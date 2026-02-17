@@ -219,3 +219,111 @@ This file accumulates knowledge about the codebase patterns, naming conventions,
 - Task 1.5 will create Tauri commands that use this client
 - Task 1.5 will parse SSE events from EventStream
 - Task 4.1 orchestrator will use this client for agent control
+
+## Task 1.5: Tauri Commands for OpenCode Integration (2026-02-17)
+
+### Implementation Overview
+- Added 3 Tauri commands to expose OpenCode functionality to frontend
+- Commands access managed state (OpenCodeManager, OpenCodeClient)
+- All commands are async and return Result<T, String> for error handling
+
+### Commands Implemented
+
+1. **get_opencode_status() -> Result<OpenCodeStatus, String>**
+   - Accesses both OpenCodeManager (for API URL) and OpenCodeClient (for health check)
+   - Returns: `{ api_url: string, healthy: bool, version: Option<string> }`
+   - Calls client.health() to verify server is responsive
+
+2. **create_session(title: String) -> Result<String, String>**
+   - Thin wrapper over OpenCodeClient::create_session()
+   - Returns session ID on success
+   - Error messages formatted with context
+
+3. **send_prompt(session_id: String, text: String) -> Result<serde_json::Value, String>**
+   - Thin wrapper over OpenCodeClient::send_prompt()
+   - Returns raw JSON response (structure varies by OpenCode version)
+   - Frontend will parse response based on needs
+
+### Tauri Command Patterns
+
+**Command Signature:**
+```rust
+#[tauri::command]
+async fn command_name(
+    state: State<'_, T>,
+    param: String,
+) -> Result<ReturnType, String>
+```
+
+**State Access:**
+- `State<'_, OpenCodeManager>` - Immutable managed state (no Mutex needed)
+- `State<'_, OpenCodeClient>` - Immutable managed state (Clone-able)
+- `State<'_, Mutex<Database>>` - Mutable managed state (requires Mutex)
+
+**Error Handling:**
+- Commands return `Result<T, String>` (String is error message for frontend)
+- Use `.map_err(|e| format!("Context: {}", e))` to convert errors
+- OpenCodeError implements Display, so `.to_string()` works
+
+**Registration:**
+```rust
+.invoke_handler(tauri::generate_handler![
+    command1,
+    command2,
+    command3
+])
+```
+
+### State Management
+- OpenCodeClient created once in setup hook with manager's API URL
+- Both manager and client stored in managed state via `app.manage()`
+- Client is Clone-able, so State<OpenCodeClient> works without Mutex
+- Manager is immutable after creation, so State<OpenCodeManager> works without Mutex
+
+### Response Types
+- Created OpenCodeStatus struct with serde::Serialize
+- Struct fields match frontend expectations (camelCase via serde default)
+- Used Option<String> for optional version field
+
+### Frontend Integration (Future Task 5.1)
+Frontend will call commands via:
+```typescript
+import { invoke } from '@tauri-apps/api/core';
+
+// Get status
+const status = await invoke<OpenCodeStatus>('get_opencode_status');
+
+// Create session
+const sessionId = await invoke<string>('create_session', { title: 'My Session' });
+
+// Send prompt
+const response = await invoke<any>('send_prompt', { 
+  sessionId: 'ses_123', 
+  text: 'Hello!' 
+});
+```
+
+### Verification
+- `cargo check` passes with no errors (only expected warnings for unused methods)
+- `cargo build` succeeds
+- Commands properly registered in invoke_handler
+- All three commands use async/await correctly
+- Error handling converts OpenCodeError to String for frontend
+
+### Key Learnings
+1. **Tauri commands must be async** when accessing async state or calling async methods
+2. **State<T> vs State<Mutex<T>>**: Use Mutex only for mutable state
+3. **Error conversion**: Frontend expects String errors, so use `.map_err()` to format
+4. **Command registration**: Use `tauri::generate_handler![]` macro with command names
+5. **OpenCodeClient creation**: Use `with_base_url()` to match manager's URL
+
+### Dependencies
+- No new dependencies added (all required deps already present from Tasks 1.3, 1.4)
+- Uses: tauri::State, serde::Serialize, opencode_client, opencode_manager
+
+### Next Steps
+- Phase 2: JIRA integration will follow similar command pattern
+- Phase 3: GitHub integration will follow similar command pattern
+- Phase 4: Orchestrator will use OpenCodeClient directly (not via commands)
+- Phase 5: Frontend will implement UI to call these commands
+

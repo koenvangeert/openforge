@@ -468,7 +468,7 @@ async fn poll_pr_comments(db: &Database, github_client: &GitHubClient) {
   - Estimated effort: 2 hours
   - Deliverable: Rust module with functions: `create_session()`, `send_prompt()`, `subscribe_events()`
 
-- [ ] **Task 1.5**: Implement Tauri commands for OpenCode control
+- [x] **Task 1.5**: Implement Tauri commands for OpenCode control
   - Parallelizable: No (depends on 1.3, 1.4)
   - Estimated effort: 2 hours
   - Deliverable: Tauri commands: `start_opencode`, `stop_opencode`, `create_agent_session`, `send_prompt`

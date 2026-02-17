@@ -6,8 +6,74 @@ mod opencode_manager;
 mod opencode_client;
 
 use std::sync::Mutex;
-use tauri::Manager;
+use tauri::{Manager, State};
 use opencode_manager::OpenCodeManager;
+use opencode_client::OpenCodeClient;
+
+// ============================================================================
+// Tauri Commands
+// ============================================================================
+
+/// Get OpenCode server status and API URL
+#[tauri::command]
+async fn get_opencode_status(
+    manager: State<'_, OpenCodeManager>,
+    client: State<'_, OpenCodeClient>,
+) -> Result<OpenCodeStatus, String> {
+    let api_url = manager.api_url();
+    
+    // Check health via API client
+    let health = client
+        .health()
+        .await
+        .map_err(|e| format!("Health check failed: {}", e))?;
+    
+    Ok(OpenCodeStatus {
+        api_url,
+        healthy: health.healthy,
+        version: health.version,
+    })
+}
+
+/// Create a new OpenCode session
+#[tauri::command]
+async fn create_session(
+    client: State<'_, OpenCodeClient>,
+    title: String,
+) -> Result<String, String> {
+    client
+        .create_session(title)
+        .await
+        .map_err(|e| format!("Failed to create session: {}", e))
+}
+
+/// Send a prompt to an OpenCode session
+#[tauri::command]
+async fn send_prompt(
+    client: State<'_, OpenCodeClient>,
+    session_id: String,
+    text: String,
+) -> Result<serde_json::Value, String> {
+    client
+        .send_prompt(&session_id, text)
+        .await
+        .map_err(|e| format!("Failed to send prompt: {}", e))
+}
+
+// ============================================================================
+// Response Types
+// ============================================================================
+
+#[derive(serde::Serialize)]
+struct OpenCodeStatus {
+    api_url: String,
+    healthy: bool,
+    version: Option<String>,
+}
+
+// ============================================================================
+// Main
+// ============================================================================
 
 #[tokio::main]
 async fn main() {
@@ -38,11 +104,20 @@ async fn main() {
 
             println!("OpenCode server started at: {}", opencode_manager.api_url());
 
-            // Store OpenCode manager in app state
+            // Create OpenCode API client
+            let opencode_client = OpenCodeClient::with_base_url(opencode_manager.api_url());
+
+            // Store OpenCode manager and client in app state
             app.manage(opencode_manager);
+            app.manage(opencode_client);
 
             Ok(())
         })
+        .invoke_handler(tauri::generate_handler![
+            get_opencode_status,
+            create_session,
+            send_prompt
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
