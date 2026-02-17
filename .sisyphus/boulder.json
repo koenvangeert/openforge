@@ -1,9 +1,7 @@
 {
-  "active_plan": "/Users/koen.vangeert/workspace/tmp/my-command-center/.sisyphus/plans/task-detail-view.md",
-  "started_at": "2026-02-17T16:54:07.003Z",
-  "session_ids": [
-    "ses_3938f6bb4ffeEOmrFcI666e35N"
-  ],
-  "plan_name": "task-detail-view",
-  "agent": "atlas"
+  "active_plan": null,
+  "started_at": null,
+  "session_ids": [],
+  "plan_name": null,
+  "agent": null
 }

@@ -1,23 +1,31 @@
 # Full-Page Task Detail View
 
+## DEPENDENCY: Requires `decouple-jira` plan completion first
+
+> **This plan assumes the JIRA decouple is DONE.** All references use post-decouple naming:
+> - `Task` (not `Ticket`), `tasks` store (not `tickets`), `selectedTaskId` (not `selectedTicketId`)
+> - `TaskRow` in Rust, `Task` interface in TypeScript
+> - IPC: `getTaskDetail()`, `updateTaskFields()`, `getTasks()`
+> - DB: `tasks` table with `acceptance_criteria` and `plan_text` columns
+> - SSE bridge already in main.rs (committed as `a18f6d1`)
+>
+> **Wave 1 (T1, T2, T3) from the original plan is REMOVED** — all foundation work is now
+> handled by the decouple-jira plan + existing SSE bridge commit.
+
 ## TL;DR
 
-> **Quick Summary**: Replace the 400px side panel with a full-page two-column task detail view. Left column (dominant, ~70% width) provides a live-streaming agent chat panel powered by SSE, with checkpoint controls and abort. Right column (~30% width) shows ticket info + editable fields (acceptance criteria, plan). Navigation via simple view state switch — no router library.
+> **Quick Summary**: Replace the side panel (DetailPanel) with a full-page two-column task detail view. Left column (dominant, ~70% width) provides a live-streaming agent chat panel powered by SSE, with checkpoint controls and abort. Right column (~30% width) shows task info + editable fields (acceptance criteria, plan). Navigation via simple view state switch — no router library.
 > 
 > **Deliverables**:
 > - New `TaskDetailView.svelte` full-page component with two-column layout
-> - New `TicketInfoPanel.svelte` (left) and `AgentChatPanel.svelte` (right) sub-components
-> - Backend SSE bridge forwarding OpenCode events to frontend in real-time
-> - New editable ticket fields (acceptance_criteria, plan) with DB persistence
-> - Fixed JIRA sync upsert to prevent data loss on new fields
+> - New `TaskInfoPanel.svelte` (right) and `AgentChatPanel.svelte` (left) sub-components
 > - Fixed PR comments data flow (currently broken — always empty)
 > - Removed old `DetailPanel.svelte` side panel
 > - Component tests for all new Svelte components
-> - Rust tests for new DB operations
 > 
 > **Estimated Effort**: Medium
-> **Parallel Execution**: YES — 5 waves
-> **Critical Path**: T1 → T4 → T8 → T11 → F1-F4
+> **Parallel Execution**: YES — 4 waves (Wave 1 removed, handled by decouple-jira)
+> **Critical Path**: T4 → T8 → T11 → F1-F4
 
 ---
 
@@ -56,16 +64,10 @@ Build a full-page task detail view that replaces the side panel, providing compr
 
 ### Concrete Deliverables
 - `src/components/TaskDetailView.svelte` — full-page two-column layout container
-- `src/components/TicketInfoPanel.svelte` — left column (info + editable fields + PR comments)
-- `src/components/AgentChatPanel.svelte` — right column (live stream + controls)
+- `src/components/TaskInfoPanel.svelte` — right column (info + editable fields + PR comments)
+- `src/components/AgentChatPanel.svelte` — left column (live stream + controls)
 - Updated `src/App.svelte` — view switch replacing side panel
-- Updated `src/lib/types.ts` — extended Ticket interface
-- Updated `src/lib/stores.ts` — navigation state
-- Updated `src/lib/ipc.ts` — new IPC wrappers
-- Updated `src-tauri/src/db.rs` — schema migration + fixed upsert + new CRUD
-- Updated `src-tauri/src/main.rs` — new Tauri commands + SSE bridge task
 - New test files for all new components
-- New Rust tests for DB operations
 
 ### Definition of Done
 - [ ] `npm run build` succeeds with zero errors
@@ -79,14 +81,13 @@ Build a full-page task detail view that replaces the side panel, providing compr
 - [ ] Old DetailPanel.svelte is removed
 
 ### Must Have
-- Two-column layout (left ~70%: agent chat/interaction, right ~30%: ticket info + editable fields)
+- Two-column layout (left ~70%: agent chat/interaction, right ~30%: task info + editable fields)
 - Editable acceptance_criteria and plan fields with explicit Save button
-- Live SSE streaming replacing 3-second polling
+- Live SSE streaming replacing 3-second polling (SSE bridge already in main.rs)
 - Checkpoint approve/reject inline in agent panel
 - Abort session button
 - Back-to-board navigation (button + Escape key)
 - Empty state when no agent session exists
-- JIRA sync does NOT clobber editable fields
 
 ### Must NOT Have (Guardrails)
 - **No router library** — use simple view state switch only
@@ -128,24 +129,20 @@ Evidence saved to `.sisyphus/evidence/task-{N}-{scenario-slug}.{ext}`.
 
 ### Parallel Execution Waves
 
-```
-Wave 1 (Foundation — backend + frontend scaffolding):
-├── Task 1: Backend DB schema + upsert fix + CRUD + Tauri commands [unspecified-high]
-├── Task 2: Frontend types + IPC wrappers + navigation store [quick]
-└── Task 3: Backend SSE bridge (background task) [unspecified-high]
+> **Wave 1 REMOVED** — T1 (DB), T2 (types/IPC), T3 (SSE bridge) are handled by `decouple-jira` plan + existing commits.
 
-Wave 2 (UI Components — all three view components + wiring):
+```
+Wave 1 (UI Components — all three view components + wiring, 4 parallel):
 ├── Task 4: TaskDetailView.svelte + App.svelte navigation [visual-engineering]
-├── Task 5: TicketInfoPanel.svelte (left column) [visual-engineering]
-├── Task 6: AgentChatPanel.svelte (right column + SSE) [visual-engineering]
+├── Task 5: TaskInfoPanel.svelte (right column) [visual-engineering]
+├── Task 6: AgentChatPanel.svelte (left column + SSE) [visual-engineering]
 └── Task 7: PR comments loading fix [quick]
 
-Wave 3 (Cleanup + Integration):
+Wave 2 (Cleanup + Integration):
 ├── Task 8: Remove old DetailPanel + dead code cleanup [quick]
 └── Task 9: Integration verification + polish [deep]
 
-Wave 4 (Tests):
-├── Task 10: Rust tests for new DB operations [quick]
+Wave 3 (Tests):
 ├── Task 11: Frontend tests for new components [unspecified-high]
 └── Task 12: Full build + test suite verification [quick]
 
@@ -155,43 +152,38 @@ Wave FINAL (Independent review, 4 parallel):
 ├── Task F3: Real manual QA [unspecified-high]
 └── Task F4: Scope fidelity check [deep]
 
-Critical Path: T1 → T4 → T8 → T11 → F1-F4
+Critical Path: T4 → T8 → T11 → F1-F4
 Parallel Speedup: ~55% faster than sequential
-Max Concurrent: 4 (Waves 2)
+Max Concurrent: 4 (Wave 1)
 ```
 
 ### Dependency Matrix
 
 | Task | Depends On | Blocks | Wave |
 |------|------------|--------|------|
-| T1 | — | T4, T5, T6, T7, T8 | 1 |
-| T2 | — | T4, T5, T6, T7 | 1 |
-| T3 | — | T6 | 1 |
-| T4 | T1, T2 | T8, T9 | 2 |
-| T5 | T1, T2 | T8, T9 | 2 |
-| T6 | T1, T2, T3 | T8, T9 | 2 |
-| T7 | T2 | T9 | 2 |
-| T8 | T4, T5, T6 | T10, T11, T12 | 3 |
-| T9 | T4, T5, T6, T7 | T10, T11, T12 | 3 |
-| T10 | T8, T9 | F1-F4 | 4 |
-| T11 | T8, T9 | F1-F4 | 4 |
-| T12 | T10, T11 | F1-F4 | 4 |
+| T4 | decouple-jira complete | T8, T9 | 1 |
+| T5 | decouple-jira complete | T8, T9 | 1 |
+| T6 | decouple-jira complete | T8, T9 | 1 |
+| T7 | decouple-jira complete | T9 | 1 |
+| T8 | T4, T5, T6 | T11, T12 | 2 |
+| T9 | T4, T5, T6, T7 | T11, T12 | 2 |
+| T11 | T8, T9 | F1-F4 | 3 |
+| T12 | T11 | F1-F4 | 3 |
 
 ### Agent Dispatch Summary
 
 | Wave | # Parallel | Tasks → Agent Category |
 |------|------------|----------------------|
-| 1 | **3** | T1 → `unspecified-high`, T2 → `quick`, T3 → `unspecified-high` |
-| 2 | **4** | T4 → `visual-engineering`, T5 → `visual-engineering`, T6 → `visual-engineering`, T7 → `quick` |
-| 3 | **2** | T8 → `quick`, T9 → `deep` |
-| 4 | **3** | T10 → `quick`, T11 → `unspecified-high`, T12 → `quick` |
+| 1 | **4** | T4 → `visual-engineering`, T5 → `visual-engineering`, T6 → `visual-engineering`, T7 → `quick` |
+| 2 | **2** | T8 → `quick`, T9 → `deep` |
+| 3 | **2** | T11 → `unspecified-high`, T12 → `quick` |
 | FINAL | **4** | F1 → `oracle`, F2 → `unspecified-high`, F3 → `unspecified-high`, F4 → `deep` |
 
 ---
 
 ## TODOs
 
-- [ ] 1. Backend: DB schema migration + fix upsert + new CRUD + Tauri commands
+- [x] 1. ~~Backend: DB schema migration + fix upsert + new CRUD + Tauri commands~~ — **SUPERSEDED by decouple-jira T1 + T3**
 
   **What to do**:
   - Add new columns to the `tickets` table via `ALTER TABLE` in `run_migrations()`:
@@ -308,7 +300,7 @@ Max Concurrent: 4 (Waves 2)
 
 ---
 
-- [ ] 2. Frontend: types + IPC wrappers + navigation store
+- [x] 2. ~~Frontend: types + IPC wrappers + navigation store~~ — **SUPERSEDED by decouple-jira T2**
 
   **What to do**:
   - Update `Ticket` interface in `types.ts` to add:
@@ -399,7 +391,7 @@ Max Concurrent: 4 (Waves 2)
 
 ---
 
-- [ ] 3. Backend: SSE event bridge (background task)
+- [x] 3. ~~Backend: SSE event bridge (background task)~~ — **DONE, committed as `a18f6d1`, preserved by decouple-jira T3**
 
   **What to do**:
   - Add a background task in `main.rs` setup (after `OpenCodeManager::start()` and `OpenCodeClient` creation) that:
@@ -505,19 +497,19 @@ Max Concurrent: 4 (Waves 2)
 
   **What to do**:
   - Create `src/components/TaskDetailView.svelte` — the full-page two-column layout container:
-    - **Header bar**: Back button (left-arrow + "Back to Board"), ticket ID, ticket title, status badge
+    - **Header bar**: Back button (left-arrow + "Back to Board"), task ID, task title, status badge
     - **Two-column body**: Left column (70% width, dominant) and right column (30% width) with a vertical divider
     - Left column renders `<AgentChatPanel>` (built in T6) — the primary focus of the view
-    - Right column renders `<TicketInfoPanel>` (built in T5) — scrollable sidebar with ticket details
-    - Props: `ticket: Ticket` (full ticket object)
+    - Right column renders `<TaskInfoPanel>` (built in T5) — scrollable sidebar with task details
+    - Props: `task: Task` (full task object)
     - Escape key handler: listen on `svelte:window` for Escape, navigate back
     - Responsive: min-width 800px before columns stack vertically
   - Modify `src/App.svelte` to replace the side panel with full-page navigation:
-    - When `$selectedTicketId` is non-null, show `<TaskDetailView>` INSTEAD of the board (not alongside it)
+    - When `$selectedTaskId` is non-null, show `<TaskDetailView>` INSTEAD of the board (not alongside it)
     - Remove the `detail-area` div and `DetailPanel` import
     - Keep the `has-detail` CSS class logic removal (no longer needed)
     - The board is hidden when detail view is shown (same pattern as `showSettings`)
-    - When `$selectedTicketId` is set to null (back button or Escape), board is shown again
+    - When `$selectedTaskId` is set to null (back button or Escape), board is shown again
   - For now, use placeholder text ("Info panel here", "Chat panel here") for the left and right columns — T5 and T6 will fill these in
 
   **Must NOT do**:
@@ -613,19 +605,19 @@ Max Concurrent: 4 (Waves 2)
 
 ---
 
-- [ ] 5. TicketInfoPanel.svelte (left column)
+- [ ] 5. TaskInfoPanel.svelte (right column)
 
   **What to do**:
-  - Create `src/components/TicketInfoPanel.svelte` — the left column of the detail view:
-    - **Ticket metadata section**: Status badge, JIRA status, assignee, created/updated dates (read-only display fields)
-    - **Description section**: Full ticket description in a scrollable `<pre>` block (read-only, from JIRA)
-    - **Acceptance Criteria section**: `<textarea>` for editing acceptance_criteria, with a "Save" button. Load initial value from `ticket.acceptance_criteria`. On save, call `updateTicketFields()` IPC. Show brief "Saved!" feedback after successful save (match SettingsPanel pattern).
+  - Create `src/components/TaskInfoPanel.svelte` — the right column of the detail view:
+    - **Task metadata section**: Status badge, JIRA status (if jira_key set), jira_assignee, created/updated dates (read-only display fields)
+    - **Description section**: Full task description in a scrollable `<pre>` block (read-only)
+    - **Acceptance Criteria section**: `<textarea>` for editing acceptance_criteria, with a "Save" button. Load initial value from `task.acceptance_criteria`. On save, call `updateTaskFields()` IPC. Show brief "Saved!" feedback after successful save (match SettingsPanel pattern).
     - **Plan section**: Same as above but for `plan_text` field
     - **Save behavior**: Single "Save" button at the bottom that saves both fields at once. Disabled while saving. Shows "Saved!" for 2 seconds after success.
-    - **PR Links section**: Display pull requests from `$ticketPrs` store for this ticket. Each PR shows as a clickable link (using `openUrl` IPC). Show PR state (open/closed) with color coding.
+    - **PR Links section**: Display pull requests from `$ticketPrs` store for this task. Each PR shows as a clickable link (using `openUrl` IPC). Show PR state (open/closed) with color coding.
     - **PR Comments section**: For each PR, load comments via `getPrComments(prId)` IPC on component mount. Display comments grouped by PR. Show unaddressed count badge. Allow marking comments as addressed inline.
-    - Props: `ticket: Ticket`
-  - Scroll the entire left panel independently
+    - Props: `task: Task`
+  - Scroll the entire right panel independently
 
   **Must NOT do**:
   - Do NOT add markdown rendering
@@ -657,11 +649,11 @@ Max Concurrent: 4 (Waves 2)
   - `src/components/DetailPanel.svelte:111-266` — CSS patterns for field labels, values, and layout
 
   **API/Type References**:
-  - `src/lib/types.ts:1-10` — `Ticket` interface with new `acceptance_criteria` and `plan_text` fields
-  - `src/lib/types.ts:44-54` — `PullRequestInfo` interface for PR display
-  - `src/lib/types.ts:32-42` — `PrComment` interface for comment display
-  - `src/lib/ipc.ts` — `updateTicketFields()`, `getPrComments()`, `markCommentAddressed()`, `openUrl()` functions
-  - `src/lib/stores.ts:7` — `ticketPrs` store for PR data
+   - `src/lib/types.ts` — `Task` interface with `acceptance_criteria` and `plan_text` fields (post-decouple naming)
+   - `src/lib/types.ts` — `PullRequestInfo` interface for PR display
+   - `src/lib/types.ts` — `PrComment` interface for comment display
+   - `src/lib/ipc.ts` — `updateTaskFields()`, `getPrComments()`, `markCommentAddressed()`, `openUrl()` functions
+   - `src/lib/stores.ts` — `ticketPrs` store for PR data
 
   **WHY Each Reference Matters**:
   - `DetailPanel.svelte:59-89` has the exact field display pattern (label + value) to replicate
@@ -671,9 +663,9 @@ Max Concurrent: 4 (Waves 2)
 
   **Acceptance Criteria**:
 
-  - [ ] Displays all ticket metadata (status, assignee, dates, description)
+  - [ ] Displays all task metadata (status, jira_assignee, dates, description)
   - [ ] Editable textarea for acceptance_criteria and plan_text
-  - [ ] Save button calls `updateTicketFields()` IPC
+  - [ ] Save button calls `updateTaskFields()` IPC
   - [ ] Save button shows Saving.../Saved! states
   - [ ] PR links displayed with state color coding
   - [ ] PR comments loaded and displayed per PR
@@ -722,8 +714,8 @@ Max Concurrent: 4 (Waves 2)
   ```
 
   **Commit**: YES
-  - Message: `feat(ui): add ticket info panel with editable fields and PR section`
-  - Files: `src/components/TicketInfoPanel.svelte`
+   - Message: `feat(ui): add task info panel with editable fields and PR section`
+   - Files: `src/components/TaskInfoPanel.svelte`
   - Pre-commit: `npm run test`
 
 ---
@@ -732,8 +724,8 @@ Max Concurrent: 4 (Waves 2)
 
   **What to do**:
   - Create `src/components/AgentChatPanel.svelte` — the right column of the detail view:
-    - **State management**: Read session from `$activeSessions` store using `ticket.id` as key
-    - **Empty state (no session)**: Display "No active agent session" with brief guidance text. This is the default state for most tickets.
+    - **State management**: Read session from `$activeSessions` store using `task.id` as key
+    - **Empty state (no session)**: Display "No active agent session" with brief guidance text. This is the default state for most tasks.
     - **Running state**: Display a live-scrolling event log. Listen for `opencode-event` Tauri events via `listen()` from `@tauri-apps/api/event`. Filter events that belong to the current session (if the event payload includes session info) or display all events while a session is active. Each event rendered as a timestamped log entry (similar to current LogViewer pattern). Auto-scroll to bottom on new events (with auto-scroll toggle).
     - **Paused state (checkpoint)**: Display the checkpoint data in a readable format. Show Approve and Reject buttons with feedback input. Use the same checkpoint interaction pattern as current `CheckpointPanel.svelte`.
     - **Failed state**: Display error message, abort status
@@ -741,7 +733,7 @@ Max Concurrent: 4 (Waves 2)
     - **Abort button**: Visible when session is running or paused. Calls `abortSession()` IPC.
     - **Stage indicator**: Show current stage label (Reading Ticket, Implementing, Creating PR, Addressing Comments)
     - Cleanup: `onDestroy` to remove the `opencode-event` listener
-  - Props: `ticket: Ticket`
+   - Props: `task: Task`
 
   **Must NOT do**:
   - Do NOT add a message input box (no chat input — deferred)
@@ -849,13 +841,12 @@ Max Concurrent: 4 (Waves 2)
 
   **What to do**:
   - The current PR comments data flow is broken: `prComments` in `App.svelte:17` is declared as `[]` and never populated. The `PrCommentsPanel` receives an always-empty array.
-  - In the new `TicketInfoPanel` (T5), PR comments need to be loaded dynamically. Ensure the panel fetches comments correctly:
+  - In the new `TaskInfoPanel` (T5), PR comments need to be loaded dynamically. Ensure the panel fetches comments correctly:
     1. Read PRs for this ticket from `$ticketPrs` store
     2. For each PR, call `getPrComments(prId)` IPC to load comments
     3. Display comments grouped by PR
   - If T5 has already handled this correctly, verify and close. If not, wire it up.
   - Also verify that `addressSelectedPrComments()` IPC still works from the new location
-  - Remove the unused `prComments` variable from `App.svelte` and the `comments` prop from the old `DetailPanel` import (which will be removed in T8 anyway)
 
   **Must NOT do**:
   - Do NOT refactor the entire PR comment pipeline
@@ -922,8 +913,8 @@ Max Concurrent: 4 (Waves 2)
   ```
 
   **Commit**: YES (groups with T5)
-  - Message: `fix(pr): wire PR comments loading in detail view`
-  - Files: `src/App.svelte`, `src/components/TicketInfoPanel.svelte`
+   - Message: `fix(pr): wire PR comments loading in detail view`
+   - Files: `src/App.svelte`, `src/components/TaskInfoPanel.svelte`
   - Pre-commit: `npm run test`
 
 ---

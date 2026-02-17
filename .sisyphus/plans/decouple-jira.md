@@ -20,6 +20,20 @@
 
 ---
 
+## Prerequisites & Overlap
+
+> **IMPORTANT**: This plan incorporates fields and features from the `task-detail-view` plan.
+> The detail view plan depends on this decouple being completed first.
+>
+> **Incorporated from task-detail-view**:
+> - `acceptance_criteria TEXT` and `plan_text TEXT` columns in the `tasks` table (T1)
+> - `OpenCodeEvent` interface and detail IPC wrappers (`getTaskDetail`, `updateTaskFields`) in frontend (T2)
+> - `get_task_detail` and `update_task_fields` Tauri commands (T3)
+>
+> **Existing code to PRESERVE** (from detail-view Wave 1, already committed):
+> - SSE bridge in main.rs: `start_sse_bridge()`, `SseEventPayload` struct, `tokio::spawn` call — committed as `a18f6d1`. T3 (Tauri commands rewrite) MUST preserve this code.
+> - The commits `ff88c0a` (T2 frontend types) and `cdc0002` (T1 DB schema) will be superseded by this decouple plan. Their changes will be naturally overwritten.
+
 ## Context
 
 ### Original Request
@@ -205,17 +219,18 @@ Max Concurrent: 8 (Wave 2)
   - Rewrite the `run_migrations()` method:
     - Detect old `tickets` table via `sqlite_master` query
     - If exists: DROP tables in FK order (agent_logs → pr_comments → agent_sessions → pull_requests → tickets)
-    - CREATE new `tasks` table: `id TEXT PRIMARY KEY, title TEXT NOT NULL, description TEXT, status TEXT NOT NULL, jira_key TEXT, jira_status TEXT, jira_assignee TEXT, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL`
+    - CREATE new `tasks` table: `id TEXT PRIMARY KEY, title TEXT NOT NULL, description TEXT, status TEXT NOT NULL, jira_key TEXT, jira_status TEXT, jira_assignee TEXT, acceptance_criteria TEXT, plan_text TEXT, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL`
     - Recreate agent_sessions, agent_logs, pull_requests, pr_comments with `FOREIGN KEY (ticket_id) REFERENCES tasks(id)` — keep column name as `ticket_id` in child tables to minimize FK blast radius (semantic mismatch is acceptable)
     - CREATE config table with `IF NOT EXISTS` (preserves existing config)
     - Add `next_task_id` default: `INSERT OR IGNORE INTO config (key, value) VALUES ('next_task_id', '1')`
   - Implement new methods:
     - `create_task(title, description, status, jira_key) -> Result<TaskRow>`: Read `next_task_id` from config, generate `T-{n}`, increment counter, INSERT into tasks, return the created row.
     - `get_all_tasks() -> Result<Vec<TaskRow>>`: SELECT all from tasks ORDER BY updated_at DESC
-    - `get_task(id) -> Result<Option<TaskRow>>`: SELECT by id
+    - `get_task(id) -> Result<Option<TaskRow>>`: SELECT by id (include acceptance_criteria, plan_text in SELECT)
     - `update_task(id, title, description, jira_key) -> Result<()>`: UPDATE title, description, jira_key, updated_at
     - `update_task_status(id, status) -> Result<()>`: UPDATE status and updated_at
-    - `update_task_jira_info(jira_key, jira_status, jira_assignee) -> Result<usize>`: UPDATE all tasks matching jira_key. Returns count of updated rows.
+    - `update_task_fields(id, acceptance_criteria, plan_text) -> Result<()>`: UPDATE only the editable fields (acceptance_criteria, plan_text) + updated_at. Used by the detail view for saving user-edited content.
+    - `update_task_jira_info(jira_key, jira_status, jira_assignee) -> Result<usize>`: UPDATE all tasks matching jira_key. Returns count of updated rows. MUST NOT touch acceptance_criteria or plan_text.
     - `get_tasks_with_jira_links() -> Result<Vec<TaskRow>>`: SELECT WHERE jira_key IS NOT NULL
     - `get_task_ids_and_jira_keys() -> Result<Vec<(String, Option<String>)>>`: For PR matching — returns all (id, jira_key) pairs
   - Keep ALL existing methods: PR CRUD, session CRUD, log CRUD, config CRUD, comment methods
@@ -261,7 +276,8 @@ Max Concurrent: 8 (Wave 2)
   - Child table FKs show what breaks if you rename the `ticket_id` column (don't do it)
 
   **Acceptance Criteria**:
-  - [ ] `TaskRow` struct exists with fields: id, title, description, status, jira_key, jira_status, jira_assignee, created_at, updated_at
+  - [ ] `TaskRow` struct exists with fields: id, title, description, status, jira_key, jira_status, jira_assignee, acceptance_criteria, plan_text, created_at, updated_at
+  - [ ] `update_task_fields` method updates acceptance_criteria and plan_text without touching other fields
   - [ ] `create_task` generates sequential T-1, T-2, T-3 IDs
   - [ ] `get_all_tasks` returns all tasks ordered by updated_at DESC
   - [ ] `update_task` modifies title, description, jira_key
@@ -318,15 +334,18 @@ Max Concurrent: 8 (Wave 2)
 - [ ] 2. Frontend Data Layer Update
 
   **What to do**:
-  - **types.ts**: Rename `Ticket` interface to `Task`. Add `jira_key: string | null` field. Rename `assignee` to `jira_assignee`. Keep `jira_status`. Keep all other types (AgentSession, AgentLog, PrComment, PullRequestInfo, OpenCodeStatus) unchanged. Update `KanbanColumn` and `COLUMN_LABELS` — keep as-is (columns are the same).
+  - **types.ts**: Rename `Ticket` interface to `Task`. Add `jira_key: string | null` field. Rename `assignee` to `jira_assignee`. Keep `jira_status`. Add `acceptance_criteria: string | null` and `plan_text: string | null` fields. Add new `OpenCodeEvent` interface: `{ event_type: string; data: string; }` (after OpenCodeStatus). Keep all other types (AgentSession, AgentLog, PrComment, PullRequestInfo, OpenCodeStatus) unchanged. Update `KanbanColumn` and `COLUMN_LABELS` — keep as-is (columns are the same).
   - **stores.ts**: Rename `tickets` store to `tasks`. Rename `selectedTicketId` to `selectedTaskId`. Update type imports from `Ticket` to `Task`. Keep `activeSessions`, `ticketPrs`, `isLoading`, `error` stores.
   - **ipc.ts**: 
     - Add: `createTask(title: string, description: string, status: string, jiraKey: string | null): Promise<Task>`
     - Add: `updateTask(id: string, title: string, description: string, jiraKey: string | null): Promise<void>`
     - Add: `updateTaskStatus(id: string, status: string): Promise<void>`
+    - Add: `getTaskDetail(taskId: string): Promise<Task>` (single task fetch for detail view)
+    - Add: `updateTaskFields(taskId: string, acceptanceCriteria: string, planText: string): Promise<void>` (save editable fields from detail view)
     - Rename: `getTickets()` → `getTasks()` returning `Promise<Task[]>`
     - Rename: `syncJiraNow()` → `refreshJiraInfo()` returning `Promise<number>`
     - Remove: `transitionTicket()` (JIRA is read-only)
+    - Remove: `getTicketDetail()` and `updateTicketFields()` (superseded by task-named versions above)
     - Keep: all PR, session, agent log, config, OpenCode functions unchanged
 
   **Must NOT do**:
@@ -362,10 +381,11 @@ Max Concurrent: 8 (Wave 2)
   - ipc.ts functions are the API contract between frontend and Tauri commands
 
   **Acceptance Criteria**:
-  - [ ] `Task` interface exists in types.ts with `jira_key: string | null` field
+  - [ ] `Task` interface exists in types.ts with `jira_key: string | null`, `acceptance_criteria: string | null`, `plan_text: string | null` fields
+  - [ ] `OpenCodeEvent` interface exists in types.ts
   - [ ] `tasks` and `selectedTaskId` stores exist in stores.ts
-  - [ ] `createTask`, `updateTask`, `updateTaskStatus`, `getTasks`, `refreshJiraInfo` functions exist in ipc.ts
-  - [ ] `transitionTicket` removed from ipc.ts
+  - [ ] `createTask`, `updateTask`, `updateTaskStatus`, `getTasks`, `refreshJiraInfo`, `getTaskDetail`, `updateTaskFields` functions exist in ipc.ts
+  - [ ] `transitionTicket`, `getTicketDetail`, `updateTicketFields` removed from ipc.ts
   - [ ] No TypeScript errors in the 3 modified files: `npx tsc --noEmit` (may show errors in other files that import these — that's expected and fixed in later tasks)
 
   **QA Scenarios**:
@@ -397,12 +417,21 @@ Max Concurrent: 8 (Wave 2)
     - `create_task(db, title, description, status, jira_key) -> Result<TaskRow, String>`: calls `db.create_task()`
     - `update_task(db, id, title, description, jira_key) -> Result<(), String>`: calls `db.update_task()`
     - `update_task_status(db, id, status) -> Result<(), String>`: calls `db.update_task_status()`
+    - `get_task_detail(db, task_id) -> Result<TaskRow, String>`: calls `db.get_task()`, returns error if not found
+    - `update_task_fields(db, task_id, acceptance_criteria, plan_text) -> Result<(), String>`: calls `db.update_task_fields()`
     - `refresh_jira_info(db, jira_client) -> Result<usize, String>`: Same logic as new JIRA sync — gets linked tasks, batch fetches from JIRA, updates JIRA info. Returns count of updated tasks.
   - Rename existing:
     - `get_tickets` → `get_tasks`: calls `db.get_all_tasks()` instead of `db.get_all_tickets()`
   - Remove:
     - `transition_ticket`: JIRA is read-only, no status transitions to JIRA
     - `sync_jira_now`: Replaced by `refresh_jira_info`
+    - `get_ticket_detail`: Superseded by `get_task_detail`
+    - `update_ticket_fields`: Superseded by `update_task_fields`
+  - **PRESERVE** (already in main.rs from prior work):
+    - `SseEventPayload` struct (~line 632)
+    - `start_sse_bridge()` async function (~line 642)
+    - SSE bridge spawn in setup() (~line 775)
+    - These must NOT be removed or modified during the rewrite
   - Update:
     - `start_ticket_implementation`: Update to use `get_task()` instead of `get_ticket()`, keep parameter name as `ticketId` for now (renaming all orchestrator internals is Task 6)
     - `poll_pr_comments_now`: Update to use `get_all_task_ids()` and handle dual matching (see Task 5 for full logic — this command duplicates some github_poller logic)
@@ -450,8 +479,9 @@ Max Concurrent: 8 (Wave 2)
   - JiraClient methods are needed for the new `refresh_jira_info` implementation
 
   **Acceptance Criteria**:
-  - [ ] `create_task`, `update_task`, `update_task_status`, `get_tasks`, `refresh_jira_info` commands exist
-  - [ ] `transition_ticket` and `sync_jira_now` commands removed
+  - [ ] `create_task`, `update_task`, `update_task_status`, `get_tasks`, `get_task_detail`, `update_task_fields`, `refresh_jira_info` commands exist
+  - [ ] `transition_ticket`, `sync_jira_now`, `get_ticket_detail`, `update_ticket_fields` commands removed
+  - [ ] SSE bridge code preserved: `SseEventPayload`, `start_sse_bridge`, SSE spawn in setup
   - [ ] `invoke_handler!` macro updated with correct command list
   - [ ] `cargo build` succeeds in src-tauri/
 
