@@ -152,3 +152,87 @@
 - File created: `src/lib/reviewPrompt.ts`
 - No new dependencies required (pure TypeScript)
 - Warnings are pre-existing (a11y, unused CSS) — not introduced by this task
+
+## Tauri Command Wiring for Self-Review (Wave 1 - T7)
+
+### get_task_diff Implementation Pattern
+- Worktree lookup: lock db, call `get_worktree_for_task`, unwrap Option with `.ok_or_else(|| format!(...))` in a scoped block to release lock before async op
+- git diff command: `tokio::process::Command::new("git").arg("-C").arg(&path).arg("diff").arg("origin/main...HEAD")`
+- Use fully qualified `tokio::process::Command` — no `use` statement needed, avoids conflicts with std Command
+- Capture stdout as `String::from_utf8_lossy(&output.stdout)` then pass `&diff_output` to `diff_parser::parse_unified_diff`
+- Check `output.status.success()` and return `Err(format!("git diff failed: {}", stderr))` on non-zero exit
+- Empty diff → `parse_unified_diff` returns empty Vec naturally (handled inside parser)
+
+### Comment Command Patterns
+- `file_path: Option<String>` + `.as_deref()` to convert to `Option<&str>` for DB method
+- `line_number: Option<i32>` passed through directly (matches DB method signature)
+- `comment_id: i64` for delete (matches `insert_self_review_comment` return type)
+- All 5 comment commands: lock db, call method, map_err — no extra logic needed
+
+### Module Wiring
+- `diff_parser` was already declared as `mod diff_parser;` in main.rs (line 15) from T1
+- `tokio` crate available with `features = ["full"]` in Cargo.toml — no new dependency
+- Section banner `// Self-Review Commands` placed before `// Response Types` section
+- All 6 new commands added to `generate_handler![]` after `pty_kill`
+
+### Verification
+- `cargo build`: 0 errors, 34 pre-existing warnings (all pre-existing, none new from this task)
+- `cargo test`: 95 tests, 0 failures — all existing tests still pass
+
+## SendToAgentPanel Component (Wave 2 - T7)
+
+### Layout Pattern
+- Horizontal bar (flexbox `row`, `justify-content: space-between`) — different from ReviewSubmitPanel which is vertical
+- Left: comment summary chips; Right: action buttons + feedback messages
+- Agent-running banner sits ABOVE the panel bar (separate element with top border)
+
+### Comment Mapping
+- `pendingManualComments` (ReviewSubmissionComment[]) → inline comments: `map(c => ({ path: c.path, line: c.line, body: c.body }))` — drop `side` field
+- `selfReviewGeneralComments` (SelfReviewComment[]) → general comments: `map(c => ({ body: c.body }))` — pick only `body`
+- `compileReviewPrompt` returns `""` when both arrays are empty — use this for `canSend` via `hasComments` derived
+
+### Critical Archive Flow Order
+1. Compile prompt BEFORE archiving (captures current state)
+2. `await archiveSelfReviewComments(taskId)`
+3. `$pendingManualComments = []` (clear inline store)
+4. Reload archived → `selfReviewArchivedComments.set(archived)`
+5. Reload active + filter general → `selfReviewGeneralComments.set(active.filter(c => c.comment_type === 'general'))`
+6. Call `onSendToAgent(prompt)` callback
+
+### Disabled State Logic
+- `isAgentBusy = agentStatus === 'running' || agentStatus === 'paused'`
+- `canSend = hasComments && !isAgentBusy && !isSending`
+- `title` attribute provides accessible tooltip explaining why disabled
+
+### Build Verification
+- `pnpm build` passed: 196 modules, 0 TypeScript errors
+- Pre-existing warnings in other files unchanged
+
+## GeneralCommentsSidebar Component (Wave 2)
+
+### Component Architecture
+- `selfReviewGeneralComments` store holds active comments; filtered by `comment_type === 'general'` on load
+- `selfReviewArchivedComments` holds archived comments; also filtered on load
+- `addSelfReviewComment` returns `number` (new comment id), NOT the full object — must re-fetch to populate store
+- Archived count derived from store length; collapsed section toggles via `archivedExpanded` local state
+
+### Svelte 5 Runes Patterns Used
+- `$props()` with interface for type-safe props
+- `$state()` for local mutable values
+- `$derived()` for computed values from stores/state
+- `$effect()` with reactive dependency on `taskId` — re-fetches when taskId changes
+- Store writes use `$storeName = value` assignment syntax (not `.set()`)
+
+### $effect Gotcha
+- Must read `taskId` inside the effect body (not before) to register the reactive dependency
+- Pattern: `const id = taskId; if (id) { loadComments() }` correctly tracks `taskId`
+
+### Filtering Stores
+- `getActiveSelfReviewComments` returns ALL active comments for a task (all types)
+- Filter on the frontend: `.filter(c => c.comment_type === 'general')` for this sidebar
+- Same applies to archived comments
+
+### Build Verification
+- `pnpm build` passed with 0 new TypeScript/Svelte errors
+- 196 modules transformed (same count as previous waves)
+- All warnings are pre-existing in other files

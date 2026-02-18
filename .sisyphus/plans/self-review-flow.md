@@ -618,7 +618,7 @@ Max Concurrent: 4 (Waves 1 & 2)
   - Files: `src/lib/reviewPrompt.ts`, `src/lib/reviewPrompt.test.ts`
   - Pre-commit: `pnpm build`
 
-- [ ] 5. Rust get_task_diff Tauri Command
+- [x] 5. Rust get_task_diff Tauri Command
 
   **What to do**:
   - Add `get_task_diff` Tauri command to `main.rs`:
@@ -710,7 +710,7 @@ Max Concurrent: 4 (Waves 1 & 2)
   - Files: `src-tauri/src/main.rs`
   - Pre-commit: `cargo build`
 
-- [ ] 6. Rust Self-Review Comment Tauri Commands
+- [x] 6. Rust Self-Review Comment Tauri Commands
 
   **What to do**:
   - Add Tauri commands to `main.rs` that wrap the DB methods from T2:
@@ -770,7 +770,7 @@ Max Concurrent: 4 (Waves 1 & 2)
   - Files: `src-tauri/src/main.rs`
   - Pre-commit: `cargo build`
 
-- [ ] 7. Frontend GeneralCommentsSidebar Component
+- [x] 7. Frontend GeneralCommentsSidebar Component
 
   **What to do**:
   - Create `src/components/GeneralCommentsSidebar.svelte` — a sidebar that shows general comment cards and lets the user add new ones
@@ -864,7 +864,7 @@ Max Concurrent: 4 (Waves 1 & 2)
   - Files: `src/components/GeneralCommentsSidebar.svelte`
   - Pre-commit: `pnpm build`
 
-- [ ] 8. Frontend SendToAgentPanel Component
+- [x] 8. Frontend SendToAgentPanel Component
 
   **What to do**:
   - Create `src/components/SendToAgentPanel.svelte` — bottom panel with "Send to Agent" action + refresh
