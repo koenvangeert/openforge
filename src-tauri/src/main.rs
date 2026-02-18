@@ -2,17 +2,18 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod db;
-mod opencode_manager;
 mod opencode_client;
 mod jira_client;
 mod jira_sync;
 mod github_client;
 mod github_poller;
-mod orchestrator;
+mod git_worktree;
+mod server_manager;
+mod sse_bridge;
+mod agent_coordinator;
 
 use std::sync::Mutex;
 use tauri::{Manager, State, Emitter};
-use opencode_manager::OpenCodeManager;
 use opencode_client::OpenCodeClient;
 use jira_client::JiraClient;
 use github_client::GitHubClient;
@@ -24,19 +25,15 @@ use github_client::GitHubClient;
 /// Get OpenCode server status and API URL
 #[tauri::command]
 async fn get_opencode_status(
-    manager: State<'_, OpenCodeManager>,
     client: State<'_, OpenCodeClient>,
 ) -> Result<OpenCodeStatus, String> {
-    let api_url = manager.api_url();
-    
-    // Check health via API client
     let health = client
         .health()
         .await
         .map_err(|e| format!("Health check failed: {}", e))?;
     
     Ok(OpenCodeStatus {
-        api_url,
+        api_url: "http://127.0.0.1:4096".to_string(),
         healthy: health.healthy,
         version: health.version,
     })
@@ -119,9 +116,10 @@ async fn create_task(
     description: String,
     status: String,
     jira_key: Option<String>,
+    project_id: Option<String>,
 ) -> Result<db::TaskRow, String> {
     let db = db.lock().unwrap();
-    db.create_task(&title, Some(&description), &status, jira_key.as_deref())
+    db.create_task(&title, Some(&description), &status, jira_key.as_deref(), project_id.as_deref())
         .map_err(|e| format!("Failed to create task: {}", e))
 }
 
@@ -158,6 +156,274 @@ async fn delete_task(
     db.delete_task(&id)
         .map_err(|e| format!("Failed to delete task: {}", e))
 }
+
+// ============================================================================
+// Project Management Commands
+// ============================================================================
+
+#[tauri::command]
+async fn create_project(
+    db: State<'_, Mutex<db::Database>>,
+    name: String,
+    repos_root_path: String,
+) -> Result<db::ProjectRow, String> {
+    let db = db.lock().unwrap();
+    db.create_project(&name, &repos_root_path)
+        .map_err(|e| format!("Failed to create project: {}", e))
+}
+
+#[tauri::command]
+async fn get_projects(
+    db: State<'_, Mutex<db::Database>>,
+) -> Result<Vec<db::ProjectRow>, String> {
+    let db = db.lock().unwrap();
+    db.get_all_projects()
+        .map_err(|e| format!("Failed to get projects: {}", e))
+}
+
+#[tauri::command]
+async fn update_project(
+    db: State<'_, Mutex<db::Database>>,
+    id: String,
+    name: String,
+    repos_root_path: String,
+) -> Result<(), String> {
+    let db = db.lock().unwrap();
+    db.update_project(&id, &name, &repos_root_path)
+        .map_err(|e| format!("Failed to update project: {}", e))
+}
+
+#[tauri::command]
+async fn delete_project(
+    db: State<'_, Mutex<db::Database>>,
+    id: String,
+) -> Result<(), String> {
+    let db = db.lock().unwrap();
+    db.delete_project(&id)
+        .map_err(|e| format!("Failed to delete project: {}", e))
+}
+
+#[tauri::command]
+async fn get_project_config(
+    db: State<'_, Mutex<db::Database>>,
+    project_id: String,
+    key: String,
+) -> Result<Option<String>, String> {
+    let db = db.lock().unwrap();
+    db.get_project_config(&project_id, &key)
+        .map_err(|e| format!("Failed to get project config: {}", e))
+}
+
+#[tauri::command]
+async fn set_project_config(
+    db: State<'_, Mutex<db::Database>>,
+    project_id: String,
+    key: String,
+    value: String,
+) -> Result<(), String> {
+    let db = db.lock().unwrap();
+    db.set_project_config(&project_id, &key, &value)
+        .map_err(|e| format!("Failed to set project config: {}", e))
+}
+
+#[tauri::command]
+async fn get_tasks_for_project(
+    db: State<'_, Mutex<db::Database>>,
+    project_id: String,
+) -> Result<Vec<db::TaskRow>, String> {
+    let db = db.lock().unwrap();
+    db.get_tasks_for_project(&project_id)
+        .map_err(|e| format!("Failed to get tasks for project: {}", e))
+}
+
+#[tauri::command]
+async fn get_worktree_for_task(
+    db: State<'_, Mutex<db::Database>>,
+    task_id: String,
+) -> Result<Option<db::WorktreeRow>, String> {
+    let db = db.lock().unwrap();
+    db.get_worktree_for_task(&task_id)
+        .map_err(|e| format!("Failed to get worktree for task: {}", e))
+}
+
+// ============================================================================
+// Implementation Orchestration Commands
+// ============================================================================
+
+#[tauri::command]
+async fn start_implementation(
+    db: State<'_, Mutex<db::Database>>,
+    server_mgr: State<'_, server_manager::ServerManager>,
+    sse_mgr: State<'_, sse_bridge::SseBridgeManager>,
+    app: tauri::AppHandle,
+    task_id: String,
+    repo_path: String,
+) -> Result<serde_json::Value, String> {
+    let (task, project_id_owned) = {
+        let db = db.lock().unwrap();
+        let task = db.get_task(&task_id)
+            .map_err(|e| format!("Failed to get task: {}", e))?
+            .ok_or("Task not found")?;
+        let project_id = task.project_id.clone().unwrap_or_default();
+        (task, project_id)
+    };
+    
+    let branch = git_worktree::slugify_branch_name(&task_id, &task.title);
+    let home = dirs::home_dir().ok_or("Failed to get home directory")?;
+    let repo_name = std::path::Path::new(&repo_path)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .ok_or("Invalid repo path")?;
+    let worktree_path = home
+        .join(".ai-command-center")
+        .join("worktrees")
+        .join(repo_name)
+        .join(&task_id);
+    
+    git_worktree::create_worktree(
+        std::path::Path::new(&repo_path),
+        &worktree_path,
+        &branch,
+        "HEAD",
+    )
+    .await
+    .map_err(|e| e.to_string())?;
+    
+    {
+        let db = db.lock().unwrap();
+        db.create_worktree_record(
+            &task_id,
+            &project_id_owned,
+            &repo_path,
+            worktree_path.to_str().unwrap(),
+            &branch,
+        )
+        .map_err(|e| e.to_string())?;
+    }
+    
+    let port = server_mgr
+        .spawn_server(&task_id, &worktree_path)
+        .await
+        .map_err(|e| e.to_string())?;
+    
+    {
+        let db = db.lock().unwrap();
+        db.update_worktree_server(&task_id, port as i64, 0)
+            .map_err(|e| e.to_string())?;
+    }
+    
+    sse_mgr
+        .start_bridge(app.clone(), task_id.clone(), port)
+        .await
+        .map_err(|e| e.to_string())?;
+    
+    let client = OpenCodeClient::with_base_url(format!("http://127.0.0.1:{}", port));
+    
+    let opencode_session_id = client
+        .create_session(format!("Task {}", task_id))
+        .await
+        .map_err(|e| format!("Failed to create session: {}", e))?;
+    
+    let mut prompt = format!("You are working on task {}: {}\n\n", task_id, task.title);
+    
+    if let Some(ref description) = task.description {
+        if !description.is_empty() {
+            prompt.push_str(description);
+            prompt.push_str("\n\n");
+        }
+    }
+    
+    if let Some(ref acceptance_criteria) = task.acceptance_criteria {
+        if !acceptance_criteria.is_empty() {
+            prompt.push_str("Acceptance Criteria:\n");
+            prompt.push_str(acceptance_criteria);
+            prompt.push_str("\n\n");
+        }
+    }
+    
+    if let Some(ref plan_text) = task.plan_text {
+        if !plan_text.is_empty() {
+            prompt.push_str("Plan:\n");
+            prompt.push_str(plan_text);
+            prompt.push_str("\n\n");
+        }
+    }
+    
+    prompt.push_str("Implement this task. Create a branch, make the changes, and create a pull request when done.");
+    
+    client
+        .prompt_async(&opencode_session_id, prompt, None)
+        .await
+        .map_err(|e| format!("Failed to send prompt: {}", e))?;
+    
+    let agent_session_id = uuid::Uuid::new_v4().to_string();
+    {
+        let db = db.lock().unwrap();
+        db.create_agent_session(
+            &agent_session_id,
+            &task_id,
+            Some(&opencode_session_id),
+            "implementing",
+            "running",
+        )
+        .map_err(|e| format!("Failed to create agent session: {}", e))?;
+    }
+    
+    Ok(serde_json::json!({
+        "task_id": task_id,
+        "worktree_path": worktree_path.to_str().unwrap(),
+        "port": port,
+        "session_id": agent_session_id,
+    }))
+}
+
+#[tauri::command]
+async fn abort_implementation(
+    db: State<'_, Mutex<db::Database>>,
+    server_mgr: State<'_, server_manager::ServerManager>,
+    sse_mgr: State<'_, sse_bridge::SseBridgeManager>,
+    _app: tauri::AppHandle,
+    task_id: String,
+) -> Result<(), String> {
+    let port = server_mgr.get_server_port(&task_id).await;
+    if let Some(port) = port {
+        let (session, opencode_session_id) = {
+            let db_lock = db.lock().unwrap();
+            let session = db_lock
+                .get_latest_session_for_ticket(&task_id)
+                .map_err(|e| format!("Failed to get session: {}", e))?;
+            let opencode_session_id = session
+                .as_ref()
+                .and_then(|s| s.opencode_session_id.clone());
+            (session, opencode_session_id)
+        };
+        
+        if let Some(opencode_session_id) = opencode_session_id {
+            let client = OpenCodeClient::with_base_url(format!("http://127.0.0.1:{}", port));
+            let _ = client.abort_session(&opencode_session_id).await;
+        }
+        
+        if let Some(session) = session {
+            let db_lock = db.lock().unwrap();
+            let _ = db_lock.update_agent_session(&session.id, "implementing", "failed", None, Some("Aborted by user"));
+        }
+    }
+    
+    sse_mgr.stop_bridge(&task_id).await;
+    
+    let _ = server_mgr.stop_server(&task_id).await;
+    
+    {
+        let db = db.lock().unwrap();
+        let _ = db.update_worktree_status(&task_id, "stopped");
+    }
+    
+    Ok(())
+}
+
+// ============================================================================
+// JIRA Integration Commands
+// ============================================================================
 
 #[tauri::command]
 async fn refresh_jira_info(
@@ -387,81 +653,69 @@ async fn mark_comment_addressed(
         .map_err(|e| format!("Failed to mark comment addressed: {}", e))
 }
 
-/// Start ticket implementation via orchestrator
-#[tauri::command]
-async fn start_ticket_implementation(
-    orchestrator: State<'_, orchestrator::Orchestrator>,
-    db: State<'_, Mutex<db::Database>>,
-    app: tauri::AppHandle,
-    ticket_id: String,
-) -> Result<String, String> {
-    orchestrator.start_implementation(&db, &app, &ticket_id)
-        .await
-        .map_err(|e| e.to_string())
-}
-
-/// Approve a checkpoint in the orchestrator
-#[tauri::command]
-async fn approve_checkpoint(
-    orchestrator: State<'_, orchestrator::Orchestrator>,
-    db: State<'_, Mutex<db::Database>>,
-    app: tauri::AppHandle,
-    session_id: String,
-) -> Result<(), String> {
-    orchestrator.approve_checkpoint(&db, &app, &session_id)
-        .await
-        .map_err(|e| e.to_string())
-}
-
-/// Reject a checkpoint with feedback
-#[tauri::command]
-async fn reject_checkpoint(
-    orchestrator: State<'_, orchestrator::Orchestrator>,
-    db: State<'_, Mutex<db::Database>>,
-    app: tauri::AppHandle,
-    session_id: String,
-    feedback: String,
-) -> Result<(), String> {
-    orchestrator.reject_checkpoint(&db, &app, &session_id, &feedback)
-        .await
-        .map_err(|e| e.to_string())
-}
-
-/// Address selected PR comments via orchestrator
-#[tauri::command]
-async fn address_selected_pr_comments(
-    orchestrator: State<'_, orchestrator::Orchestrator>,
-    db: State<'_, Mutex<db::Database>>,
-    app: tauri::AppHandle,
-    ticket_id: String,
-    comment_ids: Vec<i64>,
-) -> Result<String, String> {
-    orchestrator.address_pr_comments(&db, &app, &ticket_id, comment_ids)
-        .await
-        .map_err(|e| e.to_string())
-}
-
-/// Get the status of an agent session
 #[tauri::command]
 async fn get_session_status(
-    orchestrator: State<'_, orchestrator::Orchestrator>,
     db: State<'_, Mutex<db::Database>>,
     session_id: String,
 ) -> Result<db::AgentSessionRow, String> {
-    orchestrator.get_session_status(&db, &session_id)
-        .map_err(|e| e.to_string())
+    let db_lock = db.lock().unwrap();
+    db_lock
+        .get_agent_session(&session_id)
+        .map_err(|e| format!("Failed to get session status: {}", e))?
+        .ok_or_else(|| format!("Session {} not found", session_id))
 }
 
-/// Abort an agent session
 #[tauri::command]
 async fn abort_session(
-    orchestrator: State<'_, orchestrator::Orchestrator>,
     db: State<'_, Mutex<db::Database>>,
-    app: tauri::AppHandle,
+    server_mgr: State<'_, server_manager::ServerManager>,
+    sse_mgr: State<'_, sse_bridge::SseBridgeManager>,
+    _app: tauri::AppHandle,
     session_id: String,
 ) -> Result<(), String> {
-    orchestrator.abort_session(&db, &app, &session_id)
-        .map_err(|e| e.to_string())
+    let task_id = {
+        let db_lock = db.lock().unwrap();
+        let session = db_lock
+            .get_agent_session(&session_id)
+            .map_err(|e| format!("Failed to get session: {}", e))?
+            .ok_or_else(|| format!("Session {} not found", session_id))?;
+        session.ticket_id
+    };
+    
+    let port = server_mgr.get_server_port(&task_id).await;
+    if let Some(port) = port {
+        let (session_opt, opencode_session_id) = {
+            let db_lock = db.lock().unwrap();
+            let session = db_lock
+                .get_latest_session_for_ticket(&task_id)
+                .map_err(|e| format!("Failed to get session: {}", e))?;
+            let opencode_session_id = session
+                .as_ref()
+                .and_then(|s| s.opencode_session_id.clone());
+            (session, opencode_session_id)
+        };
+        
+        if let Some(opencode_session_id) = opencode_session_id {
+            let client = OpenCodeClient::with_base_url(format!("http://127.0.0.1:{}", port));
+            let _ = client.abort_session(&opencode_session_id).await;
+        }
+        
+        if let Some(session) = session_opt {
+            let db_lock = db.lock().unwrap();
+            let _ = db_lock.update_agent_session(&session.id, "implementing", "failed", None, Some("Aborted by user"));
+        }
+    }
+    
+    sse_mgr.stop_bridge(&task_id).await;
+    
+    let _ = server_mgr.stop_server(&task_id).await;
+    
+    {
+        let db = db.lock().unwrap();
+        let _ = db.update_worktree_status(&task_id, "stopped");
+    }
+    
+    Ok(())
 }
 
 /// Get agent logs for a session
@@ -549,81 +803,6 @@ struct OpenCodeInstallStatus {
     version: Option<String>,
 }
 
-#[derive(serde::Serialize, Clone)]
-struct SseEventPayload {
-    event_type: String,
-    data: String,
-}
-
-// ============================================================================
-// Background Tasks
-// ============================================================================
-
-/// Background task that subscribes to OpenCode SSE events and forwards them to the frontend
-async fn start_sse_bridge(app_handle: tauri::AppHandle, client: opencode_client::OpenCodeClient) {
-    loop {
-        println!("SSE bridge: Connecting to OpenCode event stream...");
-        match client.subscribe_events().await {
-            Ok(event_stream) => {
-                println!("SSE bridge: Connected to event stream");
-                use tokio_stream::StreamExt;
-                let mut stream = event_stream.into_stream();
-                let mut buffer = String::new();
-                
-                while let Some(chunk_result) = stream.next().await {
-                    match chunk_result {
-                        Ok(bytes) => {
-                            if let Ok(text) = std::str::from_utf8(&bytes) {
-                                buffer.push_str(text);
-                                
-                                while let Some(pos) = buffer.find("\n\n") {
-                                    let event_block = buffer[..pos].to_string();
-                                    buffer = buffer[pos + 2..].to_string();
-                                    
-                                    let mut event_type = String::from("message");
-                                    let mut data_lines = Vec::new();
-                                    
-                                    for line in event_block.lines() {
-                                        if let Some(value) = line.strip_prefix("event:") {
-                                            event_type = value.trim().to_string();
-                                        } else if let Some(value) = line.strip_prefix("data:") {
-                                            data_lines.push(value.trim().to_string());
-                                        } else if let Some(value) = line.strip_prefix("event: ") {
-                                            event_type = value.to_string();
-                                        } else if let Some(value) = line.strip_prefix("data: ") {
-                                            data_lines.push(value.to_string());
-                                        }
-                                    }
-                                    
-                                    let data = data_lines.join("\n");
-                                    
-                                    if !data.is_empty() {
-                                        let payload = SseEventPayload {
-                                            event_type: event_type.clone(),
-                                            data,
-                                        };
-                                        let _ = app_handle.emit("opencode-event", payload);
-                                    }
-                                }
-                            }
-                        }
-                        Err(e) => {
-                            eprintln!("SSE bridge: Stream error: {}", e);
-                            break;
-                        }
-                    }
-                }
-                println!("SSE bridge: Stream ended, will reconnect...");
-            }
-            Err(e) => {
-                eprintln!("SSE bridge: Failed to connect: {}", e);
-            }
-        }
-        
-        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-    }
-}
-
 // ============================================================================
 // Main
 // ============================================================================
@@ -631,7 +810,6 @@ async fn start_sse_bridge(app_handle: tauri::AppHandle, client: opencode_client:
 fn main() {
     tauri::Builder::default()
         .setup(|app| {
-            // Get app data directory and initialize database
             let app_data_dir = app
                 .path()
                 .app_data_dir()
@@ -643,38 +821,29 @@ fn main() {
 
             let database = db::Database::new(db_path).expect("Failed to initialize database");
 
-            // Store database in app state for access from commands
             app.manage(Mutex::new(database));
 
             println!("Database initialized successfully");
 
-            // Start OpenCode server and wait for it to be healthy
-            let opencode_manager = tauri::async_runtime::block_on(async {
-                OpenCodeManager::start().await
-            })
-            .expect("Failed to start OpenCode server");
-
-            let api_url = opencode_manager.api_url();
-            println!("OpenCode server started at: {}", api_url);
-
-            // Create OpenCode API client
-            let opencode_client = OpenCodeClient::with_base_url(api_url.clone());
-
-            // Create JIRA client
             let jira_client = JiraClient::new();
-
-            // Create GitHub client
             let github_client = GitHubClient::new();
 
-            // Create orchestrator (uses OpenCodeClient for AI agent control)
-            let orchestrator = orchestrator::Orchestrator::new(OpenCodeClient::with_base_url(api_url.clone()));
+            let opencode_client = OpenCodeClient::with_base_url("http://127.0.0.1:4096".to_string());
 
-            // Store OpenCode manager and client in app state
-            app.manage(opencode_manager);
+            let server_manager = server_manager::ServerManager::new();
+            let sse_bridge_manager = sse_bridge::SseBridgeManager::new();
+
             app.manage(opencode_client);
             app.manage(jira_client);
             app.manage(github_client);
-            app.manage(orchestrator);
+            app.manage(server_manager);
+            app.manage(sse_bridge_manager);
+
+            if let Err(e) = server_manager::ServerManager::new().cleanup_stale_pids() {
+                eprintln!("Failed to cleanup stale PIDs: {}", e);
+            }
+
+            println!("Server manager initialized");
 
             let app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
@@ -690,14 +859,6 @@ fn main() {
 
             println!("GitHub poller task started");
 
-            let app_handle_sse = app.handle().clone();
-            let sse_client = OpenCodeClient::with_base_url(api_url);
-            tauri::async_runtime::spawn(async move {
-                start_sse_bridge(app_handle_sse, sse_client).await;
-            });
-
-            println!("SSE event bridge started");
-
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -711,15 +872,21 @@ fn main() {
             update_task,
             update_task_status,
             delete_task,
+            create_project,
+            get_projects,
+            update_project,
+            delete_project,
+            get_project_config,
+            set_project_config,
+            get_tasks_for_project,
+            get_worktree_for_task,
+            start_implementation,
+            abort_implementation,
             refresh_jira_info,
             poll_pr_comments_now,
             get_pull_requests,
             get_pr_comments,
             mark_comment_addressed,
-            start_ticket_implementation,
-            approve_checkpoint,
-            reject_checkpoint,
-            address_selected_pr_comments,
             get_session_status,
             abort_session,
             get_agent_logs,

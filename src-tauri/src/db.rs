@@ -15,6 +15,33 @@ pub struct TaskRow {
     pub jira_assignee: Option<String>,
     pub acceptance_criteria: Option<String>,
     pub plan_text: Option<String>,
+    pub project_id: Option<String>,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+/// Project row from database
+#[derive(Debug, Clone, Serialize)]
+pub struct ProjectRow {
+    pub id: String,
+    pub name: String,
+    pub path: String,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+/// Worktree row from database
+#[derive(Debug, Clone, Serialize)]
+pub struct WorktreeRow {
+    pub id: i64,
+    pub task_id: String,
+    pub project_id: String,
+    pub repo_path: String,
+    pub worktree_path: String,
+    pub branch_name: String,
+    pub opencode_port: Option<i64>,
+    pub opencode_pid: Option<i64>,
+    pub status: String,
     pub created_at: i64,
     pub updated_at: i64,
 }
@@ -234,6 +261,82 @@ impl Database {
             [],
         )?;
 
+        // Migration: Rename repos_root_path to path in projects table
+        let repos_root_path_exists: bool = conn.query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('projects') WHERE name='repos_root_path'",
+            [],
+            |row| {
+                let count: i64 = row.get(0)?;
+                Ok(count > 0)
+            },
+        )?;
+
+        if repos_root_path_exists {
+            conn.execute(
+                "ALTER TABLE projects RENAME COLUMN repos_root_path TO path",
+                [],
+            )?;
+        }
+
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS projects (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                path TEXT NOT NULL,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL
+            )",
+            [],
+        )?;
+
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS project_config (
+                project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+                key TEXT NOT NULL,
+                value TEXT NOT NULL,
+                UNIQUE(project_id, key)
+            )",
+            [],
+        )?;
+
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS worktrees (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                task_id TEXT NOT NULL UNIQUE REFERENCES tasks(id),
+                project_id TEXT NOT NULL REFERENCES projects(id),
+                repo_path TEXT NOT NULL,
+                worktree_path TEXT NOT NULL,
+                branch_name TEXT NOT NULL,
+                opencode_port INTEGER,
+                opencode_pid INTEGER,
+                status TEXT NOT NULL DEFAULT 'active',
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL
+            )",
+            [],
+        )?;
+
+        let project_id_exists: bool = conn.query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('tasks') WHERE name='project_id'",
+            [],
+            |row| {
+                let count: i64 = row.get(0)?;
+                Ok(count > 0)
+            },
+        )?;
+
+        if !project_id_exists {
+            conn.execute(
+                "ALTER TABLE tasks ADD COLUMN project_id TEXT REFERENCES projects(id)",
+                [],
+            )?;
+        }
+
+        conn.execute(
+            "INSERT OR IGNORE INTO config (key, value) VALUES ('next_project_id', '1')",
+            [],
+        )?;
+
         Ok(())
     }
 
@@ -265,12 +368,326 @@ impl Database {
         Ok(())
     }
 
+    // ============================================================================
+    // Project Management
+    // ============================================================================
+
+    /// Create a new project with auto-incremented ID
+    pub fn create_project(&self, name: &str, path: &str) -> Result<ProjectRow> {
+        let conn = self.conn.lock().unwrap();
+
+        let next_id: i64 = conn.query_row(
+            "SELECT value FROM config WHERE key = 'next_project_id'",
+            [],
+            |row| {
+                let val: String = row.get(0)?;
+                Ok(val.parse::<i64>().unwrap_or(1))
+            },
+        )?;
+
+        let project_id = format!("P-{}", next_id);
+
+        conn.execute(
+            "UPDATE config SET value = ?1 WHERE key = 'next_project_id'",
+            [&(next_id + 1).to_string()],
+        )?;
+
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("time went backwards")
+            .as_secs() as i64;
+
+        conn.execute(
+            "INSERT INTO projects (id, name, path, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            rusqlite::params![&project_id, name, path, now, now],
+        )?;
+
+        Ok(ProjectRow {
+            id: project_id,
+            name: name.to_string(),
+            path: path.to_string(),
+            created_at: now,
+            updated_at: now,
+        })
+    }
+
+    /// Get all projects
+    pub fn get_all_projects(&self) -> Result<Vec<ProjectRow>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT id, name, path, created_at, updated_at 
+             FROM projects ORDER BY updated_at DESC",
+        )?;
+
+        let projects = stmt.query_map([], |row| {
+            Ok(ProjectRow {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                path: row.get(2)?,
+                created_at: row.get(3)?,
+                updated_at: row.get(4)?,
+            })
+        })?;
+
+        let mut result = Vec::new();
+        for project in projects {
+            result.push(project?);
+        }
+        Ok(result)
+    }
+
+    /// Get a project by ID
+    pub fn get_project(&self, id: &str) -> Result<Option<ProjectRow>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT id, name, path, created_at, updated_at 
+             FROM projects WHERE id = ?1",
+        )?;
+        let mut rows = stmt.query([id])?;
+        if let Some(row) = rows.next()? {
+            Ok(Some(ProjectRow {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                path: row.get(2)?,
+                created_at: row.get(3)?,
+                updated_at: row.get(4)?,
+            }))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Update a project
+    pub fn update_project(&self, id: &str, name: &str, path: &str) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("time went backwards")
+            .as_secs() as i64;
+        conn.execute(
+            "UPDATE projects SET name = ?1, path = ?2, updated_at = ?3 WHERE id = ?4",
+            rusqlite::params![name, path, now, id],
+        )?;
+        Ok(())
+    }
+
+    /// Delete a project
+    pub fn delete_project(&self, id: &str) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute("DELETE FROM projects WHERE id = ?1", rusqlite::params![id])?;
+        Ok(())
+    }
+
+    // ============================================================================
+    // Project Configuration
+    // ============================================================================
+
+    /// Get a project config value
+    pub fn get_project_config(&self, project_id: &str, key: &str) -> Result<Option<String>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt =
+            conn.prepare("SELECT value FROM project_config WHERE project_id = ?1 AND key = ?2")?;
+        let mut rows = stmt.query([project_id, key])?;
+
+        if let Some(row) = rows.next()? {
+            Ok(Some(row.get(0)?))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Set a project config value
+    pub fn set_project_config(&self, project_id: &str, key: &str, value: &str) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT OR REPLACE INTO project_config (project_id, key, value) VALUES (?1, ?2, ?3)",
+            [project_id, key, value],
+        )?;
+        Ok(())
+    }
+
+    /// Get all config values for a project
+    pub fn get_all_project_config(
+        &self,
+        project_id: &str,
+    ) -> Result<std::collections::HashMap<String, String>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt =
+            conn.prepare("SELECT key, value FROM project_config WHERE project_id = ?1")?;
+        let rows = stmt.query_map([project_id], |row| Ok((row.get(0)?, row.get(1)?)))?;
+
+        let mut result = std::collections::HashMap::new();
+        for row in rows {
+            let (key, value) = row?;
+            result.insert(key, value);
+        }
+        Ok(result)
+    }
+
+    // ============================================================================
+    // Worktree Management
+    // ============================================================================
+
+    /// Create a worktree record
+    pub fn create_worktree_record(
+        &self,
+        task_id: &str,
+        project_id: &str,
+        repo_path: &str,
+        worktree_path: &str,
+        branch_name: &str,
+    ) -> Result<i64> {
+        let conn = self.conn.lock().unwrap();
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("time went backwards")
+            .as_secs() as i64;
+
+        conn.execute(
+            "INSERT INTO worktrees (task_id, project_id, repo_path, worktree_path, branch_name, status, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, 'active', ?6, ?7)",
+            rusqlite::params![task_id, project_id, repo_path, worktree_path, branch_name, now, now],
+        )?;
+
+        Ok(conn.last_insert_rowid())
+    }
+
+    /// Get worktree for a task
+    pub fn get_worktree_for_task(&self, task_id: &str) -> Result<Option<WorktreeRow>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT id, task_id, project_id, repo_path, worktree_path, branch_name, opencode_port, opencode_pid, status, created_at, updated_at
+             FROM worktrees WHERE task_id = ?1",
+        )?;
+        let mut rows = stmt.query([task_id])?;
+        if let Some(row) = rows.next()? {
+            Ok(Some(WorktreeRow {
+                id: row.get(0)?,
+                task_id: row.get(1)?,
+                project_id: row.get(2)?,
+                repo_path: row.get(3)?,
+                worktree_path: row.get(4)?,
+                branch_name: row.get(5)?,
+                opencode_port: row.get(6)?,
+                opencode_pid: row.get(7)?,
+                status: row.get(8)?,
+                created_at: row.get(9)?,
+                updated_at: row.get(10)?,
+            }))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Update worktree server info
+    pub fn update_worktree_server(&self, task_id: &str, port: i64, pid: i64) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("time went backwards")
+            .as_secs() as i64;
+        conn.execute(
+            "UPDATE worktrees SET opencode_port = ?1, opencode_pid = ?2, updated_at = ?3 WHERE task_id = ?4",
+            rusqlite::params![port, pid, now, task_id],
+        )?;
+        Ok(())
+    }
+
+    /// Update worktree status
+    pub fn update_worktree_status(&self, task_id: &str, status: &str) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("time went backwards")
+            .as_secs() as i64;
+        conn.execute(
+            "UPDATE worktrees SET status = ?1, updated_at = ?2 WHERE task_id = ?3",
+            rusqlite::params![status, now, task_id],
+        )?;
+        Ok(())
+    }
+
+    /// Delete a worktree record
+    pub fn delete_worktree_record(&self, task_id: &str) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "DELETE FROM worktrees WHERE task_id = ?1",
+            rusqlite::params![task_id],
+        )?;
+        Ok(())
+    }
+
+    /// Get all active worktrees
+    pub fn get_active_worktrees(&self) -> Result<Vec<WorktreeRow>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT id, task_id, project_id, repo_path, worktree_path, branch_name, opencode_port, opencode_pid, status, created_at, updated_at
+             FROM worktrees WHERE status = 'active' ORDER BY updated_at DESC",
+        )?;
+
+        let worktrees = stmt.query_map([], |row| {
+            Ok(WorktreeRow {
+                id: row.get(0)?,
+                task_id: row.get(1)?,
+                project_id: row.get(2)?,
+                repo_path: row.get(3)?,
+                worktree_path: row.get(4)?,
+                branch_name: row.get(5)?,
+                opencode_port: row.get(6)?,
+                opencode_pid: row.get(7)?,
+                status: row.get(8)?,
+                created_at: row.get(9)?,
+                updated_at: row.get(10)?,
+            })
+        })?;
+
+        let mut result = Vec::new();
+        for worktree in worktrees {
+            result.push(worktree?);
+        }
+        Ok(result)
+    }
+
+    /// Get all tasks for a project
+    pub fn get_tasks_for_project(&self, project_id: &str) -> Result<Vec<TaskRow>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT id, title, description, status, jira_key, jira_status, jira_assignee, acceptance_criteria, plan_text, project_id, created_at, updated_at 
+             FROM tasks WHERE project_id = ?1 ORDER BY updated_at DESC",
+        )?;
+
+        let tasks = stmt.query_map([project_id], |row| {
+            Ok(TaskRow {
+                id: row.get(0)?,
+                title: row.get(1)?,
+                description: row.get(2)?,
+                status: row.get(3)?,
+                jira_key: row.get(4)?,
+                jira_status: row.get(5)?,
+                jira_assignee: row.get(6)?,
+                acceptance_criteria: row.get(7)?,
+                plan_text: row.get(8)?,
+                project_id: row.get(9)?,
+                created_at: row.get(10)?,
+                updated_at: row.get(11)?,
+            })
+        })?;
+
+        let mut result = Vec::new();
+        for task in tasks {
+            result.push(task?);
+        }
+        Ok(result)
+    }
+
     pub fn create_task(
         &self,
         title: &str,
         description: Option<&str>,
         status: &str,
         jira_key: Option<&str>,
+        project_id: Option<&str>,
     ) -> Result<TaskRow> {
         let conn = self.conn.lock().unwrap();
 
@@ -296,8 +713,8 @@ impl Database {
             .as_secs() as i64;
 
         conn.execute(
-            "INSERT INTO tasks (id, title, description, status, jira_key, jira_status, jira_assignee, acceptance_criteria, plan_text, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+            "INSERT INTO tasks (id, title, description, status, jira_key, jira_status, jira_assignee, acceptance_criteria, plan_text, project_id, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
             rusqlite::params![
                 &task_id,
                 title,
@@ -308,6 +725,7 @@ impl Database {
                 None::<String>,
                 None::<String>,
                 None::<String>,
+                project_id,
                 now,
                 now,
             ],
@@ -323,6 +741,7 @@ impl Database {
             jira_assignee: None,
             acceptance_criteria: None,
             plan_text: None,
+            project_id: project_id.map(|s| s.to_string()),
             created_at: now,
             updated_at: now,
         })
@@ -331,7 +750,7 @@ impl Database {
     pub fn get_all_tasks(&self) -> Result<Vec<TaskRow>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT id, title, description, status, jira_key, jira_status, jira_assignee, acceptance_criteria, plan_text, created_at, updated_at 
+            "SELECT id, title, description, status, jira_key, jira_status, jira_assignee, acceptance_criteria, plan_text, project_id, created_at, updated_at 
              FROM tasks ORDER BY updated_at DESC"
         )?;
 
@@ -346,8 +765,9 @@ impl Database {
                 jira_assignee: row.get(6)?,
                 acceptance_criteria: row.get(7)?,
                 plan_text: row.get(8)?,
-                created_at: row.get(9)?,
-                updated_at: row.get(10)?,
+                project_id: row.get(9)?,
+                created_at: row.get(10)?,
+                updated_at: row.get(11)?,
             })
         })?;
 
@@ -361,7 +781,7 @@ impl Database {
     pub fn get_task(&self, id: &str) -> Result<Option<TaskRow>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT id, title, description, status, jira_key, jira_status, jira_assignee, acceptance_criteria, plan_text, created_at, updated_at 
+            "SELECT id, title, description, status, jira_key, jira_status, jira_assignee, acceptance_criteria, plan_text, project_id, created_at, updated_at 
              FROM tasks WHERE id = ?1"
         )?;
         let mut rows = stmt.query([id])?;
@@ -376,8 +796,9 @@ impl Database {
                 jira_assignee: row.get(6)?,
                 acceptance_criteria: row.get(7)?,
                 plan_text: row.get(8)?,
-                created_at: row.get(9)?,
-                updated_at: row.get(10)?,
+                project_id: row.get(9)?,
+                created_at: row.get(10)?,
+                updated_at: row.get(11)?,
             }))
         } else {
             Ok(None)
@@ -452,7 +873,7 @@ impl Database {
     pub fn get_tasks_with_jira_links(&self) -> Result<Vec<TaskRow>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT id, title, description, status, jira_key, jira_status, jira_assignee, acceptance_criteria, plan_text, created_at, updated_at 
+            "SELECT id, title, description, status, jira_key, jira_status, jira_assignee, acceptance_criteria, plan_text, project_id, created_at, updated_at 
              FROM tasks WHERE jira_key IS NOT NULL ORDER BY updated_at DESC"
         )?;
 
@@ -467,8 +888,9 @@ impl Database {
                 jira_assignee: row.get(6)?,
                 acceptance_criteria: row.get(7)?,
                 plan_text: row.get(8)?,
-                created_at: row.get(9)?,
-                updated_at: row.get(10)?,
+                project_id: row.get(9)?,
+                created_at: row.get(10)?,
+                updated_at: row.get(11)?,
             })
         })?;
 
@@ -947,21 +1369,21 @@ mod tests {
 
         let table_count: i32 = conn
             .query_row(
-                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('tasks', 'agent_sessions', 'agent_logs', 'pull_requests', 'pr_comments', 'config')",
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('tasks', 'agent_sessions', 'agent_logs', 'pull_requests', 'pr_comments', 'config', 'projects', 'project_config', 'worktrees')",
                 [],
                 |row| row.get(0),
             )
             .expect("Failed to count tables");
 
-        assert_eq!(table_count, 6, "All 6 tables should be created");
+        assert_eq!(table_count, 9, "All 9 tables should be created");
 
         let config_count: i32 = conn
             .query_row("SELECT COUNT(*) FROM config", [], |row| row.get(0))
             .expect("Failed to count config rows");
 
         assert_eq!(
-            config_count, 14,
-            "All 14 default config values should be inserted"
+            config_count, 15,
+            "All 15 default config values should be inserted"
         );
 
         // Clean up
@@ -1014,8 +1436,8 @@ mod tests {
         let conn = db.connection();
         let conn = conn.lock().unwrap();
         conn.execute(
-            "INSERT INTO tasks (id, title, description, status, jira_key, jira_status, jira_assignee, acceptance_criteria, plan_text, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
-            rusqlite::params!["T-100", "Test task", "A description", "todo", "PROJ-100", "To Do", "alice", None::<String>, None::<String>, 1000, 1000],
+            "INSERT INTO tasks (id, title, description, status, jira_key, jira_status, jira_assignee, acceptance_criteria, plan_text, project_id, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+            rusqlite::params!["T-100", "Test task", "A description", "todo", "PROJ-100", "To Do", "alice", None::<String>, None::<String>, None::<String>, 1000, 1000],
         ).expect("Failed to insert test task");
     }
 
@@ -1024,7 +1446,7 @@ mod tests {
         let (db, path) = make_test_db("create_task");
 
         let task = db
-            .create_task("My task", Some("desc"), "todo", None)
+            .create_task("My task", Some("desc"), "todo", None, None)
             .expect("create failed");
 
         assert_eq!(task.id, "T-1");
@@ -1045,7 +1467,7 @@ mod tests {
         let (db, path) = make_test_db("update_task");
 
         let task = db
-            .create_task("Original", Some("desc"), "todo", None)
+            .create_task("Original", Some("desc"), "todo", None, None)
             .expect("create failed");
 
         db.update_task(&task.id, "Updated", Some("new desc"), None)
@@ -1065,7 +1487,7 @@ mod tests {
         let (db, path) = make_test_db("get_task_by_id");
 
         let task = db
-            .create_task("Found me", Some("desc"), "todo", None)
+            .create_task("Found me", Some("desc"), "todo", None, None)
             .expect("create failed");
 
         let retrieved = db.get_task(&task.id).expect("get failed");
@@ -1404,13 +1826,13 @@ mod tests {
         let (db, path) = make_test_db("task_autoincrement");
 
         let task1 = db
-            .create_task("Task 1", None, "todo", None)
+            .create_task("Task 1", None, "todo", None, None)
             .expect("create 1 failed");
         let task2 = db
-            .create_task("Task 2", None, "todo", None)
+            .create_task("Task 2", None, "todo", None, None)
             .expect("create 2 failed");
         let task3 = db
-            .create_task("Task 3", None, "todo", None)
+            .create_task("Task 3", None, "todo", None, None)
             .expect("create 3 failed");
 
         assert_eq!(task1.id, "T-1");
@@ -1426,7 +1848,7 @@ mod tests {
         let (db, path) = make_test_db("update_task_status");
 
         let task = db
-            .create_task("My task", None, "todo", None)
+            .create_task("My task", None, "todo", None, None)
             .expect("create failed");
 
         db.update_task_status(&task.id, "in_progress")
@@ -1443,9 +1865,9 @@ mod tests {
     fn test_update_task_jira_info() {
         let (db, path) = make_test_db("update_jira_info");
 
-        db.create_task("Linked task", None, "todo", Some("PROJ-1"))
+        db.create_task("Linked task", None, "todo", Some("PROJ-1"), None)
             .expect("create 1 failed");
-        db.create_task("Unlinked task", None, "todo", None)
+        db.create_task("Unlinked task", None, "todo", None, None)
             .expect("create 2 failed");
 
         let updated = db
@@ -1470,11 +1892,11 @@ mod tests {
     fn test_get_tasks_with_jira_links() {
         let (db, path) = make_test_db("tasks_with_jira");
 
-        db.create_task("Task 1", None, "todo", Some("PROJ-1"))
+        db.create_task("Task 1", None, "todo", Some("PROJ-1"), None)
             .expect("create 1 failed");
-        db.create_task("Task 2", None, "todo", Some("PROJ-2"))
+        db.create_task("Task 2", None, "todo", Some("PROJ-2"), None)
             .expect("create 2 failed");
-        db.create_task("Task 3", None, "todo", None)
+        db.create_task("Task 3", None, "todo", None, None)
             .expect("create 3 failed");
 
         let linked = db.get_tasks_with_jira_links().expect("get linked failed");
@@ -1489,7 +1911,7 @@ mod tests {
         let (db, path) = make_test_db("preserve_fields");
 
         let task = db
-            .create_task("My task", None, "todo", Some("PROJ-1"))
+            .create_task("My task", None, "todo", Some("PROJ-1"), None)
             .expect("create failed");
 
         db.update_task_fields(&task.id, Some("AC text"), Some("Plan text"))

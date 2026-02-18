@@ -1,0 +1,5 @@
+QA2: Verify RepoInfo struct removed from git_worktree.rs
+Command: grep -c "RepoInfo" src-tauri/src/git_worktree.rs
+Expected: 0
+Result: 0
+Status: PASS

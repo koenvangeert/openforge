@@ -1,0 +1,5 @@
+QA1: Verify scan_repos removed from main.rs
+Command: grep -c "scan_repos" src-tauri/src/main.rs
+Expected: 0
+Result: 0
+Status: PASS

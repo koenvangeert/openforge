@@ -1,0 +1,401 @@
+use dashmap::DashMap;
+use once_cell::sync::Lazy;
+use regex::Regex;
+use serde::Serialize;
+use std::fmt;
+use std::io;
+use std::path::Path;
+use std::sync::Arc;
+use tokio::process::Command;
+use tokio::sync::Mutex;
+
+// ============================================================================
+// Error Type
+// ============================================================================
+
+#[derive(Debug)]
+pub enum GitWorktreeError {
+    NotARepository,
+    WorktreeAddFailed(String),
+    WorktreeRemoveFailed(String),
+    CommandFailed(String),
+    IoError(io::Error),
+}
+
+impl fmt::Display for GitWorktreeError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            GitWorktreeError::NotARepository => {
+                write!(f, "Not a git repository")
+            }
+            GitWorktreeError::WorktreeAddFailed(msg) => {
+                write!(f, "Failed to add worktree: {}", msg)
+            }
+            GitWorktreeError::WorktreeRemoveFailed(msg) => {
+                write!(f, "Failed to remove worktree: {}", msg)
+            }
+            GitWorktreeError::CommandFailed(msg) => {
+                write!(f, "Git command failed: {}", msg)
+            }
+            GitWorktreeError::IoError(e) => {
+                write!(f, "IO error: {}", e)
+            }
+        }
+    }
+}
+
+impl std::error::Error for GitWorktreeError {}
+
+impl From<io::Error> for GitWorktreeError {
+    fn from(err: io::Error) -> Self {
+        GitWorktreeError::IoError(err)
+    }
+}
+
+// ============================================================================
+// Data Structures
+// ============================================================================
+
+#[derive(Debug, Clone, Serialize)]
+pub struct WorktreeListEntry {
+    pub path: String,
+    pub branch: Option<String>,
+    pub head: Option<String>,
+}
+
+// ============================================================================
+// Per-Path Locking
+// ============================================================================
+
+static WORKTREE_LOCKS: Lazy<DashMap<String, Arc<Mutex<()>>>> = Lazy::new(DashMap::new);
+
+/// Acquires a lock for the given repository path to prevent concurrent worktree operations
+fn acquire_lock(repo_path: &Path) -> Arc<Mutex<()>> {
+    let path_key = repo_path.to_string_lossy().to_string();
+    WORKTREE_LOCKS
+        .entry(path_key)
+        .or_insert_with(|| Arc::new(Mutex::new(())))
+        .clone()
+}
+
+// ============================================================================
+// Worktree Operations
+// ============================================================================
+
+/// Creates a new git worktree with a new branch based on a given reference.
+/// If the worktree path already exists, it's considered a successful reuse.
+///
+/// # Arguments
+/// * `repo_path` - Path to the main git repository
+/// * `worktree_path` - Path where the worktree should be created
+/// * `branch_name` - Name of the new branch to create
+/// * `base_ref` - Base reference (branch/commit) to branch from
+///
+/// # Returns
+/// Ok(()) on success, or an error describing what went wrong
+pub async fn create_worktree(
+    repo_path: &Path,
+    worktree_path: &Path,
+    branch_name: &str,
+    base_ref: &str,
+) -> Result<(), GitWorktreeError> {
+    let lock = acquire_lock(repo_path);
+    let _guard = lock.lock().await;
+
+    let prune_output = Command::new("git")
+        .arg("-C")
+        .arg(repo_path)
+        .arg("worktree")
+        .arg("prune")
+        .output()
+        .await?;
+
+    if !prune_output.status.success() {
+        let stderr = String::from_utf8_lossy(&prune_output.stderr);
+        println!("Warning: worktree prune failed: {}", stderr);
+    }
+
+    if worktree_path.exists() {
+        return Ok(());
+    }
+
+    let result = try_create_worktree_inner(repo_path, worktree_path, branch_name, base_ref).await;
+
+    if result.is_err() {
+        println!("Worktree creation failed, attempting cleanup and retry...");
+        
+        let _ = Command::new("git")
+            .arg("-C")
+            .arg(repo_path)
+            .arg("worktree")
+            .arg("remove")
+            .arg("--force")
+            .arg(worktree_path)
+            .output()
+            .await;
+
+        let _ = Command::new("git")
+            .arg("-C")
+            .arg(repo_path)
+            .arg("worktree")
+            .arg("prune")
+            .output()
+            .await;
+
+        return try_create_worktree_inner(repo_path, worktree_path, branch_name, base_ref).await;
+    }
+
+    result
+}
+
+async fn try_create_worktree_inner(
+    repo_path: &Path,
+    worktree_path: &Path,
+    branch_name: &str,
+    base_ref: &str,
+) -> Result<(), GitWorktreeError> {
+    let add_output = Command::new("git")
+        .arg("-C")
+        .arg(repo_path)
+        .arg("worktree")
+        .arg("add")
+        .arg("-b")
+        .arg(branch_name)
+        .arg(worktree_path)
+        .arg(base_ref)
+        .output()
+        .await?;
+
+    if !add_output.status.success() {
+        let stderr = String::from_utf8_lossy(&add_output.stderr);
+        return Err(GitWorktreeError::WorktreeAddFailed(stderr.to_string()));
+    }
+
+    let _ = Command::new("git")
+        .arg("-C")
+        .arg(worktree_path)
+        .arg("branch")
+        .arg("--unset-upstream")
+        .output()
+        .await;
+
+    Ok(())
+}
+
+/// Removes a git worktree and cleans up all associated metadata.
+/// Performs a 4-step cleanup process to ensure complete removal.
+///
+/// # Arguments
+/// * `repo_path` - Path to the main git repository
+/// * `worktree_path` - Path to the worktree to remove
+///
+/// # Returns
+/// Ok(()) on success, or an error describing what went wrong
+pub async fn remove_worktree(
+    repo_path: &Path,
+    worktree_path: &Path,
+) -> Result<(), GitWorktreeError> {
+    let lock = acquire_lock(repo_path);
+    let _guard = lock.lock().await;
+
+    // Step 1: Force remove the worktree via git
+    let remove_output = Command::new("git")
+        .arg("-C")
+        .arg(repo_path)
+        .arg("worktree")
+        .arg("remove")
+        .arg("--force")
+        .arg(worktree_path)
+        .output()
+        .await?;
+
+    if !remove_output.status.success() {
+        let stderr = String::from_utf8_lossy(&remove_output.stderr);
+        println!("Warning: git worktree remove failed: {}", stderr);
+    }
+
+    // Step 2: Remove .git/worktrees metadata
+    let worktree_name = worktree_path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("");
+    
+    let git_dir = repo_path.join(".git").join("worktrees").join(worktree_name);
+    if git_dir.exists() {
+        if let Err(e) = std::fs::remove_dir_all(&git_dir) {
+            println!("Warning: failed to remove worktree metadata: {}", e);
+        }
+    }
+
+    // Step 3: Force remove the filesystem directory
+    if worktree_path.exists() {
+        let rm_output = Command::new("rm")
+            .arg("-rf")
+            .arg(worktree_path)
+            .output()
+            .await?;
+
+        if !rm_output.status.success() {
+            let stderr = String::from_utf8_lossy(&rm_output.stderr);
+            return Err(GitWorktreeError::WorktreeRemoveFailed(stderr.to_string()));
+        }
+    }
+
+    // Step 4: Prune stale worktree references
+    let prune_output = Command::new("git")
+        .arg("-C")
+        .arg(repo_path)
+        .arg("worktree")
+        .arg("prune")
+        .output()
+        .await?;
+
+    if !prune_output.status.success() {
+        let stderr = String::from_utf8_lossy(&prune_output.stderr);
+        println!("Warning: worktree prune failed: {}", stderr);
+    }
+
+    Ok(())
+}
+
+/// Lists all worktrees for a given repository.
+/// Parses the output of `git worktree list --porcelain`.
+///
+/// # Arguments
+/// * `repo_path` - Path to the main git repository
+///
+/// # Returns
+/// A vector of `WorktreeListEntry` structs for each worktree
+pub async fn list_worktrees(repo_path: &Path) -> Result<Vec<WorktreeListEntry>, GitWorktreeError> {
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(repo_path)
+        .arg("worktree")
+        .arg("list")
+        .arg("--porcelain")
+        .output()
+        .await?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(GitWorktreeError::CommandFailed(stderr.to_string()));
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let mut worktrees = Vec::new();
+    let mut current_entry = WorktreeListEntry {
+        path: String::new(),
+        branch: None,
+        head: None,
+    };
+
+    for line in stdout.lines() {
+        if line.starts_with("worktree ") {
+            if !current_entry.path.is_empty() {
+                worktrees.push(current_entry.clone());
+            }
+            current_entry = WorktreeListEntry {
+                path: line.strip_prefix("worktree ").unwrap_or("").to_string(),
+                branch: None,
+                head: None,
+            };
+        } else if line.starts_with("branch ") {
+            current_entry.branch = Some(line.strip_prefix("branch ").unwrap_or("").to_string());
+        } else if line.starts_with("HEAD ") {
+            current_entry.head = Some(line.strip_prefix("HEAD ").unwrap_or("").to_string());
+        } else if line.is_empty() && !current_entry.path.is_empty() {
+            worktrees.push(current_entry.clone());
+            current_entry = WorktreeListEntry {
+                path: String::new(),
+                branch: None,
+                head: None,
+            };
+        }
+    }
+
+    if !current_entry.path.is_empty() {
+        worktrees.push(current_entry);
+    }
+
+    Ok(worktrees)
+}
+
+// ============================================================================
+// Branch Name Generation
+// ============================================================================
+
+/// Generates a slugified branch name from a task ID and title.
+/// Converts to lowercase, replaces non-alphanumeric characters with hyphens,
+/// collapses multiple hyphens, trims, and limits to 50 characters.
+///
+/// # Arguments
+/// * `task_id` - The task identifier (e.g., "T-5", "PROJ-123")
+/// * `title` - The task title (e.g., "Add Auth Module!")
+///
+/// # Returns
+/// A branch name in the format "{task_id}/{slug}" (e.g., "T-5/add-auth-module")
+///
+/// # Example
+/// ```
+/// let branch = slugify_branch_name("T-5", "Add Auth Module!");
+/// assert_eq!(branch, "T-5/add-auth-module");
+/// ```
+pub fn slugify_branch_name(task_id: &str, title: &str) -> String {
+    let lower = title.to_lowercase();
+    let re = Regex::new(r"[^a-z0-9]+").unwrap();
+    let with_hyphens = re.replace_all(&lower, "-");
+    let re_collapse = Regex::new(r"-+").unwrap();
+    let collapsed = re_collapse.replace_all(&with_hyphens, "-");
+    let trimmed = collapsed.trim_matches('-');
+    let limited = if trimmed.len() > 50 {
+        &trimmed[..50]
+    } else {
+        trimmed
+    };
+    let slug = limited.trim_end_matches('-');
+
+    format!("{}/{}", task_id, slug)
+}
+
+// ============================================================================
+// Tests
+// ============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_slugify_branch_name_basic() {
+        let result = slugify_branch_name("T-5", "Add Auth Module!");
+        assert_eq!(result, "T-5/add-auth-module");
+    }
+
+    #[test]
+    fn test_slugify_branch_name_special_chars() {
+        let result = slugify_branch_name("PROJ-123", "Fix: Bug with @mentions & #hashtags");
+        assert_eq!(result, "PROJ-123/fix-bug-with-mentions-hashtags");
+    }
+
+    #[test]
+    fn test_slugify_branch_name_multiple_spaces() {
+        let result = slugify_branch_name("T-1", "Multiple   Spaces   Here");
+        assert_eq!(result, "T-1/multiple-spaces-here");
+    }
+
+    #[test]
+    fn test_slugify_branch_name_long_title() {
+        let long_title = "This is a very long title that should be truncated to fifty characters maximum";
+        let result = slugify_branch_name("T-999", long_title);
+        assert!(result.starts_with("T-999/"));
+        let slug_part = result.strip_prefix("T-999/").unwrap();
+        assert!(slug_part.len() <= 50);
+        assert!(!slug_part.ends_with('-'));
+    }
+
+    #[test]
+    fn test_slugify_branch_name_unicode() {
+        let result = slugify_branch_name("T-7", "Add 日本語 support");
+        assert_eq!(result, "T-7/add-support");
+    }
+}
