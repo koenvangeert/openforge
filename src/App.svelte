@@ -8,21 +8,26 @@
   import KanbanBoard from './components/KanbanBoard.svelte'
   import TaskDetailView from './components/TaskDetailView.svelte'
   import AddTaskDialog from './components/AddTaskDialog.svelte'
-  import SettingsPanel from './components/SettingsPanel.svelte'
-  import Toast from './components/Toast.svelte'
-  import ProjectSwitcher from './components/ProjectSwitcher.svelte'
-  import ProjectSetupDialog from './components/ProjectSetupDialog.svelte'
+import SettingsPanel from './components/SettingsPanel.svelte'
+import GlobalSettingsPanel from './components/GlobalSettingsPanel.svelte'
+import Toast from './components/Toast.svelte'
+import ProjectSwitcher from './components/ProjectSwitcher.svelte'
+import ProjectSetupDialog from './components/ProjectSetupDialog.svelte'
 
 
   let openCodeStatus: OpenCodeStatus | null = null
   let unlisteners: UnlistenFn[] = []
   let showSettings = false
+  let showGlobalSettings = false
   let showAddDialog = false
   let editingTask: Task | null = null
   let dialogMode: 'create' | 'edit' = 'create'
   let showProjectSetup = false
 
   $: selectedTask = $tasks.find(t => t.id === $selectedTaskId) || null
+
+  // Close settings panels when a task is selected
+  $: if ($selectedTaskId) { showSettings = false; showGlobalSettings = false }
 
   // Reload tasks when active project changes
   $: if ($activeProjectId) {
@@ -215,7 +220,10 @@
     <h1 class="app-title">AI Command Center</h1>
     <ProjectSwitcher on:new-project={() => showProjectSetup = true} />
     <div class="status-bar">
-      <button class="settings-btn" on:click={() => showSettings = !showSettings}>
+      <button class="settings-btn" on:click={() => { showGlobalSettings = !showGlobalSettings; showSettings = false; $selectedTaskId = null }}>
+        ⚙
+      </button>
+      <button class="settings-btn" on:click={() => { showSettings = !showSettings; showGlobalSettings = false; $selectedTaskId = null }}>
         {showSettings ? 'Board' : 'Settings'}
       </button>
       {#if openCodeStatus}
@@ -233,7 +241,9 @@
   </header>
 
   <main class="main-content">
-    {#if showSettings}
+    {#if showGlobalSettings}
+      <GlobalSettingsPanel on:close={() => showGlobalSettings = false} />
+    {:else if showSettings}
       <SettingsPanel on:close={() => showSettings = false} on:project-deleted={loadProjects} />
     {:else if selectedTask}
       <TaskDetailView task={selectedTask} />

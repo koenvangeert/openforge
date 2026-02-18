@@ -337,6 +337,51 @@ impl Database {
             [],
         )?;
 
+        // ============================================================================
+        // One-time migration: Copy per-project credentials to global config
+        // If global credentials are empty but a project has them, copy them over.
+        // This ensures existing users don't lose sync after the config migration.
+        // ============================================================================
+        let global_token: String = conn
+            .query_row(
+                "SELECT value FROM config WHERE key = 'jira_api_token'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or_default();
+
+        if global_token.is_empty() {
+            let source_project: Option<String> = conn.query_row(
+                "SELECT project_id FROM project_config WHERE key = 'jira_api_token' AND value != '' LIMIT 1",
+                [],
+                |row| row.get(0),
+            ).ok();
+
+            if let Some(project_id) = source_project {
+                let keys = [
+                    "jira_base_url",
+                    "jira_username",
+                    "jira_api_token",
+                    "github_token",
+                ];
+                for key in &keys {
+                    let value: String = conn
+                        .query_row(
+                            "SELECT value FROM project_config WHERE project_id = ?1 AND key = ?2",
+                            rusqlite::params![project_id, key],
+                            |row| row.get(0),
+                        )
+                        .unwrap_or_default();
+                    if !value.is_empty() {
+                        conn.execute(
+                            "UPDATE config SET value = ?1 WHERE key = ?2",
+                            rusqlite::params![value, key],
+                        )?;
+                    }
+                }
+            }
+        }
+
         Ok(())
     }
 
@@ -1929,6 +1974,134 @@ mod tests {
         assert_eq!(updated.acceptance_criteria, Some("AC text".to_string()));
         assert_eq!(updated.plan_text, Some("Plan text".to_string()));
         assert_eq!(updated.jira_status, Some("In Progress".to_string()));
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_project_config_operations() {
+        let (db, path) = make_test_db("project_config");
+
+        let project = db
+            .create_project("Test Project", "/tmp/test")
+            .expect("Failed to create project");
+
+        db.set_project_config(&project.id, "github_default_repo", "owner/repo")
+            .expect("Failed to set github_default_repo");
+        db.set_project_config(&project.id, "custom_setting", "value123")
+            .expect("Failed to set custom_setting");
+
+        let repo = db
+            .get_project_config(&project.id, "github_default_repo")
+            .expect("Failed to get github_default_repo");
+        assert_eq!(repo, Some("owner/repo".to_string()));
+
+        let setting = db
+            .get_project_config(&project.id, "custom_setting")
+            .expect("Failed to get custom_setting");
+        assert_eq!(setting, Some("value123".to_string()));
+
+        let nonexistent = db
+            .get_project_config(&project.id, "nonexistent")
+            .expect("Failed to query nonexistent");
+        assert_eq!(nonexistent, None);
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_global_and_project_config_are_independent() {
+        let (db, path) = make_test_db("independent_configs");
+
+        db.set_config("github_token", "global-token-456")
+            .expect("Failed to set global github_token");
+
+        let project = db
+            .create_project("Test Project", "/tmp/test")
+            .expect("Failed to create project");
+
+        db.set_project_config(&project.id, "github_default_repo", "owner/repo")
+            .expect("Failed to set project github_default_repo");
+
+        let global_token = db
+            .get_config("github_token")
+            .expect("Failed to get global github_token");
+        assert_eq!(global_token, Some("global-token-456".to_string()));
+
+        let project_repo = db
+            .get_project_config(&project.id, "github_default_repo")
+            .expect("Failed to get project github_default_repo");
+        assert_eq!(project_repo, Some("owner/repo".to_string()));
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_migration_copies_credentials_to_global() {
+        let path = format!("/tmp/test_migration_copy_{}.db", std::process::id());
+        let _ = fs::remove_file(&path);
+
+        {
+            let db = Database::new(PathBuf::from(&path)).expect("Failed to create DB");
+            let project = db
+                .create_project("Test Project", "/tmp/test")
+                .expect("Failed to create project");
+            db.set_project_config(&project.id, "jira_api_token", "proj-token")
+                .expect("set");
+            db.set_project_config(&project.id, "jira_base_url", "https://test.atlassian.net")
+                .expect("set");
+            db.set_project_config(&project.id, "jira_username", "user@test.com")
+                .expect("set");
+            db.set_project_config(&project.id, "github_token", "ghp_testtoken")
+                .expect("set");
+        }
+
+        let db = Database::new(PathBuf::from(&path)).expect("Failed to reopen DB");
+        assert_eq!(
+            db.get_config("jira_api_token").unwrap(),
+            Some("proj-token".to_string())
+        );
+        assert_eq!(
+            db.get_config("jira_base_url").unwrap(),
+            Some("https://test.atlassian.net".to_string())
+        );
+        assert_eq!(
+            db.get_config("jira_username").unwrap(),
+            Some("user@test.com".to_string())
+        );
+        assert_eq!(
+            db.get_config("github_token").unwrap(),
+            Some("ghp_testtoken".to_string())
+        );
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_migration_does_not_overwrite_existing_global() {
+        let path = format!("/tmp/test_migration_idempotent_{}.db", std::process::id());
+        let _ = fs::remove_file(&path);
+
+        {
+            let db = Database::new(PathBuf::from(&path)).expect("Failed to create DB");
+            db.set_config("jira_api_token", "existing-token")
+                .expect("set");
+            let project = db
+                .create_project("Test Project", "/tmp/test")
+                .expect("Failed to create project");
+            db.set_project_config(&project.id, "jira_api_token", "project-token")
+                .expect("set");
+        }
+
+        let db = Database::new(PathBuf::from(&path)).expect("Failed to reopen DB");
+        assert_eq!(
+            db.get_config("jira_api_token").unwrap(),
+            Some("existing-token".to_string())
+        );
 
         drop(db);
         let _ = fs::remove_file(&path);
