@@ -7,11 +7,7 @@
 
   let projectName = ''
   let path = ''
-  let jiraBaseUrl = ''
-  let jiraUsername = ''
-  let jiraApiToken = ''
   let jiraBoardId = ''
-  let githubToken = ''
   let githubDefaultRepo = ''
   let isSaving = false
   let saved = false
@@ -27,11 +23,7 @@
 
   async function loadConfig(projectId: string) {
     try {
-      jiraBaseUrl = (await getProjectConfig(projectId, 'jira_base_url')) || ''
-      jiraUsername = (await getProjectConfig(projectId, 'jira_username')) || ''
-      jiraApiToken = (await getProjectConfig(projectId, 'jira_api_token')) || ''
       jiraBoardId = (await getProjectConfig(projectId, 'jira_board_id')) || ''
-      githubToken = (await getProjectConfig(projectId, 'github_token')) || ''
       githubDefaultRepo = (await getProjectConfig(projectId, 'github_default_repo')) || ''
     } catch (e) {
       console.error('Failed to load settings:', e)
@@ -45,11 +37,7 @@
     saved = false
     try {
       await updateProject($activeProjectId, projectName, path)
-      await setProjectConfig($activeProjectId, 'jira_base_url', jiraBaseUrl)
-      await setProjectConfig($activeProjectId, 'jira_username', jiraUsername)
-      await setProjectConfig($activeProjectId, 'jira_api_token', jiraApiToken)
       await setProjectConfig($activeProjectId, 'jira_board_id', jiraBoardId)
-      await setProjectConfig($activeProjectId, 'github_token', githubToken)
       await setProjectConfig($activeProjectId, 'github_default_repo', githubDefaultRepo)
       saved = true
       setTimeout(() => { saved = false }, 2000)
@@ -86,7 +74,7 @@
 
 <div class="settings">
   <div class="settings-header">
-    <h2>Settings for: {projectName || 'No Project'}</h2>
+    <h2>Project Settings: {projectName || 'No Project'}</h2>
     <button class="close-btn" on:click={close}>X</button>
   </div>
 
@@ -113,19 +101,6 @@
 
       <section class="section">
         <h3>JIRA</h3>
-        <p class="section-note">Sync updates linked task info only (read-only)</p>
-        <label class="field">
-          <span>Base URL</span>
-          <input type="text" bind:value={jiraBaseUrl} placeholder="https://your-domain.atlassian.net" />
-        </label>
-        <label class="field">
-          <span>Email / Username</span>
-          <input type="text" bind:value={jiraUsername} placeholder="your@email.com" />
-        </label>
-        <label class="field">
-          <span>API Token</span>
-          <input type="password" bind:value={jiraApiToken} placeholder="Your JIRA API token" />
-        </label>
         <label class="field">
           <span>Project / Board ID</span>
           <input type="text" bind:value={jiraBoardId} placeholder="e.g. PROJ" />
@@ -134,10 +109,6 @@
 
       <section class="section">
         <h3>GitHub</h3>
-        <label class="field">
-          <span>Personal Access Token</span>
-          <input type="password" bind:value={githubToken} placeholder="ghp_..." />
-        </label>
         <label class="field">
           <span>Default Repository</span>
           <input type="text" bind:value={githubDefaultRepo} placeholder="owner/repo" />

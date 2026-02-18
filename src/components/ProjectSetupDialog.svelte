@@ -6,11 +6,7 @@
 
   let projectName = ''
   let path = ''
-  let jiraBaseUrl = ''
-  let jiraUsername = ''
-  let jiraApiToken = ''
   let jiraBoardId = ''
-  let githubToken = ''
   let githubDefaultRepo = ''
   let isSubmitting = false
   let showJiraSection = false
@@ -24,23 +20,11 @@
       const project = await createProject(projectName.trim(), path.trim())
 
       // Set JIRA config if provided
-      if (jiraBaseUrl.trim()) {
-        await setProjectConfig(project.id, 'jira_base_url', jiraBaseUrl.trim())
-      }
-      if (jiraUsername.trim()) {
-        await setProjectConfig(project.id, 'jira_username', jiraUsername.trim())
-      }
-      if (jiraApiToken.trim()) {
-        await setProjectConfig(project.id, 'jira_api_token', jiraApiToken.trim())
-      }
       if (jiraBoardId.trim()) {
         await setProjectConfig(project.id, 'jira_board_id', jiraBoardId.trim())
       }
 
       // Set GitHub config if provided
-      if (githubToken.trim()) {
-        await setProjectConfig(project.id, 'github_token', githubToken.trim())
-      }
       if (githubDefaultRepo.trim()) {
         await setProjectConfig(project.id, 'github_default_repo', githubDefaultRepo.trim())
       }
@@ -116,33 +100,6 @@
       {#if showJiraSection}
         <div class="section-content">
           <label class="field">
-            <span>Base URL</span>
-            <input
-              type="text"
-              bind:value={jiraBaseUrl}
-              placeholder="https://yourcompany.atlassian.net"
-            />
-          </label>
-
-          <label class="field">
-            <span>Username</span>
-            <input
-              type="text"
-              bind:value={jiraUsername}
-              placeholder="your.email@company.com"
-            />
-          </label>
-
-          <label class="field">
-            <span>API Token</span>
-            <input
-              type="password"
-              bind:value={jiraApiToken}
-              placeholder="Your JIRA API token"
-            />
-          </label>
-
-          <label class="field">
             <span>Board ID</span>
             <input
               type="text"
@@ -168,15 +125,6 @@
 
       {#if showGithubSection}
         <div class="section-content">
-          <label class="field">
-            <span>Personal Access Token</span>
-            <input
-              type="password"
-              bind:value={githubToken}
-              placeholder="ghp_..."
-            />
-          </label>
-
           <label class="field">
             <span>Default Repository</span>
             <input
