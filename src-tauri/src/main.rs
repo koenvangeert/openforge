@@ -102,37 +102,46 @@ async fn get_task_detail(
 #[tauri::command]
 async fn create_task(
     db: State<'_, Mutex<db::Database>>,
+    app: tauri::AppHandle,
     title: String,
     status: String,
     jira_key: Option<String>,
     project_id: Option<String>,
 ) -> Result<db::TaskRow, String> {
     let db = db.lock().unwrap();
-    db.create_task(&title, &status, jira_key.as_deref(), project_id.as_deref())
-        .map_err(|e| format!("Failed to create task: {}", e))
+    let task = db.create_task(&title, &status, jira_key.as_deref(), project_id.as_deref())
+        .map_err(|e| format!("Failed to create task: {}", e))?;
+    let _ = app.emit("task-changed", serde_json::json!({ "action": "created", "task_id": task.id }));
+    Ok(task)
 }
 
 #[tauri::command]
 async fn update_task(
     db: State<'_, Mutex<db::Database>>,
+    app: tauri::AppHandle,
     id: String,
     title: String,
     jira_key: Option<String>,
 ) -> Result<(), String> {
     let db = db.lock().unwrap();
     db.update_task(&id, &title, jira_key.as_deref())
-        .map_err(|e| format!("Failed to update task: {}", e))
+        .map_err(|e| format!("Failed to update task: {}", e))?;
+    let _ = app.emit("task-changed", serde_json::json!({ "action": "updated", "task_id": id }));
+    Ok(())
 }
 
 #[tauri::command]
 async fn update_task_status(
     db: State<'_, Mutex<db::Database>>,
+    app: tauri::AppHandle,
     id: String,
     status: String,
 ) -> Result<(), String> {
     let db = db.lock().unwrap();
     db.update_task_status(&id, &status)
-        .map_err(|e| format!("Failed to update task status: {}", e))
+        .map_err(|e| format!("Failed to update task status: {}", e))?;
+    let _ = app.emit("task-changed", serde_json::json!({ "action": "updated", "task_id": id }));
+    Ok(())
 }
 
 #[tauri::command]
@@ -141,6 +150,7 @@ async fn delete_task(
     server_mgr: State<'_, server_manager::ServerManager>,
     sse_mgr: State<'_, sse_bridge::SseBridgeManager>,
     pty_mgr: State<'_, PtyManager>,
+    app: tauri::AppHandle,
     id: String,
 ) -> Result<(), String> {
     let _ = pty_mgr.kill_pty(&id).await;
@@ -168,7 +178,9 @@ async fn delete_task(
     let db_lock = db.lock().unwrap();
     db_lock
         .delete_task(&id)
-        .map_err(|e| format!("Failed to delete task: {}", e))
+        .map_err(|e| format!("Failed to delete task: {}", e))?;
+    let _ = app.emit("task-changed", serde_json::json!({ "action": "deleted", "task_id": id }));
+    Ok(())
 }
 
 // ============================================================================
@@ -380,6 +392,7 @@ async fn start_implementation(
         db.update_task_status(&task_id, "in_progress")
             .map_err(|e| format!("Failed to update task status: {}", e))?;
     }
+    let _ = app.emit("task-changed", serde_json::json!({ "action": "updated", "task_id": task_id }));
 
     Ok(serde_json::json!({
         "task_id": task_id,

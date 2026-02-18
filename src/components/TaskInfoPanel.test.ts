@@ -6,15 +6,12 @@ import type { Task } from '../lib/types'
 
 vi.mock('../lib/stores', () => ({
   ticketPrs: writable(new Map()),
-  tasks: writable([]),
   selectedTaskId: writable(null),
-  activeProjectId: writable('project-1'),
 }))
 
 vi.mock('../lib/ipc', () => ({
   updateTaskStatus: vi.fn().mockResolvedValue(undefined),
   deleteTask: vi.fn().mockResolvedValue(undefined),
-  getTasksForProject: vi.fn().mockResolvedValue([]),
   getPrComments: vi.fn().mockResolvedValue([]),
   markCommentAddressed: vi.fn().mockResolvedValue(undefined),
   openUrl: vi.fn().mockResolvedValue(undefined),

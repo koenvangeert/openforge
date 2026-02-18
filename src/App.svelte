@@ -311,6 +311,24 @@
         $reviewRequestCount = event.payload
       })
     )
+
+    unlisteners.push(
+      await listen<{ action: string; task_id: string }>('task-changed', (event) => {
+        if (event.payload.action === 'deleted') {
+          const taskId = event.payload.task_id
+          if ($selectedTaskId === taskId) {
+            $selectedTaskId = null
+          }
+          const updated = new Map($activeSessions)
+          updated.delete(taskId)
+          $activeSessions = updated
+          if ($checkpointNotification?.ticketId === taskId) {
+            $checkpointNotification = null
+          }
+        }
+        loadTasks()
+      })
+    )
   })
 
   onDestroy(() => {

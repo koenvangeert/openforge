@@ -3,7 +3,7 @@
   import type { Task, AgentSession, KanbanColumn, Action } from '../lib/types'
   import { COLUMNS, COLUMN_LABELS } from '../lib/types'
   import { tasks, selectedTaskId, activeSessions, ticketPrs, error, activeProjectId } from '../lib/stores'
-  import { updateTaskStatus, deleteTask, getTasksForProject } from '../lib/ipc'
+  import { updateTaskStatus, deleteTask } from '../lib/ipc'
   import { loadActions, getEnabledActions } from '../lib/actions'
   import TaskCard from './TaskCard.svelte'
   import AddTaskInline from './AddTaskInline.svelte'
@@ -23,12 +23,7 @@
   }
 
   async function handleTaskCreated() {
-    if (!$activeProjectId) return
-    try {
-      $tasks = await getTasksForProject($activeProjectId)
-    } catch (err: unknown) {
-      console.error('Failed to reload tasks:', err)
-    }
+    // Task reload handled by task-changed event in App.svelte
   }
 
   let contextMenu = { visible: false, x: 0, y: 0, taskId: '', showMoveSubmenu: false }
@@ -64,10 +59,8 @@
   async function handleMoveTo(column: KanbanColumn) {
     const taskId = contextMenu.taskId
     closeContextMenu()
-    if (!$activeProjectId) return
     try {
       await updateTaskStatus(taskId, column)
-      $tasks = await getTasksForProject($activeProjectId)
     } catch (err: unknown) {
       console.error('Failed to move task:', err)
       $error = String(err)
@@ -77,13 +70,11 @@
   async function handleDelete() {
     const taskId = contextMenu.taskId
     closeContextMenu()
-    if (!$activeProjectId) return
     try {
       await deleteTask(taskId)
       if ($selectedTaskId === taskId) {
         $selectedTaskId = null
       }
-      $tasks = await getTasksForProject($activeProjectId)
     } catch (err: unknown) {
       console.error('Failed to delete task:', err)
       $error = String(err)
