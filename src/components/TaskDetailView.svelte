@@ -18,6 +18,7 @@
 
   function getStatusColor(status: string): string {
     if (status === 'running') return 'var(--success)'
+    if (status === 'completed') return 'var(--accent)'
     if (status === 'paused') return 'var(--warning)'
     if (status === 'failed') return 'var(--error)'
     return 'var(--text-secondary)'

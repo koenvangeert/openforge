@@ -122,8 +122,8 @@
   }
 
   .card.completed {
-    border-left: 3px solid var(--success);
-    background: linear-gradient(to right, rgba(158, 206, 106, 0.08), transparent 40%);
+    border-left: 3px solid var(--accent);
+    background: linear-gradient(to right, rgba(122, 162, 247, 0.08), transparent 40%);
   }
 
   .card.paused {
@@ -216,8 +216,8 @@
   }
 
   .status-badge.completed {
-    background: rgba(158, 206, 106, 0.2);
-    color: var(--success);
+    background: rgba(122, 162, 247, 0.2);
+    color: var(--accent);
   }
 
   .status-badge.paused {
@@ -258,7 +258,7 @@
   }
 
   .card-status.completed {
-    color: var(--success);
+    color: var(--accent);
   }
 
   .card-status.failed {

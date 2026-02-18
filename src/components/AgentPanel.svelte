@@ -410,7 +410,7 @@
   }
 
   .status-dot.complete {
-    background: var(--success);
+    background: var(--accent);
   }
 
   .status-dot.error {
@@ -498,8 +498,8 @@
   }
 
   .badge-completed {
-    background: rgba(158, 206, 106, 0.15);
-    color: var(--success);
+    background: rgba(122, 162, 247, 0.15);
+    color: var(--accent);
   }
 
   .badge-failed {
