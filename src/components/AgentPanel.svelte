@@ -28,24 +28,28 @@
       console.log('[AgentPanel] agent-event for task:', taskId, 'type:', eventType, 'data length:', data.length)
 
       if (eventType === 'message.part.delta') {
-        // Try to parse as JSON content
         try {
           const parsed = JSON.parse(data)
-          if (parsed.content && Array.isArray(parsed.content)) {
-            for (const part of parsed.content) {
-              if (part.type === 'text' && part.text) {
-                outputText += part.text
-              }
-            }
+          const props = parsed.properties
+          if (props && props.field === 'text' && typeof props.delta === 'string') {
+            outputText += props.delta
           }
         } catch {
-          // JSON parse failed, append raw data
           outputText += data
         }
         status = 'running'
       } else if (eventType === 'session.idle') {
         console.log('[AgentPanel] Session idle (complete) for task:', taskId)
         status = 'complete'
+      } else if (eventType === 'session.status') {
+        try {
+          const parsed = JSON.parse(data)
+          const statusType = parsed.properties?.status?.type
+          if (statusType === 'idle') {
+            console.log('[AgentPanel] Session status idle (complete) for task:', taskId)
+            status = 'complete'
+          }
+        } catch { /* ignore parse errors */ }
       } else if (eventType === 'session.error') {
         console.log('[AgentPanel] Session error for task:', taskId, 'error:', data)
         status = 'error'

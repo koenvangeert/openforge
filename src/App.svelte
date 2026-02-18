@@ -186,11 +186,24 @@ import ProjectSetupDialog from './components/ProjectSetupDialog.svelte'
         const session = $activeSessions.get(taskId)
         if (!session) return
 
-        if (eventType === 'session.idle') {
-          console.log('[session] SSE session.idle for task:', taskId)
-          const updated = new Map($activeSessions)
-          updated.set(taskId, { ...session, status: 'completed' })
-          $activeSessions = updated
+        if (eventType === 'session.idle' || eventType === 'session.status') {
+          try {
+            const parsed = JSON.parse(event.payload.data)
+            const statusType = parsed.properties?.status?.type
+            if (eventType === 'session.idle' || statusType === 'idle') {
+              console.log('[session] SSE session idle for task:', taskId)
+              const updated = new Map($activeSessions)
+              updated.set(taskId, { ...session, status: 'completed' })
+              $activeSessions = updated
+            }
+          } catch {
+            if (eventType === 'session.idle') {
+              console.log('[session] SSE session.idle for task:', taskId)
+              const updated = new Map($activeSessions)
+              updated.set(taskId, { ...session, status: 'completed' })
+              $activeSessions = updated
+            }
+          }
         } else if (eventType === 'session.error') {
           console.log('[session] SSE session.error for task:', taskId, 'data:', event.payload.data)
           const updated = new Map($activeSessions)

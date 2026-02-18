@@ -136,15 +136,20 @@ impl SseBridgeManager {
                     async move {
                         match event {
                             es::SSE::Event(evt) => {
-                                // Try to extract OpenCode session ID from event data for debugging
-                                let opencode_session_id = serde_json::from_str::<serde_json::Value>(&evt.data)
-                                    .ok()
-                                    .and_then(|v| {
-                                        v.get("sessionId")
-                                            .or_else(|| v.get("session_id"))
-                                            .and_then(|s| s.as_str())
-                                            .map(|s| s.to_string())
-                                    });
+                                // Parse JSON payload to extract the real event type and session ID.
+                                // OpenCode does NOT set the SSE `event:` header — the event type
+                                // lives inside the JSON payload's `type` field.
+                                let parsed = serde_json::from_str::<serde_json::Value>(&evt.data).ok();
+
+                                let real_event_type = parsed.as_ref()
+                                    .and_then(|v| v.get("type"))
+                                    .and_then(|t| t.as_str())
+                                    .unwrap_or(&evt.event_type);
+
+                                let opencode_session_id = parsed.as_ref()
+                                    .and_then(|v| v.get("properties"))
+                                    .and_then(|p| p.get("sessionID"))
+                                    .and_then(|s| s.as_str());
 
                                 // Log every event with type, task, and OpenCode session ID
                                 let truncated_data = if evt.data.len() > 200 {
@@ -155,14 +160,14 @@ impl SseBridgeManager {
                                 println!(
                                     "[SSE] task={} type={} opencode_session={} data={}",
                                     task_id,
-                                    evt.event_type,
-                                    opencode_session_id.as_deref().unwrap_or("none"),
+                                    real_event_type,
+                                    opencode_session_id.unwrap_or("none"),
                                     truncated_data
                                 );
 
                                 let payload = AgentEventPayload {
                                     task_id: task_id.clone(),
-                                    event_type: evt.event_type.clone(),
+                                    event_type: real_event_type.to_string(),
                                     data: evt.data.clone(),
                                     timestamp: std::time::SystemTime::now()
                                         .duration_since(std::time::UNIX_EPOCH)
@@ -174,7 +179,11 @@ impl SseBridgeManager {
                                     eprintln!("[SSE] Failed to emit agent-event: {}", e);
                                 }
 
-                                if evt.event_type == "session.idle" {
+                                if real_event_type == "session.idle" || real_event_type == "session.status" && parsed.as_ref()
+                                    .and_then(|v| v.get("properties"))
+                                    .and_then(|p| p.get("status"))
+                                    .and_then(|s| s.get("type"))
+                                    .and_then(|t| t.as_str()) == Some("idle") {
                                     println!("[SSE] Session idle → emitting implementation-complete for task {}", task_id);
                                     let completion = CompletionPayload {
                                         task_id: task_id.clone(),
@@ -182,7 +191,7 @@ impl SseBridgeManager {
                                     if let Err(e) = app_clone.emit("implementation-complete", &completion) {
                                         eprintln!("[SSE] Failed to emit implementation-complete: {}", e);
                                     }
-                                } else if evt.event_type == "session.error" {
+                                } else if real_event_type == "session.error" {
                                     println!("[SSE] Session error → emitting implementation-failed for task {}", task_id);
                                     let failure = FailurePayload {
                                         task_id: task_id.clone(),
