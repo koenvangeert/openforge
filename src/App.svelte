@@ -235,6 +235,28 @@
               if ($checkpointNotification?.ticketId === taskId) {
                 $checkpointNotification = null
               }
+            } else if (statusType === 'busy') {
+              console.log('[session] SSE session busy for task:', taskId)
+              const updated = new Map($activeSessions)
+              updated.set(taskId, { ...session, status: 'running', checkpoint_data: null })
+              $activeSessions = updated
+              persistSessionStatus(taskId, 'running', null, null).catch(e =>
+                console.error('[session] Failed to persist running status:', e)
+              )
+              if ($checkpointNotification?.ticketId === taskId) {
+                $checkpointNotification = null
+              }
+            } else if (statusType === 'retry') {
+              console.log('[session] SSE session retry for task:', taskId)
+              const updated = new Map($activeSessions)
+              updated.set(taskId, { ...session, status: 'running', checkpoint_data: null })
+              $activeSessions = updated
+              persistSessionStatus(taskId, 'running', null, null).catch(e =>
+                console.error('[session] Failed to persist running status:', e)
+              )
+              if ($checkpointNotification?.ticketId === taskId) {
+                $checkpointNotification = null
+              }
             }
           } catch {
             if (eventType === 'session.idle') {

@@ -335,10 +335,37 @@ All events follow this JSON structure:
 ```
 OpenCode server (/event SSE)
   → sse_bridge.rs (Rust, per-task, connects to per-worktree OpenCode port)
-    → Tauri emit("agent-event", { task_id, event_type, data, timestamp })
-      → App.svelte listener (updates activeSessions store)
-      → AgentPanel.svelte listener (appends streaming text to output)
+    ├─ Persists session status to DB (source of truth)
+    └─ Tauri emit("agent-event", { task_id, event_type, data, timestamp })
+        → App.svelte listener (updates activeSessions store + UI)
+        → AgentPanel.svelte listener (updates terminal panel status)
 ```
 
 `sse_bridge.rs` must parse the JSON `data` field to extract `type` as the `event_type`
 forwarded to the frontend, since OpenCode does not set the SSE `event:` header field.
+
+### Session Status Sync
+
+The app tracks **two separate status fields** per task:
+
+| Field | Values | Storage | Purpose |
+|-------|--------|---------|---------|
+| `Task.status` | `todo`, `in_progress`, `in_review`, `testing`, `done` | `tasks` table | Kanban column |
+| `AgentSession.status` | `running`, `paused`, `completed`, `failed`, `interrupted` | `agent_sessions` table | Agent execution state |
+
+**OpenCode → App status mapping** (in `sse_bridge.rs`):
+
+| OpenCode Event | status.type | App Session Status |
+|----------------|-------------|--------------------|
+| `session.status` | `busy` | `running` |
+| `session.status` | `retry` | `running` |
+| `session.status` | `idle` | `completed` |
+| `session.idle` (deprecated) | — | `completed` |
+| `session.error` | — | `failed` |
+| `permission.updated` | — | `paused` |
+| `permission.replied` | — | `running` |
+
+**Backend is the source of truth**: `sse_bridge.rs` persists status changes directly to the
+DB when SSE events arrive. The frontend also updates the `activeSessions` store for real-time
+UI reactivity, but the DB write in the backend ensures status survives page refreshes and is
+not dependent on a frontend roundtrip.

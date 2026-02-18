@@ -213,6 +213,55 @@ impl SseBridgeManager {
                                         eprintln!("[SSE] Failed to emit implementation-failed: {}", e);
                                     }
                                 }
+
+                                // Persist session status to DB (backend is source of truth)
+                                let new_session_status = if real_event_type == "session.idle" {
+                                    Some("completed")
+                                } else if real_event_type == "session.status" {
+                                    match parsed.as_ref()
+                                        .and_then(|v| v.get("properties"))
+                                        .and_then(|p| p.get("status"))
+                                        .and_then(|s| s.get("type"))
+                                        .and_then(|t| t.as_str())
+                                    {
+                                        Some("idle") => Some("completed"),
+                                        Some("busy") => Some("running"),
+                                        Some("retry") => Some("running"),
+                                        _ => None,
+                                    }
+                                } else if real_event_type == "session.error" {
+                                    Some("failed")
+                                } else if real_event_type == "permission.updated" || real_event_type == "question.asked" {
+                                    Some("paused")
+                                } else if real_event_type == "permission.replied" || real_event_type == "question.answered" {
+                                    Some("running")
+                                } else {
+                                    None
+                                };
+
+                                if let Some(new_status) = new_session_status {
+                                    let db = app_clone.state::<std::sync::Mutex<db::Database>>();
+                                    let lock_result = db.lock();
+                                    if let Ok(db_lock) = lock_result {
+                                        if let Ok(Some(session)) = db_lock.get_latest_session_for_ticket(&task_id) {
+                                            let error_msg = if new_status == "failed" {
+                                                Some(evt.data.as_str())
+                                            } else {
+                                                None
+                                            };
+                                            let checkpoint = if new_status == "paused" {
+                                                Some(evt.data.as_str())
+                                            } else {
+                                                None
+                                            };
+                                            if let Err(e) = db_lock.update_agent_session(
+                                                &session.id, &session.stage, new_status, checkpoint, error_msg
+                                            ) {
+                                                eprintln!("[SSE] Failed to persist session status '{}' for task {}: {}", new_status, task_id, e);
+                                            }
+                                        }
+                                    }
+                                }
                             }
                             es::SSE::Connected(_) => {
                                 println!("[SSE] Connected for task {}", task_id);

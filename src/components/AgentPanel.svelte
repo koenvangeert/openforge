@@ -243,6 +243,12 @@
           if (statusType === 'idle') {
             console.log('[AgentPanel] Session status idle (complete) for task:', taskId)
             status = 'complete'
+          } else if (statusType === 'busy') {
+            console.log('[AgentPanel] Session status busy (running) for task:', taskId)
+            status = 'running'
+          } else if (statusType === 'retry') {
+            console.log('[AgentPanel] Session status retry (running) for task:', taskId)
+            status = 'running'
           }
         } catch { /* ignore parse errors */ }
       } else if (eventType === 'session.error') {
