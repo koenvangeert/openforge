@@ -389,6 +389,115 @@ impl GitHubClient {
         Ok(prs)
     }
 
+    /// Get check runs for a commit
+    ///
+    /// # Arguments
+    /// * `owner` - Repository owner
+    /// * `repo` - Repository name
+    /// * `sha` - Commit SHA
+    /// * `token` - GitHub Personal Access Token
+    ///
+    /// # Returns
+    /// CheckRunsResponse with list of check runs
+    pub async fn get_check_runs(
+        &self,
+        owner: &str,
+        repo: &str,
+        sha: &str,
+        token: &str,
+    ) -> Result<CheckRunsResponse, GitHubError> {
+        let url = format!(
+            "https://api.github.com/repos/{}/{}/commits/{}/check-runs?per_page=100",
+            owner, repo, sha
+        );
+
+        let response = self
+            .client
+            .get(&url)
+            .header("Authorization", format!("token {}", token))
+            .header("User-Agent", "ai-command-center")
+            .send()
+            .await
+            .map_err(|e| GitHubError::NetworkError(e.to_string()))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unable to read response body".to_string());
+            return Err(GitHubError::ApiError {
+                status: status.as_u16(),
+                message: body,
+            });
+        }
+
+        let check_runs: CheckRunsResponse = response
+            .json()
+            .await
+            .map_err(|e| GitHubError::ParseError(e.to_string()))?;
+
+        if check_runs.total_count > 100 {
+            eprintln!(
+                "[GitHub] PR has {} check runs, only first 100 fetched",
+                check_runs.total_count
+            );
+        }
+
+        Ok(check_runs)
+    }
+
+    /// Get combined status for a commit
+    ///
+    /// # Arguments
+    /// * `owner` - Repository owner
+    /// * `repo` - Repository name
+    /// * `sha` - Commit SHA
+    /// * `token` - GitHub Personal Access Token
+    ///
+    /// # Returns
+    /// CombinedStatusResponse with commit status information
+    pub async fn get_combined_status(
+        &self,
+        owner: &str,
+        repo: &str,
+        sha: &str,
+        token: &str,
+    ) -> Result<CombinedStatusResponse, GitHubError> {
+        let url = format!(
+            "https://api.github.com/repos/{}/{}/commits/{}/status",
+            owner, repo, sha
+        );
+
+        let response = self
+            .client
+            .get(&url)
+            .header("Authorization", format!("token {}", token))
+            .header("User-Agent", "ai-command-center")
+            .send()
+            .await
+            .map_err(|e| GitHubError::NetworkError(e.to_string()))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unable to read response body".to_string());
+            return Err(GitHubError::ApiError {
+                status: status.as_u16(),
+                message: body,
+            });
+        }
+
+        let combined_status: CombinedStatusResponse = response
+            .json()
+            .await
+            .map_err(|e| GitHubError::ParseError(e.to_string()))?;
+
+        Ok(combined_status)
+    }
+
     /// Get authenticated user's login
     ///
     /// # Arguments
@@ -505,10 +614,7 @@ impl GitHubClient {
                     .and_then(|r| r.as_str())
                     .unwrap_or("main")
                     .to_string(),
-                head_sha: pr_details.head.extra.get("sha")
-                    .and_then(|s| s.as_str())
-                    .unwrap_or("")
-                    .to_string(),
+                head_sha: pr_details.head.sha,
                 additions: pr_details.extra.get("additions")
                     .and_then(|a| a.as_i64())
                     .unwrap_or(0),
@@ -730,6 +836,53 @@ impl GitHubClient {
     }
 }
 
+/// Aggregate CI status from check runs and commit status
+///
+/// Determines the overall CI status by examining both check runs and commit statuses.
+/// Returns one of: "none", "pending", "success", or "failure".
+///
+/// # Arguments
+/// * `check_runs` - Check runs response from GitHub API
+/// * `commit_status` - Combined status response from GitHub API
+///
+/// # Returns
+/// Aggregated CI status string
+pub fn aggregate_ci_status(
+    check_runs: &CheckRunsResponse,
+    commit_status: &CombinedStatusResponse,
+) -> String {
+    if check_runs.check_runs.is_empty() && commit_status.statuses.is_empty() {
+        return "none".to_string();
+    }
+
+    for check_run in &check_runs.check_runs {
+        if let Some(conclusion) = &check_run.conclusion {
+            match conclusion.as_str() {
+                "failure" | "timed_out" | "action_required" | "cancelled" => {
+                    return "failure".to_string();
+                }
+                _ => {}
+            }
+        }
+    }
+
+    if commit_status.state == "failure" || commit_status.state == "error" {
+        return "failure".to_string();
+    }
+
+    for check_run in &check_runs.check_runs {
+        if check_run.status != "completed" {
+            return "pending".to_string();
+        }
+    }
+
+    if commit_status.state == "pending" && !commit_status.statuses.is_empty() {
+        return "pending".to_string();
+    }
+
+    "success".to_string()
+}
+
 impl Default for GitHubClient {
     fn default() -> Self {
         Self::new()
@@ -833,6 +986,8 @@ pub struct GitHubHead {
     /// Branch name (e.g., "feature/PROJ-123-fix-bug")
     #[serde(rename = "ref")]
     pub ref_name: String,
+    /// Commit SHA of the head branch
+    pub sha: String,
     #[serde(flatten)]
     pub extra: serde_json::Value,
 }
@@ -928,6 +1083,64 @@ struct BlobResponse {
     encoding: String,
     #[serde(flatten)]
     extra: serde_json::Value,
+}
+
+/// Check runs response from GitHub API
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct CheckRunsResponse {
+    /// Total number of check runs
+    pub total_count: usize,
+    /// List of check runs
+    pub check_runs: Vec<CheckRun>,
+}
+
+/// Individual check run from GitHub API
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct CheckRun {
+    /// Check run ID
+    pub id: i64,
+    /// Check run name (e.g., "build", "test", "lint")
+    pub name: String,
+    /// Check run status (e.g., "queued", "in_progress", "completed")
+    #[serde(default)]
+    pub status: String,
+    /// Check run conclusion (e.g., "success", "failure", "skipped", "neutral")
+    #[serde(default)]
+    pub conclusion: Option<String>,
+    /// URL to view the check run
+    pub html_url: String,
+}
+
+/// Combined status response from GitHub API
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct CombinedStatusResponse {
+    /// Overall state (e.g., "success", "failure", "pending", "error")
+    pub state: String,
+    /// List of commit statuses
+    pub statuses: Vec<CommitStatusEntry>,
+    /// Commit SHA
+    #[serde(default)]
+    pub sha: String,
+    /// Total number of statuses
+    #[serde(default)]
+    pub total_count: usize,
+    #[serde(flatten)]
+    pub extra: serde_json::Value,
+}
+
+/// Individual commit status entry from GitHub API
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct CommitStatusEntry {
+    /// Status state (e.g., "success", "failure", "pending", "error")
+    pub state: String,
+    /// Status context (e.g., "continuous-integration/travis-ci")
+    pub context: String,
+    /// Status description
+    #[serde(default)]
+    pub description: Option<String>,
+    /// URL to view the status
+    #[serde(default)]
+    pub target_url: Option<String>,
 }
 
 // ============================================================================
