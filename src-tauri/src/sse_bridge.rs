@@ -1,10 +1,21 @@
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager};
 use crate::db;
+use crate::opencode_client::OpenCodeClient;
 use eventsource_client::{self as es, Client};
 use futures::TryStreamExt;
+
+// ============================================================================
+// Constants
+// ============================================================================
+
+/// Polling interval for checking child session status (seconds)
+const CHILD_CHECK_INTERVAL_SECS: u64 = 5;
+/// Maximum time to wait for child sessions to complete (seconds)
+const CHILD_CHECK_TIMEOUT_SECS: u64 = 600; // 10 minutes
 
 // ============================================================================
 // Error Types
@@ -56,6 +67,21 @@ pub struct FailurePayload {
 }
 
 // ============================================================================
+// Helpers
+// ============================================================================
+
+fn persist_session_completed(app: &AppHandle, task_id: &str) {
+    let db = app.state::<std::sync::Mutex<db::Database>>();
+    if let Ok(db_lock) = db.lock() {
+        if let Ok(Some(session)) = db_lock.get_latest_session_for_ticket(task_id) {
+            if let Err(e) = db_lock.update_agent_session(&session.id, &session.stage, "completed", None, None) {
+                eprintln!("[SSE] Failed to persist completed status for task {}: {}", task_id, e);
+            }
+        }
+    };
+}
+
+// ============================================================================
 // Bridge Handle
 // ============================================================================
 
@@ -86,6 +112,7 @@ impl SseBridgeManager {
     /// # Arguments
     /// * `app` - Tauri application handle for event emission
     /// * `task_id` - Unique identifier for this task
+    /// * `opencode_session_id` - Optional OpenCode session ID for filtering events
     /// * `server_port` - Port where OpenCode server is listening
     ///
     /// # Returns
@@ -96,6 +123,7 @@ impl SseBridgeManager {
         &self,
         app: AppHandle,
         task_id: String,
+        opencode_session_id: Option<String>,
         server_port: u16,
     ) -> Result<(), SseBridgeError> {
         {
@@ -122,6 +150,7 @@ impl SseBridgeManager {
         let (cancel_tx, mut cancel_rx) = tokio::sync::oneshot::channel::<()>();
 
         let task_id_clone = task_id.clone();
+        let opencode_session_id_clone = opencode_session_id.clone();
         let bridges_clone = self.bridges.clone();
 
         tokio::spawn(async move {
@@ -129,17 +158,18 @@ impl SseBridgeManager {
 
             let stream = client.stream();
 
+            let child_poll_in_progress = Arc::new(AtomicBool::new(false));
+
             tokio::select! {
                 result = stream.try_for_each(|event| {
                     let app_clone = app.clone();
                     let task_id = task_id_clone.clone();
+                    let opencode_session_id_clone = opencode_session_id_clone.clone();
+                    let child_poll_in_progress = child_poll_in_progress.clone();
 
                     async move {
                         match event {
                             es::SSE::Event(evt) => {
-                                // Parse JSON payload to extract the real event type and session ID.
-                                // OpenCode does NOT set the SSE `event:` header — the event type
-                                // lives inside the JSON payload's `type` field.
                                 let parsed = serde_json::from_str::<serde_json::Value>(&evt.data).ok();
 
                                 let real_event_type = parsed.as_ref()
@@ -147,7 +177,6 @@ impl SseBridgeManager {
                                     .and_then(|t| t.as_str())
                                     .unwrap_or(&evt.event_type);
 
-                                // Skip text-streaming events — PTY handles display now
                                 match real_event_type {
                                     "message.part.delta" | "message.part.updated" |
                                     "message.updated" | "message.removed" |
@@ -171,18 +200,130 @@ impl SseBridgeManager {
                                     eprintln!("[SSE] Failed to emit agent-event: {}", e);
                                 }
 
-                                if real_event_type == "session.idle" || real_event_type == "session.status" && parsed.as_ref()
+                                // Layer 1: SessionID filtering — only react to status-changing events
+                                // from OUR session. Child/unrelated session events are still forwarded
+                                // to the frontend above, but completion/error/pause logic is skipped.
+                                let event_session_id = parsed.as_ref()
                                     .and_then(|v| v.get("properties"))
-                                    .and_then(|p| p.get("status"))
-                                    .and_then(|s| s.get("type"))
-                                    .and_then(|t| t.as_str()) == Some("idle") {
-                                    println!("[SSE] Session idle → emitting action-complete for task {}", task_id);
+                                    .and_then(|p| p.get("sessionID"))
+                                    .and_then(|s| s.as_str())
+                                    .map(|s| s.to_string());
 
-                                    let completion = CompletionPayload {
-                                        task_id: task_id.clone(),
-                                    };
-                                    if let Err(e) = app_clone.emit("action-complete", &completion) {
-                                        eprintln!("[SSE] Failed to emit action-complete: {}", e);
+                                let is_status_event = matches!(real_event_type,
+                                    "session.idle" | "session.status" | "session.error" |
+                                    "permission.updated" | "permission.replied" |
+                                    "question.asked" | "question.answered"
+                                );
+
+                                if is_status_event {
+                                    if let (Some(ref our_session_id), Some(ref event_sid)) = (&opencode_session_id_clone, &event_session_id) {
+                                        if our_session_id != event_sid {
+                                            return Ok(());
+                                        }
+                                    }
+                                }
+
+                                // Layer 2: Child-check polling on parent idle.
+                                // When our session goes idle, check if children are still busy
+                                // before emitting action-complete. Polling runs in a separate task
+                                // so the SSE stream is not blocked.
+                                let is_session_idle = real_event_type == "session.idle"
+                                    || (real_event_type == "session.status" && parsed.as_ref()
+                                        .and_then(|v| v.get("properties"))
+                                        .and_then(|p| p.get("status"))
+                                        .and_then(|s| s.get("type"))
+                                        .and_then(|t| t.as_str()) == Some("idle"));
+
+                                let mut spawned_child_poll = false;
+
+                                if is_session_idle {
+                                    println!("[SSE] Session idle for task {} — checking for active children", task_id);
+
+                                    if child_poll_in_progress.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_ok() {
+                                        spawned_child_poll = true;
+                                        let our_session_id_opt = opencode_session_id_clone.clone();
+                                        let app_for_poll = app_clone.clone();
+                                        let task_id_for_poll = task_id.clone();
+                                        let poll_flag = child_poll_in_progress.clone();
+
+                                        tokio::spawn(async move {
+                                            let emit_complete = |app: &AppHandle, task_id: &str| {
+                                                let completion = CompletionPayload { task_id: task_id.to_string() };
+                                                if let Err(e) = app.emit("action-complete", &completion) {
+                                                    eprintln!("[SSE] Failed to emit action-complete: {}", e);
+                                                }
+                                            };
+
+                                            let our_session_id = match our_session_id_opt {
+                                                Some(ref id) => id.clone(),
+                                                None => {
+                                                    println!("[SSE] No session ID — emitting action-complete for task {}", task_id_for_poll);
+                                                    emit_complete(&app_for_poll, &task_id_for_poll);
+                                                    persist_session_completed(&app_for_poll, &task_id_for_poll);
+                                                    poll_flag.store(false, Ordering::SeqCst);
+                                                    return;
+                                                }
+                                            };
+
+                                            let oc_client = OpenCodeClient::with_base_url(
+                                                format!("http://127.0.0.1:{}", server_port)
+                                            );
+
+                                            let children = match oc_client.get_session_children(&our_session_id).await {
+                                                Ok(c) => c,
+                                                Err(e) => {
+                                                    eprintln!("[SSE] get_session_children failed for task {}: {} — completing immediately", task_id_for_poll, e);
+                                                    emit_complete(&app_for_poll, &task_id_for_poll);
+                                                    persist_session_completed(&app_for_poll, &task_id_for_poll);
+                                                    poll_flag.store(false, Ordering::SeqCst);
+                                                    return;
+                                                }
+                                            };
+
+                                            if children.is_empty() {
+                                                println!("[SSE] No children — emitting action-complete for task {}", task_id_for_poll);
+                                                emit_complete(&app_for_poll, &task_id_for_poll);
+                                                persist_session_completed(&app_for_poll, &task_id_for_poll);
+                                                poll_flag.store(false, Ordering::SeqCst);
+                                                return;
+                                            }
+
+                                            let child_ids: Vec<String> = children.iter().map(|c| c.id.clone()).collect();
+                                            println!("[SSE] {} child session(s) found for task {} — polling until idle", child_ids.len(), task_id_for_poll);
+
+                                            let max_iterations = CHILD_CHECK_TIMEOUT_SECS / CHILD_CHECK_INTERVAL_SECS;
+                                            for iteration in 0..max_iterations {
+                                                let statuses = match oc_client.get_all_session_statuses().await {
+                                                    Ok(s) => s,
+                                                    Err(e) => {
+                                                        eprintln!("[SSE] get_all_session_statuses failed (task {}, iter {}): {} — completing", task_id_for_poll, iteration, e);
+                                                        emit_complete(&app_for_poll, &task_id_for_poll);
+                                                        persist_session_completed(&app_for_poll, &task_id_for_poll);
+                                                        poll_flag.store(false, Ordering::SeqCst);
+                                                        return;
+                                                    }
+                                                };
+
+                                                let any_busy = child_ids.iter().any(|id| statuses.contains_key(id));
+                                                if !any_busy {
+                                                    println!("[SSE] All children idle — emitting action-complete for task {}", task_id_for_poll);
+                                                    emit_complete(&app_for_poll, &task_id_for_poll);
+                                                    persist_session_completed(&app_for_poll, &task_id_for_poll);
+                                                    poll_flag.store(false, Ordering::SeqCst);
+                                                    return;
+                                                }
+
+                                                println!("[SSE] Children still busy (iter {}/{}) for task {} — waiting {}s", iteration + 1, max_iterations, task_id_for_poll, CHILD_CHECK_INTERVAL_SECS);
+                                                tokio::time::sleep(tokio::time::Duration::from_secs(CHILD_CHECK_INTERVAL_SECS)).await;
+                                            }
+
+                                            eprintln!("[SSE] Child-check timeout ({}s) for task {} — emitting action-complete anyway", CHILD_CHECK_TIMEOUT_SECS, task_id_for_poll);
+                                            emit_complete(&app_for_poll, &task_id_for_poll);
+                                            persist_session_completed(&app_for_poll, &task_id_for_poll);
+                                            poll_flag.store(false, Ordering::SeqCst);
+                                        });
+                                    } else {
+                                        println!("[SSE] Child-check poll already in progress for task {} — skipping", task_id);
                                     }
                                 } else if real_event_type == "session.error" {
                                     println!("[SSE] Session error → emitting implementation-failed for task {}", task_id);
@@ -195,9 +336,8 @@ impl SseBridgeManager {
                                     }
                                 }
 
-                                // Persist session status to DB (backend is source of truth)
                                 let new_session_status = if real_event_type == "session.idle" {
-                                    Some("completed")
+                                    if spawned_child_poll { None } else { Some("completed") }
                                 } else if real_event_type == "session.status" {
                                     match parsed.as_ref()
                                         .and_then(|v| v.get("properties"))
@@ -205,7 +345,7 @@ impl SseBridgeManager {
                                         .and_then(|s| s.get("type"))
                                         .and_then(|t| t.as_str())
                                     {
-                                        Some("idle") => Some("completed"),
+                                        Some("idle") => if spawned_child_poll { None } else { Some("completed") },
                                         Some("busy") => Some("running"),
                                         Some("retry") => Some("running"),
                                         _ => None,
@@ -292,5 +432,94 @@ impl SseBridgeManager {
             let _ = handle.cancel_tx.send(());
             println!("[SSE] Stopped bridge for task {}", task_id);
         }
+    }
+}
+
+// ============================================================================
+// Tests
+// ============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::opencode_client::SessionStatusInfo;
+
+    #[test]
+    fn test_extract_session_id_from_event() {
+        let json = r#"{"type": "session.idle", "properties": {"sessionID": "ses_abc123"}}"#;
+        let parsed: serde_json::Value = serde_json::from_str(json).unwrap();
+        let session_id = parsed.get("properties")
+            .and_then(|p| p.get("sessionID"))
+            .and_then(|s| s.as_str());
+        assert_eq!(session_id, Some("ses_abc123"));
+    }
+
+    #[test]
+    fn test_extract_event_type_from_json() {
+        let json = r#"{"type": "session.status", "properties": {"sessionID": "ses_1", "status": {"type": "idle"}}}"#;
+        let parsed: serde_json::Value = serde_json::from_str(json).unwrap();
+        let event_type = parsed.get("type").and_then(|t| t.as_str());
+        assert_eq!(event_type, Some("session.status"));
+    }
+
+    #[test]
+    fn test_session_id_filter_matching() {
+        let our_session_id = Some("ses_parent".to_string());
+        let event_session_id = Some("ses_parent".to_string());
+
+        let should_skip = match (&our_session_id, &event_session_id) {
+            (Some(our), Some(event)) => our != event,
+            _ => false,
+        };
+        assert!(!should_skip);
+    }
+
+    #[test]
+    fn test_session_id_filter_non_matching() {
+        let our_session_id = Some("ses_parent".to_string());
+        let event_session_id = Some("ses_child".to_string());
+
+        let should_skip = match (&our_session_id, &event_session_id) {
+            (Some(our), Some(event)) => our != event,
+            _ => false,
+        };
+        assert!(should_skip);
+    }
+
+    #[test]
+    fn test_session_id_filter_none_fallthrough() {
+        let our_session_id: Option<String> = None;
+        let event_session_id = Some("ses_child".to_string());
+
+        let should_skip = match (&our_session_id, &event_session_id) {
+            (Some(our), Some(event)) => our != event,
+            _ => false,
+        };
+        assert!(!should_skip);
+    }
+
+    #[test]
+    fn test_detect_idle_from_session_status_event() {
+        let json = r#"{"type": "session.status", "properties": {"sessionID": "ses_1", "status": {"type": "idle"}}}"#;
+        let parsed: serde_json::Value = serde_json::from_str(json).unwrap();
+        let status_type = parsed.get("properties")
+            .and_then(|p| p.get("status"))
+            .and_then(|s| s.get("type"))
+            .and_then(|t| t.as_str());
+        assert_eq!(status_type, Some("idle"));
+    }
+
+    #[test]
+    fn test_child_busy_detection() {
+        let mut statuses: HashMap<String, SessionStatusInfo> = HashMap::new();
+        statuses.insert("ses_child1".to_string(), SessionStatusInfo { status_type: "busy".to_string() });
+
+        let child_ids = vec!["ses_child1".to_string(), "ses_child2".to_string()];
+        let any_busy = child_ids.iter().any(|id| statuses.contains_key(id));
+        assert!(any_busy);
+
+        statuses.remove("ses_child1");
+        let any_busy = child_ids.iter().any(|id| statuses.contains_key(id));
+        assert!(!any_busy);
     }
 }
