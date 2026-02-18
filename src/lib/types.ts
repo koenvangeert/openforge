@@ -219,6 +219,7 @@ export interface Action {
   id: string;
   name: string;
   prompt: string;
+  agent: string | null;
   builtin: boolean;
   enabled: boolean;
 }
