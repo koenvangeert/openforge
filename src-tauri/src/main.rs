@@ -324,6 +324,8 @@ async fn start_implementation(
         .await
         .map_err(|e| format!("Failed to create session: {}", e))?;
     
+    println!("[start_implementation] OpenCode session created: {} for task {} on port {}", opencode_session_id, task_id, port);
+
     let mut prompt = format!("You are working on task {}: {}\n\n", task_id, task.title);
     
     if let Some(ref description) = task.description {
@@ -351,10 +353,12 @@ async fn start_implementation(
     
     prompt.push_str("Implement this task. Create a branch, make the changes, and create a pull request when done.");
     
+    println!("[start_implementation] Sending prompt_async to opencode session {}", opencode_session_id);
     client
         .prompt_async(&opencode_session_id, prompt, None)
         .await
         .map_err(|e| format!("Failed to send prompt: {}", e))?;
+    println!("[start_implementation] Prompt sent successfully to opencode session {}", opencode_session_id);
     
     let agent_session_id = uuid::Uuid::new_v4().to_string();
     {
@@ -369,6 +373,11 @@ async fn start_implementation(
         .map_err(|e| format!("Failed to create agent session: {}", e))?;
     }
     
+    println!(
+        "[start_implementation] Agent session created: {} (opencode: {}) for task {}",
+        agent_session_id, opencode_session_id, task_id
+    );
+
     Ok(serde_json::json!({
         "task_id": task_id,
         "worktree_path": worktree_path.to_str().unwrap(),

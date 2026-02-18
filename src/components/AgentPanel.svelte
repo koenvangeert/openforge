@@ -16,13 +16,16 @@
   let autoScroll = true
 
   $: session = $activeSessions.get(taskId) || null
+  $: console.log('[AgentPanel] session reactive update for task:', taskId, 'session:', session ? `id=${session.id} status=${session.status} stage=${session.stage}` : 'null')
 
   onMount(async () => {
+    console.log('[AgentPanel] Mounted for task:', taskId)
     unlisten = await listen<AgentEvent>('agent-event', (event) => {
       if (event.payload.task_id !== taskId) return
 
       const eventType = event.payload.event_type
       const data = event.payload.data
+      console.log('[AgentPanel] agent-event for task:', taskId, 'type:', eventType, 'data length:', data.length)
 
       if (eventType === 'message.part.delta') {
         // Try to parse as JSON content
@@ -41,8 +44,10 @@
         }
         status = 'running'
       } else if (eventType === 'session.idle') {
+        console.log('[AgentPanel] Session idle (complete) for task:', taskId)
         status = 'complete'
       } else if (eventType === 'session.error') {
+        console.log('[AgentPanel] Session error for task:', taskId, 'error:', data)
         status = 'error'
         errorMessage = data
       }

@@ -3,8 +3,8 @@
   import { listen } from '@tauri-apps/api/event'
   import type { UnlistenFn } from '@tauri-apps/api/event'
   import { tasks, selectedTaskId, activeSessions, ticketPrs, error, isLoading, projects, activeProjectId } from './lib/stores'
-  import { getProjects, getTasksForProject, getOpenCodeStatus, getPullRequests, startImplementation } from './lib/ipc'
-  import type { Task, PullRequestInfo, OpenCodeStatus } from './lib/types'
+  import { getProjects, getTasksForProject, getOpenCodeStatus, getPullRequests, startImplementation, getSessionStatus } from './lib/ipc'
+  import type { Task, PullRequestInfo, OpenCodeStatus, AgentEvent } from './lib/types'
   import KanbanBoard from './components/KanbanBoard.svelte'
   import TaskDetailView from './components/TaskDetailView.svelte'
   import AddTaskDialog from './components/AddTaskDialog.svelte'
@@ -89,11 +89,26 @@
       $error = 'No active project selected'
       return
     }
+    const taskId = event.detail.taskId
     try {
-      await startImplementation(event.detail.taskId, activeProject.path)
+      console.log('[session] Starting implementation for task:', taskId)
+      const result = await startImplementation(taskId, activeProject.path)
+      console.log('[session] Implementation started, session_id:', result.session_id)
+
+      // Fetch the full session from DB and populate the activeSessions store
+      try {
+        const session = await getSessionStatus(result.session_id)
+        console.log('[session] Fetched session status:', session.id, 'status:', session.status, 'stage:', session.stage)
+        const updated = new Map($activeSessions)
+        updated.set(taskId, session)
+        $activeSessions = updated
+      } catch (sessionErr) {
+        console.error('[session] Failed to fetch session after start:', sessionErr)
+      }
+
       await loadTasks()
     } catch (e) {
-      console.error('Failed to start implementation:', e)
+      console.error('[session] Failed to start implementation for task:', taskId, e)
       $error = String(e)
     }
   }
@@ -114,13 +129,35 @@
     )
 
     unlisteners.push(
-      await listen('implementation-complete', () => {
+      await listen<{ task_id: string }>('implementation-complete', (event) => {
+        const taskId = event.payload.task_id
+        console.log('[session] Implementation complete for task:', taskId)
+        const session = $activeSessions.get(taskId)
+        if (session) {
+          const updated = new Map($activeSessions)
+          updated.set(taskId, { ...session, status: 'completed' })
+          $activeSessions = updated
+          console.log('[session] Updated session status to completed for task:', taskId)
+        } else {
+          console.warn('[session] No active session found for completed task:', taskId)
+        }
         loadTasks()
       })
     )
 
     unlisteners.push(
-      await listen('implementation-failed', () => {
+      await listen<{ task_id: string; error: string }>('implementation-failed', (event) => {
+        const taskId = event.payload.task_id
+        console.log('[session] Implementation failed for task:', taskId, 'error:', event.payload.error)
+        const session = $activeSessions.get(taskId)
+        if (session) {
+          const updated = new Map($activeSessions)
+          updated.set(taskId, { ...session, status: 'failed', error_message: event.payload.error })
+          $activeSessions = updated
+          console.log('[session] Updated session status to failed for task:', taskId)
+        } else {
+          console.warn('[session] No active session found for failed task:', taskId)
+        }
         loadTasks()
       })
     )
@@ -139,7 +176,28 @@
     )
 
     unlisteners.push(
+      await listen<AgentEvent>('agent-event', (event) => {
+        const { task_id: taskId, event_type: eventType } = event.payload
+        const session = $activeSessions.get(taskId)
+        if (!session) return
+
+        if (eventType === 'session.idle') {
+          console.log('[session] SSE session.idle for task:', taskId)
+          const updated = new Map($activeSessions)
+          updated.set(taskId, { ...session, status: 'completed' })
+          $activeSessions = updated
+        } else if (eventType === 'session.error') {
+          console.log('[session] SSE session.error for task:', taskId, 'data:', event.payload.data)
+          const updated = new Map($activeSessions)
+          updated.set(taskId, { ...session, status: 'failed', error_message: event.payload.data })
+          $activeSessions = updated
+        }
+      })
+    )
+
+    unlisteners.push(
       await listen<{ ticket_id: string; session_id: string }>('session-aborted', (event) => {
+        console.log('[session] Session aborted for task:', event.payload.ticket_id)
         const updated = new Map($activeSessions)
         updated.delete(event.payload.ticket_id)
         $activeSessions = updated

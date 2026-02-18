@@ -124,7 +124,7 @@ impl SseBridgeManager {
         let bridges_clone = self.bridges.clone();
 
         tokio::spawn(async move {
-            println!("SSE bridge: Starting for task {}", task_id_clone);
+            println!("[SSE] Starting bridge for task {} on port {}", task_id_clone, server_port);
 
             let stream = client.stream();
 
@@ -136,6 +136,30 @@ impl SseBridgeManager {
                     async move {
                         match event {
                             es::SSE::Event(evt) => {
+                                // Try to extract OpenCode session ID from event data for debugging
+                                let opencode_session_id = serde_json::from_str::<serde_json::Value>(&evt.data)
+                                    .ok()
+                                    .and_then(|v| {
+                                        v.get("sessionId")
+                                            .or_else(|| v.get("session_id"))
+                                            .and_then(|s| s.as_str())
+                                            .map(|s| s.to_string())
+                                    });
+
+                                // Log every event with type, task, and OpenCode session ID
+                                let truncated_data = if evt.data.len() > 200 {
+                                    format!("{}...[truncated {} bytes]", &evt.data[..200], evt.data.len())
+                                } else {
+                                    evt.data.clone()
+                                };
+                                println!(
+                                    "[SSE] task={} type={} opencode_session={} data={}",
+                                    task_id,
+                                    evt.event_type,
+                                    opencode_session_id.as_deref().unwrap_or("none"),
+                                    truncated_data
+                                );
+
                                 let payload = AgentEventPayload {
                                     task_id: task_id.clone(),
                                     event_type: evt.event_type.clone(),
@@ -147,28 +171,30 @@ impl SseBridgeManager {
                                 };
 
                                 if let Err(e) = app_clone.emit("agent-event", &payload) {
-                                    eprintln!("SSE bridge: Failed to emit agent-event: {}", e);
+                                    eprintln!("[SSE] Failed to emit agent-event: {}", e);
                                 }
 
                                 if evt.event_type == "session.idle" {
+                                    println!("[SSE] Session idle → emitting implementation-complete for task {}", task_id);
                                     let completion = CompletionPayload {
                                         task_id: task_id.clone(),
                                     };
                                     if let Err(e) = app_clone.emit("implementation-complete", &completion) {
-                                        eprintln!("SSE bridge: Failed to emit implementation-complete: {}", e);
+                                        eprintln!("[SSE] Failed to emit implementation-complete: {}", e);
                                     }
                                 } else if evt.event_type == "session.error" {
+                                    println!("[SSE] Session error → emitting implementation-failed for task {}", task_id);
                                     let failure = FailurePayload {
                                         task_id: task_id.clone(),
                                         error: evt.data.clone(),
                                     };
                                     if let Err(e) = app_clone.emit("implementation-failed", &failure) {
-                                        eprintln!("SSE bridge: Failed to emit implementation-failed: {}", e);
+                                        eprintln!("[SSE] Failed to emit implementation-failed: {}", e);
                                     }
                                 }
                             }
                             es::SSE::Connected(_) => {
-                                println!("SSE bridge: Connected for task {}", task_id);
+                                println!("[SSE] Connected for task {}", task_id);
                             }
                             es::SSE::Comment(_) => {}
                         }
@@ -176,12 +202,12 @@ impl SseBridgeManager {
                     }
                 }) => {
                     match result {
-                        Ok(_) => println!("SSE bridge: Stream ended for task {}", task_id_clone),
-                        Err(e) => eprintln!("SSE bridge: Stream error for task {}: {}", task_id_clone, e),
+                        Ok(_) => println!("[SSE] Stream ended for task {}", task_id_clone),
+                        Err(e) => eprintln!("[SSE] Stream error for task {}: {}", task_id_clone, e),
                     }
                 }
                 _ = &mut cancel_rx => {
-                    println!("SSE bridge: Cancelled for task {}", task_id_clone);
+                    println!("[SSE] Cancelled for task {}", task_id_clone);
                 }
             }
 
@@ -204,7 +230,7 @@ impl SseBridgeManager {
         let mut bridges = self.bridges.lock().await;
         if let Some(handle) = bridges.remove(task_id) {
             let _ = handle.cancel_tx.send(());
-            println!("SSE bridge: Stopped for task {}", task_id);
+            println!("[SSE] Stopped bridge for task {}", task_id);
         }
     }
 
@@ -213,7 +239,7 @@ impl SseBridgeManager {
         let mut bridges = self.bridges.lock().await;
         for (task_id, handle) in bridges.drain() {
             let _ = handle.cancel_tx.send(());
-            println!("SSE bridge: Stopped for task {}", task_id);
+            println!("[SSE] Stopped bridge for task {}", task_id);
         }
     }
 }
