@@ -147,25 +147,6 @@ impl SseBridgeManager {
                                     .and_then(|t| t.as_str())
                                     .unwrap_or(&evt.event_type);
 
-                                let opencode_session_id = parsed.as_ref()
-                                    .and_then(|v| v.get("properties"))
-                                    .and_then(|p| p.get("sessionID"))
-                                    .and_then(|s| s.as_str());
-
-                                // Log every event with type, task, and OpenCode session ID
-                                let truncated_data = if evt.data.len() > 200 {
-                                    format!("{}...[truncated {} bytes]", &evt.data[..200], evt.data.len())
-                                } else {
-                                    evt.data.clone()
-                                };
-                                println!(
-                                    "[SSE] task={} type={} opencode_session={} data={}",
-                                    task_id,
-                                    real_event_type,
-                                    opencode_session_id.unwrap_or("none"),
-                                    truncated_data
-                                );
-
                                 // Skip text-streaming events — PTY handles display now
                                 match real_event_type {
                                     "message.part.delta" | "message.part.updated" |

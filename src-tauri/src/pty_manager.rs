@@ -206,7 +206,6 @@ impl PtyManager {
 
                         if !data.is_empty() {
                             let text = String::from_utf8_lossy(&data).to_string();
-                            println!("[PTY] task={} reader got {} bytes, sending to channel", task_id_reader, n);
                             if tx.send(Some(text)).is_err() {
                                 println!("[PTY] task={} channel closed, reader exiting", task_id_reader);
                                 break;
@@ -229,7 +228,6 @@ impl PtyManager {
                 match msg {
                     Some(text) => {
                         let event_name = format!("pty-output-{}", task_id_emitter);
-                        println!("[PTY] task={} emitter sending {} chars via {}", task_id_emitter, text.len(), event_name);
                         let payload = serde_json::json!({ "task_id": &task_id_emitter, "data": text });
                         if let Err(e) = app_handle.emit(&event_name, &payload) {
                             eprintln!("[PTY] Failed to emit {}: {}", event_name, e);
@@ -296,8 +294,6 @@ impl PtyManager {
             .master
             .resize(size)
             .map_err(|e| PtyError::IoError(io::Error::new(io::ErrorKind::Other, e.to_string())))?;
-
-        println!("Resized PTY for task {} to {}x{}", task_id, cols, rows);
 
         Ok(())
     }

@@ -277,8 +277,6 @@ impl ServerManager {
             let mut lines = reader.lines();
 
             while let Some(line) = lines.next_line().await.map_err(ServerError::IoError)? {
-                println!("OpenCode stdout: {}", line);
-
                 if let Some(captures) = port_regex.captures(&line) {
                     if let Some(port_match) = captures.get(1) {
                         if let Ok(port) = port_match.as_str().parse::<u16>() {
@@ -311,12 +309,8 @@ impl ServerManager {
                     println!("Health check passed for port {}: {}", port, response.status());
                     return Ok(());
                 }
-                Ok(response) => {
-                    println!("Health check attempt {}/{} for port {} returned: {}", attempt, HEALTH_CHECK_RETRIES, port, response.status());
-                }
-                Err(e) => {
-                    println!("Health check attempt {}/{} for port {} failed: {}", attempt, HEALTH_CHECK_RETRIES, port, e);
-                }
+                Ok(_response) => {}
+                Err(_) => {}
             }
 
             if attempt < HEALTH_CHECK_RETRIES {

@@ -73,16 +73,8 @@ async fn get_tasks(
     db: State<'_, Mutex<db::Database>>,
 ) -> Result<Vec<db::TaskRow>, String> {
     let db = db.lock().unwrap();
-    match db.get_all_tasks() {
-        Ok(tasks) => {
-            println!("[get_tasks] Returning {} tasks", tasks.len());
-            Ok(tasks)
-        }
-        Err(e) => {
-            eprintln!("[get_tasks] Error: {}", e);
-            Err(format!("Failed to get tasks: {}", e))
-        }
-    }
+    db.get_all_tasks()
+        .map_err(|e| format!("Failed to get tasks: {}", e))
 }
 
 #[tauri::command]
@@ -385,16 +377,12 @@ async fn start_implementation(
         .await
         .map_err(|e| format!("Failed to create session: {}", e))?;
     
-    println!("[start_implementation] OpenCode session created: {} for task {} on port {}", opencode_session_id, task_id, port);
-
     let prompt = build_task_prompt(&task, "Implement this task. Create a branch, make the changes, and create a pull request when done.");
     
-    println!("[start_implementation] Sending prompt_async to opencode session {}", opencode_session_id);
     client
         .prompt_async(&opencode_session_id, prompt, None)
         .await
         .map_err(|e| format!("Failed to send prompt: {}", e))?;
-    println!("[start_implementation] Prompt sent successfully to opencode session {}", opencode_session_id);
     
     let agent_session_id = uuid::Uuid::new_v4().to_string();
     {
@@ -409,11 +397,6 @@ async fn start_implementation(
         .map_err(|e| format!("Failed to create agent session: {}", e))?;
     }
     
-    println!(
-        "[start_implementation] Agent session created: {} (opencode: {}) for task {}",
-        agent_session_id, opencode_session_id, task_id
-    );
-
     {
         let db = db.lock().unwrap();
         db.update_task_status(&task_id, "in_progress")
@@ -479,8 +462,6 @@ async fn run_action(
                         
                         let client = OpenCodeClient::with_base_url(format!("http://127.0.0.1:{}", port));
                         
-                        println!("[run_action] Reusing session {} for task {}", opencode_session_id, task_id);
-                        
                         client
                             .prompt_async(opencode_session_id, prompt, None)
                             .await
@@ -494,9 +475,7 @@ async fn run_action(
                         
                         match sse_mgr.start_bridge(app.clone(), task_id.clone(), port).await {
                             Ok(_) => {},
-                            Err(e) if e.to_string().contains("already running") => {
-                                println!("[run_action] SSE bridge already running for task {}", task_id);
-                            },
+                            Err(e) if e.to_string().contains("already running") => {},
                             Err(e) => return Err(e.to_string()),
                         }
                         
@@ -579,14 +558,10 @@ async fn run_action(
         .await
         .map_err(|e| format!("Failed to create session: {}", e))?;
     
-    println!("[run_action] OpenCode session created: {} for task {} on port {}", opencode_session_id, task_id, port);
-    
-    println!("[run_action] Sending prompt_async to opencode session {}", opencode_session_id);
     client
         .prompt_async(&opencode_session_id, prompt, None)
         .await
         .map_err(|e| format!("Failed to send prompt: {}", e))?;
-    println!("[run_action] Prompt sent successfully to opencode session {}", opencode_session_id);
     
     let agent_session_id = uuid::Uuid::new_v4().to_string();
     {
@@ -601,11 +576,6 @@ async fn run_action(
         .map_err(|e| format!("Failed to create agent session: {}", e))?;
     }
     
-    println!(
-        "[run_action] Agent session created: {} (opencode: {}) for task {}",
-        agent_session_id, opencode_session_id, task_id
-    );
-
     Ok(serde_json::json!({
         "task_id": task_id,
         "worktree_path": worktree_path.to_str().unwrap(),
