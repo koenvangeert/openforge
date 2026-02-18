@@ -29,9 +29,10 @@
 
   $: statusClass = session?.status || 'idle'
   $: needsInput = session?.status === 'paused' && session?.checkpoint_data !== null
+  $: hasVisibleStatus = session !== null && ['running', 'completed', 'paused', 'failed', 'interrupted'].includes(session?.status ?? '')
 </script>
 
-<button class="card" class:running={statusClass === 'running'} class:paused={statusClass === 'paused'} class:failed={statusClass === 'failed'} class:interrupted={statusClass === 'interrupted'} class:needs-input={needsInput} on:click={handleClick}>
+<button class="card" class:running={statusClass === 'running'} class:paused={statusClass === 'paused'} class:failed={statusClass === 'failed'} class:interrupted={statusClass === 'interrupted'} class:completed={statusClass === 'completed'} class:needs-input={needsInput} on:click={handleClick}>
   <div class="card-header">
     <div class="id-row">
       <span class="task-id">{task.id}</span>
@@ -42,13 +43,25 @@
         <span class="needs-input-badge">Needs Input</span>
       {/if}
     </div>
-    {#if session}
-      <span class="status-dot {statusClass}"></span>
+    {#if hasVisibleStatus}
+      <span class="status-badge {statusClass}">
+        {#if statusClass === 'running'}
+          Running
+        {:else if statusClass === 'completed'}
+          Done
+        {:else if statusClass === 'paused'}
+          Paused
+        {:else if statusClass === 'failed'}
+          Error
+        {:else if statusClass === 'interrupted'}
+          Stopped
+        {/if}
+      </span>
     {/if}
   </div>
   <div class="card-title">{truncate(task.title, 60)}</div>
   {#if session}
-    <div class="card-status">
+    <div class="card-status {statusClass}">
       {#if session.status === 'running'}
         {stageLabel(session.stage)}...
       {:else if session.status === 'paused'}
@@ -105,18 +118,27 @@
 
   .card.running {
     border-left: 3px solid var(--success);
+    background: linear-gradient(to right, rgba(158, 206, 106, 0.05), transparent 40%);
+  }
+
+  .card.completed {
+    border-left: 3px solid var(--success);
+    background: linear-gradient(to right, rgba(158, 206, 106, 0.08), transparent 40%);
   }
 
   .card.paused {
     border-left: 3px solid var(--warning);
+    background: linear-gradient(to right, rgba(224, 175, 104, 0.05), transparent 40%);
   }
 
   .card.failed {
     border-left: 3px solid var(--error);
+    background: linear-gradient(to right, rgba(247, 118, 142, 0.05), transparent 40%);
   }
 
   .card.interrupted {
     border-left: 3px solid var(--text-secondary);
+    background: linear-gradient(to right, rgba(86, 95, 137, 0.05), transparent 40%);
   }
 
   .card.needs-input {
@@ -176,32 +198,46 @@
     animation: pulse 1.5s infinite;
   }
 
-  .status-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
+  .status-badge {
+    font-size: 0.6rem;
+    font-weight: 600;
+    padding: 2px 6px;
+    border-radius: 3px;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    line-height: 1.3;
   }
 
-  .status-dot.running {
-    background: var(--success);
-    animation: pulse 1.5s infinite;
+  .status-badge.running {
+    background: rgba(158, 206, 106, 0.15);
+    color: var(--success);
+    animation: badge-pulse 2s ease-in-out infinite;
   }
 
-  .status-dot.paused {
-    background: var(--warning);
+  .status-badge.completed {
+    background: rgba(158, 206, 106, 0.2);
+    color: var(--success);
   }
 
-  .status-dot.failed {
-    background: var(--error);
+  .status-badge.paused {
+    background: rgba(224, 175, 104, 0.15);
+    color: var(--warning);
   }
 
-  .status-dot.interrupted {
-    background: var(--text-secondary);
+  .status-badge.failed {
+    background: rgba(247, 118, 142, 0.15);
+    color: var(--error);
   }
 
-  @keyframes pulse {
+  .status-badge.interrupted {
+    background: rgba(86, 95, 137, 0.15);
+    color: var(--text-secondary);
+  }
+
+  @keyframes badge-pulse {
     0%, 100% { opacity: 1; }
-    50% { opacity: 0.4; }
+    50% { opacity: 0.6; }
   }
 
   .card-title {
@@ -215,6 +251,22 @@
     font-size: 0.7rem;
     color: var(--text-secondary);
     margin-bottom: 4px;
+  }
+
+  .card-status.running {
+    color: var(--success);
+  }
+
+  .card-status.completed {
+    color: var(--success);
+  }
+
+  .card-status.failed {
+    color: var(--error);
+  }
+
+  .card-status.paused {
+    color: var(--warning);
   }
 
   .card-prs {
