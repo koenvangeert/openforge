@@ -1,9 +1,9 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte'
-  import type { Task, AgentSession, KanbanColumn, Action, AgentInfo } from '../lib/types'
+  import type { Task, AgentSession, KanbanColumn, Action } from '../lib/types'
   import { COLUMNS, COLUMN_LABELS } from '../lib/types'
   import { tasks, selectedTaskId, activeSessions, ticketPrs, error, activeProjectId } from '../lib/stores'
-  import { updateTaskStatus, deleteTask, getTasksForProject, getAgents } from '../lib/ipc'
+  import { updateTaskStatus, deleteTask, getTasksForProject } from '../lib/ipc'
   import { loadActions, getEnabledActions } from '../lib/actions'
   import TaskCard from './TaskCard.svelte'
   import AddTaskInline from './AddTaskInline.svelte'
@@ -33,9 +33,6 @@
 
   let contextMenu = { visible: false, x: 0, y: 0, taskId: '', showMoveSubmenu: false }
   let actions: Action[] = []
-  let availableAgents: AgentInfo[] = []
-  let selectedAgent: string | null = null
-  let agentsLoading = false
   
   $: if ($activeProjectId) {
     loadActions($activeProjectId).then(a => { actions = getEnabledActions(a) })
@@ -45,27 +42,13 @@
   $: isSessionBusy = contextSession?.status === 'running' || contextSession?.status === 'paused'
   $: busyReason = contextSession?.status === 'running' ? 'Agent is busy' : contextSession?.status === 'paused' ? 'Answer pending question first' : ''
 
-  async function handleContextMenu(event: MouseEvent, taskId: string) {
+  function handleContextMenu(event: MouseEvent, taskId: string) {
     event.preventDefault()
     contextMenu = { visible: true, x: event.clientX, y: event.clientY, taskId, showMoveSubmenu: false }
-    await fetchAgents()
-  }
-
-  async function fetchAgents() {
-    agentsLoading = true
-    try {
-      availableAgents = await getAgents()
-    } catch (e) {
-      console.error('Failed to fetch agents:', e)
-      availableAgents = []
-    } finally {
-      agentsLoading = false
-    }
   }
 
   function closeContextMenu() {
     contextMenu = { ...contextMenu, visible: false, showMoveSubmenu: false }
-    selectedAgent = null
   }
 
   function toggleMoveSubmenu() {
@@ -75,7 +58,7 @@
   function handleRunAction(action: Action) {
     const taskId = contextMenu.taskId
     closeContextMenu()
-    dispatch('run-action', { taskId, actionPrompt: action.prompt, agent: selectedAgent })
+    dispatch('run-action', { taskId, actionPrompt: action.prompt, agent: action.agent })
   }
 
   async function handleMoveTo(column: KanbanColumn) {
@@ -137,32 +120,6 @@
 
 {#if contextMenu.visible}
   <div class="context-menu" style="left: {contextMenu.x}px; top: {contextMenu.y}px;">
-    <div class="agent-selector">
-      <span class="agent-label">Agent</span>
-      <div class="agent-chips">
-        <button
-          class="agent-chip"
-          class:active={selectedAgent === null}
-          on:click|stopPropagation={() => selectedAgent = null}
-        >
-          Default
-        </button>
-        {#if agentsLoading}
-          <span class="agent-loading">Loading...</span>
-        {:else}
-          {#each availableAgents as agent (agent.name)}
-            <button
-              class="agent-chip"
-              class:active={selectedAgent === agent.name}
-              on:click|stopPropagation={() => selectedAgent = agent.name}
-            >
-              {agent.name}
-            </button>
-          {/each}
-        {/if}
-      </div>
-    </div>
-    <div class="context-divider"></div>
     {#each actions as action (action.id)}
       <button
         class="context-item"
@@ -322,56 +279,5 @@
     color: white;
   }
 
-  .agent-selector {
-    padding: 6px 12px 4px;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
 
-  .agent-label {
-    font-size: 0.65rem;
-    font-weight: 600;
-    color: var(--text-secondary);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-  }
-
-  .agent-chips {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4px;
-  }
-
-  .agent-chip {
-    all: unset;
-    padding: 3px 10px;
-    font-size: 0.75rem;
-    font-weight: 500;
-    color: var(--text-secondary);
-    background: var(--bg-primary);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    cursor: pointer;
-    transition: all 0.15s;
-    white-space: nowrap;
-  }
-
-  .agent-chip:hover {
-    color: var(--text-primary);
-    border-color: var(--accent);
-  }
-
-  .agent-chip.active {
-    color: var(--accent);
-    background: rgba(122, 162, 247, 0.15);
-    border-color: var(--accent);
-  }
-
-  .agent-loading {
-    font-size: 0.7rem;
-    color: var(--text-secondary);
-    font-style: italic;
-    padding: 3px 0;
-  }
 </style>

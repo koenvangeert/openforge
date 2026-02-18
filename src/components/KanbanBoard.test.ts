@@ -9,13 +9,12 @@ vi.mock('../lib/ipc', () => ({
   getTasks: vi.fn(),
   updateTaskStatus: vi.fn(),
   deleteTask: vi.fn(),
-  getAgents: vi.fn(() => Promise.resolve([{ name: 'build' }, { name: 'oracle' }])),
 }))
 
 // Mock actions module
 const mockActions: Action[] = [
-  { id: 'action-1', name: 'Start Implementation', prompt: 'Implement this task', builtin: true, enabled: true },
-  { id: 'action-2', name: 'Write Tests', prompt: 'Write tests for this', builtin: true, enabled: true },
+  { id: 'action-1', name: 'Start Implementation', prompt: 'Implement this task', agent: null, builtin: true, enabled: true },
+  { id: 'action-2', name: 'Write Tests', prompt: 'Write tests for this', agent: null, builtin: true, enabled: true },
 ]
 
 vi.mock('../lib/actions', () => ({
