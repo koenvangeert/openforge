@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/svelte'
+import { render, screen, fireEvent } from '@testing-library/svelte'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import SettingsPanel from './SettingsPanel.svelte'
 import { activeProjectId, projects } from '../lib/stores'
@@ -10,12 +10,25 @@ vi.mock('../lib/ipc', () => ({
   deleteProject: vi.fn(),
 }))
 
+vi.mock('../lib/actions', () => ({
+  loadActions: vi.fn(),
+  saveActions: vi.fn(),
+  createAction: vi.fn(),
+  DEFAULT_ACTIONS: [
+    { id: 'builtin-start-implementation', name: 'Start Implementation', prompt: 'Implement this task...', builtin: true, enabled: true },
+    { id: 'builtin-plan-design', name: 'Plan/Design', prompt: 'Analyze this task...', builtin: true, enabled: true },
+    { id: 'builtin-manual-testing', name: 'Manual Testing', prompt: 'Create a comprehensive manual testing plan...', builtin: true, enabled: true },
+  ],
+}))
+
 import { getProjectConfig } from '../lib/ipc'
+import { loadActions, createAction, DEFAULT_ACTIONS } from '../lib/actions'
 
 describe('SettingsPanel', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(getProjectConfig).mockResolvedValue('')
+    vi.mocked(loadActions).mockResolvedValue([])
     activeProjectId.set('test-project-id')
     projects.set([
       {
@@ -58,5 +71,43 @@ describe('SettingsPanel', () => {
     render(SettingsPanel)
     
     expect(screen.getByPlaceholderText('My Project')).toBeTruthy()
+  })
+
+  it('renders actions section with defaults', async () => {
+    vi.mocked(loadActions).mockResolvedValue(DEFAULT_ACTIONS)
+    
+    render(SettingsPanel)
+    
+    await vi.waitFor(() => {
+      expect(screen.getByText('Start Implementation')).toBeTruthy()
+    })
+    
+    expect(screen.getByText('Plan/Design')).toBeTruthy()
+    expect(screen.getByText('Manual Testing')).toBeTruthy()
+  })
+
+  it('add action creates new entry', async () => {
+    const mockActions = [...DEFAULT_ACTIONS]
+    vi.mocked(loadActions).mockResolvedValue(mockActions)
+    vi.mocked(createAction).mockReturnValue({
+      id: 'new-action-id',
+      name: 'New Action',
+      prompt: '',
+      builtin: false,
+      enabled: true,
+    })
+    
+    render(SettingsPanel)
+    
+    await vi.waitFor(() => {
+      expect(screen.getByText('Start Implementation')).toBeTruthy()
+    })
+    
+    const addButton = screen.getByRole('button', { name: /add action/i })
+    await fireEvent.click(addButton)
+    
+    await vi.waitFor(() => {
+      expect(screen.getByDisplayValue('New Action')).toBeTruthy()
+    })
   })
 })

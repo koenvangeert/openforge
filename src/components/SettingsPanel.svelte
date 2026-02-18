@@ -2,6 +2,8 @@
   import { createEventDispatcher } from 'svelte'
   import { activeProjectId, projects } from '../lib/stores'
   import { getProjectConfig, setProjectConfig, updateProject, deleteProject } from '../lib/ipc'
+  import { loadActions, saveActions, createAction, DEFAULT_ACTIONS } from '../lib/actions'
+  import type { Action } from '../lib/types'
 
   const dispatch = createEventDispatcher()
 
@@ -9,6 +11,7 @@
   let path = ''
   let jiraBoardId = ''
   let githubDefaultRepo = ''
+  let actions: Action[] = []
   let isSaving = false
   let saved = false
   let isDeleting = false
@@ -25,6 +28,7 @@
     try {
       jiraBoardId = (await getProjectConfig(projectId, 'jira_board_id')) || ''
       githubDefaultRepo = (await getProjectConfig(projectId, 'github_default_repo')) || ''
+      actions = await loadActions(projectId)
     } catch (e) {
       console.error('Failed to load settings:', e)
     }
@@ -39,6 +43,7 @@
       await updateProject($activeProjectId, projectName, path)
       await setProjectConfig($activeProjectId, 'jira_board_id', jiraBoardId)
       await setProjectConfig($activeProjectId, 'github_default_repo', githubDefaultRepo)
+      await saveActions($activeProjectId, actions)
       saved = true
       setTimeout(() => { saved = false }, 2000)
     } catch (e) {
@@ -65,6 +70,23 @@
     } finally {
       isDeleting = false
     }
+  }
+
+  function addAction() {
+    actions = [...actions, createAction('New Action', '')]
+  }
+
+  function removeAction(index: number) {
+    const action = actions[index]
+    if (action.builtin) {
+      if (!confirm(`Delete built-in action "${action.name}"? You can restore it with Reset to Defaults.`)) return
+    }
+    actions = actions.filter((_, i) => i !== index)
+  }
+
+  function resetActions() {
+    if (!confirm('Reset all actions to defaults? This will remove any custom actions.')) return
+    actions = [...DEFAULT_ACTIONS]
   }
 
   function close() {
@@ -113,6 +135,36 @@
           <span>Default Repository</span>
           <input type="text" bind:value={githubDefaultRepo} placeholder="owner/repo" />
         </label>
+      </section>
+
+      <section class="section">
+        <h3>Actions</h3>
+        <p class="section-description">Configure actions available in the task context menu. Each action sends its prompt to the AI agent along with the task context.</p>
+        
+        {#each actions as action, i (action.id)}
+          <div class="action-item">
+            <div class="action-header">
+              <label class="action-toggle">
+                <input type="checkbox" bind:checked={action.enabled} />
+                <span class="action-name">{action.name}</span>
+              </label>
+              <button class="action-delete-btn" on:click={() => removeAction(i)} title="Delete action">&times;</button>
+            </div>
+            <label class="field">
+              <span>Name</span>
+              <input type="text" bind:value={action.name} placeholder="Action name" />
+            </label>
+            <label class="field">
+              <span>Prompt</span>
+              <textarea bind:value={action.prompt} placeholder="Instruction for the AI agent..." rows="3"></textarea>
+            </label>
+          </div>
+        {/each}
+        
+        <div class="action-buttons">
+          <button class="btn btn-add" on:click={addAction}>+ Add Action</button>
+          <button class="btn btn-reset" on:click={resetActions}>Reset to Defaults</button>
+        </div>
       </section>
     </div>
 
@@ -208,6 +260,104 @@
 
   .field input:focus {
     border-color: var(--accent);
+  }
+
+  .section-description {
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+    margin: 0 0 8px;
+    line-height: 1.4;
+  }
+
+  .action-item {
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .action-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .action-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+  }
+
+  .action-toggle input[type="checkbox"] {
+    accent-color: var(--accent);
+  }
+
+  .action-name {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .action-delete-btn {
+    all: unset;
+    cursor: pointer;
+    color: var(--text-secondary);
+    font-size: 1rem;
+    padding: 2px 6px;
+    border-radius: 4px;
+  }
+
+  .action-delete-btn:hover {
+    background: var(--error);
+    color: white;
+  }
+
+  .field textarea {
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 8px 10px;
+    color: var(--text-primary);
+    font-size: 0.8rem;
+    font-family: inherit;
+    outline: none;
+    resize: vertical;
+  }
+
+  .field textarea:focus {
+    border-color: var(--accent);
+  }
+
+  .action-buttons {
+    display: flex;
+    gap: 8px;
+  }
+
+  .btn-add {
+    flex: 1;
+    background: transparent;
+    border: 1px dashed var(--border);
+    color: var(--text-secondary);
+  }
+
+  .btn-add:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  .btn-reset {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+  }
+
+  .btn-reset:hover {
+    border-color: var(--text-primary);
+    color: var(--text-primary);
   }
 
   .settings-footer {
