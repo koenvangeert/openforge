@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte'
   import type { Task, AgentSession, KanbanColumn, Action } from '../lib/types'
   import { COLUMNS, COLUMN_LABELS } from '../lib/types'
   import { tasks, selectedTaskId, activeSessions, ticketPrs, error, activeProjectId } from '../lib/stores'
@@ -8,7 +7,11 @@
   import TaskCard from './TaskCard.svelte'
   import AddTaskInline from './AddTaskInline.svelte'
 
-  const dispatch = createEventDispatcher()
+  interface Props {
+    onRunAction?: (data: { taskId: string; actionPrompt: string; agent: string | null }) => void
+  }
+
+  let { onRunAction }: Props = $props()
 
   function tasksForColumn(allTasks: Task[], column: KanbanColumn): Task[] {
     return allTasks.filter(t => t.status === column)
@@ -18,8 +21,8 @@
     return sessions.get(taskId) || null
   }
 
-  function handleSelect(event: CustomEvent<string>) {
-    $selectedTaskId = event.detail
+  function handleSelect(taskId: string) {
+    $selectedTaskId = taskId
   }
 
   async function handleTaskCreated() {
@@ -31,16 +34,18 @@
     }
   }
 
-  let contextMenu = { visible: false, x: 0, y: 0, taskId: '', showMoveSubmenu: false }
-  let actions: Action[] = []
+  let contextMenu = $state({ visible: false, x: 0, y: 0, taskId: '', showMoveSubmenu: false })
+  let actions = $state<Action[]>([])
   
-  $: if ($activeProjectId) {
-    loadActions($activeProjectId).then(a => { actions = getEnabledActions(a) })
-  }
+  $effect(() => {
+    if ($activeProjectId) {
+      loadActions($activeProjectId).then(a => { actions = getEnabledActions(a) })
+    }
+  })
 
-  $: contextSession = contextMenu.taskId ? $activeSessions.get(contextMenu.taskId) : null
-  $: isSessionBusy = contextSession?.status === 'running' || contextSession?.status === 'paused'
-  $: busyReason = contextSession?.status === 'running' ? 'Agent is busy' : contextSession?.status === 'paused' ? 'Answer pending question first' : ''
+  let contextSession = $derived(contextMenu.taskId ? $activeSessions.get(contextMenu.taskId) : null)
+  let isSessionBusy = $derived(contextSession?.status === 'running' || contextSession?.status === 'paused')
+  let busyReason = $derived(contextSession?.status === 'running' ? 'Agent is busy' : contextSession?.status === 'paused' ? 'Answer pending question first' : '')
 
   function handleContextMenu(event: MouseEvent, taskId: string) {
     event.preventDefault()
@@ -58,7 +63,7 @@
   function handleRunAction(action: Action) {
     const taskId = contextMenu.taskId
     closeContextMenu()
-    dispatch('run-action', { taskId, actionPrompt: action.prompt, agent: action.agent })
+    onRunAction?.({ taskId, actionPrompt: action.prompt, agent: action.agent ?? null })
   }
 
   async function handleMoveTo(column: KanbanColumn) {
@@ -91,7 +96,7 @@
   }
 </script>
 
-<svelte:window on:click={closeContextMenu} />
+<svelte:window onclick={closeContextMenu} />
 
 <div class="kanban">
   {#each COLUMNS as column}
@@ -101,13 +106,13 @@
         <span class="column-name">{COLUMN_LABELS[column]}</span>
         <div class="column-header-right">
           <span class="column-count">{columnTasks.length}</span>
-          <AddTaskInline {column} on:task-created={handleTaskCreated} />
+          <AddTaskInline {column} onTaskCreated={handleTaskCreated} />
         </div>
       </div>
       <div class="column-body">
         {#each columnTasks as task (task.id)}
-          <div on:contextmenu={(e) => handleContextMenu(e, task.id)}>
-            <TaskCard {task} session={getSession($activeSessions, task.id)} pullRequests={$ticketPrs.get(task.id) || []} on:select={handleSelect} />
+          <div oncontextmenu={(e: MouseEvent) => handleContextMenu(e, task.id)}>
+            <TaskCard {task} session={getSession($activeSessions, task.id)} pullRequests={$ticketPrs.get(task.id) || []} onSelect={handleSelect} />
           </div>
         {/each}
         {#if columnTasks.length === 0}
@@ -126,26 +131,26 @@
         class:disabled={isSessionBusy}
         disabled={isSessionBusy}
         title={isSessionBusy ? busyReason : action.name}
-        on:click={() => handleRunAction(action)}
+        onclick={() => handleRunAction(action)}
       >
         {action.name}
       </button>
     {/each}
     <div class="context-divider"></div>
-    <button class="context-item has-submenu" on:click|stopPropagation={toggleMoveSubmenu}>
+    <button class="context-item has-submenu" onclick={(e: MouseEvent) => { e.stopPropagation(); toggleMoveSubmenu() }}>
       Move to...
     </button>
     {#if contextMenu.showMoveSubmenu}
       <div class="submenu">
         {#each COLUMNS as col}
-          <button class="context-item" on:click={() => handleMoveTo(col)}>
+          <button class="context-item" onclick={() => handleMoveTo(col)}>
             {COLUMN_LABELS[col]}
           </button>
         {/each}
       </div>
     {/if}
     <div class="context-divider"></div>
-    <button class="context-item context-delete" on:click={handleDelete}>Delete</button>
+    <button class="context-item context-delete" onclick={handleDelete}>Delete</button>
   </div>
 {/if}
 

@@ -1,19 +1,29 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte'
   import type { Task, KanbanColumn } from '../lib/types'
   import { COLUMNS, COLUMN_LABELS } from '../lib/types'
   import { createTask, updateTask } from '../lib/ipc'
   import { activeProjectId } from '../lib/stores'
 
-  export let mode: 'create' | 'edit' = 'create'
-  export let task: Task | null = null
+  interface Props {
+    mode?: 'create' | 'edit'
+    task?: Task | null
+    onClose?: () => void
+    onTaskSaved?: (task?: Task) => void
+  }
 
-  const dispatch = createEventDispatcher()
+  let { mode = 'create', task = null, onClose, onTaskSaved }: Props = $props()
 
-  let title = mode === 'edit' && task ? task.title : ''
-  let jiraKey = mode === 'edit' && task ? (task.jira_key || '') : ''
-  let status: KanbanColumn = mode === 'edit' && task ? (task.status as KanbanColumn) : 'todo'
-  let isSubmitting = false
+  let title = $state('')
+  let jiraKey = $state('')
+  let status = $state<KanbanColumn>('todo')
+  let isSubmitting = $state(false)
+
+  // Initialize form values from props
+  $effect(() => {
+    title = mode === 'edit' && task ? task.title : ''
+    jiraKey = mode === 'edit' && task ? (task.jira_key || '') : ''
+    status = mode === 'edit' && task ? (task.status as KanbanColumn) : 'todo'
+  })
 
   async function handleSubmit() {
     if (!title.trim()) return
@@ -27,14 +37,14 @@
           jiraKey.trim() || null,
           $activeProjectId
         )
-        dispatch('task-saved', newTask)
+        onTaskSaved?.(newTask)
       } else if (task) {
         await updateTask(
           task.id,
           title.trim(),
           jiraKey.trim() || null
         )
-        dispatch('task-saved')
+        onTaskSaved?.()
       }
       close()
     } catch (e) {
@@ -45,7 +55,7 @@
   }
 
   function close() {
-    dispatch('close')
+    onClose?.()
   }
 
   function handleKeydown(e: KeyboardEvent) {
@@ -61,14 +71,14 @@
   }
 </script>
 
-<div class="overlay" on:click={handleOverlayClick} on:keydown={handleKeydown} role="dialog" aria-modal="true" tabindex="-1">
+<div class="overlay" onclick={handleOverlayClick} onkeydown={handleKeydown} role="dialog" aria-modal="true" tabindex="-1">
   <div class="dialog">
     <div class="dialog-header">
       <h2>{mode === 'create' ? 'Create Task' : 'Edit Task'}</h2>
-      <button class="close-btn" on:click={close} type="button">X</button>
+      <button class="close-btn" onclick={close} type="button">X</button>
     </div>
 
-    <form class="dialog-body" on:submit|preventDefault={handleSubmit}>
+    <form class="dialog-body" onsubmit={(e: SubmitEvent) => { e.preventDefault(); handleSubmit() }}>
       <label class="field">
         <span>Title <span class="required">*</span></span>
         <input
@@ -102,12 +112,12 @@
     </form>
 
     <div class="dialog-footer">
-      <button class="btn btn-cancel" on:click={close} type="button" disabled={isSubmitting}>
+      <button class="btn btn-cancel" onclick={close} type="button" disabled={isSubmitting}>
         Cancel
       </button>
       <button
         class="btn btn-submit"
-        on:click={handleSubmit}
+        onclick={handleSubmit}
         type="button"
         disabled={!title.trim() || isSubmitting}
       >

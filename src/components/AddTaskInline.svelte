@@ -2,15 +2,17 @@
   import type { KanbanColumn } from '../lib/types'
   import { createTask } from '../lib/ipc'
   import { activeProjectId } from '../lib/stores'
-  import { createEventDispatcher } from 'svelte'
 
-  export let column: KanbanColumn
+  interface Props {
+    column: KanbanColumn
+    onTaskCreated?: () => void
+  }
 
-  const dispatch = createEventDispatcher()
+  let { column, onTaskCreated }: Props = $props()
 
-  let expanded = false
-  let title = ''
-  let loading = false
+  let expanded = $state(false)
+  let title = $state('')
+  let loading = $state(false)
   let inputElement: HTMLInputElement
 
   function expand() {
@@ -33,7 +35,7 @@
     loading = true
     try {
       await createTask(trimmedTitle, column, null, $activeProjectId)
-      dispatch('task-created')
+      onTaskCreated?.()
       collapse()
     } catch (error) {
       console.error('Failed to create task:', error)
@@ -71,12 +73,12 @@
       placeholder="Task title..."
       class="task-input"
       disabled={loading}
-      on:keydown={handleKeydown}
-      on:blur={handleBlur}
+      onkeydown={handleKeydown}
+      onblur={handleBlur}
     />
   </div>
 {:else}
-  <button class="add-inline collapsed" on:click={expand} title="Add task">
+  <button class="add-inline collapsed" onclick={expand} title="Add task">
     <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
       <path d="M6 1V11M1 6H11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
     </svg>

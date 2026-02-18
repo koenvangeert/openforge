@@ -1,16 +1,21 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte'
+  import type { Project } from '../lib/types'
   import { createProject, setProjectConfig } from '../lib/ipc'
 
-  const dispatch = createEventDispatcher()
+  interface Props {
+    onClose?: () => void
+    onProjectCreated?: (project: Project) => void
+  }
 
-  let projectName = ''
-  let path = ''
-  let jiraBoardId = ''
-  let githubDefaultRepo = ''
-  let isSubmitting = false
-  let showJiraSection = false
-  let showGithubSection = false
+  let { onClose, onProjectCreated }: Props = $props()
+
+  let projectName = $state('')
+  let path = $state('')
+  let jiraBoardId = $state('')
+  let githubDefaultRepo = $state('')
+  let isSubmitting = $state(false)
+  let showJiraSection = $state(false)
+  let showGithubSection = $state(false)
 
   async function handleSubmit() {
     if (!projectName.trim() || !path.trim()) return
@@ -29,7 +34,7 @@
         await setProjectConfig(project.id, 'github_default_repo', githubDefaultRepo.trim())
       }
 
-      dispatch('project-created', project)
+      onProjectCreated?.(project)
       close()
     } catch (e) {
       console.error('Failed to create project:', e)
@@ -39,7 +44,7 @@
   }
 
   function close() {
-    dispatch('close')
+    onClose?.()
   }
 
   function handleKeydown(e: KeyboardEvent) {
@@ -55,14 +60,14 @@
   }
 </script>
 
-<div class="overlay" on:click={handleOverlayClick} on:keydown={handleKeydown} role="dialog" aria-modal="true" tabindex="-1">
+<div class="overlay" onclick={handleOverlayClick} onkeydown={handleKeydown} role="dialog" aria-modal="true" tabindex="-1">
   <div class="dialog">
     <div class="dialog-header">
       <h2>New Project</h2>
-      <button class="close-btn" on:click={close} type="button">X</button>
+      <button class="close-btn" onclick={close} type="button">X</button>
     </div>
 
-    <form class="dialog-body" on:submit|preventDefault={handleSubmit}>
+    <form class="dialog-body" onsubmit={(e: SubmitEvent) => { e.preventDefault(); handleSubmit() }}>
       <label class="field">
         <span>Project Name <span class="required">*</span></span>
         <input
@@ -89,7 +94,7 @@
       <div class="section-toggle">
         <button
           class="toggle-btn"
-          on:click={() => showJiraSection = !showJiraSection}
+          onclick={() => showJiraSection = !showJiraSection}
           type="button"
         >
           <span class="toggle-icon" class:expanded={showJiraSection}>▶</span>
@@ -115,7 +120,7 @@
       <div class="section-toggle">
         <button
           class="toggle-btn"
-          on:click={() => showGithubSection = !showGithubSection}
+          onclick={() => showGithubSection = !showGithubSection}
           type="button"
         >
           <span class="toggle-icon" class:expanded={showGithubSection}>▶</span>
@@ -138,12 +143,12 @@
     </form>
 
     <div class="dialog-footer">
-      <button class="btn btn-cancel" on:click={close} type="button" disabled={isSubmitting}>
+      <button class="btn btn-cancel" onclick={close} type="button" disabled={isSubmitting}>
         Cancel
       </button>
       <button
          class="btn btn-submit"
-         on:click={handleSubmit}
+         onclick={handleSubmit}
          type="button"
          disabled={!projectName.trim() || !path.trim() || isSubmitting}
        >

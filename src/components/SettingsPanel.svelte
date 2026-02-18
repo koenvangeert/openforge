@@ -1,29 +1,41 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte'
   import { activeProjectId, projects } from '../lib/stores'
   import { getProjectConfig, setProjectConfig, updateProject, deleteProject, getAgents } from '../lib/ipc'
   import { loadActions, saveActions, createAction, DEFAULT_ACTIONS } from '../lib/actions'
   import type { Action, AgentInfo } from '../lib/types'
 
-  const dispatch = createEventDispatcher()
-
-  let projectName = ''
-  let path = ''
-  let jiraBoardId = ''
-  let githubDefaultRepo = ''
-  let actions: Action[] = []
-  let availableAgents: AgentInfo[] = []
-  let isSaving = false
-  let saved = false
-  let isDeleting = false
-
-  $: if ($activeProjectId) {
-    loadConfig($activeProjectId)
+  interface Props {
+    onClose?: () => void
+    onProjectDeleted?: () => void
   }
 
-  $: currentProject = $projects.find((p: typeof $projects[0]) => p.id === $activeProjectId)
-  $: projectName = currentProject?.name || ''
-  $: path = currentProject?.path || ''
+  let { onClose, onProjectDeleted }: Props = $props()
+
+  let projectName = $state('')
+  let path = $state('')
+  let jiraBoardId = $state('')
+  let githubDefaultRepo = $state('')
+  let actions = $state<Action[]>([])
+  let availableAgents = $state<AgentInfo[]>([])
+  let isSaving = $state(false)
+  let saved = $state(false)
+  let isDeleting = $state(false)
+
+  let currentProject = $derived($projects.find((p: typeof $projects[0]) => p.id === $activeProjectId))
+
+  $effect(() => {
+    projectName = currentProject?.name || ''
+  })
+
+  $effect(() => {
+    path = currentProject?.path || ''
+  })
+
+  $effect(() => {
+    if ($activeProjectId) {
+      loadConfig($activeProjectId)
+    }
+  })
 
   async function loadConfig(projectId: string) {
     try {
@@ -64,7 +76,7 @@
     isDeleting = true
     try {
       await deleteProject($activeProjectId)
-      dispatch('project-deleted')
+      onProjectDeleted?.()
       close()
     } catch (e) {
       console.error('Failed to delete project:', e)
@@ -92,14 +104,14 @@
   }
 
   function close() {
-    dispatch('close')
+    onClose?.()
   }
 </script>
 
 <div class="settings">
   <div class="settings-header">
     <h2>Project Settings: {projectName || 'No Project'}</h2>
-    <button class="close-btn" on:click={close}>X</button>
+    <button class="close-btn" onclick={close}>X</button>
   </div>
 
   {#if !$activeProjectId}
@@ -118,9 +130,9 @@
            <span>Repository Path</span>
            <input type="text" bind:value={path} placeholder="/path/to/repo" />
          </label>
-        <button class="btn btn-delete" on:click={handleDelete} disabled={isDeleting}>
-          {#if isDeleting}Deleting...{:else}Delete Project{/if}
-        </button>
+         <button class="btn btn-delete" onclick={handleDelete} disabled={isDeleting}>
+           {#if isDeleting}Deleting...{:else}Delete Project{/if}
+         </button>
       </section>
 
       <section class="section">
@@ -150,7 +162,7 @@
                 <input type="checkbox" bind:checked={action.enabled} />
                 <span class="action-name">{action.name}</span>
               </label>
-              <button class="action-delete-btn" on:click={() => removeAction(i)} title="Delete action">&times;</button>
+              <button class="action-delete-btn" onclick={() => removeAction(i)} title="Delete action">&times;</button>
             </div>
             <label class="field">
               <span>Name</span>
@@ -162,7 +174,7 @@
             </label>
             <label class="field">
               <span>Agent</span>
-              <select value={action.agent ?? ''} on:change={(e) => action.agent = e.currentTarget.value || null}>
+              <select value={action.agent ?? ''} onchange={(e) => action.agent = (e.currentTarget as HTMLSelectElement).value || null}>
                 <option value="">Default</option>
                 {#each availableAgents as agent}
                   <option value={agent.name}>{agent.name}</option>
@@ -173,14 +185,14 @@
         {/each}
         
         <div class="action-buttons">
-          <button class="btn btn-add" on:click={addAction}>+ Add Action</button>
-          <button class="btn btn-reset" on:click={resetActions}>Reset to Defaults</button>
+          <button class="btn btn-add" onclick={addAction}>+ Add Action</button>
+          <button class="btn btn-reset" onclick={resetActions}>Reset to Defaults</button>
         </div>
       </section>
     </div>
 
     <div class="settings-footer">
-      <button class="btn btn-save" on:click={save} disabled={isSaving}>
+      <button class="btn btn-save" onclick={save} disabled={isSaving}>
         {#if isSaving}Saving...{:else if saved}Saved!{:else}Save Settings{/if}
       </button>
     </div>

@@ -4,7 +4,11 @@
   import AgentPanel from './AgentPanel.svelte'
   import TaskInfoPanel from './TaskInfoPanel.svelte'
 
-  export let task: Task
+  interface Props {
+    task: Task
+  }
+
+  let { task }: Props = $props()
 
   function handleBack() {
     $selectedTaskId = null
@@ -29,11 +33,11 @@
   }
 </script>
 
-<svelte:window on:keydown={handleEscape} />
+<svelte:window onkeydown={handleEscape} />
 
 <div class="task-detail-view">
   <header class="detail-header">
-    <button class="back-button" on:click={handleBack}>
+    <button class="back-button" onclick={handleBack}>
       <span class="back-arrow">←</span>
       Back to Board
     </button>

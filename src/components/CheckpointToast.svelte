@@ -3,7 +3,7 @@
   import type { CheckpointNotification } from '../lib/types'
   import { checkpointNotification, selectedTaskId } from '../lib/stores'
 
-  let visible = false
+  let visible = $state(false)
   let timer: ReturnType<typeof setTimeout>
 
   function truncate(text: string, max: number): string {
@@ -43,12 +43,12 @@
 </script>
 
 {#if visible && $checkpointNotification}
-  <div class="checkpoint-toast" on:click={handleClick} role="button" tabindex="0" on:keydown={(e) => e.key === 'Enter' && handleClick()}>
+  <div class="checkpoint-toast" onclick={handleClick} role="button" tabindex="0" onkeydown={(e: KeyboardEvent) => e.key === 'Enter' && handleClick()}>
     <span class="toast-icon">!</span>
     <span class="toast-message">
       Agent needs input on {$checkpointNotification.ticketKey || truncate($checkpointNotification.ticketId, 20)}
     </span>
-    <button class="toast-close" on:click|stopPropagation={dismiss}>X</button>
+    <button class="toast-close" onclick={(e: MouseEvent) => { e.stopPropagation(); dismiss() }}>X</button>
   </div>
 {/if}
 

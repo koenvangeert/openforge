@@ -1,8 +1,8 @@
 <script lang="ts">
   import { error } from '../lib/stores'
 
-  let visible = false
-  let message = ''
+  let visible = $state(false)
+  let message = $state('')
   let timer: ReturnType<typeof setTimeout>
 
   error.subscribe((err) => {
@@ -21,7 +21,7 @@
 {#if visible}
   <div class="toast">
     <span class="toast-message">{message}</span>
-    <button class="toast-close" on:click={() => { visible = false; $error = null }}>X</button>
+    <button class="toast-close" onclick={() => { visible = false; $error = null }}>X</button>
   </div>
 {/if}
 

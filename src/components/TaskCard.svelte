@@ -1,16 +1,18 @@
 <script lang="ts">
   import type { Task, AgentSession, PullRequestInfo } from '../lib/types'
   import { openUrl } from '../lib/ipc'
-  import { createEventDispatcher } from 'svelte'
 
-  export let task: Task
-  export let session: AgentSession | null = null
-  export let pullRequests: PullRequestInfo[] = []
+  interface Props {
+    task: Task
+    session?: AgentSession | null
+    pullRequests?: PullRequestInfo[]
+    onSelect?: (taskId: string) => void
+  }
 
-  const dispatch = createEventDispatcher()
+  let { task, session = null, pullRequests = [], onSelect }: Props = $props()
 
   function handleClick() {
-    dispatch('select', task.id)
+    onSelect?.(task.id)
   }
 
   function truncate(text: string, max: number): string {
@@ -27,12 +29,12 @@
     return labels[stage] || stage
   }
 
-  $: statusClass = session?.status || 'idle'
-  $: needsInput = session?.status === 'paused' && session?.checkpoint_data !== null
-  $: hasVisibleStatus = session !== null && ['running', 'completed', 'paused', 'failed', 'interrupted'].includes(session?.status ?? '')
+  let statusClass = $derived(session?.status || 'idle')
+  let needsInput = $derived(session?.status === 'paused' && session?.checkpoint_data !== null)
+  let hasVisibleStatus = $derived(session !== null && ['running', 'completed', 'paused', 'failed', 'interrupted'].includes(session?.status ?? ''))
 </script>
 
-<button class="card" class:running={statusClass === 'running'} class:paused={statusClass === 'paused'} class:failed={statusClass === 'failed'} class:interrupted={statusClass === 'interrupted'} class:completed={statusClass === 'completed'} class:needs-input={needsInput} on:click={handleClick}>
+<button class="card" class:running={statusClass === 'running'} class:paused={statusClass === 'paused'} class:failed={statusClass === 'failed'} class:interrupted={statusClass === 'interrupted'} class:completed={statusClass === 'completed'} class:needs-input={needsInput} onclick={handleClick}>
   <div class="card-header">
     <div class="id-row">
       <span class="task-id">{task.id}</span>
@@ -84,8 +86,8 @@
           class:pr-closed={pr.state !== 'open'}
           role="link"
           tabindex="0"
-          on:click|stopPropagation={() => openUrl(pr.url)}
-          on:keydown|stopPropagation={(e) => e.key === 'Enter' && openUrl(pr.url)}
+          onclick={(e: MouseEvent) => { e.stopPropagation(); openUrl(pr.url) }}
+          onkeydown={(e: KeyboardEvent) => { e.stopPropagation(); if (e.key === 'Enter') openUrl(pr.url) }}
         >
           PR #{pr.id}
         </span>

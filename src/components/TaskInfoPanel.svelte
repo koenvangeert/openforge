@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { createEventDispatcher, onMount } from 'svelte'
+  import { onMount } from 'svelte'
   import type { Task, PrComment, KanbanColumn, WorktreeInfo } from '../lib/types'
   import { COLUMNS, COLUMN_LABELS } from '../lib/types'
   import { tasks, selectedTaskId, ticketPrs, activeProjectId } from '../lib/stores'
@@ -13,12 +13,15 @@
     getWorktreeForTask 
   } from '../lib/ipc'
 
-  export let task: Task
+  interface Props {
+    task: Task
+    onEdit?: () => void
+  }
 
-  const dispatch = createEventDispatcher()
+  let { task, onEdit }: Props = $props()
 
-  let worktree: WorktreeInfo | null = null
-  let prCommentsByPr: Map<number, PrComment[]> = new Map()
+  let worktree = $state<WorktreeInfo | null>(null)
+  let prCommentsByPr = $state<Map<number, PrComment[]>>(new Map())
 
   async function loadWorktree(taskId: string) {
     try {
@@ -44,14 +47,18 @@
     prCommentsByPr = prCommentsByPr
   }
 
-  $: loadWorktree(task.id)
-  $: {
+  $effect(() => {
+    loadWorktree(task.id)
+  })
+
+  $effect(() => {
     // Reload PR comments when task changes or ticketPrs updates
     const prs = $ticketPrs.get(task.id)
     if (prs) {
       loadPrComments()
     }
-  }
+  })
+
 
   onMount(() => {
     loadPrComments()
@@ -104,8 +111,8 @@
     return comments.filter(c => c.addressed === 0).length
   }
 
-  $: statusLabel = COLUMN_LABELS[task.status as KanbanColumn] || task.status
-  $: taskPrs = $ticketPrs.get(task.id) || []
+  let statusLabel = $derived(COLUMN_LABELS[task.status as KanbanColumn] || task.status)
+  let taskPrs = $derived($ticketPrs.get(task.id) || [])
 </script>
 
 <div class="info-panel">
@@ -165,6 +172,7 @@
     {/if}
   </section>
 
+
   <!-- Status Change Section -->
   <section class="section">
     <h3 class="section-title">Change Status</h3>
@@ -173,7 +181,7 @@
         <button 
           class="status-btn" 
           class:active={task.status === col}
-          on:click={() => handleStatusChange(col)}
+          onclick={() => handleStatusChange(col)}
           disabled={task.status === col}>
           {COLUMN_LABELS[col]}
         </button>
@@ -184,8 +192,8 @@
   <!-- Action Row -->
   <section class="section">
     <div class="action-row">
-      <button class="btn btn-edit" on:click={() => dispatch('edit')}>Edit Task</button>
-      <button class="btn btn-delete" on:click={handleDelete}>Delete</button>
+      <button class="btn btn-edit" onclick={() => onEdit?.()}>Edit Task</button>
+      <button class="btn btn-delete" onclick={handleDelete}>Delete</button>
     </div>
   </section>
 
@@ -202,7 +210,7 @@
               </span>
               <span class="pr-title">{pr.title}</span>
             </div>
-            <button class="pr-link" on:click={() => openUrl(pr.url)}>
+            <button class="pr-link" onclick={() => openUrl(pr.url)}>
               {pr.url}
             </button>
           </div>
@@ -241,7 +249,7 @@
                   {#if comment.addressed === 0}
                     <button 
                       class="btn-mark-addressed" 
-                      on:click={() => handleMarkAddressed(comment.id, pr.id)}>
+                      onclick={() => handleMarkAddressed(comment.id, pr.id)}>
                       Mark Addressed
                     </button>
                   {:else}

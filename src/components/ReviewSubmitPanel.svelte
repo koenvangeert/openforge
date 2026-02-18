@@ -3,18 +3,22 @@
   import { submitPrReview } from '../lib/ipc'
   import type { ReviewSubmissionComment } from '../lib/types'
 
-  export let repoOwner: string
-  export let repoName: string
-  export let prNumber: number
-  export let commitId: string
+  interface Props {
+    repoOwner: string
+    repoName: string
+    prNumber: number
+    commitId: string
+  }
 
-  let summary: string = ''
-  let isSubmitting = false
-  let error: string | null = null
-  let successMessage: string | null = null
-  let selectedEvent: 'COMMENT' | 'APPROVE' | 'REQUEST_CHANGES' = 'COMMENT'
+  let { repoOwner, repoName, prNumber, commitId }: Props = $props()
 
-  $: canSubmit = !isSubmitting && (summary.trim() !== '' || $pendingManualComments.length > 0)
+  let summary = $state('')
+  let isSubmitting = $state(false)
+  let error = $state<string | null>(null)
+  let successMessage = $state<string | null>(null)
+  let selectedEvent = $state<'COMMENT' | 'APPROVE' | 'REQUEST_CHANGES'>('COMMENT')
+
+  let canSubmit = $derived(!isSubmitting && (summary.trim() !== '' || $pendingManualComments.length > 0))
 
   async function handleSubmit(event: 'COMMENT' | 'APPROVE' | 'REQUEST_CHANGES') {
     if (!canSubmit) return
@@ -101,21 +105,21 @@
     <div class="action-buttons">
       <button 
         class="submit-btn comment-btn"
-        on:click={handleCommentClick}
+        onclick={handleCommentClick}
         disabled={!canSubmit}
       >
         {isSubmitting && selectedEvent === 'COMMENT' ? 'Submitting...' : 'Comment'}
       </button>
       <button 
         class="submit-btn approve-btn"
-        on:click={handleApproveClick}
+        onclick={handleApproveClick}
         disabled={!canSubmit}
       >
         {isSubmitting && selectedEvent === 'APPROVE' ? 'Submitting...' : 'Approve'}
       </button>
       <button 
         class="submit-btn request-changes-btn"
-        on:click={handleRequestChangesClick}
+        onclick={handleRequestChangesClick}
         disabled={!canSubmit}
       >
         {isSubmitting && selectedEvent === 'REQUEST_CHANGES' ? 'Submitting...' : 'Request Changes'}

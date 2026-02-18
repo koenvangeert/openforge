@@ -1,9 +1,13 @@
 <script lang="ts">
   import type { ReviewPullRequest } from '../lib/types'
 
-  export let pr: ReviewPullRequest
-  export let selected = false
-  export let onClick: () => void
+  interface Props {
+    pr: ReviewPullRequest
+    selected?: boolean
+    onClick: () => void
+  }
+
+  let { pr, selected = false, onClick }: Props = $props()
 
   function timeAgo(timestamp: number): string {
     const seconds = Math.floor((Date.now() - timestamp) / 1000)
@@ -17,7 +21,7 @@
   }
 </script>
 
-<button class="pr-card" class:selected on:click={onClick}>
+<button class="pr-card" class:selected onclick={onClick}>
   <div class="header-row">
     <span class="repo-badge">{pr.repo_owner}/{pr.repo_name}</span>
     {#if pr.draft}

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte'
   import { listen } from '@tauri-apps/api/event'
-  import type { UnlistenFn } from '@tauri-apps/api/event'
+  import type { UnlistenFn, Event } from '@tauri-apps/api/event'
   import { tasks, selectedTaskId, activeSessions, checkpointNotification, ticketPrs, error, isLoading, projects, activeProjectId, currentView, reviewRequestCount } from './lib/stores'
   import { getProjects, getTasksForProject, getOpenCodeStatus, getPullRequests, runAction, getSessionStatus, getLatestSessions, persistSessionStatus } from './lib/ipc'
   import type { Task, PullRequestInfo, OpenCodeStatus, AgentEvent } from './lib/types'
@@ -17,36 +17,38 @@
   import ProjectSetupDialog from './components/ProjectSetupDialog.svelte'
 
 
-  let openCodeStatus: OpenCodeStatus | null = null
+  let openCodeStatus = $state<OpenCodeStatus | null>(null)
   let unlisteners: UnlistenFn[] = []
-  let showAddDialog = false
-  let editingTask: Task | null = null
-  let dialogMode: 'create' | 'edit' = 'create'
-  let showProjectSetup = false
+  let showAddDialog = $state(false)
+  let editingTask = $state<Task | null>(null)
+  let dialogMode = $state<'create' | 'edit'>('create')
+  let showProjectSetup = $state(false)
 
-  $: selectedTask = $tasks.find(t => t.id === $selectedTaskId) || null
+  let selectedTask = $derived($tasks.find(t => t.id === $selectedTaskId) || null)
 
-  // Navigation logic
-  $: if ($selectedTaskId && $currentView === 'board') {
-    // Stay in board view when a task is selected
-  }
+  // Navigation logic - clear selected task when switching views
+  $effect(() => {
+    if ($currentView === 'pr_review') {
+      $selectedTaskId = null
+    }
+  })
   
-  $: if ($currentView === 'pr_review') {
-    $selectedTaskId = null
-  }
-  
-  $: if ($currentView === 'settings' || $currentView === 'global_settings') {
-    $selectedTaskId = null
-  }
+  $effect(() => {
+    if ($currentView === 'settings' || $currentView === 'global_settings') {
+      $selectedTaskId = null
+    }
+  })
 
   // Reload tasks when active project changes
-  $: if ($activeProjectId) {
-    loadTasks()
-    loadPullRequests()
-  }
+  $effect(() => {
+    if ($activeProjectId) {
+      loadTasks()
+      loadPullRequests()
+    }
+  })
 
   // Find active project
-  $: activeProject = $projects.find(p => p.id === $activeProjectId) || null
+  let activeProject = $derived($projects.find(p => p.id === $activeProjectId) || null)
 
   async function loadProjects() {
     try {
@@ -115,12 +117,12 @@
     }
   }
 
-  async function handleRunAction(event: CustomEvent<{ taskId: string; actionPrompt: string; agent: string | null }>) {
+  async function handleRunAction(data: { taskId: string; actionPrompt: string; agent: string | null }) {
     if (!activeProject) {
       $error = 'No active project selected'
       return
     }
-    const { taskId, actionPrompt, agent } = event.detail
+    const { taskId, actionPrompt, agent } = data
     try {
       const result = await runAction(taskId, activeProject.path, actionPrompt, agent)
 
@@ -156,7 +158,7 @@
     )
 
     unlisteners.push(
-      await listen<{ task_id: string }>('action-complete', (event) => {
+      await listen<{ task_id: string }>('action-complete', (event: Event<{ task_id: string }>) => {
         const taskId = event.payload.task_id
         const session = $activeSessions.get(taskId)
         if (session) {
@@ -175,7 +177,7 @@
     )
 
     unlisteners.push(
-      await listen<{ task_id: string; error: string }>('implementation-failed', (event) => {
+      await listen<{ task_id: string; error: string }>('implementation-failed', (event: Event<{ task_id: string; error: string }>) => {
         const taskId = event.payload.task_id
         const session = $activeSessions.get(taskId)
         if (session) {
@@ -207,7 +209,7 @@
     )
 
     unlisteners.push(
-      await listen<AgentEvent>('agent-event', (event) => {
+      await listen<AgentEvent>('agent-event', (event: Event<AgentEvent>) => {
         const { task_id: taskId, event_type: eventType } = event.payload
         const session = $activeSessions.get(taskId)
         if (!session) return
@@ -296,7 +298,7 @@
     )
 
     unlisteners.push(
-      await listen<{ ticket_id: string; session_id: string }>('session-aborted', (event) => {
+      await listen<{ ticket_id: string; session_id: string }>('session-aborted', (event: Event<{ ticket_id: string; session_id: string }>) => {
         const updated = new Map($activeSessions)
         updated.delete(event.payload.ticket_id)
         $activeSessions = updated
@@ -307,7 +309,7 @@
     )
 
     unlisteners.push(
-      await listen<number>('review-pr-count-changed', (event) => {
+      await listen<number>('review-pr-count-changed', (event: Event<number>) => {
         $reviewRequestCount = event.payload
       })
     )
@@ -322,21 +324,21 @@
   <header class="top-bar">
     <div class="top-bar-left">
       <h1 class="app-title">AI Command Center</h1>
-      <ProjectSwitcher on:new-project={() => showProjectSetup = true} />
+      <ProjectSwitcher onNewProject={() => showProjectSetup = true} />
     </div>
     
     <nav class="view-switcher">
       <button 
         class="view-tab" 
         class:active={$currentView === 'board'} 
-        on:click={() => $currentView = 'board'}
+        onclick={() => $currentView = 'board'}
       >
         Board
       </button>
       <button 
         class="view-tab" 
         class:active={$currentView === 'pr_review'} 
-        on:click={() => $currentView = 'pr_review'}
+        onclick={() => $currentView = 'pr_review'}
       >
         PR Review
         {#if $reviewRequestCount > 0}
@@ -346,7 +348,7 @@
       <button 
         class="view-tab" 
         class:active={$currentView === 'settings' || $currentView === 'global_settings'} 
-        on:click={() => { if ($currentView !== 'settings' && $currentView !== 'global_settings') $currentView = 'settings' }}
+        onclick={() => { if ($currentView !== 'settings' && $currentView !== 'global_settings') $currentView = 'settings' }}
       >
         Settings
       </button>
@@ -374,23 +376,23 @@
           <button
             class="sub-tab"
             class:active={$currentView === 'settings'}
-            on:click={() => $currentView = 'settings'}
+            onclick={() => $currentView = 'settings'}
           >
             Project
           </button>
           <button
             class="sub-tab"
             class:active={$currentView === 'global_settings'}
-            on:click={() => $currentView = 'global_settings'}
+            onclick={() => $currentView = 'global_settings'}
           >
             Global
           </button>
         </div>
         <div class="settings-panel-content">
           {#if $currentView === 'settings'}
-            <SettingsPanel on:close={() => $currentView = 'board'} on:project-deleted={loadProjects} />
+            <SettingsPanel onClose={() => $currentView = 'board'} onProjectDeleted={loadProjects} />
           {:else}
-            <GlobalSettingsPanel on:close={() => $currentView = 'board'} />
+            <GlobalSettingsPanel onClose={() => $currentView = 'board'} />
           {/if}
         </div>
       </div>
@@ -406,17 +408,17 @@
             <span>Loading tasks...</span>
           </div>
         {:else}
-          <KanbanBoard on:run-action={handleRunAction} />
+          <KanbanBoard onRunAction={handleRunAction} />
         {/if}
       </div>
     {/if}
 
     {#if showAddDialog}
-      <AddTaskDialog mode={dialogMode} task={editingTask} on:close={() => { showAddDialog = false; editingTask = null }} on:task-saved={() => { showAddDialog = false; editingTask = null; loadTasks() }} />
+      <AddTaskDialog mode={dialogMode} task={editingTask} onClose={() => { showAddDialog = false; editingTask = null }} onTaskSaved={() => { showAddDialog = false; editingTask = null; loadTasks() }} />
     {/if}
 
     {#if showProjectSetup}
-      <ProjectSetupDialog on:close={() => showProjectSetup = false} on:project-created={handleProjectCreated} />
+      <ProjectSetupDialog onClose={() => showProjectSetup = false} onProjectCreated={handleProjectCreated} />
     {/if}
   </main>
 </div>

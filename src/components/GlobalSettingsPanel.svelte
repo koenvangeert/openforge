@@ -1,15 +1,19 @@
 <script lang="ts">
-  import { onMount, createEventDispatcher } from 'svelte'
+  import { onMount } from 'svelte'
   import { getConfig, setConfig } from '../lib/ipc'
 
-  const dispatch = createEventDispatcher()
+  interface Props {
+    onClose?: () => void
+  }
 
-  let jiraBaseUrl = ''
-  let jiraUsername = ''
-  let jiraApiToken = ''
-  let githubToken = ''
-  let isSaving = false
-  let saved = false
+  let { onClose }: Props = $props()
+
+  let jiraBaseUrl = $state('')
+  let jiraUsername = $state('')
+  let jiraApiToken = $state('')
+  let githubToken = $state('')
+  let isSaving = $state(false)
+  let saved = $state(false)
 
   onMount(() => {
     loadConfig()
@@ -44,14 +48,14 @@
   }
 
   function close() {
-    dispatch('close')
+    onClose?.()
   }
 </script>
 
 <div class="settings">
   <div class="settings-header">
     <h2>Global Settings</h2>
-    <button class="close-btn" on:click={close}>X</button>
+    <button class="close-btn" onclick={close}>X</button>
   </div>
 
   <div class="settings-body">
@@ -81,7 +85,7 @@
   </div>
 
   <div class="settings-footer">
-    <button class="btn btn-save" on:click={save} disabled={isSaving}>
+    <button class="btn btn-save" onclick={save} disabled={isSaving}>
       {#if isSaving}Saving...{:else if saved}Saved!{:else}Save Settings{/if}
     </button>
   </div>

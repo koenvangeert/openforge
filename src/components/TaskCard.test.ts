@@ -1,5 +1,5 @@
 import { render, screen, fireEvent } from '@testing-library/svelte'
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import TaskCard from './TaskCard.svelte'
 import type { Task, AgentSession } from '../lib/types'
 
@@ -205,14 +205,11 @@ describe('TaskCard', () => {
   })
 
   it('dispatches select event on click', async () => {
-    const { component } = render(TaskCard, { props: { task: baseTask } })
-    let selectedId = ''
-    component.$on('select', (e: CustomEvent<string>) => {
-      selectedId = e.detail
-    })
+    const onSelect = vi.fn()
+    render(TaskCard, { props: { task: baseTask, onSelect } })
     const card = screen.getByRole('button')
     await fireEvent.click(card)
-    expect(selectedId).toBe('T-42')
+    expect(onSelect).toHaveBeenCalledWith('T-42')
   })
 
   it('applies needs-input class when session is paused with checkpoint_data', () => {

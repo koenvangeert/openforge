@@ -8,11 +8,11 @@
   import ReviewSubmitPanel from './ReviewSubmitPanel.svelte'
   import type { ReviewPullRequest } from '../lib/types'
 
-  let isLoading = false
-  let error: string | null = null
-  let diffViewer: DiffViewer
+  let isLoading = $state(false)
+  let error = $state<string | null>(null)
+  let diffViewer = $state<DiffViewer>()
 
-  $: groupedPrs = groupByRepo($reviewPrs)
+  let groupedPrs = $derived(groupByRepo($reviewPrs))
 
   function groupByRepo(prs: ReviewPullRequest[]): Map<string, ReviewPullRequest[]> {
     const grouped = new Map<string, ReviewPullRequest[]>()
@@ -110,7 +110,7 @@
   {#if $selectedReviewPr}
     <div class="detail-view">
       <div class="detail-header">
-        <button class="back-btn" on:click={backToList}>
+        <button class="back-btn" onclick={backToList}>
           ← Back to list
         </button>
         <div class="pr-info">
@@ -123,7 +123,7 @@
             <span class="separator">•</span>
             <span class="time">{timeAgo($selectedReviewPr.created_at)}</span>
             <span class="separator">•</span>
-            <span class="gh-link" role="link" tabindex="0" on:click={openPrOnGitHub} on:keydown={(e) => e.key === 'Enter' && openPrOnGitHub()}>View on GitHub ↗</span>
+            <span class="gh-link" role="link" tabindex="0" onclick={openPrOnGitHub} onkeydown={(e: KeyboardEvent) => e.key === 'Enter' && openPrOnGitHub()}>View on GitHub ↗</span>
           </div>
         </div>
       </div>
@@ -165,7 +165,7 @@
           <h2 class="heading">PRs Requesting Your Review</h2>
           <span class="count">{$reviewPrs.length} {$reviewPrs.length === 1 ? 'PR' : 'PRs'}</span>
         </div>
-        <button class="refresh-btn" on:click={refreshPrs} disabled={isLoading}>
+        <button class="refresh-btn" onclick={refreshPrs} disabled={isLoading}>
           {isLoading ? '⟳' : '↻'} Refresh
         </button>
       </div>

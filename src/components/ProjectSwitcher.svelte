@@ -1,14 +1,18 @@
 <script lang="ts">
-  import { createEventDispatcher, onMount, onDestroy } from 'svelte'
+  import { onMount, onDestroy } from 'svelte'
   import { projects, activeProjectId } from '../lib/stores'
   import type { Project } from '../lib/types'
 
-  const dispatch = createEventDispatcher()
+  interface Props {
+    onNewProject?: () => void
+  }
 
-  let isOpen = false
+  let { onNewProject }: Props = $props()
+
+  let isOpen = $state(false)
   let dropdownRef: HTMLDivElement
 
-  $: activeProject = $projects.find(p => p.id === $activeProjectId)
+  let activeProject = $derived($projects.find(p => p.id === $activeProjectId))
 
   function toggleDropdown() {
     isOpen = !isOpen
@@ -21,7 +25,7 @@
 
   function openNewProjectDialog() {
     isOpen = false
-    dispatch('new-project')
+    onNewProject?.()
   }
 
   function handleClickOutside(e: MouseEvent) {
@@ -48,7 +52,7 @@
 </script>
 
 <div class="project-switcher" bind:this={dropdownRef}>
-  <button class="switcher-btn" on:click={toggleDropdown} type="button">
+  <button class="switcher-btn" onclick={toggleDropdown} type="button">
     <span class="project-name">
       {activeProject ? activeProject.name : 'No Project'}
     </span>
@@ -60,7 +64,7 @@
       {#if $projects.length === 0}
         <div class="empty-state">
           <p>Create your first project</p>
-          <button class="new-project-btn" on:click={openNewProjectDialog} type="button">
+          <button class="new-project-btn" onclick={openNewProjectDialog} type="button">
             + New Project
           </button>
         </div>
@@ -70,7 +74,7 @@
             <button
               class="project-item"
               class:active={project.id === $activeProjectId}
-              on:click={() => selectProject(project)}
+              onclick={() => selectProject(project)}
               type="button"
             >
               <span class="project-item-name">{project.name}</span>
@@ -81,7 +85,7 @@
           {/each}
         </div>
         <div class="dropdown-footer">
-          <button class="new-project-btn" on:click={openNewProjectDialog} type="button">
+          <button class="new-project-btn" onclick={openNewProjectDialog} type="button">
             + New Project
           </button>
         </div>

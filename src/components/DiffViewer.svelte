@@ -6,19 +6,25 @@
   import type { PrFileDiff, ReviewComment, ReviewSubmissionComment } from '../lib/types'
   import { pendingManualComments, reviewComments } from '../lib/stores'
 
-  export let files: PrFileDiff[] = []
-  export let existingComments: ReviewComment[] = []
-  export let repoOwner: string = ''
-  export let repoName: string = ''
+  interface Props {
+    files?: PrFileDiff[]
+    existingComments?: ReviewComment[]
+    repoOwner?: string
+    repoName?: string
+  }
+
+  let { files = [], existingComments = [], repoOwner = '', repoName = '' }: Props = $props()
 
   let container: HTMLElement
-  let outputFormat: 'side-by-side' | 'line-by-line' = 'side-by-side'
-  let activeCommentLine: { path: string; line: number; side: string } | null = null
-  let commentText: string = ''
+  let outputFormat = $state<'side-by-side' | 'line-by-line'>('side-by-side')
+  let activeCommentLine = $state<{ path: string; line: number; side: string } | null>(null)
+  let commentText = $state('')
 
-  $: if (container && files.length > 0) {
-    renderDiffs()
-  }
+  $effect(() => {
+    if (container && files.length > 0) {
+      renderDiffs()
+    }
+  })
 
   function renderDiffs() {
     if (!container) return
@@ -251,10 +257,10 @@
 
 <div class="diff-viewer">
   <div class="controls">
-    <button class:active={outputFormat === 'side-by-side'} on:click={() => outputFormat = 'side-by-side'}>
+    <button class:active={outputFormat === 'side-by-side'} onclick={() => outputFormat = 'side-by-side'}>
       Split
     </button>
-    <button class:active={outputFormat === 'line-by-line'} on:click={() => outputFormat = 'line-by-line'}>
+    <button class:active={outputFormat === 'line-by-line'} onclick={() => outputFormat = 'line-by-line'}>
       Unified
     </button>
   </div>

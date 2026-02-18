@@ -1,11 +1,15 @@
 <script lang="ts">
   import type { PrFileDiff } from '../lib/types'
 
-  export let files: PrFileDiff[] = []
-  export let onSelectFile: (filename: string) => void
+  interface Props {
+    files?: PrFileDiff[]
+    onSelectFile: (filename: string) => void
+  }
 
-  let selectedFile: string | null = null
-  let expandedDirs = new Set<string>()
+  let { files = [], onSelectFile }: Props = $props()
+
+  let selectedFile = $state<string | null>(null)
+  let expandedDirs = $state(new Set<string>())
 
   interface TreeNode {
     name: string
@@ -15,11 +19,26 @@
     file?: PrFileDiff
   }
 
-  $: tree = buildTree(files)
-  $: totalStats = files.reduce((acc, f) => ({
+  function collectDirPaths(files: PrFileDiff[]): Set<string> {
+    const dirs = new Set<string>()
+    for (const file of files) {
+      const parts = file.filename.split('/')
+      for (let i = 0; i < parts.length - 1; i++) {
+        dirs.add(parts.slice(0, i + 1).join('/'))
+      }
+    }
+    return dirs
+  }
+
+  $effect(() => {
+    expandedDirs = collectDirPaths(files)
+  })
+
+  let tree = $derived(buildTree(files))
+  let totalStats = $derived(files.reduce((acc, f) => ({
     additions: acc.additions + f.additions,
     deletions: acc.deletions + f.deletions,
-  }), { additions: 0, deletions: 0 })
+  }), { additions: 0, deletions: 0 }))
 
   function buildTree(files: PrFileDiff[]): TreeNode {
     const root: TreeNode = { name: '', fullPath: '', isDir: true, children: new Map() }
@@ -44,10 +63,6 @@
         }
 
         current = current.children.get(part)!
-        
-        if (!isLast) {
-          expandedDirs.add(fullPath)
-        }
       }
     }
 
@@ -80,12 +95,13 @@
   }
 
   function toggleDir(path: string) {
-    if (expandedDirs.has(path)) {
-      expandedDirs.delete(path)
+    const next = new Set(expandedDirs)
+    if (next.has(path)) {
+      next.delete(path)
     } else {
-      expandedDirs.add(path)
+      next.add(path)
     }
-    expandedDirs = expandedDirs
+    expandedDirs = next
   }
 
   function flattenTree(node: TreeNode, depth: number = 0, _dirs?: Set<string>): Array<{ node: TreeNode; depth: number }> {
@@ -104,7 +120,7 @@
     return result
   }
 
-  $: flattenedNodes = flattenTree(tree, 0, expandedDirs)
+  let flattenedNodes = $derived(flattenTree(tree, 0, expandedDirs))
 </script>
 
 <div class="file-tree">
@@ -119,7 +135,7 @@
   <div class="tree-container">
     {#each flattenedNodes as { node, depth }}
       {#if node.isDir}
-        <button class="dir-toggle" style="padding-left: {12 + depth * 16}px" on:click={() => toggleDir(node.fullPath)}>
+        <button class="dir-toggle" style="padding-left: {12 + depth * 16}px" onclick={() => toggleDir(node.fullPath)}>
           <span class="icon">{expandedDirs.has(node.fullPath) ? '▼' : '▶'}</span>
           <span class="name">{node.name}/</span>
         </button>
@@ -128,7 +144,7 @@
           class="tree-node file" 
           class:selected={selectedFile === node.file.filename}
           style="padding-left: {12 + depth * 16}px"
-          on:click={() => node.file && handleFileClick(node.file)}
+          onclick={() => node.file && handleFileClick(node.file)}
         >
           <span class="status-icon" style="color: {getStatusColor(node.file.status)}">
             {getStatusIcon(node.file.status)}

@@ -7,6 +7,7 @@ import { tasks, activeSessions, activeProjectId } from '../lib/stores'
 // Mock IPC functions
 vi.mock('../lib/ipc', () => ({
   getTasks: vi.fn(),
+  getTasksForProject: vi.fn(() => Promise.resolve([])),
   updateTaskStatus: vi.fn(),
   deleteTask: vi.fn(),
 }))
@@ -25,12 +26,10 @@ vi.mock('../lib/actions', () => ({
 const baseTask: Task = {
   id: 'T-1',
   title: 'Test task',
-  description: 'Test description',
   status: 'todo',
   jira_key: null,
   jira_status: null,
   jira_assignee: null,
-  acceptance_criteria: null,
   plan_text: null,
   project_id: 'proj-1',
   created_at: 1000,
@@ -148,12 +147,8 @@ describe('KanbanBoard', () => {
   })
 
   it('dispatches run-action event when action is clicked', async () => {
-    const { component } = render(KanbanBoard)
-    let dispatchedEvent: any = null
-    
-    component.$on('run-action', (e: CustomEvent) => {
-      dispatchedEvent = e.detail
-    })
+    const onRunAction = vi.fn()
+    render(KanbanBoard, { props: { onRunAction } })
     
     // Trigger context menu
     const taskCard = screen.getByText('Test task').closest('div')
@@ -167,9 +162,10 @@ describe('KanbanBoard', () => {
     const startImplButton = screen.getByText('Start Implementation')
     await fireEvent.click(startImplButton)
     
-    expect(dispatchedEvent).toBeTruthy()
-    expect(dispatchedEvent.taskId).toBe('T-1')
-    expect(dispatchedEvent.actionPrompt).toBe('Implement this task')
-    expect(dispatchedEvent.agent).toBeNull()
+    expect(onRunAction).toHaveBeenCalledWith({
+      taskId: 'T-1',
+      actionPrompt: 'Implement this task',
+      agent: null,
+    })
   })
 })

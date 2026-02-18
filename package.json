@@ -16,19 +16,18 @@
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
     "diff2html": "^3.4.56",
-    "svelte": "^4.2.8"
+    "svelte": "^5.0.0"
   },
   "devDependencies": {
-    "@sveltejs/vite-plugin-svelte": "^3.0.3",
+    "@sveltejs/vite-plugin-svelte": "^6.0.0",
     "@tauri-apps/api": "^2.0.0",
     "@tauri-apps/cli": "^2.10.0",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/svelte": "^5.3.1",
     "@types/node": "^20.10.6",
     "jsdom": "^28.1.0",
-    "svelte-preprocess": "^6.0.3",
     "typescript": "^5.3.3",
-    "vite": "^5.0.8",
+    "vite": "^6.0.0",
     "vitest": "^4.0.18"
   }
 }
