@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { Task, AgentSession, AgentLog, PrComment, PullRequestInfo, OpenCodeStatus, AgentInfo, Project, WorktreeInfo, ImplementationStatus, ReviewPullRequest, PrFileDiff, ReviewComment, ReviewSubmissionComment } from "./types";
+import type { Task, AgentSession, AgentLog, PrComment, PullRequestInfo, OpenCodeStatus, AgentInfo, Project, WorktreeInfo, ImplementationStatus, ReviewPullRequest, PrFileDiff, ReviewComment, ReviewSubmissionComment, SelfReviewComment } from "./types";
 
 export async function createTask(title: string, status: string, jiraKey: string | null, projectId: string | null): Promise<Task> {
   return invoke<Task>("create_task", { title, status, jiraKey, projectId });
@@ -186,4 +186,28 @@ export async function resizePty(taskId: string, cols: number, rows: number): Pro
 
 export async function killPty(taskId: string): Promise<void> {
   return invoke("pty_kill", { taskId });
+}
+
+export async function getTaskDiff(taskId: string): Promise<PrFileDiff[]> {
+  return invoke<PrFileDiff[]>("get_task_diff", { taskId });
+}
+
+export async function addSelfReviewComment(taskId: string, commentType: string, filePath: string | null, lineNumber: number | null, body: string): Promise<number> {
+  return invoke<number>("add_self_review_comment", { taskId, commentType, filePath, lineNumber, body });
+}
+
+export async function getActiveSelfReviewComments(taskId: string): Promise<SelfReviewComment[]> {
+  return invoke<SelfReviewComment[]>("get_active_self_review_comments", { taskId });
+}
+
+export async function getArchivedSelfReviewComments(taskId: string): Promise<SelfReviewComment[]> {
+  return invoke<SelfReviewComment[]>("get_archived_self_review_comments", { taskId });
+}
+
+export async function deleteSelfReviewComment(commentId: number): Promise<void> {
+  return invoke<void>("delete_self_review_comment", { commentId });
+}
+
+export async function archiveSelfReviewComments(taskId: string): Promise<void> {
+  return invoke<void>("archive_self_review_comments", { taskId });
 }

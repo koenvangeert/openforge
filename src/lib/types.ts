@@ -205,6 +205,19 @@ export interface ReviewSubmission {
   comments: ReviewSubmissionComment[];
 }
 
+/** Self-review comment for task implementation review */
+export interface SelfReviewComment {
+  id: number;
+  task_id: string;
+  round: number;
+  comment_type: string;
+  file_path: string | null;
+  line_number: number | null;
+  body: string;
+  created_at: number;
+  archived_at: number | null;
+}
+
 /** App-level view for top-bar navigation */
 export type AppView = "board" | "pr_review" | "settings" | "global_settings";
 
