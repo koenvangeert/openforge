@@ -486,106 +486,184 @@ async fn poll_pr_comments_now(
     github_client: State<'_, GitHubClient>,
     app: tauri::AppHandle,
 ) -> Result<usize, String> {
-    let (github_token, github_default_repo) = {
+    let github_token = {
         let db_lock = db.lock().unwrap();
-
-        let github_token = db_lock
+        db_lock
             .get_config("github_token")
             .map_err(|e| format!("Failed to read config: {}", e))?
-            .unwrap_or_default();
-
-        let github_default_repo = db_lock
-            .get_config("github_default_repo")
-            .map_err(|e| format!("Failed to read config: {}", e))?
-            .unwrap_or_default();
-
-        (github_token, github_default_repo)
+            .unwrap_or_default()
     };
 
     if github_token.is_empty() {
         return Err("github_token not configured".to_string());
     }
 
-    let parts: Vec<&str> = github_default_repo.split('/').collect();
-    if parts.len() != 2 {
-        return Err("github_default_repo must be in format 'owner/repo'".to_string());
-    }
-    let (repo_owner, repo_name) = (parts[0].to_string(), parts[1].to_string());
-
-    let github_prs = github_client
-        .list_open_prs(&repo_owner, &repo_name, &github_token)
-        .await
-        .map_err(|e| format!("Failed to list open PRs: {}", e))?;
-
-    let ticket_ids = {
+    let projects = {
         let db_lock = db.lock().unwrap();
         db_lock
-            .get_all_task_ids()
-            .map_err(|e| format!("Failed to get task IDs: {}", e))?
+            .get_all_projects()
+            .map_err(|e| format!("Failed to get projects: {}", e))?
     };
 
-    let open_pr_ids: Vec<i64> = github_prs.iter().map(|pr| pr.number).collect();
+    let mut total_new_comments = 0;
 
-    {
-        let db_lock = db.lock().unwrap();
-        db_lock
-            .close_stale_open_prs(&repo_owner, &repo_name, &open_pr_ids)
-            .map_err(|e| format!("Failed to close stale PRs: {}", e))?;
-    }
-
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_secs() as i64;
-
-    for pr in &github_prs {
-        let matched_ticket = ticket_ids.iter().find(|tid| {
-            pr.title.contains(tid.as_str()) || pr.head.ref_name.contains(tid.as_str())
-        });
-        if let Some(ticket_id) = matched_ticket {
+    for project in projects {
+        let github_default_repo = {
             let db_lock = db.lock().unwrap();
-            let _ = db_lock.insert_pull_request(
-                pr.number,
-                ticket_id,
-                &repo_owner,
-                &repo_name,
-                &pr.title,
-                &pr.html_url,
-                &pr.state,
-                now,
-                now,
-            );
+            db_lock
+                .get_project_config(&project.id, "github_default_repo")
+                .map_err(|e| format!("Failed to read project config: {}", e))?
+                .unwrap_or_default()
+        };
+
+        if github_default_repo.is_empty() {
+            continue;
         }
-    }
 
-    let open_prs = {
-        let db_lock = db.lock().unwrap();
-        db_lock
-            .get_open_prs()
-            .map_err(|e| format!("Failed to get open PRs: {}", e))?
-    };
+        let parts: Vec<&str> = github_default_repo.split('/').collect();
+        if parts.len() != 2 {
+            eprintln!(
+                "[poll_pr_comments_now] Invalid repo format for project {}: {}",
+                project.id, github_default_repo
+            );
+            continue;
+        }
+        let (repo_owner, repo_name) = (parts[0], parts[1]);
 
-    let mut new_comment_count = 0;
-
-    for pr in open_prs {
-        let comments = github_client
-            .get_pr_comments(&pr.repo_owner, &pr.repo_name, pr.id, &github_token)
+        let github_prs = match github_client
+            .list_open_prs(repo_owner, repo_name, &github_token)
             .await
-            .map_err(|e| format!("Failed to fetch PR comments: {}", e))?;
+        {
+            Ok(prs) => prs,
+            Err(e) => {
+                eprintln!(
+                    "[poll_pr_comments_now] Failed to list open PRs for project {}: {}",
+                    project.id, e
+                );
+                continue;
+            }
+        };
 
-        for comment in comments {
+        let task_ids = {
             let db_lock = db.lock().unwrap();
-            let exists = db_lock
-                .comment_exists(comment.id)
-                .map_err(|e| format!("Failed to check comment existence: {}", e))?;
+            match db_lock.get_tasks_for_project(&project.id) {
+                Ok(tasks) => tasks.into_iter().map(|t| t.id).collect::<Vec<_>>(),
+                Err(e) => {
+                    eprintln!(
+                        "[poll_pr_comments_now] Failed to get tasks for project {}: {}",
+                        project.id, e
+                    );
+                    continue;
+                }
+            }
+        };
 
-            if !exists {
-                let created_at = chrono::DateTime::parse_from_rfc3339(&comment.created_at)
-                    .map_err(|e| format!("Failed to parse timestamp: {}", e))?
-                    .timestamp();
+        let open_pr_ids: Vec<i64> = github_prs.iter().map(|pr| pr.number).collect();
 
-                db_lock
-                    .insert_pr_comment(
+        {
+            let db_lock = db.lock().unwrap();
+            if let Err(e) = db_lock.close_stale_open_prs(repo_owner, repo_name, &open_pr_ids) {
+                eprintln!(
+                    "[poll_pr_comments_now] Failed to close stale PRs for project {}: {}",
+                    project.id, e
+                );
+            }
+        }
+
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+
+        for pr in &github_prs {
+            let matched_ticket = task_ids.iter().find(|tid| {
+                pr.title.contains(tid.as_str()) || pr.head.ref_name.contains(tid.as_str())
+            });
+            if let Some(ticket_id) = matched_ticket {
+                let db_lock = db.lock().unwrap();
+                let _ = db_lock.insert_pull_request(
+                    pr.number,
+                    ticket_id,
+                    repo_owner,
+                    repo_name,
+                    &pr.title,
+                    &pr.html_url,
+                    &pr.state,
+                    now,
+                    now,
+                );
+            }
+        }
+
+        let open_prs = {
+            let db_lock = db.lock().unwrap();
+            match db_lock.get_open_prs() {
+                Ok(all_prs) => {
+                    let project_task_ids: std::collections::HashSet<String> =
+                        task_ids.iter().cloned().collect();
+                    all_prs
+                        .into_iter()
+                        .filter(|pr| {
+                            pr.repo_owner == repo_owner
+                                && pr.repo_name == repo_name
+                                && project_task_ids.contains(&pr.ticket_id)
+                        })
+                        .collect::<Vec<_>>()
+                }
+                Err(e) => {
+                    eprintln!(
+                        "[poll_pr_comments_now] Failed to get open PRs for project {}: {}",
+                        project.id, e
+                    );
+                    continue;
+                }
+            }
+        };
+
+        for pr in open_prs {
+            let comments = match github_client
+                .get_pr_comments(&pr.repo_owner, &pr.repo_name, pr.id, &github_token)
+                .await
+            {
+                Ok(comments) => comments,
+                Err(e) => {
+                    eprintln!(
+                        "[poll_pr_comments_now] Failed to fetch PR comments for project {} PR {}: {}",
+                        project.id, pr.id, e
+                    );
+                    continue;
+                }
+            };
+
+            for comment in comments {
+                let db_lock = db.lock().unwrap();
+                let exists = match db_lock.comment_exists(comment.id) {
+                    Ok(exists) => exists,
+                    Err(e) => {
+                        eprintln!(
+                            "[poll_pr_comments_now] Failed to check comment existence: {}",
+                            e
+                        );
+                        drop(db_lock);
+                        continue;
+                    }
+                };
+
+                if !exists {
+                    let created_at = match chrono::DateTime::parse_from_rfc3339(&comment.created_at)
+                    {
+                        Ok(dt) => dt.timestamp(),
+                        Err(e) => {
+                            eprintln!(
+                                "[poll_pr_comments_now] Failed to parse timestamp: {}",
+                                e
+                            );
+                            drop(db_lock);
+                            continue;
+                        }
+                    };
+
+                    if let Err(e) = db_lock.insert_pr_comment(
                         comment.id,
                         pr.id,
                         &comment.user.login,
@@ -594,23 +672,31 @@ async fn poll_pr_comments_now(
                         comment.path.as_deref(),
                         comment.line,
                         created_at,
-                    )
-                    .map_err(|e| format!("Failed to insert comment: {}", e))?;
+                    ) {
+                        eprintln!(
+                            "[poll_pr_comments_now] Failed to insert comment: {}",
+                            e
+                        );
+                        drop(db_lock);
+                        continue;
+                    }
 
-                new_comment_count += 1;
+                    total_new_comments += 1;
 
-                let _ = app.emit("new-pr-comment", serde_json::json!({
-                    "pr_id": pr.id,
-                    "comment_id": comment.id,
-                    "author": comment.user.login,
-                    "body": comment.body,
-                }));
+                    let _ = app.emit(
+                        "new-pr-comment",
+                        serde_json::json!({
+                            "ticket_id": pr.ticket_id,
+                            "comment_id": comment.id
+                        }),
+                    );
+                }
+                drop(db_lock);
             }
-            drop(db_lock);
         }
     }
 
-    Ok(new_comment_count)
+    Ok(total_new_comments)
 }
 
 #[tauri::command]

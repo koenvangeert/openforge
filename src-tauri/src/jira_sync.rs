@@ -5,9 +5,8 @@
 //!
 //! ## Architecture
 //! - Spawned as background task in main.rs setup hook
-//! - Iterates all projects and reads per-project JIRA config from project_config table
-//! - Projects without JIRA config are silently skipped
-//! - For each configured project, queries tasks with JIRA links
+//! - Reads JIRA credentials from global config table
+//! - Iterates all projects and queries tasks with JIRA links
 //! - Fetches JIRA issue data for those specific keys
 //! - Updates JIRA status and assignee fields in database (read-only display info)
 //! - Emits `jira-sync-complete` event to frontend
@@ -54,6 +53,32 @@ pub async fn start_jira_sync(app: AppHandle) {
                 .unwrap_or(60)
         };
 
+        let (jira_base_url, jira_username, jira_api_token) = {
+            let db_lock = db.lock().unwrap();
+            let base_url = db_lock
+                .get_config("jira_base_url")
+                .ok()
+                .flatten()
+                .unwrap_or_default();
+            let username = db_lock
+                .get_config("jira_username")
+                .ok()
+                .flatten()
+                .unwrap_or_default();
+            let api_token = db_lock
+                .get_config("jira_api_token")
+                .ok()
+                .flatten()
+                .unwrap_or_default();
+            (base_url, username, api_token)
+        };
+
+        if jira_base_url.is_empty() || jira_api_token.is_empty() {
+            println!("[JIRA Sync] JIRA credentials not configured, sleeping");
+            sleep(Duration::from_secs(poll_interval)).await;
+            continue;
+        }
+
         let projects_result = {
             let db_lock = db.lock().unwrap();
             db_lock.get_all_projects()
@@ -77,19 +102,6 @@ pub async fn start_jira_sync(app: AppHandle) {
         let mut total_updated = 0;
 
         for project in projects {
-            let config = match read_project_jira_config(&db, &project.id) {
-                Ok(Some(cfg)) => cfg,
-                Ok(None) => {
-                    continue;
-                }
-                Err(e) => {
-                    eprintln!(
-                        "[JIRA Sync] Failed to read config for project {}: {}",
-                        project.id, e
-                    );
-                    continue;
-                }
-            };
 
             let tasks_result = {
                 let db_lock = db.lock().unwrap();
@@ -135,9 +147,9 @@ pub async fn start_jira_sync(app: AppHandle) {
 
             match jira_client
                 .search_issues(
-                    &config.jira_base_url,
-                    &config.jira_username,
-                    &config.jira_api_token,
+                    &jira_base_url,
+                    &jira_username,
+                    &jira_api_token,
                     &jql,
                 )
                 .await
@@ -195,46 +207,4 @@ pub async fn start_jira_sync(app: AppHandle) {
     }
 }
 
-/// Configuration for JIRA sync per project
-#[derive(Debug)]
-struct SyncConfig {
-    project_id: String,
-    jira_api_token: String,
-    jira_base_url: String,
-    jira_username: String,
-}
 
-/// Read JIRA configuration for a specific project
-/// Returns Ok(None) if project has no JIRA config (missing required fields)
-fn read_project_jira_config(
-    db: &Mutex<Database>,
-    project_id: &str,
-) -> Result<Option<SyncConfig>, String> {
-    let db_lock = db.lock().unwrap();
-
-    let jira_base_url = db_lock
-        .get_project_config(project_id, "jira_base_url")
-        .map_err(|e| e.to_string())?
-        .unwrap_or_default();
-
-    let jira_api_token = db_lock
-        .get_project_config(project_id, "jira_api_token")
-        .map_err(|e| e.to_string())?
-        .unwrap_or_default();
-
-    let jira_username = db_lock
-        .get_project_config(project_id, "jira_username")
-        .map_err(|e| e.to_string())?
-        .unwrap_or_default();
-
-    if jira_base_url.is_empty() || jira_api_token.is_empty() {
-        return Ok(None);
-    }
-
-    Ok(Some(SyncConfig {
-        project_id: project_id.to_string(),
-        jira_api_token,
-        jira_base_url,
-        jira_username,
-    }))
-}

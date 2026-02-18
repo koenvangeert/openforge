@@ -5,7 +5,8 @@
 //!
 //! ## Architecture
 //! - Spawned as background task in main.rs setup hook
-//! - Iterates all projects and reads per-project GitHub config
+//! - Reads GitHub token from global config table
+//! - Iterates all projects and reads per-project github_default_repo
 //! - For each project with GitHub config:
 //!   - Gets all open PRs from pull_requests table
 //!   - Fetches PR status from GitHub API (detects merged/closed PRs)
@@ -41,6 +42,20 @@ pub async fn start_github_poller(app: AppHandle) {
 
     loop {
         let db = app.state::<Mutex<Database>>();
+
+        let github_token = {
+            let db_lock = db.lock().unwrap();
+            db_lock
+                .get_config("github_token")
+                .ok()
+                .flatten()
+                .unwrap_or_default()
+        };
+
+        if github_token.is_empty() {
+            sleep(Duration::from_secs(60)).await;
+            continue;
+        }
 
         let projects = {
             let db_lock = db.lock().unwrap();
@@ -79,7 +94,7 @@ pub async fn start_github_poller(app: AppHandle) {
                 }
             };
 
-            if config.github_token.is_empty() || config.github_default_repo.is_empty() {
+            if config.github_default_repo.is_empty() {
                 continue;
             }
 
@@ -93,7 +108,7 @@ pub async fn start_github_poller(app: AppHandle) {
                 continue;
             }
 
-            if let Err(e) = sync_open_prs(&github_client, &db, &app, &config).await {
+            if let Err(e) = sync_open_prs(&github_client, &db, &app, &config, &github_token).await {
                 eprintln!(
                     "[GitHub Poller] Failed to sync PRs for project {}: {}",
                     project.id, e
@@ -115,7 +130,7 @@ pub async fn start_github_poller(app: AppHandle) {
             };
 
             for pr in open_prs {
-                match poll_pr_comments(&github_client, &db, &app, &config, &pr).await {
+                match poll_pr_comments(&github_client, &db, &app, &github_token, &pr).await {
                     Ok(count) => total_new_comments += count,
                     Err(e) => {
                         eprintln!(
@@ -142,7 +157,6 @@ pub async fn start_github_poller(app: AppHandle) {
 #[derive(Debug)]
 struct PollerConfig {
     project_id: String,
-    github_token: String,
     github_default_repo: String,
 }
 
@@ -152,23 +166,17 @@ fn read_project_config(
 ) -> Result<Option<PollerConfig>, String> {
     let db_lock = db.lock().unwrap();
 
-    let github_token = db_lock
-        .get_project_config(project_id, "github_token")
-        .map_err(|e| e.to_string())?
-        .unwrap_or_default();
-
     let github_default_repo = db_lock
         .get_project_config(project_id, "github_default_repo")
         .map_err(|e| e.to_string())?
         .unwrap_or_default();
 
-    if github_token.is_empty() || github_default_repo.is_empty() {
+    if github_default_repo.is_empty() {
         return Ok(None);
     }
 
     Ok(Some(PollerConfig {
         project_id: project_id.to_string(),
-        github_token,
         github_default_repo,
     }))
 }
@@ -242,6 +250,7 @@ async fn sync_open_prs(
     db: &Mutex<Database>,
     app: &AppHandle,
     config: &PollerConfig,
+    github_token: &str,
 ) -> Result<usize, String> {
     let parts: Vec<&str> = config.github_default_repo.split('/').collect();
     if parts.len() != 2 {
@@ -250,7 +259,7 @@ async fn sync_open_prs(
     let (repo_owner, repo_name) = (parts[0], parts[1]);
 
     let github_prs = github_client
-        .list_open_prs(repo_owner, repo_name, &config.github_token)
+        .list_open_prs(repo_owner, repo_name, github_token)
         .await
         .map_err(|e| format!("Failed to list open PRs: {}", e))?;
 
@@ -407,17 +416,15 @@ fn extract_jira_keys(text: &str) -> Vec<String> {
     keys
 }
 
-/// Poll a single PR for new comments
 async fn poll_pr_comments(
     github_client: &GitHubClient,
     db: &Mutex<Database>,
     app: &AppHandle,
-    config: &PollerConfig,
+    github_token: &str,
     pr: &PrRow,
 ) -> Result<usize, String> {
-    // Fetch comments from GitHub
     let comments = github_client
-        .get_pr_comments(&pr.repo_owner, &pr.repo_name, pr.id, &config.github_token)
+        .get_pr_comments(&pr.repo_owner, &pr.repo_name, pr.id, github_token)
         .await
         .map_err(|e| format!("Failed to fetch comments: {}", e))?;
 
