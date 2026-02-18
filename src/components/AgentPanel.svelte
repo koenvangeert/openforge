@@ -26,6 +26,7 @@
   let terminal: Terminal | null = null
   let fitAddon: FitAddon | null = null
   let resizeObserver: ResizeObserver | null = null
+  let resizeTimeout: ReturnType<typeof setTimeout> | null = null
   let ptySpawned = $state(false)
   let terminalMounted = false
   let opencodePort: number | null = null
@@ -162,12 +163,28 @@
     fitAddon?.fit()
 
     resizeObserver = new ResizeObserver(() => {
-      fitAddon?.fit()
-      if (terminal && ptySpawned) {
-        resizePty(taskId, terminal.cols, terminal.rows).catch((e) => {
-          console.error('[AgentPanel] Failed to resize PTY:', e)
-        })
+      if (!terminal || !terminalContainer) return
+      if (!resizeTimeout) {
+        // Leading edge: fire immediately on first resize event
+        fitAddon?.fit()
+        if (terminal && ptySpawned) {
+          resizePty(taskId, terminal.cols, terminal.rows).catch((e) => {
+            console.error('[AgentPanel] Failed to resize PTY:', e)
+          })
+        }
+      } else {
+        clearTimeout(resizeTimeout)
       }
+      resizeTimeout = setTimeout(() => {
+        resizeTimeout = null
+        // Trailing edge: fire once more to catch final size
+        fitAddon?.fit()
+        if (terminal && ptySpawned) {
+          resizePty(taskId, terminal.cols, terminal.rows).catch((e) => {
+            console.error('[AgentPanel] Failed to resize PTY:', e)
+          })
+        }
+      }, 100)
     })
     resizeObserver.observe(terminalContainer)
 
@@ -256,6 +273,7 @@
     if (unlisten) unlisten()
     if (ptyOutputUnlisten) ptyOutputUnlisten()
     if (ptyExitUnlisten) ptyExitUnlisten()
+    if (resizeTimeout) clearTimeout(resizeTimeout)
     if (resizeObserver) resizeObserver.disconnect()
     if (ptySpawned) {
       killPty(taskId).catch((e) => {
