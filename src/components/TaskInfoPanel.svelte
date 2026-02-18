@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import type { Task, PrComment, KanbanColumn, WorktreeInfo } from '../lib/types'
-  import { COLUMNS, COLUMN_LABELS } from '../lib/types'
+  import { COLUMN_LABELS } from '../lib/types'
   import { selectedTaskId, ticketPrs } from '../lib/stores'
   import { 
     updateTaskStatus, 
@@ -166,21 +166,13 @@
   </section>
 
 
-  <!-- Status Change Section -->
-  <section class="section">
-    <h3 class="section-title">Change Status</h3>
-    <div class="status-actions">
-      {#each COLUMNS as col}
-        <button 
-          class="status-btn" 
-          class:active={task.status === col}
-          onclick={() => handleStatusChange(col)}
-          disabled={task.status === col}>
-          {COLUMN_LABELS[col]}
-        </button>
-      {/each}
-    </div>
-  </section>
+  {#if task.status !== 'done'}
+    <section class="section">
+      <button class="btn-done" onclick={() => handleStatusChange('done')}>
+        Move to Done
+      </button>
+    </section>
+  {/if}
 
   <!-- Action Row -->
   <section class="section">
@@ -336,39 +328,27 @@
     cursor: not-allowed;
   }
 
-  .status-actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-  }
-
-  .status-btn {
-    padding: 6px 10px;
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    font-size: 0.7rem;
-    font-weight: 500;
+  .btn-done {
+    width: 100%;
+    padding: 14px 20px;
+    border: none;
+    border-radius: 8px;
+    font-size: 0.95rem;
+    font-weight: 700;
     cursor: pointer;
-    background: var(--bg-card);
-    color: var(--text-secondary);
-    transition: all 0.2s ease;
-  }
-
-  .status-btn:hover:not(:disabled) {
-    background: var(--bg-secondary);
-    color: var(--text-primary);
-    border-color: var(--accent);
-  }
-
-  .status-btn.active {
-    background: var(--accent);
+    background: var(--success);
     color: white;
-    border-color: var(--accent);
+    transition: all 0.2s ease;
+    letter-spacing: 0.02em;
   }
 
-  .status-btn:disabled {
-    cursor: not-allowed;
-    opacity: 0.8;
+  .btn-done:hover {
+    opacity: 0.9;
+    transform: translateY(-1px);
+  }
+
+  .btn-done:active {
+    transform: translateY(0);
   }
 
   .action-row {

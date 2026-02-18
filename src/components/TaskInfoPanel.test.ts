@@ -70,11 +70,15 @@ describe('TaskInfoPanel', () => {
     expect(screen.queryByText('JIRA Assignee')).toBeNull()
   })
 
-  it('shows Change Status section with status buttons', () => {
+  it('shows Move to Done button when task is not done', () => {
     render(TaskInfoPanel, { props: { task: baseTask } })
-    expect(screen.getByText('Change Status')).toBeTruthy()
-    expect(screen.getByText('Doing')).toBeTruthy()
-    expect(screen.getByText('Done')).toBeTruthy()
+    expect(screen.getByText('Move to Done')).toBeTruthy()
+  })
+
+  it('hides Move to Done button when task is already done', () => {
+    const doneTask = { ...baseTask, status: 'done' }
+    render(TaskInfoPanel, { props: { task: doneTask } })
+    expect(screen.queryByText('Move to Done')).toBeNull()
   })
 
   it('shows Edit Task and Delete buttons', () => {
