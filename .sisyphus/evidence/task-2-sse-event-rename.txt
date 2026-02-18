@@ -1,0 +1,4 @@
+45:/// Payload for action-complete event
+198:                                    println!("[SSE] Session idle → emitting action-complete for task {}", task_id);
+203:                                    if let Err(e) = app_clone.emit("action-complete", &completion) {
+204:                                        eprintln!("[SSE] Failed to emit action-complete: {}", e);

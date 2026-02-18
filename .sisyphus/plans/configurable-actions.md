@@ -188,7 +188,7 @@ Max Concurrent: 2 (Waves 1, 2)
 
 ## TODOs
 
-- [ ] 1. Action types, defaults constant, and helper functions
+- [x] 1. Action types, defaults constant, and helper functions
 
   **What to do**:
   - In `src/lib/types.ts`: Add `Action` interface:
@@ -261,7 +261,7 @@ Max Concurrent: 2 (Waves 1, 2)
   - Message: `feat(lib): add Action type and configurable actions helpers`
   - Files: `src/lib/types.ts`, `src/lib/actions.ts`
 
-- [ ] 2. Backend: Add `run_action` Tauri command with session-reuse logic
+- [x] 2. Backend: Add `run_action` Tauri command with session-reuse logic
 
   **What to do**:
   - In `src-tauri/src/main.rs`:
@@ -291,12 +291,19 @@ Max Concurrent: 2 (Waves 1, 2)
            - Check `server_mgr.get_server_port(&task_id)` → if Some(port):
              - Create OpenCodeClient, call `prompt_async` with existing `opencode_session_id`
              - Update agent session status to "running" via `db.update_agent_session()`
+             - Start SSE bridge if not already running — handle `AlreadyRunning` error gracefully (just log + continue, it means bridge is already connected)
              - Return JSON with task_id, worktree_path (from worktree record), port, session_id
            - If no port (server stopped): fall through to full flow
          - If session is "running" or "paused": return error "Agent is busy" / "Answer pending question first"
+         - **Orphaned server case**: if `get_server_port` returns Some but `get_latest_session_for_ticket` returns None → treat as "no reusable session", fall through to full flow (server will be reused by the full flow)
        - Full flow (no reusable session): same as current `start_implementation` lines 291-421 but using `build_task_prompt` for prompt construction
+       - **Race condition guard**: Re-check session status AFTER acquiring resources (between menu click and execution, another action may have started). If status changed to "running"/"paused" after initial check, abort and return error.
     3. Update `start_implementation` to call `build_task_prompt` internally (DRY refactor)
     4. Register `run_action` in `invoke_handler!` macro
+  - In `src-tauri/src/sse_bridge.rs`:
+    1. **Remove hardcoded status transition**: Delete the `db.update_task_status(&task_id, "in_review")` block at lines 200-205. Actions should NOT auto-move task status on completion.
+    2. **Rename event**: Change `"implementation-complete"` event to `"action-complete"` (lines 198, 210-211). Update the `CompletionPayload` comment (line 45) and log messages accordingly. This makes the event generic for all action types.
+    3. Do NOT change the `"implementation-failed"` event — keep it as-is for now (failure handling is action-agnostic).
   - In `src/lib/ipc.ts`: Add IPC wrapper:
     ```typescript
     export async function runAction(taskId: string, repoPath: string, actionPrompt: string): Promise<ImplementationStatus> {
@@ -308,8 +315,9 @@ Max Concurrent: 2 (Waves 1, 2)
   **Must NOT do**:
   - Do NOT remove `start_implementation` — keep it working (it's still called by existing code until Task 5 wires up the new flow)
   - Do NOT change `prompt_async` signature in opencode_client.rs
-  - Do NOT change worktree creation, server spawning, or SSE bridge logic
+  - Do NOT change worktree creation, server spawning, or PTY management logic
   - Do NOT touch `agent_coordinator.rs` yet (that's Task 6)
+  - Do NOT import from or call `agent_coordinator.rs` — it contains stale/dead code
 
   **Recommended Agent Profile**:
   - **Category**: `unspecified-high`
@@ -328,6 +336,7 @@ Max Concurrent: 2 (Waves 1, 2)
   - `src-tauri/src/main.rs:283-422` — Current `start_implementation`: the full flow to refactor. Lines 358-383 are the prompt construction to extract.
   - `src-tauri/src/main.rs:424-468` — `abort_implementation`: shows pattern for looking up session + server port for a task.
   - `src-tauri/src/main.rs:889-908` — `get_latest_session`: pattern for DB session lookup.
+  - `src-tauri/src/sse_bridge.rs:193-212` — SSE idle handler with hardcoded `"in_review"` status + `"implementation-complete"` event to refactor
 
   **API/Type References**:
   - `src-tauri/src/opencode_client.rs:242-278` — `prompt_async(session_id, text, agent)` signature
@@ -335,6 +344,7 @@ Max Concurrent: 2 (Waves 1, 2)
   - `src-tauri/src/db.rs:1220-1238` — `update_agent_session()` for changing session status
   - `src-tauri/src/db.rs:103-113` — `AgentSessionRow` struct with status field
   - `src/lib/types.ts:111-116` — `ImplementationStatus` return type
+  - `src-tauri/src/sse_bridge.rs:45` — `CompletionPayload` struct comment to update
 
   **Acceptance Criteria**:
 
@@ -371,13 +381,29 @@ Max Concurrent: 2 (Waves 1, 2)
       1. Verify no TypeScript errors related to runAction
     Expected Result: vitest exits 0
     Evidence: .sisyphus/evidence/task-2-ipc.txt
+
+  Scenario: SSE bridge no longer auto-moves task status
+    Tool: Grep
+    Steps:
+      1. Search for "update_task_status" in sse_bridge.rs
+      2. Verify NO call to update_task_status with "in_review" remains
+    Expected Result: No hardcoded status transition in SSE bridge
+    Evidence: .sisyphus/evidence/task-2-sse-no-automove.txt
+
+  Scenario: SSE bridge emits action-complete instead of implementation-complete
+    Tool: Grep
+    Steps:
+      1. Search for "implementation-complete" in sse_bridge.rs — should NOT be found
+      2. Search for "action-complete" in sse_bridge.rs — should be found
+    Expected Result: Event renamed to action-complete
+    Evidence: .sisyphus/evidence/task-2-sse-event-rename.txt
   ```
 
   **Commit**: YES
-  - Message: `feat(backend): add run_action command with session-reuse and prompt refactor`
-  - Files: `src-tauri/src/main.rs`, `src/lib/ipc.ts`
+  - Message: `feat(backend): add run_action command with session-reuse and refactor SSE bridge`
+  - Files: `src-tauri/src/main.rs`, `src-tauri/src/sse_bridge.rs`, `src/lib/ipc.ts`
 
-- [ ] 3. Dynamic context menu in KanbanBoard
+- [x] 3. Dynamic context menu in KanbanBoard
 
   **What to do**:
   - In `src/components/KanbanBoard.svelte`:
@@ -479,7 +505,7 @@ Max Concurrent: 2 (Waves 1, 2)
   - Message: `feat(ui): replace hardcoded Start Implementation with dynamic actions menu`
   - Files: `src/components/KanbanBoard.svelte`
 
-- [ ] 4. Actions management section in SettingsPanel
+- [x] 4. Actions management section in SettingsPanel
 
   **What to do**:
   - In `src/components/SettingsPanel.svelte`:
@@ -592,7 +618,7 @@ Max Concurrent: 2 (Waves 1, 2)
   - Message: `feat(ui): add actions management section to SettingsPanel`
   - Files: `src/components/SettingsPanel.svelte`
 
-- [ ] 5. Wire execution in App.svelte
+- [x] 5. Wire execution in App.svelte
 
   **What to do**:
   - In `src/App.svelte`:
@@ -629,10 +655,10 @@ Max Concurrent: 2 (Waves 1, 2)
     3. Update the KanbanBoard event binding:
        - Change `on:start-implementation={handleStartImplementation}` to `on:run-action={handleRunAction}`
     4. Remove old `startImplementation` import from ipc (if no other callers remain)
+    5. **Update SSE event listener**: Change `listen('implementation-complete', ...)` to `listen('action-complete', ...)` (Task 2 renamed this event in sse_bridge.rs). The handler logic stays the same — just the event name changes.
 
   **Must NOT do**:
-  - Do NOT change SSE event handling
-  - Do NOT change session status update logic
+  - Do NOT change session status update logic (Task 2 already removed auto-move from SSE bridge)
   - Do NOT change the `loadSessions` function
 
   **Recommended Agent Profile**:
@@ -672,13 +698,21 @@ Max Concurrent: 2 (Waves 1, 2)
       2. Verify "run-action" appears in event binding
     Expected Result: New event wired, old removed
     Evidence: .sisyphus/evidence/task-5-wiring.txt
+
+  Scenario: SSE event listener updated to action-complete
+    Tool: Grep
+    Steps:
+      1. Verify no "implementation-complete" in App.svelte — should NOT be found
+      2. Verify "action-complete" appears in App.svelte listen() call
+    Expected Result: Event listener matches renamed SSE event
+    Evidence: .sisyphus/evidence/task-5-sse-listener.txt
   ```
 
   **Commit**: YES (grouped with Task 6)
   - Message: `refactor: wire configurable actions and clean up old implementation pathway`
   - Files: `src/App.svelte`
 
-- [ ] 6. Clean up old hardcoded pathway
+- [x] 6. Clean up old hardcoded pathway
 
   **What to do**:
   - In `src-tauri/src/main.rs`:
@@ -844,7 +878,7 @@ Max Concurrent: 2 (Waves 1, 2)
 | After Task(s) | Message | Files | Verification |
 |------------|---------|-------|--------------|
 | 1 | `feat(lib): add Action type and configurable actions helpers` | `src/lib/types.ts`, `src/lib/actions.ts` | `npx vitest run --passWithNoTests` |
-| 2 | `feat(backend): add run_action command with session-reuse and prompt refactor` | `src-tauri/src/main.rs`, `src/lib/ipc.ts` | `cargo build && cargo test` |
+| 2 | `feat(backend): add run_action command with session-reuse and refactor SSE bridge` | `src-tauri/src/main.rs`, `src-tauri/src/sse_bridge.rs`, `src/lib/ipc.ts` | `cargo build && cargo test` |
 | 3 | `feat(ui): replace hardcoded Start Implementation with dynamic actions menu` | `src/components/KanbanBoard.svelte` | `npx vitest run` |
 | 4 | `feat(ui): add actions management section to SettingsPanel` | `src/components/SettingsPanel.svelte` | `npx vitest run` |
 | 5, 6 | `refactor: wire configurable actions and clean up old implementation pathway` | `src/App.svelte`, `src-tauri/src/main.rs`, `src-tauri/src/agent_coordinator.rs`, `src/lib/ipc.ts` | `npx vitest run && cargo build` |

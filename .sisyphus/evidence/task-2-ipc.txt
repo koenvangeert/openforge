@@ -1,0 +1,116 @@
+
+[1m[46m RUN [49m[22m [36mv4.0.18 [39m[90m/Users/koen.vangeert/workspace/tmp/my-command-center[39m
+
+12:49:07 PM [vite-plugin-svelte] /Users/koen.vangeert/workspace/tmp/my-command-center/src/components/AddTaskDialog.svelte:65:10 A11y: Avoid using autofocus
+12:49:07 PM [vite-plugin-svelte] /Users/koen.vangeert/workspace/tmp/my-command-center/src/components/AddTaskDialog.svelte:50:0 A11y: Non-interactive element <div> should not be assigned mouse or keyboard event listeners.
+ [32m✓[39m src/components/FileTree.test.ts [2m([22m[2m13 tests[22m[2m)[22m[32m 64[2mms[22m[39m
+12:49:07 PM [vite-plugin-svelte] /Users/koen.vangeert/workspace/tmp/my-command-center/src/components/DiffViewer.svelte:8:11 DiffViewer has unused export property 'repoOwner'. If it is for external reference only, please consider using `export const repoOwner`
+12:49:07 PM [vite-plugin-svelte] /Users/koen.vangeert/workspace/tmp/my-command-center/src/components/DiffViewer.svelte:9:11 DiffViewer has unused export property 'repoName'. If it is for external reference only, please consider using `export const repoName`
+12:49:07 PM [vite-plugin-svelte] /Users/koen.vangeert/workspace/tmp/my-command-center/src/components/DiffViewer.svelte:298:2 Unused CSS selector ".no-diff"
+12:49:07 PM [vite-plugin-svelte] /Users/koen.vangeert/workspace/tmp/my-command-center/src/components/DiffViewer.svelte:299:2 Unused CSS selector ".error"
+12:49:07 PM [vite-plugin-svelte] /Users/koen.vangeert/workspace/tmp/my-command-center/src/components/DiffViewer.svelte:308:2 Unused CSS selector ".error"
+ [32m✓[39m src/components/ReviewPrCard.test.ts [2m([22m[2m13 tests[22m[2m)[22m[32m 219[2mms[22m[39m
+ [32m✓[39m src/components/TaskInfoPanel.test.ts [2m([22m[2m15 tests[22m[2m)[22m[32m 155[2mms[22m[39m
+Sourcemap for "/Users/koen.vangeert/workspace/tmp/my-command-center/node_modules/diff2html/lib-esm/diff2html.js" points to missing source files
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Sourcemap for "/Users/koen.vangeert/workspace/tmp/my-command-center/node_modules/diff2html/lib-esm/diff-parser.js" points to missing source files
+Sourcemap for "/Users/koen.vangeert/workspace/tmp/my-command-center/node_modules/diff2html/lib-esm/types.js" points to missing source files
+Sourcemap for "/Users/koen.vangeert/workspace/tmp/my-command-center/node_modules/diff2html/lib-esm/utils.js" points to missing source files
+Sourcemap for "/Users/koen.vangeert/workspace/tmp/my-command-center/node_modules/diff2html/lib-esm/file-list-renderer.js" points to missing source files
+Sourcemap for "/Users/koen.vangeert/workspace/tmp/my-command-center/node_modules/diff2html/lib-esm/render-utils.js" points to missing source files
+[90mstdout[2m | src/components/TaskDetailView.test.ts[2m > [22m[2mTaskDetailView[2m > [22m[2mrenders back button with "Back to Board" text
+[22m[39m[AgentPanel] session reactive update for task: T-42 session: null
+
+ [32m✓[39m src/components/TaskCard.test.ts [2m([22m[2m15 tests[22m[2m)[22m[32m 278[2mms[22m[39m
+Sourcemap for "/Users/koen.vangeert/workspace/tmp/my-command-center/node_modules/diff2html/lib-esm/rematch.js" points to missing source files
+ [32m✓[39m src/components/GlobalSettingsPanel.test.ts [2m([22m[2m6 tests[22m[2m)[22m[33m 414[2mms[22m[39m
+[90mstdout[2m | src/components/TaskDetailView.test.ts[2m > [22m[2mTaskDetailView[2m > [22m[2mrenders task jira_key when present
+[22m[39m[AgentPanel] session reactive update for task: T-42 session: null
+
+Sourcemap for "/Users/koen.vangeert/workspace/tmp/my-command-center/node_modules/diff2html/lib-esm/line-by-line-renderer.js" points to missing source files
+[90mstdout[2m | src/components/TaskDetailView.test.ts[2m > [22m[2mTaskDetailView[2m > [22m[2mrenders task id when jira_key is null
+[22m[39m[AgentPanel] session reactive update for task: T-42 session: null
+
+Sourcemap for "/Users/koen.vangeert/workspace/tmp/my-command-center/node_modules/diff2html/lib-esm/side-by-side-renderer.js" points to missing source files
+[90mstdout[2m | src/components/TaskDetailView.test.ts[2m > [22m[2mTaskDetailView[2m > [22m[2mrenders task title in header
+[22m[39m[AgentPanel] session reactive update for task: T-42 session: null
+
+Sourcemap for "/Users/koen.vangeert/workspace/tmp/my-command-center/node_modules/diff2html/lib-esm/hoganjs-utils.js" points to missing source files
+[90mstdout[2m | src/components/TaskDetailView.test.ts[2m > [22m[2mTaskDetailView[2m > [22m[2mrenders status badge with status label
+[22m[39m[AgentPanel] session reactive update for task: T-42 session: null
+
+ [32m✓[39m src/components/AddTaskInline.test.ts [2m([22m[2m6 tests[22m[2m)[22m[33m 424[2mms[22m[39m
+Sourcemap for "/Users/koen.vangeert/workspace/tmp/my-command-center/node_modules/diff2html/lib-esm/diff2html-templates.js" points to missing source files
+[90mstdout[2m | src/components/TaskDetailView.test.ts[2m > [22m[2mTaskDetailView[2m > [22m[2mhas AgentPanel child with empty state text
+[22m[39m[AgentPanel] session reactive update for task: T-42 session: null
+
+[90mstdout[2m | src/components/TaskDetailView.test.ts[2m > [22m[2mTaskDetailView[2m > [22m[2mhas TaskInfoPanel child with section title
+[22m[39m[AgentPanel] session reactive update for task: T-42 session: null
+
+ [32m✓[39m src/components/TaskDetailView.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 202[2mms[22m[39m
+ [32m✓[39m src/components/AddTaskDialog.test.ts [2m([22m[2m8 tests[22m[2m)[22m[33m 608[2mms[22m[39m
+ [32m✓[39m src/components/PrReviewView.test.ts [2m([22m[2m17 tests[22m[2m)[22m[33m 329[2mms[22m[39m
+ [32m✓[39m src/lib/parseCheckpoint.test.ts [2m([22m[2m12 tests[22m[2m)[22m[32m 11[2mms[22m[39m
+[90mstderr[2m | src/components/ReviewSubmitPanel.test.ts[2m > [22m[2mReviewSubmitPanel[2m > [22m[2mshows error message when submission fails
+[22m[39mFailed to submit review: Error: Network error
+    at [90m/Users/koen.vangeert/workspace/tmp/my-command-center/[39msrc/components/ReviewSubmitPanel.test.ts:238:49
+    at [90mfile:///Users/koen.vangeert/workspace/tmp/my-command-center/[39mnode_modules/[4m@vitest/runner[24m/dist/index.js:145:11
+    at [90mfile:///Users/koen.vangeert/workspace/tmp/my-command-center/[39mnode_modules/[4m@vitest/runner[24m/dist/index.js:915:26
+    at [90mfile:///Users/koen.vangeert/workspace/tmp/my-command-center/[39mnode_modules/[4m@vitest/runner[24m/dist/index.js:1243:20
+    at new Promise (<anonymous>)
+    at runWithTimeout [90m(file:///Users/koen.vangeert/workspace/tmp/my-command-center/[39mnode_modules/[4m@vitest/runner[24m/dist/index.js:1209:10[90m)[39m
+    at [90mfile:///Users/koen.vangeert/workspace/tmp/my-command-center/[39mnode_modules/[4m@vitest/runner[24m/dist/index.js:1653:37
+    at Traces.$ [90m(file:///Users/koen.vangeert/workspace/tmp/my-command-center/[39mnode_modules/[4mvitest[24m/dist/chunks/traces.CCmnQaNT.js:142:27[90m)[39m
+    at trace [90m(file:///Users/koen.vangeert/workspace/tmp/my-command-center/[39mnode_modules/[4mvitest[24m/dist/chunks/test.B8ej_ZHS.js:239:21[90m)[39m
+    at runTest [90m(file:///Users/koen.vangeert/workspace/tmp/my-command-center/[39mnode_modules/[4m@vitest/runner[24m/dist/index.js:1653:12[90m)[39m
+
+ [32m✓[39m src/components/ReviewSubmitPanel.test.ts [2m([22m[2m14 tests[22m[2m)[22m[32m 99[2mms[22m[39m
+[90mstdout[2m | src/components/AgentPanel.test.ts[2m > [22m[2mAgentPanel[2m > [22m[2mrenders empty state text "No active agent session" when idle
+[22m[39m[AgentPanel] session reactive update for task: T-1 session: null
+
+[90mstdout[2m | src/components/AgentPanel.test.ts[2m > [22m[2mAgentPanel[2m > [22m[2mshows guidance text "Start an implementation from the Kanban board context menu"
+[22m[39m[AgentPanel] session reactive update for task: T-1 session: null
+
+[90mstdout[2m | src/components/AgentPanel.test.ts[2m > [22m[2mAgentPanel[2m > [22m[2mstatus text shows "No active implementation" when idle
+[22m[39m[AgentPanel] session reactive update for task: T-1 session: null
+
+[90mstdout[2m | src/components/AgentPanel.test.ts[2m > [22m[2mAgentPanel[2m > [22m[2mdoes not show abort button when idle
+[22m[39m[AgentPanel] session reactive update for task: T-1 session: null
+
+[90mstdout[2m | src/components/AgentPanel.test.ts[2m > [22m[2mAgentPanel[2m > [22m[2mshows running session status when session is running
+[22m[39m[AgentPanel] session reactive update for task: T-1 session: id=ses-1 status=running stage=implement
+
+[90mstdout[2m | src/components/AgentPanel.test.ts[2m > [22m[2mAgentPanel[2m > [22m[2mshows different stage labels for different stages
+[22m[39m[AgentPanel] session reactive update for task: T-1 session: id=ses-1 status=running stage=read_ticket
+
+ [32m✓[39m src/components/CheckpointToast.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 62[2mms[22m[39m
+[90mstdout[2m | src/components/AgentPanel.test.ts[2m > [22m[2mAgentPanel[2m > [22m[2mdoes not show abort button when session is running but PTY has not started
+[22m[39m[AgentPanel] session reactive update for task: T-1 session: id=ses-1 status=running stage=implement
+
+[90mstdout[2m | src/components/AgentPanel.test.ts[2m > [22m[2mAgentPanel[2m > [22m[2mshows completed badge when session is completed
+[22m[39m[AgentPanel] session reactive update for task: T-1 session: id=ses-1 status=completed stage=implement
+
+[90mstdout[2m | src/components/AgentPanel.test.ts[2m > [22m[2mAgentPanel[2m > [22m[2mshows question banner when session is paused with checkpoint_data
+[22m[39m[AgentPanel] session reactive update for task: T-1 session: id=ses-1 status=paused stage=implement
+
+[90mstdout[2m | src/components/AgentPanel.test.ts[2m > [22m[2mAgentPanel[2m > [22m[2mshows generic fallback banner when checkpoint_data has no known fields
+[22m[39m[AgentPanel] session reactive update for task: T-1 session: id=ses-1 status=paused stage=implement
+
+[90mstdout[2m | src/components/AgentPanel.test.ts[2m > [22m[2mAgentPanel[2m > [22m[2mdoes not show question banner when session is running
+[22m[39m[AgentPanel] session reactive update for task: T-1 session: id=ses-1 status=running stage=implement
+
+[90mstdout[2m | src/components/AgentPanel.test.ts[2m > [22m[2mAgentPanel[2m > [22m[2mdoes not show question banner when no session exists
+[22m[39m[AgentPanel] session reactive update for task: T-1 session: null
+
+[90mstdout[2m | src/components/AgentPanel.test.ts[2m > [22m[2mAgentPanel[2m > [22m[2mshows question text from question.asked event format
+[22m[39m[AgentPanel] session reactive update for task: T-1 session: id=ses-1 status=paused stage=implement
+
+ [32m✓[39m src/components/AgentPanel.test.ts [2m([22m[2m13 tests[22m[2m)[22m[32m 41[2mms[22m[39m
+ [32m✓[39m src/components/Toast.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 38[2mms[22m[39m
+ [32m✓[39m src/components/SettingsPanel.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 29[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m15 passed[39m[22m[90m (15)[39m
+[2m      Tests [22m [1m[32m152 passed[39m[22m[90m (152)[39m
+[2m   Start at [22m 12:49:05
+[2m   Duration [22m 5.24s[2m (transform 7.09s, setup 0ms, import 13.46s, tests 2.97s, environment 20.99s)[22m
+

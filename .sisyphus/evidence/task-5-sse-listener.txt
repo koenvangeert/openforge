@@ -1,0 +1,22 @@
+# Task 5: SSE Event Listener Evidence
+
+## Event Listener Update
+Lines 162-183: Updated SSE event listener
+- Old event name: 'implementation-complete'
+- New event name: 'action-complete'
+- Updated console log: "Implementation complete" → "Action complete"
+
+## Listener Behavior
+The listener:
+1. Receives action-complete event with task_id
+2. Updates activeSessions store with status: 'completed'
+3. Persists session status to database
+4. Clears checkpoint notification if present
+5. Reloads tasks
+
+## Verification
+✓ implementation-complete listener removed
+✓ action-complete listener in place
+✓ Console log updated
+✓ implementation-failed listener unchanged (as required)
+✓ All other SSE listeners unchanged
