@@ -2,7 +2,8 @@ import { render, screen } from '@testing-library/svelte'
 import { describe, it, expect, vi } from 'vitest'
 import { writable } from 'svelte/store'
 import TaskInfoPanel from './TaskInfoPanel.svelte'
-import type { Task } from '../lib/types'
+import type { Task, PullRequestInfo } from '../lib/types'
+import { ticketPrs } from '../lib/stores'
 
 vi.mock('../lib/stores', () => ({
   ticketPrs: writable(new Map()),
@@ -83,6 +84,33 @@ describe('TaskInfoPanel', () => {
     render(TaskInfoPanel, { props: { task: baseTask } })
     expect(screen.queryByText('Edit Task')).toBeNull()
     expect(screen.queryByText('Delete')).toBeNull()
+  })
+
+  it('renders pipeline status section when PRs have CI data', async () => {
+    const prWithCi: PullRequestInfo = {
+      id: 42,
+      ticket_id: 'T-42',
+      repo_owner: 'owner',
+      repo_name: 'repo',
+      title: 'Test PR',
+      url: 'https://github.com/owner/repo/pull/42',
+      state: 'open',
+      head_sha: 'abc123',
+      ci_status: 'failure',
+      ci_check_runs: JSON.stringify([
+        { id: 1, name: 'build', status: 'completed', conclusion: 'failure', html_url: 'https://example.com' },
+        { id: 2, name: 'lint', status: 'completed', conclusion: 'success', html_url: 'https://example.com' }
+      ]),
+      created_at: 1000,
+      updated_at: 2000,
+    }
+
+    ticketPrs.set(new Map([['T-42', [prWithCi]]]))
+
+    render(TaskInfoPanel, { props: { task: baseTask, onEdit: vi.fn() } })
+
+    await new Promise((r) => setTimeout(r, 10))
+    expect(screen.getByText('Pipeline Status')).toBeTruthy()
   })
 
 })

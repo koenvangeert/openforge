@@ -1426,4 +1426,111 @@ mod tests {
         let user: AuthenticatedUser = serde_json::from_str(json).unwrap();
         assert_eq!(user.login, "testuser");
     }
+
+    #[test]
+    fn test_github_head_sha_deserialization() {
+        let json = r#"{"ref": "feature/T-1", "sha": "abc123def456", "repo": {"id": 1}}"#;
+        let head: GitHubHead = serde_json::from_str(json).unwrap();
+        assert_eq!(head.sha, "abc123def456");
+        assert_eq!(head.ref_name, "feature/T-1");
+    }
+
+    #[test]
+    fn test_check_runs_deserialization() {
+        let json = r#"{"total_count":1,"check_runs":[{"id":1,"name":"build","status":"completed","conclusion":"success","html_url":"https://example.com"}]}"#;
+        let resp: CheckRunsResponse = serde_json::from_str(json).unwrap();
+        assert_eq!(resp.total_count, 1);
+        assert_eq!(resp.check_runs[0].conclusion, Some("success".to_string()));
+
+        let json = r#"{"total_count":1,"check_runs":[{"id":2,"name":"test","status":"in_progress","conclusion":null,"html_url":"https://example.com"}]}"#;
+        let resp: CheckRunsResponse = serde_json::from_str(json).unwrap();
+        assert_eq!(resp.check_runs[0].status, "in_progress");
+        assert_eq!(resp.check_runs[0].conclusion, None);
+
+        let json = r#"{"total_count":0,"check_runs":[]}"#;
+        let resp: CheckRunsResponse = serde_json::from_str(json).unwrap();
+        assert_eq!(resp.total_count, 0);
+        assert!(resp.check_runs.is_empty());
+    }
+
+    #[test]
+    fn test_combined_status_deserialization() {
+        let json = r#"{"state":"success","statuses":[{"state":"success","context":"ci/build","description":"Build passed","target_url":"https://example.com"}],"sha":"abc123","total_count":1}"#;
+        let resp: CombinedStatusResponse = serde_json::from_str(json).unwrap();
+        assert_eq!(resp.state, "success");
+        assert_eq!(resp.statuses.len(), 1);
+        assert_eq!(resp.statuses[0].context, "ci/build");
+
+        let json = r#"{"state":"pending","statuses":[],"sha":"def456","total_count":0}"#;
+        let resp: CombinedStatusResponse = serde_json::from_str(json).unwrap();
+        assert_eq!(resp.state, "pending");
+        assert!(resp.statuses.is_empty());
+    }
+
+    #[test]
+    fn test_aggregate_ci_status() {
+        fn make_check_runs(runs: Vec<(&str, &str, Option<&str>)>) -> CheckRunsResponse {
+            CheckRunsResponse {
+                total_count: runs.len(),
+                check_runs: runs.into_iter().map(|(name, status, conclusion)| CheckRun {
+                    id: 1,
+                    name: name.to_string(),
+                    status: status.to_string(),
+                    conclusion: conclusion.map(|c| c.to_string()),
+                    html_url: "https://example.com".to_string(),
+                }).collect(),
+            }
+        }
+
+        fn make_combined(state: &str, statuses: Vec<&str>) -> CombinedStatusResponse {
+            CombinedStatusResponse {
+                state: state.to_string(),
+                statuses: statuses.into_iter().map(|s| CommitStatusEntry {
+                    state: s.to_string(),
+                    context: "ci".to_string(),
+                    description: None,
+                    target_url: None,
+                }).collect(),
+                sha: "abc".to_string(),
+                total_count: 0,
+                extra: serde_json::Value::Object(serde_json::Map::new()),
+            }
+        }
+
+        let empty_runs = make_check_runs(vec![]);
+        let empty_combined = make_combined("pending", vec![]);
+
+        assert_eq!(aggregate_ci_status(&empty_runs, &empty_combined), "none");
+
+        let success_runs = make_check_runs(vec![("build", "completed", Some("success")), ("test", "completed", Some("success"))]);
+        let success_combined = make_combined("success", vec!["success"]);
+        assert_eq!(aggregate_ci_status(&success_runs, &success_combined), "success");
+
+        let failure_runs = make_check_runs(vec![("build", "completed", Some("failure")), ("test", "completed", Some("success"))]);
+        assert_eq!(aggregate_ci_status(&failure_runs, &empty_combined), "failure");
+
+        let timed_out_runs = make_check_runs(vec![("build", "completed", Some("timed_out"))]);
+        assert_eq!(aggregate_ci_status(&timed_out_runs, &empty_combined), "failure");
+
+        let cancelled_runs = make_check_runs(vec![("build", "completed", Some("cancelled"))]);
+        assert_eq!(aggregate_ci_status(&cancelled_runs, &empty_combined), "failure");
+
+        let failure_combined = make_combined("failure", vec!["failure"]);
+        assert_eq!(aggregate_ci_status(&empty_runs, &failure_combined), "failure");
+
+        let error_combined = make_combined("error", vec!["error"]);
+        assert_eq!(aggregate_ci_status(&empty_runs, &error_combined), "failure");
+
+        let pending_runs = make_check_runs(vec![("build", "in_progress", None), ("test", "completed", Some("success"))]);
+        assert_eq!(aggregate_ci_status(&pending_runs, &empty_combined), "pending");
+
+        let pending_combined = make_combined("pending", vec!["pending"]);
+        assert_eq!(aggregate_ci_status(&empty_runs, &pending_combined), "pending");
+
+        let neutral_runs = make_check_runs(vec![("build", "completed", Some("neutral")), ("lint", "completed", Some("skipped"))]);
+        assert_eq!(aggregate_ci_status(&neutral_runs, &empty_combined), "success");
+
+        let null_conclusion_runs = make_check_runs(vec![("build", "completed", None)]);
+        assert_eq!(aggregate_ci_status(&null_conclusion_runs, &empty_combined), "success");
+    }
 }

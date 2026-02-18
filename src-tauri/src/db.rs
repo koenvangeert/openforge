@@ -2837,4 +2837,124 @@ mod tests {
         drop(db);
         let _ = fs::remove_file(&path);
     }
+
+    #[test]
+    fn test_ci_status_migration() {
+        let (db, path) = make_test_db("ci_migration");
+
+        // Verify columns exist by querying pragma
+        let conn = db.connection();
+        let conn = conn.lock().unwrap();
+
+        let has_head_sha: bool = conn
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM pragma_table_info('pull_requests') WHERE name='head_sha'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        let has_ci_status: bool = conn.query_row(
+            "SELECT COUNT(*) > 0 FROM pragma_table_info('pull_requests') WHERE name='ci_status'",
+            [], |row| row.get(0)
+        ).unwrap();
+        let has_ci_check_runs: bool = conn.query_row(
+            "SELECT COUNT(*) > 0 FROM pragma_table_info('pull_requests') WHERE name='ci_check_runs'",
+            [], |row| row.get(0)
+        ).unwrap();
+
+        assert!(has_head_sha, "head_sha column missing");
+        assert!(has_ci_status, "ci_status column missing");
+        assert!(has_ci_check_runs, "ci_check_runs column missing");
+
+        drop(conn);
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_update_pr_ci_status() {
+        let (db, path) = make_test_db("ci_status_update");
+        insert_test_task(&db);
+
+        let now = 1000i64;
+        db.insert_pull_request(
+            42,
+            "T-100",
+            "owner",
+            "repo",
+            "Test PR",
+            "https://github.com/pr/42",
+            "open",
+            now,
+            now,
+        )
+        .unwrap();
+
+        db.update_pr_ci_status(42, "sha123", "success", r#"[{"id":1,"name":"build","status":"completed","conclusion":"success","html_url":"https://example.com"}]"#).unwrap();
+
+        let prs = db.get_open_prs().unwrap();
+        let pr = prs.iter().find(|p| p.id == 42).expect("PR not found");
+
+        assert_eq!(pr.head_sha, "sha123");
+        assert_eq!(pr.ci_status, Some("success".to_string()));
+        assert!(pr.ci_check_runs.is_some());
+        assert!(pr.ci_check_runs.as_ref().unwrap().contains("build"));
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_pr_upsert_preserves_ci_status() {
+        let (db, path) = make_test_db("ci_upsert_preserve");
+        insert_test_task(&db);
+
+        let now = 1000i64;
+        db.insert_pull_request(
+            42,
+            "T-100",
+            "owner",
+            "repo",
+            "Test PR",
+            "https://github.com/pr/42",
+            "open",
+            now,
+            now,
+        )
+        .unwrap();
+
+        db.update_pr_ci_status(42, "sha123", "success", r#"[{"id":1,"name":"build","status":"completed","conclusion":"success","html_url":"https://example.com"}]"#).unwrap();
+
+        // Re-insert PR (simulating 30s sync cycle) - this must NOT wipe CI data
+        db.insert_pull_request(
+            42,
+            "T-100",
+            "owner",
+            "repo",
+            "Test PR Updated",
+            "https://github.com/pr/42",
+            "open",
+            now + 30,
+            now + 30,
+        )
+        .unwrap();
+
+        let prs = db.get_open_prs().unwrap();
+        let pr = prs.iter().find(|p| p.id == 42).expect("PR not found");
+
+        assert_eq!(
+            pr.ci_status,
+            Some("success".to_string()),
+            "CI status was wiped by upsert!"
+        );
+        assert!(
+            pr.ci_check_runs.is_some(),
+            "CI check runs were wiped by upsert!"
+        );
+        assert_eq!(pr.head_sha, "sha123", "Head SHA was wiped by upsert!");
+        assert_eq!(pr.title, "Test PR Updated");
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
 }

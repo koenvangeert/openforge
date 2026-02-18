@@ -1,7 +1,7 @@
 import { render, screen, fireEvent } from '@testing-library/svelte'
 import { describe, it, expect, vi } from 'vitest'
 import TaskCard from './TaskCard.svelte'
-import type { Task, AgentSession } from '../lib/types'
+import type { Task, AgentSession, PullRequestInfo } from '../lib/types'
 
 const baseTask: Task = {
   id: 'T-42',
@@ -12,6 +12,21 @@ const baseTask: Task = {
   jira_assignee: 'Alice',
   plan_text: null,
   project_id: null,
+  created_at: 1000,
+  updated_at: 2000,
+}
+
+const basePr: PullRequestInfo = {
+  id: 42,
+  ticket_id: 'T-42',
+  repo_owner: 'owner',
+  repo_name: 'repo',
+  title: 'Test PR',
+  url: 'https://github.com/owner/repo/pull/42',
+  state: 'open',
+  head_sha: 'abc123',
+  ci_status: null,
+  ci_check_runs: null,
   created_at: 1000,
   updated_at: 2000,
 }
@@ -267,5 +282,17 @@ describe('TaskCard', () => {
     render(TaskCard, { props: { task: baseTask } })
     const card = screen.getByRole('button')
     expect(card.classList.contains('needs-input')).toBe(false)
+  })
+
+  it('renders CI status dot for success', () => {
+    const pr = { ...basePr, ci_status: 'success' }
+    render(TaskCard, { props: { task: baseTask, pullRequests: [pr] } })
+    const dot = document.querySelector('.ci-dot.ci-success')
+    expect(dot).toBeTruthy()
+  })
+
+  it('no CI dot when ci_status is null', () => {
+    render(TaskCard, { props: { task: baseTask, pullRequests: [basePr] } })
+    expect(document.querySelector('.ci-dot')).toBeNull()
   })
 })
