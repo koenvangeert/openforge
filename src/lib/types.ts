@@ -212,3 +212,11 @@ export const COLUMN_LABELS: Record<KanbanColumn, string> = {
 };
 
 export const COLUMNS: KanbanColumn[] = ["todo", "in_progress", "in_review", "testing", "done"];
+
+export interface Action {
+  id: string;
+  name: string;
+  prompt: string;
+  builtin: boolean;
+  enabled: boolean;
+}
