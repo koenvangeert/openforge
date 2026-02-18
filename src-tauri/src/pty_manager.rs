@@ -123,6 +123,11 @@ impl PtyManager {
         // Override with terminal-specific env vars
         cmd.env("TERM", "xterm-256color");
         cmd.env("COLORTERM", "truecolor");
+        // Inform OpenTUI that this is a VSCode-compatible terminal. OpenTUI's Zig renderer
+        // (terminal.zig) checks TERM_PROGRAM and disables Kitty keyboard protocol and Kitty
+        // graphics queries when "vscode" is detected. xterm.js does not support these protocols,
+        // so this prevents unsupported escape sequences and startup delays.
+        cmd.env("TERM_PROGRAM", "vscode");
 
         // Spawn the command
         let child = pair
