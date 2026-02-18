@@ -1251,7 +1251,8 @@ mod tests {
                 "login": "testuser"
             },
             "head": {
-                "ref": "feature/PROJ-123-fix-bug"
+                "ref": "feature/PROJ-123-fix-bug",
+                "sha": "abc123def456"
             },
             "extra_field": "ignored"
         }"#;
