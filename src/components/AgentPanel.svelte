@@ -1,23 +1,93 @@
 <script lang="ts">
-  import { onMount, onDestroy, afterUpdate } from 'svelte'
+  import { onMount, onDestroy } from 'svelte'
   import { listen } from '@tauri-apps/api/event'
   import type { UnlistenFn } from '@tauri-apps/api/event'
-  import type { AgentEvent } from '../lib/types'
+  import type { AgentEvent, PtyEvent } from '../lib/types'
   import { activeSessions } from '../lib/stores'
-  import { abortImplementation, getLatestSession, getSessionOutput } from '../lib/ipc'
+  import { abortImplementation, getLatestSession, getWorktreeForTask, spawnPty, writePty, resizePty, killPty } from '../lib/ipc'
+  import { Terminal } from '@xterm/xterm'
+  import { FitAddon } from '@xterm/addon-fit'
+  import '@xterm/xterm/css/xterm.css'
 
   export let taskId: string
 
-  let outputText = ''
   let status: 'idle' | 'running' | 'complete' | 'error' = 'idle'
   let errorMessage: string | null = null
-  let outputContainer: HTMLDivElement
   let unlisten: UnlistenFn | null = null
-  let autoScroll = true
+  let ptyOutputUnlisten: UnlistenFn | null = null
+  let ptyExitUnlisten: UnlistenFn | null = null
   let loadingHistory = false
+  let terminalContainer: HTMLDivElement
+  let terminal: Terminal | null = null
+  let fitAddon: FitAddon | null = null
+  let resizeObserver: ResizeObserver | null = null
+  let ptySpawned = false
+  let terminalMounted = false
+  let opencodePort: number | null = null
 
   $: session = $activeSessions.get(taskId) || null
+  $: attachCommand = session?.opencode_session_id && opencodePort
+    ? `opencode attach http://127.0.0.1:${opencodePort} -s ${session.opencode_session_id}`
+    : null
   $: console.log('[AgentPanel] session reactive update for task:', taskId, 'session:', session ? `id=${session.id} status=${session.status} stage=${session.stage}` : 'null')
+
+  // Auto-spawn PTY when session becomes running and terminal is mounted
+  $: if (session && session.status === 'running' && terminalContainer && terminal && !ptySpawned) {
+    spawnPtyForSession()
+  }
+
+  async function spawnPtyForSession() {
+    if (ptySpawned) return
+    ptySpawned = true
+
+    const opencodeSessionId = session?.opencode_session_id
+    if (!opencodeSessionId) {
+      console.error('[AgentPanel] No opencode_session_id available for PTY spawn')
+      ptySpawned = false
+      return
+    }
+
+    try {
+      const worktree = await getWorktreeForTask(taskId)
+      const port = worktree?.opencode_port
+      if (!port) {
+        console.error('[AgentPanel] No opencode_port found for task:', taskId)
+        ptySpawned = false
+        return
+      }
+      opencodePort = port
+
+      mountTerminal()
+      await setupPtyListeners()
+
+      const cols = terminal?.cols ?? 80
+      const rows = terminal?.rows ?? 24
+      console.log('[AgentPanel] Spawning PTY for task:', taskId, 'port:', port, 'session:', opencodeSessionId, 'size:', cols, 'x', rows)
+      await spawnPty(taskId, port, opencodeSessionId, cols, rows)
+      console.log('[AgentPanel] PTY spawn succeeded, listening on pty-output-' + taskId)
+      status = 'running'
+    } catch (e) {
+      console.error('[AgentPanel] Failed to spawn PTY:', e)
+      ptySpawned = false
+    }
+  }
+
+  async function setupPtyListeners() {
+    // Listen for PTY output → write to xterm
+    ptyOutputUnlisten = await listen<PtyEvent>(`pty-output-${taskId}`, (event) => {
+      console.log('[AgentPanel] pty-output received, payload:', JSON.stringify(event.payload).slice(0, 200))
+      if (terminal && event.payload.data) {
+        terminal.write(event.payload.data)
+      } else {
+        console.warn('[AgentPanel] pty-output skipped: terminal=', !!terminal, 'data=', !!event.payload?.data)
+      }
+    })
+
+    ptyExitUnlisten = await listen<PtyEvent>(`pty-exit-${taskId}`, (event) => {
+      console.log('[AgentPanel] PTY exited for task:', taskId, 'data:', event.payload.data)
+      ptySpawned = false
+    })
+  }
 
   async function loadSessionHistory() {
     loadingHistory = true
@@ -34,6 +104,12 @@
       }
 
       if (!existingSession) return
+
+      if (!opencodePort) {
+        const worktree = await getWorktreeForTask(taskId)
+        if (worktree?.opencode_port) opencodePort = worktree.opencode_port
+      }
+
       if (existingSession.status !== 'completed' && existingSession.status !== 'failed') return
 
       if (existingSession.status === 'completed') {
@@ -43,47 +119,112 @@
         errorMessage = existingSession.error_message
       }
 
-      try {
-        const text = await getSessionOutput(taskId)
-        if (text) {
-          outputText = text
-        }
-      } catch (e) {
-        console.error('[AgentPanel] Failed to fetch session output from OpenCode:', e)
-      }
     } catch (e) {
       console.error('[AgentPanel] Failed to load session history:', e)
     } finally {
       loadingHistory = false
     }
+
+    // Re-attach PTY after loadingHistory is false so the terminal-wrapper div
+    // is in the DOM and mountTerminal() can open xterm into it.
+    const reattachSession = $activeSessions.get(taskId)
+    if (reattachSession?.opencode_session_id) {
+      try {
+        const worktree = await getWorktreeForTask(taskId)
+        if (worktree?.opencode_port) {
+          opencodePort = worktree.opencode_port
+          await setupPtyListeners()
+          const cols = terminal?.cols ?? 80
+          const rows = terminal?.rows ?? 24
+          await spawnPty(taskId, worktree.opencode_port, reattachSession.opencode_session_id, cols, rows)
+          ptySpawned = true
+        }
+      } catch (e) {
+        console.error('[AgentPanel] Failed to re-attach PTY for completed session:', e)
+      }
+    }
+  }
+
+  function mountTerminal() {
+    if (terminalMounted || !terminal || !terminalContainer) return
+    console.log('[AgentPanel] Opening terminal into container', terminalContainer.clientWidth, 'x', terminalContainer.clientHeight)
+    terminal.open(terminalContainer)
+    terminalMounted = true
+    fitAddon?.fit()
+    console.log('[AgentPanel] Terminal opened, size:', terminal.cols, 'x', terminal.rows)
+
+    resizeObserver = new ResizeObserver(() => {
+      fitAddon?.fit()
+      if (terminal && ptySpawned) {
+        resizePty(taskId, terminal.cols, terminal.rows).catch((e) => {
+          console.error('[AgentPanel] Failed to resize PTY:', e)
+        })
+      }
+    })
+    resizeObserver.observe(terminalContainer)
+
+    terminal.onData((data) => {
+      if (ptySpawned) {
+        writePty(taskId, data).catch((e) => {
+          console.error('[AgentPanel] Failed to write to PTY:', e)
+        })
+      }
+    })
+  }
+
+  $: if (terminalContainer && terminal) {
+    mountTerminal()
   }
 
   onMount(async () => {
     console.log('[AgentPanel] Mounted for task:', taskId)
 
-    if (!outputText) {
-      await loadSessionHistory()
-    }
+    // Initialize xterm.js terminal
+    terminal = new Terminal({
+      fontFamily: "'SF Mono', 'Fira Code', 'Consolas', monospace",
+      fontSize: 13,
+      lineHeight: 1.4,
+      cursorBlink: true,
+      cursorStyle: 'block',
+      scrollback: 10000,
+      theme: {
+        background: '#1a1b26',
+        foreground: '#a9b1d6',
+        cursor: '#7aa2f7',
+        selectionBackground: 'rgba(122, 162, 247, 0.3)',
+        black: '#414868',
+        red: '#f7768e',
+        green: '#9ece6a',
+        yellow: '#e0af68',
+        blue: '#7aa2f7',
+        magenta: '#bb9af7',
+        cyan: '#7dcfff',
+        white: '#c0caf5',
+        brightBlack: '#414868',
+        brightRed: '#f7768e',
+        brightGreen: '#9ece6a',
+        brightYellow: '#e0af68',
+        brightBlue: '#7aa2f7',
+        brightMagenta: '#bb9af7',
+        brightCyan: '#7dcfff',
+        brightWhite: '#c0caf5',
+      },
+      allowProposedApi: true,
+    })
+
+    fitAddon = new FitAddon()
+    terminal.loadAddon(fitAddon)
+
+    await loadSessionHistory()
 
     unlisten = await listen<AgentEvent>('agent-event', (event) => {
       if (event.payload.task_id !== taskId) return
 
       const eventType = event.payload.event_type
       const data = event.payload.data
-      console.log('[AgentPanel] agent-event for task:', taskId, 'type:', eventType, 'data length:', data.length)
+      console.log('[AgentPanel] agent-event for task:', taskId, 'type:', eventType)
 
-      if (eventType === 'message.part.delta') {
-        try {
-          const parsed = JSON.parse(data)
-          const props = parsed.properties
-          if (props && props.field === 'text' && typeof props.delta === 'string') {
-            outputText += props.delta
-          }
-        } catch {
-          outputText += data
-        }
-        status = 'running'
-      } else if (eventType === 'session.idle') {
+      if (eventType === 'session.idle') {
         console.log('[AgentPanel] Session idle (complete) for task:', taskId)
         status = 'complete'
       } else if (eventType === 'session.status') {
@@ -104,19 +245,26 @@
   })
 
   onDestroy(() => {
-    if (unlisten) {
-      unlisten()
+    if (unlisten) unlisten()
+    if (ptyOutputUnlisten) ptyOutputUnlisten()
+    if (ptyExitUnlisten) ptyExitUnlisten()
+    if (resizeObserver) resizeObserver.disconnect()
+    if (ptySpawned) {
+      killPty(taskId).catch((e) => {
+        console.error('[AgentPanel] Failed to kill PTY on destroy:', e)
+      })
     }
-  })
-
-  afterUpdate(() => {
-    if (outputContainer && autoScroll) {
-      outputContainer.scrollTop = outputContainer.scrollHeight
-    }
+    if (terminal) terminal.dispose()
   })
 
   async function handleAbort() {
     try {
+      if (ptySpawned) {
+        await killPty(taskId).catch((e) => {
+          console.error('[AgentPanel] Failed to kill PTY on abort:', e)
+        })
+        ptySpawned = false
+      }
       await abortImplementation(taskId)
       status = 'error'
       errorMessage = 'Implementation aborted by user'
@@ -168,15 +316,20 @@
             <span class="session-badge {getSessionStatusBadgeClass(session.status)}">
               {session.status}
             </span>
+            {#if attachCommand}
+              <button class="attach-command" on:click={() => { navigator.clipboard.writeText(attachCommand ?? '') }} title="Click to copy">
+                {attachCommand}
+              </button>
+            {:else if session.opencode_session_id}
+              <span class="session-id" title={session.opencode_session_id}>
+                {session.opencode_session_id}
+              </span>
+            {/if}
           </div>
         {/if}
       </div>
     </div>
     <div class="controls">
-      <label class="auto-scroll-toggle">
-        <input type="checkbox" bind:checked={autoScroll} />
-        <span>Auto-scroll</span>
-      </label>
       {#if status === 'running'}
         <button class="abort-button" on:click={handleAbort}>
           Abort
@@ -185,14 +338,15 @@
     </div>
   </div>
 
-  <div class="output-container" bind:this={outputContainer}>
+  <div class="output-container">
+    <div class="terminal-wrapper" bind:this={terminalContainer}></div>
     {#if loadingHistory}
-      <div class="empty-state">
+      <div class="empty-state-overlay">
         <div class="loading-spinner"></div>
         <div class="empty-title">Loading session output...</div>
       </div>
-    {:else if !session && !outputText}
-      <div class="empty-state">
+    {:else if !session && status === 'idle'}
+      <div class="empty-state-overlay">
         <svg class="empty-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
           <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
           <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -201,34 +355,6 @@
         <div class="empty-title">No active agent session</div>
         <div class="empty-description">Start an implementation from the Kanban board context menu</div>
       </div>
-    {:else if status === 'complete' && session?.status === 'completed'}
-      <div class="completion-banner">
-        <svg class="completion-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M22 11.08V12C22 17.5228 17.5228 22 12 22C6.47715 22 2 17.5228 2 12C2 6.47715 6.47715 2 12 2C15.0395 2 17.7281 3.45492 19.4787 5.69495" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-          <path d="M22 4L12 14.01L9 11.01" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-        <span>Session completed</span>
-      </div>
-      <pre class="output-text">{outputText}</pre>
-    {:else if status === 'error' || session?.status === 'failed'}
-      {#if outputText}
-        <pre class="output-text">{outputText}</pre>
-      {/if}
-      {#if errorMessage || session?.error_message}
-        <div class="error-banner">
-          <svg class="error-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
-            <path d="M12 8V12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-            <path d="M12 16H12.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-          </svg>
-          <div class="error-content">
-            <div class="error-title">Session failed</div>
-            <div class="error-message-text">{errorMessage || session?.error_message}</div>
-          </div>
-        </div>
-      {/if}
-    {:else}
-      <pre class="output-text">{outputText}</pre>
     {/if}
   </div>
 </div>
@@ -326,6 +452,38 @@
     letter-spacing: 0.03em;
   }
 
+  .session-id {
+    color: var(--text-secondary);
+    font-size: 0.6875rem;
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    opacity: 0.7;
+    max-width: 180px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .attach-command {
+    color: var(--text-secondary);
+    font-size: 0.6875rem;
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    background: rgba(122, 162, 247, 0.08);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 2px 8px;
+    cursor: pointer;
+    max-width: 420px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    transition: all 0.15s;
+  }
+
+  .attach-command:hover {
+    background: rgba(122, 162, 247, 0.15);
+    color: var(--text-primary);
+  }
+
   .badge-running {
     background: rgba(158, 206, 106, 0.15);
     color: var(--success);
@@ -357,55 +515,6 @@
     gap: 12px;
   }
 
-  .auto-scroll-toggle {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    cursor: pointer;
-    user-select: none;
-    padding: 4px 8px;
-    border-radius: 4px;
-    transition: background 0.2s;
-  }
-
-  .auto-scroll-toggle:hover {
-    background: rgba(255, 255, 255, 0.05);
-  }
-
-  .auto-scroll-toggle input[type="checkbox"] {
-    appearance: none;
-    width: 14px;
-    height: 14px;
-    border: 1.5px solid var(--border);
-    border-radius: 3px;
-    cursor: pointer;
-    position: relative;
-    transition: all 0.2s;
-  }
-
-  .auto-scroll-toggle input[type="checkbox"]:checked {
-    background: var(--accent);
-    border-color: var(--accent);
-  }
-
-  .auto-scroll-toggle input[type="checkbox"]:checked::after {
-    content: '';
-    position: absolute;
-    left: 3px;
-    top: 0px;
-    width: 4px;
-    height: 8px;
-    border: solid white;
-    border-width: 0 2px 2px 0;
-    transform: rotate(45deg);
-  }
-
-  .auto-scroll-toggle span {
-    color: var(--text-secondary);
-    font-size: 0.75rem;
-    font-weight: 500;
-  }
-
   .abort-button {
     padding: 6px 14px;
     background: var(--error);
@@ -431,21 +540,25 @@
 
   .output-container {
     flex: 1;
-    overflow-y: auto;
+    overflow: hidden;
     min-height: 0;
-    background: var(--bg-primary);
+    background: #1a1b26;
     border: 1px solid var(--border);
     border-radius: 6px;
-    padding: 16px;
+    position: relative;
   }
 
-  .empty-state {
+  .empty-state-overlay {
+    position: absolute;
+    inset: 0;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     padding: 60px 20px;
     gap: 16px;
+    background: #1a1b26;
+    z-index: 1;
   }
 
   .empty-icon {
@@ -482,73 +595,9 @@
     to { transform: rotate(360deg); }
   }
 
-  .completion-banner {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 14px 16px;
-    background: rgba(158, 206, 106, 0.1);
-    border: 1px solid rgba(158, 206, 106, 0.3);
-    border-radius: 6px;
-    margin-bottom: 16px;
-    color: var(--success);
-    font-size: 0.875rem;
-    font-weight: 600;
-  }
-
-  .completion-icon {
-    width: 24px;
-    height: 24px;
-    flex-shrink: 0;
-  }
-
-  .error-banner {
-    display: flex;
-    gap: 12px;
-    padding: 14px 16px;
-    background: rgba(247, 118, 142, 0.08);
-    border: 1px solid rgba(247, 118, 142, 0.3);
-    border-left: 4px solid var(--error);
-    border-radius: 6px;
-    margin-bottom: 16px;
-  }
-
-  .error-icon {
-    width: 24px;
-    height: 24px;
-    color: var(--error);
-    flex-shrink: 0;
-    margin-top: 2px;
-  }
-
-  .error-content {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    flex: 1;
-  }
-
-  .error-title {
-    color: var(--error);
-    font-size: 0.875rem;
-    font-weight: 600;
-  }
-
-  .error-message-text {
-    color: var(--text-primary);
-    font-size: 0.8125rem;
-    line-height: 1.5;
-    white-space: pre-wrap;
-    word-break: break-word;
-  }
-
-  .output-text {
-    margin: 0;
-    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
-    font-size: 0.8125rem;
-    line-height: 1.6;
-    color: var(--text-primary);
-    white-space: pre-wrap;
-    word-break: break-word;
+  .terminal-wrapper {
+    width: 100%;
+    height: 100%;
+    padding: 8px;
   }
 </style>
