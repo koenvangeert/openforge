@@ -10,6 +10,7 @@ mod github_poller;
 mod git_worktree;
 mod server_manager;
 mod sse_bridge;
+mod pty_manager;
 mod agent_coordinator;
 
 use std::sync::Mutex;
@@ -17,6 +18,7 @@ use tauri::{Manager, State, Emitter};
 use opencode_client::OpenCodeClient;
 use jira_client::JiraClient;
 use github_client::GitHubClient;
+use pty_manager::PtyManager;
 
 // ============================================================================
 // Tauri Commands
@@ -152,8 +154,10 @@ async fn delete_task(
     db: State<'_, Mutex<db::Database>>,
     server_mgr: State<'_, server_manager::ServerManager>,
     sse_mgr: State<'_, sse_bridge::SseBridgeManager>,
+    pty_mgr: State<'_, PtyManager>,
     id: String,
 ) -> Result<(), String> {
+    let _ = pty_mgr.kill_pty(&id).await;
     sse_mgr.stop_bridge(&id).await;
     let _ = server_mgr.stop_server(&id).await;
 
@@ -402,6 +406,12 @@ async fn start_implementation(
         agent_session_id, opencode_session_id, task_id
     );
 
+    {
+        let db = db.lock().unwrap();
+        db.update_task_status(&task_id, "in_progress")
+            .map_err(|e| format!("Failed to update task status: {}", e))?;
+    }
+
     Ok(serde_json::json!({
         "task_id": task_id,
         "worktree_path": worktree_path.to_str().unwrap(),
@@ -415,9 +425,11 @@ async fn abort_implementation(
     db: State<'_, Mutex<db::Database>>,
     server_mgr: State<'_, server_manager::ServerManager>,
     sse_mgr: State<'_, sse_bridge::SseBridgeManager>,
+    pty_mgr: State<'_, PtyManager>,
     _app: tauri::AppHandle,
     task_id: String,
 ) -> Result<(), String> {
+    let _ = pty_mgr.kill_pty(&task_id).await;
     let port = server_mgr.get_server_port(&task_id).await;
     if let Some(port) = port {
         let (session, opencode_session_id) = {
@@ -954,6 +966,66 @@ async fn get_session_output(
     Ok(output)
 }
 
+// ============================================================================
+// PTY Terminal Commands
+// ============================================================================
+
+#[tauri::command]
+async fn pty_spawn(
+    pty_mgr: State<'_, PtyManager>,
+    app: tauri::AppHandle,
+    task_id: String,
+    server_port: u16,
+    opencode_session_id: String,
+    cols: u16,
+    rows: u16,
+) -> Result<(), String> {
+    pty_mgr
+        .spawn_pty(&task_id, server_port, &opencode_session_id, cols, rows, app)
+        .await
+        .map_err(|e| format!("Failed to spawn PTY: {}", e))
+}
+
+#[tauri::command]
+async fn pty_write(
+    pty_mgr: State<'_, PtyManager>,
+    task_id: String,
+    data: String,
+) -> Result<(), String> {
+    pty_mgr
+        .write_pty(&task_id, data.as_bytes())
+        .await
+        .map_err(|e| format!("Failed to write to PTY: {}", e))
+}
+
+#[tauri::command]
+async fn pty_resize(
+    pty_mgr: State<'_, PtyManager>,
+    task_id: String,
+    cols: u16,
+    rows: u16,
+) -> Result<(), String> {
+    pty_mgr
+        .resize_pty(&task_id, cols, rows)
+        .await
+        .map_err(|e| format!("Failed to resize PTY: {}", e))
+}
+
+#[tauri::command]
+async fn pty_kill(
+    pty_mgr: State<'_, PtyManager>,
+    task_id: String,
+) -> Result<(), String> {
+    pty_mgr
+        .kill_pty(&task_id)
+        .await
+        .map_err(|e| format!("Failed to kill PTY: {}", e))
+}
+
+// ============================================================================
+// Utility Commands
+// ============================================================================
+
 #[tauri::command]
 async fn check_opencode_installed() -> Result<OpenCodeInstallStatus, String> {
     let output = std::process::Command::new("which")
@@ -1056,15 +1128,21 @@ fn main() {
 
             let server_manager = server_manager::ServerManager::new();
             let sse_bridge_manager = sse_bridge::SseBridgeManager::new();
+            let pty_manager = PtyManager::new();
 
             app.manage(opencode_client);
             app.manage(jira_client);
             app.manage(github_client);
             app.manage(server_manager);
             app.manage(sse_bridge_manager);
+            app.manage(pty_manager);
 
             if let Err(e) = server_manager::ServerManager::new().cleanup_stale_pids() {
-                eprintln!("Failed to cleanup stale PIDs: {}", e);
+                eprintln!("Failed to cleanup stale server PIDs: {}", e);
+            }
+
+            if let Err(e) = PtyManager::new().cleanup_stale_pids() {
+                eprintln!("Failed to cleanup stale PTY PIDs: {}", e);
             }
 
             println!("Server manager initialized");
@@ -1121,7 +1199,11 @@ fn main() {
             open_url,
             get_config,
             set_config,
-            check_opencode_installed
+            check_opencode_installed,
+            pty_spawn,
+            pty_write,
+            pty_resize,
+            pty_kill
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

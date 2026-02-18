@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
+use crate::db;
 use eventsource_client::{self as es, Client};
 use futures::TryStreamExt;
 
@@ -165,6 +166,16 @@ impl SseBridgeManager {
                                     truncated_data
                                 );
 
+                                // Skip text-streaming events — PTY handles display now
+                                match real_event_type {
+                                    "message.part.delta" | "message.part.updated" |
+                                    "message.updated" | "message.removed" |
+                                    "server.heartbeat" | "server.connected" => {
+                                        return Ok(());
+                                    }
+                                    _ => {}
+                                }
+
                                 let payload = AgentEventPayload {
                                     task_id: task_id.clone(),
                                     event_type: real_event_type.to_string(),
@@ -185,6 +196,14 @@ impl SseBridgeManager {
                                     .and_then(|s| s.get("type"))
                                     .and_then(|t| t.as_str()) == Some("idle") {
                                     println!("[SSE] Session idle → emitting implementation-complete for task {}", task_id);
+
+                                    let db_state = app_clone.state::<std::sync::Mutex<db::Database>>();
+                                    if let Ok(db) = db_state.lock() {
+                                        if let Err(e) = db.update_task_status(&task_id, "in_review") {
+                                            eprintln!("[SSE] Failed to update task status to in_review: {}", e);
+                                        }
+                                    }
+
                                     let completion = CompletionPayload {
                                         task_id: task_id.clone(),
                                     };
