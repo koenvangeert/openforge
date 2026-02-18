@@ -1388,6 +1388,8 @@ fn main() {
     #[cfg(desktop)]
     let _ = fix_path_env::fix();
 
+    ctrlc::set_handler(|| std::process::exit(0)).ok();
+
     tauri::Builder::default()
         .setup(|app| {
             let app_data_dir = app
