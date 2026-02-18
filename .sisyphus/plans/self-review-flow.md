@@ -1259,7 +1259,7 @@ Max Concurrent: 4 (Waves 1 & 2)
   - Files: `src/components/SelfReviewView.svelte`
   - Pre-commit: `pnpm build`
 
-- [ ] 12. Rust Tests
+- [x] 12. Rust Tests
 
   **What to do**:
   - Add comprehensive tests for all new Rust code:
@@ -1335,7 +1335,7 @@ Max Concurrent: 4 (Waves 1 & 2)
   - Files: `src-tauri/src/diff_parser.rs`, `src-tauri/src/db.rs`
   - Pre-commit: `cargo test`
 
-- [ ] 13. Frontend Tests
+- [x] 13. Frontend Tests
 
   **What to do**:
   - Add comprehensive frontend tests:

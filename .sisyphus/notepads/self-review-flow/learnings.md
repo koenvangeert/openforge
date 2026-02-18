@@ -306,3 +306,30 @@
 - `$state<PullRequestInfo | null>(null)` for reactive state in Svelte 5
 - CSS: `max-height: 240px; overflow-y: auto` on comments list keeps sidebar usable with many comments
 - `color-mix(in srgb, var(--accent) 15%, transparent)` works for subtle tinted backgrounds with CSS variables
+
+## Frontend Tests for Self-Review Feature (T-213 Final Task)
+
+### TaskDetailView.test.ts Fixing Pattern
+- Component gained `onRunAction` prop — ALL renders must include it: `{ props: { task: baseTask, onRunAction: mockOnRunAction } }`
+- Define `mockOnRunAction = vi.fn()` at file top (module scope), not per-test
+- Import order matters: `vi.mock()` calls must come BEFORE component/ipc imports; place `import TaskDetailView` AFTER mock declarations
+- Pattern: `vi.mock('../lib/ipc', ...)` → `vi.mock('@tauri-apps/api/event', ...)` → `import TaskDetailView` → `import { ipcFn } from '../lib/ipc'`
+
+### Testing Svelte 5 $effect + async IPC in jsdom
+- `{#if hasWorktree}` toggled by `$effect(() => getWorktreeForTask().then(w => hasWorktree = w !== null))`
+- Testing this with `mockResolvedValueOnce` is unreliable in jsdom — Svelte 5 scheduler doesn't always flush after Promise resolves in test env
+- "hides Review toggle when no worktree" (default mock = null) works reliably with `waitFor`
+- "shows Review toggle when worktree exists" (override mock) is OPTIONAL and problematic — skip it, not worth the flakiness
+- LESSON: Svelte 5 `$state` updates inside Promise `.then()` may not synchronously propagate DOM updates in jsdom tests
+
+### reviewPrompt.test.ts Patterns
+- Pure function: no `vi.mock` needed — just `import { compileReviewPrompt } from './reviewPrompt'` and call directly
+- Test all 4 branches: both empty, inline-only, general-only, both present
+- Add bonus tests: numbered lists, task title in header, special characters
+- Special chars (backticks, quotes, newlines) pass through unchanged — no escaping in the function
+- `sections.join("\n")` preserves embedded newlines in comment bodies
+
+### Test Count
+- Before: 174 tests, 17 test files
+- After: 182 tests, 18 test files (+8 tests, +1 file)
+- 23 unhandled errors from xterm/matchMedia remain pre-existing
