@@ -100,13 +100,11 @@ async fn get_task_detail(
 async fn update_task_fields(
     db: State<'_, Mutex<db::Database>>,
     task_id: String,
-    acceptance_criteria: String,
     plan_text: String,
 ) -> Result<(), String> {
     let db = db.lock().unwrap();
     db.update_task_fields(
         &task_id,
-        Some(&acceptance_criteria),
         Some(&plan_text),
     )
     .map_err(|e| format!("Failed to update task fields: {}", e))
@@ -116,13 +114,12 @@ async fn update_task_fields(
 async fn create_task(
     db: State<'_, Mutex<db::Database>>,
     title: String,
-    description: String,
     status: String,
     jira_key: Option<String>,
     project_id: Option<String>,
 ) -> Result<db::TaskRow, String> {
     let db = db.lock().unwrap();
-    db.create_task(&title, Some(&description), &status, jira_key.as_deref(), project_id.as_deref())
+    db.create_task(&title, &status, jira_key.as_deref(), project_id.as_deref())
         .map_err(|e| format!("Failed to create task: {}", e))
 }
 
@@ -131,11 +128,10 @@ async fn update_task(
     db: State<'_, Mutex<db::Database>>,
     id: String,
     title: String,
-    description: String,
     jira_key: Option<String>,
 ) -> Result<(), String> {
     let db = db.lock().unwrap();
-    db.update_task(&id, &title, Some(&description), jira_key.as_deref())
+    db.update_task(&id, &title, jira_key.as_deref())
         .map_err(|e| format!("Failed to update task: {}", e))
 }
 
@@ -282,21 +278,6 @@ async fn get_worktree_for_task(
 #[tauri::command]
 fn build_task_prompt(task: &db::TaskRow, action_instruction: &str) -> String {
     let mut prompt = format!("You are working on task {}: {}\n\n", task.id, task.title);
-    
-    if let Some(ref description) = task.description {
-        if !description.is_empty() {
-            prompt.push_str(description);
-            prompt.push_str("\n\n");
-        }
-    }
-    
-    if let Some(ref acceptance_criteria) = task.acceptance_criteria {
-        if !acceptance_criteria.is_empty() {
-            prompt.push_str("Acceptance Criteria:\n");
-            prompt.push_str(acceptance_criteria);
-            prompt.push_str("\n\n");
-        }
-    }
     
     if let Some(ref plan_text) = task.plan_text {
         if !plan_text.is_empty() {
@@ -1716,8 +1697,6 @@ mod tests {
         let task = db::TaskRow {
             id: "T-123".to_string(),
             title: "Test Task".to_string(),
-            description: Some("This is a test description".to_string()),
-            acceptance_criteria: Some("- Must work\n- Must be tested".to_string()),
             plan_text: Some("Step 1: Do this\nStep 2: Do that".to_string()),
             status: "todo".to_string(),
             jira_key: None,
@@ -1731,9 +1710,6 @@ mod tests {
         let prompt = build_task_prompt(&task, "Do the thing!");
         
         assert!(prompt.contains("You are working on task T-123: Test Task"));
-        assert!(prompt.contains("This is a test description"));
-        assert!(prompt.contains("Acceptance Criteria:"));
-        assert!(prompt.contains("- Must work"));
         assert!(prompt.contains("Plan:"));
         assert!(prompt.contains("Step 1: Do this"));
         assert!(prompt.ends_with("Do the thing!"));
@@ -1744,8 +1720,6 @@ mod tests {
         let task = db::TaskRow {
             id: "T-456".to_string(),
             title: "Minimal Task".to_string(),
-            description: None,
-            acceptance_criteria: None,
             plan_text: None,
             status: "todo".to_string(),
             jira_key: None,
@@ -1769,8 +1743,6 @@ mod tests {
         let task = db::TaskRow {
             id: "T-789".to_string(),
             title: "Empty Fields Task".to_string(),
-            description: Some("".to_string()),
-            acceptance_criteria: Some("".to_string()),
             plan_text: Some("".to_string()),
             status: "todo".to_string(),
             jira_key: None,

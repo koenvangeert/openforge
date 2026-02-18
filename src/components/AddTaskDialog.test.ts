@@ -7,12 +7,10 @@ vi.mock('../lib/ipc', () => ({
   createTask: vi.fn().mockResolvedValue({
     id: 'T-1',
     title: 'New Task',
-    description: 'Task description',
     status: 'todo',
     jira_key: null,
     jira_status: null,
     jira_assignee: null,
-    acceptance_criteria: null,
     plan_text: null,
     created_at: 1000,
     updated_at: 1000,
@@ -25,12 +23,10 @@ import { createTask, updateTask } from '../lib/ipc'
 const mockTask: Task = {
   id: 'T-42',
   title: 'Existing Task',
-  description: 'Existing description',
   status: 'in_progress',
   jira_key: 'PROJ-123',
   jira_status: 'In Progress',
   jira_assignee: 'Alice',
-  acceptance_criteria: null,
   plan_text: null,
   project_id: null,
   created_at: 1000,
@@ -48,9 +44,6 @@ describe('AddTaskDialog', () => {
     
     const titleInput = screen.getByPlaceholderText('Enter task title') as HTMLInputElement
     expect(titleInput.value).toBe('')
-    
-    const descInput = screen.getByPlaceholderText('Add task description (optional)') as HTMLTextAreaElement
-    expect(descInput.value).toBe('')
   })
 
   it('disables submit button when title is empty', () => {
@@ -73,18 +66,16 @@ describe('AddTaskDialog', () => {
     render(AddTaskDialog, { props: { mode: 'create' } })
     
     const titleInput = screen.getByPlaceholderText('Enter task title')
-    const descInput = screen.getByPlaceholderText('Add task description (optional)')
     const jiraInput = screen.getByPlaceholderText('e.g. PROJ-123')
     
     await fireEvent.input(titleInput, { target: { value: 'My new task' } })
-    await fireEvent.input(descInput, { target: { value: 'Task details' } })
     await fireEvent.input(jiraInput, { target: { value: 'PROJ-456' } })
     
     const submitBtn = screen.getByRole('button', { name: 'Create Task' })
     await fireEvent.click(submitBtn)
     
     await new Promise((r) => setTimeout(r, 10))
-    expect(createTask).toHaveBeenCalledWith('My new task', 'Task details', 'todo', 'PROJ-456', null)
+    expect(createTask).toHaveBeenCalledWith('My new task', 'todo', 'PROJ-456', null)
   })
 
   it('pre-fills fields in edit mode', () => {
@@ -93,9 +84,6 @@ describe('AddTaskDialog', () => {
     
     const titleInput = screen.getByPlaceholderText('Enter task title') as HTMLInputElement
     expect(titleInput.value).toBe('Existing Task')
-    
-    const descInput = screen.getByPlaceholderText('Add task description (optional)') as HTMLTextAreaElement
-    expect(descInput.value).toBe('Existing description')
     
     const jiraInput = screen.getByPlaceholderText('e.g. PROJ-123') as HTMLInputElement
     expect(jiraInput.value).toBe('PROJ-123')
@@ -108,7 +96,7 @@ describe('AddTaskDialog', () => {
     await fireEvent.click(submitBtn)
     
     await new Promise((r) => setTimeout(r, 10))
-    expect(updateTask).toHaveBeenCalledWith('T-42', 'Existing Task', 'Existing description', 'PROJ-123')
+    expect(updateTask).toHaveBeenCalledWith('T-42', 'Existing Task', 'PROJ-123')
   })
 
   it('does not show status dropdown in edit mode', () => {

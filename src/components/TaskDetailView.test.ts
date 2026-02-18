@@ -34,12 +34,10 @@ vi.mock('@tauri-apps/api/event', () => ({
 const baseTask: Task = {
   id: 'T-42',
   title: 'Implement auth middleware',
-  description: 'Add JWT auth to API routes',
   status: 'todo',
   jira_key: 'PROJ-123',
   jira_status: 'To Do',
   jira_assignee: 'Alice',
-  acceptance_criteria: null,
   plan_text: null,
   project_id: null,
   created_at: 1000,

@@ -1,12 +1,12 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { Task, AgentSession, AgentLog, PrComment, PullRequestInfo, OpenCodeStatus, Project, WorktreeInfo, ImplementationStatus, ReviewPullRequest, PrFileDiff, ReviewComment, ReviewSubmissionComment } from "./types";
 
-export async function createTask(title: string, description: string, status: string, jiraKey: string | null, projectId: string | null): Promise<Task> {
-  return invoke<Task>("create_task", { title, description, status, jiraKey, projectId });
+export async function createTask(title: string, status: string, jiraKey: string | null, projectId: string | null): Promise<Task> {
+  return invoke<Task>("create_task", { title, status, jiraKey, projectId });
 }
 
-export async function updateTask(id: string, title: string, description: string, jiraKey: string | null): Promise<void> {
-  return invoke("update_task", { id, title, description, jiraKey });
+export async function updateTask(id: string, title: string, jiraKey: string | null): Promise<void> {
+  return invoke("update_task", { id, title, jiraKey });
 }
 
 export async function updateTaskStatus(id: string, status: string): Promise<void> {
@@ -136,8 +136,8 @@ export async function getSessionOutput(taskId: string): Promise<string> {
   return invoke<string>("get_session_output", { taskId });
 }
 
-export async function updateTaskFields(taskId: string, acceptanceCriteria: string, planText: string): Promise<void> {
-  return invoke("update_task_fields", { taskId, acceptanceCriteria, planText });
+export async function updateTaskFields(taskId: string, planText: string): Promise<void> {
+  return invoke("update_task_fields", { taskId, planText });
 }
 
 export async function getGithubUsername(): Promise<string> {

@@ -32,7 +32,7 @@
 
     loading = true
     try {
-      await createTask(trimmedTitle, '', column, null, $activeProjectId)
+      await createTask(trimmedTitle, column, null, $activeProjectId)
       dispatch('task-created')
       collapse()
     } catch (error) {

@@ -18,7 +18,6 @@
 
   const dispatch = createEventDispatcher()
 
-  let acceptanceCriteria = task.acceptance_criteria || ''
   let planText = task.plan_text || ''
   let isSaving = false
   let saved = false
@@ -60,7 +59,6 @@
 
   // Update local state when task prop changes
   $: {
-    acceptanceCriteria = task.acceptance_criteria || ''
     planText = task.plan_text || ''
   }
 
@@ -72,7 +70,7 @@
     isSaving = true
     saved = false
     try {
-      await updateTaskFields(task.id, acceptanceCriteria, planText)
+      await updateTaskFields(task.id, planText)
       saved = true
       setTimeout(() => { saved = false }, 2000)
       // Refresh tasks to update parent
@@ -192,25 +190,6 @@
         </div>
       {/if}
     {/if}
-  </section>
-
-  <!-- Description Section -->
-  {#if task.description}
-    <section class="section">
-      <h3 class="section-title">Description</h3>
-      <pre class="description">{task.description}</pre>
-    </section>
-  {/if}
-
-  <!-- Acceptance Criteria Section -->
-  <section class="section">
-    <h3 class="section-title">Acceptance Criteria</h3>
-    <textarea 
-      class="textarea"
-      bind:value={acceptanceCriteria}
-      placeholder="Add acceptance criteria..."
-      rows="6"
-    ></textarea>
   </section>
 
   <!-- Plan Section -->
@@ -384,21 +363,6 @@
     border-radius: 4px;
     font-weight: 500;
     width: fit-content;
-  }
-
-  .description {
-    margin: 0;
-    font-size: 0.8rem;
-    color: var(--text-primary);
-    white-space: pre-wrap;
-    word-break: break-word;
-    line-height: 1.5;
-    max-height: 200px;
-    overflow-y: auto;
-    background: var(--bg-primary);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    padding: 10px;
   }
 
   .textarea {

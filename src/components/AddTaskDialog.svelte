@@ -11,7 +11,6 @@
   const dispatch = createEventDispatcher()
 
   let title = mode === 'edit' && task ? task.title : ''
-  let description = mode === 'edit' && task ? (task.description || '') : ''
   let jiraKey = mode === 'edit' && task ? (task.jira_key || '') : ''
   let status: KanbanColumn = mode === 'edit' && task ? (task.status as KanbanColumn) : 'todo'
   let isSubmitting = false
@@ -24,7 +23,6 @@
       if (mode === 'create') {
         const newTask = await createTask(
           title.trim(),
-          description.trim() || '',
           status,
           jiraKey.trim() || null,
           $activeProjectId
@@ -34,7 +32,6 @@
         await updateTask(
           task.id,
           title.trim(),
-          description.trim() || '',
           jiraKey.trim() || null
         )
         dispatch('task-saved')
@@ -80,15 +77,6 @@
           placeholder="Enter task title"
           required
           autofocus
-        />
-      </label>
-
-      <label class="field">
-        <span>Description</span>
-        <textarea
-          bind:value={description}
-          placeholder="Add task description (optional)"
-          rows="4"
         />
       </label>
 
@@ -211,7 +199,6 @@
   }
 
   .field input,
-  .field textarea,
   .field select {
     background: var(--bg-primary);
     border: 1px solid var(--border);
@@ -224,14 +211,8 @@
   }
 
   .field input:focus,
-  .field textarea:focus,
   .field select:focus {
     border-color: var(--accent);
-  }
-
-  .field textarea {
-    resize: vertical;
-    min-height: 80px;
   }
 
   .field select {

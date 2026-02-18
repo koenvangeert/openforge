@@ -29,12 +29,10 @@ vi.mock('@tauri-apps/api/event', () => ({
 const baseTask: Task = {
   id: 'T-42',
   title: 'Implement auth middleware',
-  description: 'Add JWT auth to API routes',
   status: 'todo',
   jira_key: 'PROJ-123',
   jira_status: 'To Do',
   jira_assignee: 'Alice',
-  acceptance_criteria: null,
   plan_text: null,
   project_id: null,
   created_at: 1000,
@@ -76,22 +74,6 @@ describe('TaskInfoPanel', () => {
     expect(screen.queryByText('JIRA Assignee')).toBeNull()
   })
 
-  it('renders description when present', () => {
-    render(TaskInfoPanel, { props: { task: baseTask } })
-    expect(screen.getByText('Add JWT auth to API routes')).toBeTruthy()
-  })
-
-  it('hides description section when description is null', () => {
-    const taskNoDesc = { ...baseTask, description: null }
-    render(TaskInfoPanel, { props: { task: taskNoDesc } })
-    expect(screen.queryByText('Description')).toBeNull()
-  })
-
-  it('shows acceptance criteria textarea with placeholder', () => {
-    render(TaskInfoPanel, { props: { task: baseTask } })
-    expect(screen.getByPlaceholderText('Add acceptance criteria...')).toBeTruthy()
-  })
-
   it('shows plan textarea with placeholder', () => {
     render(TaskInfoPanel, { props: { task: baseTask } })
     expect(screen.getByPlaceholderText('Add plan...')).toBeTruthy()
@@ -115,13 +97,6 @@ describe('TaskInfoPanel', () => {
     render(TaskInfoPanel, { props: { task: baseTask } })
     expect(screen.getByText('Edit Task')).toBeTruthy()
     expect(screen.getByText('Delete')).toBeTruthy()
-  })
-
-  it('pre-fills acceptance criteria when task has value', () => {
-    const taskWithCriteria = { ...baseTask, acceptance_criteria: 'Must pass all tests' }
-    render(TaskInfoPanel, { props: { task: taskWithCriteria } })
-    const textarea = screen.getByPlaceholderText('Add acceptance criteria...') as HTMLTextAreaElement
-    expect(textarea.value).toBe('Must pass all tests')
   })
 
   it('pre-fills plan text when task has value', () => {
