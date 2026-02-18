@@ -1248,6 +1248,55 @@ impl Database {
         }
     }
 
+    pub fn get_latest_sessions_for_tickets(
+        &self,
+        ticket_ids: &[String],
+    ) -> Result<Vec<AgentSessionRow>> {
+        if ticket_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let conn = self.conn.lock().unwrap();
+        let placeholders: Vec<String> = ticket_ids
+            .iter()
+            .enumerate()
+            .map(|(i, _)| format!("?{}", i + 1))
+            .collect();
+        let sql = format!(
+            "SELECT s.id, s.ticket_id, s.opencode_session_id, s.stage, s.status, s.checkpoint_data, s.error_message, s.created_at, s.updated_at
+             FROM agent_sessions s
+             INNER JOIN (
+                 SELECT ticket_id, MAX(created_at) as max_created
+                 FROM agent_sessions
+                 WHERE ticket_id IN ({})
+                 GROUP BY ticket_id
+             ) latest ON s.ticket_id = latest.ticket_id AND s.created_at = latest.max_created",
+            placeholders.join(", ")
+        );
+        let mut stmt = conn.prepare(&sql)?;
+        let params: Vec<&dyn rusqlite::types::ToSql> = ticket_ids
+            .iter()
+            .map(|id| id as &dyn rusqlite::types::ToSql)
+            .collect();
+        let rows = stmt.query_map(params.as_slice(), |row| {
+            Ok(AgentSessionRow {
+                id: row.get(0)?,
+                ticket_id: row.get(1)?,
+                opencode_session_id: row.get(2)?,
+                stage: row.get(3)?,
+                status: row.get(4)?,
+                checkpoint_data: row.get(5)?,
+                error_message: row.get(6)?,
+                created_at: row.get(7)?,
+                updated_at: row.get(8)?,
+            })
+        })?;
+        let mut result = Vec::new();
+        for row in rows {
+            result.push(row?);
+        }
+        Ok(result)
+    }
+
     pub fn insert_agent_log(&self, session_id: &str, log_type: &str, content: &str) -> Result<()> {
         let conn = self.conn.lock().unwrap();
         let now = std::time::SystemTime::now()

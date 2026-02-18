@@ -344,6 +344,46 @@ impl OpenCodeClient {
         Ok(agents)
     }
 
+    /// Get session messages
+    ///
+    /// # Arguments
+    /// * `session_id` - Session ID
+    ///
+    /// # Returns
+    /// Array of message objects (each with role, parts, etc.)
+    pub async fn get_session_messages(
+        &self,
+        session_id: &str,
+    ) -> Result<Vec<serde_json::Value>, OpenCodeError> {
+        let url = format!("{}/session/{}/message", self.base_url, session_id);
+
+        let response = self
+            .client
+            .get(&url)
+            .send()
+            .await
+            .map_err(|e| OpenCodeError::NetworkError(e.to_string()))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unable to read response body".to_string());
+            return Err(OpenCodeError::ApiError {
+                status: status.as_u16(),
+                message: body,
+            });
+        }
+
+        let messages: Vec<serde_json::Value> = response
+            .json()
+            .await
+            .map_err(|e| OpenCodeError::ParseError(e.to_string()))?;
+
+        Ok(messages)
+    }
+
     /// Get session information
     ///
     /// # Arguments

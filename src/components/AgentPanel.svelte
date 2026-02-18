@@ -4,7 +4,7 @@
   import type { UnlistenFn } from '@tauri-apps/api/event'
   import type { AgentEvent } from '../lib/types'
   import { activeSessions } from '../lib/stores'
-  import { abortImplementation } from '../lib/ipc'
+  import { abortImplementation, getLatestSession, getSessionOutput } from '../lib/ipc'
 
   export let taskId: string
 
@@ -14,12 +14,57 @@
   let outputContainer: HTMLDivElement
   let unlisten: UnlistenFn | null = null
   let autoScroll = true
+  let loadingHistory = false
 
   $: session = $activeSessions.get(taskId) || null
   $: console.log('[AgentPanel] session reactive update for task:', taskId, 'session:', session ? `id=${session.id} status=${session.status} stage=${session.stage}` : 'null')
 
+  async function loadSessionHistory() {
+    loadingHistory = true
+    try {
+      let existingSession = $activeSessions.get(taskId)
+      if (!existingSession) {
+        const dbSession = await getLatestSession(taskId)
+        if (dbSession && (dbSession.status === 'completed' || dbSession.status === 'failed')) {
+          const updated = new Map($activeSessions)
+          updated.set(taskId, dbSession)
+          $activeSessions = updated
+          existingSession = dbSession
+        }
+      }
+
+      if (!existingSession) return
+      if (existingSession.status !== 'completed' && existingSession.status !== 'failed') return
+
+      if (existingSession.status === 'completed') {
+        status = 'complete'
+      } else {
+        status = 'error'
+        errorMessage = existingSession.error_message
+      }
+
+      try {
+        const text = await getSessionOutput(taskId)
+        if (text) {
+          outputText = text
+        }
+      } catch (e) {
+        console.error('[AgentPanel] Failed to fetch session output from OpenCode:', e)
+      }
+    } catch (e) {
+      console.error('[AgentPanel] Failed to load session history:', e)
+    } finally {
+      loadingHistory = false
+    }
+  }
+
   onMount(async () => {
     console.log('[AgentPanel] Mounted for task:', taskId)
+
+    if (!outputText) {
+      await loadSessionHistory()
+    }
+
     unlisten = await listen<AgentEvent>('agent-event', (event) => {
       if (event.payload.task_id !== taskId) return
 
@@ -141,7 +186,12 @@
   </div>
 
   <div class="output-container" bind:this={outputContainer}>
-    {#if !session && !outputText}
+    {#if loadingHistory}
+      <div class="empty-state">
+        <div class="loading-spinner"></div>
+        <div class="empty-title">Loading session output...</div>
+      </div>
+    {:else if !session && !outputText}
       <div class="empty-state">
         <svg class="empty-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
           <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -417,6 +467,19 @@
     text-align: center;
     max-width: 320px;
     line-height: 1.5;
+  }
+
+  .loading-spinner {
+    width: 32px;
+    height: 32px;
+    border: 3px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
   }
 
   .completion-banner {

@@ -73,6 +73,59 @@ describe('TaskCard', () => {
     expect(screen.getByText('Awaiting approval')).toBeTruthy()
   })
 
+  it('shows needs-input badge when session is paused with checkpoint data', () => {
+    const session: AgentSession = {
+      id: 'ses-1',
+      ticket_id: 'T-42',
+      opencode_session_id: null,
+      stage: 'implement',
+      status: 'paused',
+      checkpoint_data: '{"question":"approve?"}',
+      error_message: null,
+      created_at: 1000,
+      updated_at: 2000,
+    }
+    render(TaskCard, { props: { task: baseTask, session } })
+    expect(screen.getByText('Needs Input')).toBeTruthy()
+  })
+
+  it('hides needs-input badge when session is running', () => {
+    const session: AgentSession = {
+      id: 'ses-1',
+      ticket_id: 'T-42',
+      opencode_session_id: null,
+      stage: 'implement',
+      status: 'running',
+      checkpoint_data: null,
+      error_message: null,
+      created_at: 1000,
+      updated_at: 2000,
+    }
+    render(TaskCard, { props: { task: baseTask, session } })
+    expect(screen.queryByText('Needs Input')).toBeNull()
+  })
+
+  it('hides needs-input badge when paused without checkpoint data', () => {
+    const session: AgentSession = {
+      id: 'ses-1',
+      ticket_id: 'T-42',
+      opencode_session_id: null,
+      stage: 'implement',
+      status: 'paused',
+      checkpoint_data: null,
+      error_message: null,
+      created_at: 1000,
+      updated_at: 2000,
+    }
+    render(TaskCard, { props: { task: baseTask, session } })
+    expect(screen.queryByText('Needs Input')).toBeNull()
+  })
+
+  it('hides needs-input badge when no session', () => {
+    render(TaskCard, { props: { task: baseTask } })
+    expect(screen.queryByText('Needs Input')).toBeNull()
+  })
+
   it('dispatches select event on click', async () => {
     const { component } = render(TaskCard, { props: { task: baseTask } })
     let selectedId = ''

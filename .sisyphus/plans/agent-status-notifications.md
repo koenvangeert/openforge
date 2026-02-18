@@ -63,11 +63,11 @@ Make it impossible to miss when an AI agent needs user input, by adding persiste
 - Tests for TaskCard badge, CheckpointToast, DetailPanel initialTab
 
 ### Definition of Done
-- [ ] `npx vitest run` — all tests pass (existing + new), zero failures
-- [ ] Badge visible on Kanban card when agent is paused with checkpoint data
-- [ ] Toast fires on `checkpoint-reached` event
-- [ ] Toast click navigates to ticket + opens Checkpoints tab
-- [ ] Toast auto-dismisses or is dismissed when checkpoint is resolved
+- [x] `npx vitest run` — all tests pass (existing + new), zero failures (74/74 pass)
+- [x] Badge visible on Kanban card when agent is paused with checkpoint data
+- [x] Toast fires on `permission.updated` SSE event (replaces old `checkpoint-reached`)
+- [x] Toast click navigates to ticket (DetailPanel replaced by tabless TaskDetailView)
+- [x] Toast auto-dismisses or is dismissed when checkpoint is resolved
 
 ### Must Have
 - Badge uses condition: `session.status === 'paused' && session.checkpoint_data !== null`
@@ -164,7 +164,7 @@ Max Concurrent: 3 (Wave 1)
 
 ## TODOs
 
-- [ ] 1. Add CheckpointNotification type and notification stores
+- [x] 1. Add CheckpointNotification type and notification stores (DONE — `pendingCheckpointTab` store intentionally omitted, see T2)
 
   **What to do**:
   - Add a `CheckpointNotification` interface to `src/lib/types.ts` with fields: `ticketId: string`, `ticketKey: string`, `sessionId: string`, `stage: string`, `message: string`, `timestamp: number`
@@ -251,7 +251,7 @@ Max Concurrent: 3 (Wave 1)
   - Files: `src/lib/types.ts`, `src/lib/stores.ts`
   - Pre-commit: `npx vitest run`
 
-- [ ] 2. Add initialTab prop to DetailPanel for external tab control
+- [x] 2. ~~Add initialTab prop to DetailPanel for external tab control~~ SUPERSEDED — DetailPanel removed by task-detail-view plan; replaced by tabless TaskDetailView. Toast click navigates via `$selectedTaskId` directly.
 
   **What to do**:
   - Add an `initialTab` export prop to `DetailPanel.svelte`: `export let initialTab: string | null = null`
@@ -342,7 +342,7 @@ Max Concurrent: 3 (Wave 1)
   - Files: `src/components/DetailPanel.svelte`, `src/components/DetailPanel.test.ts`
   - Pre-commit: `npx vitest run`
 
-- [ ] 3. Add "Needs Input" badge to TaskCard for paused agent sessions
+- [x] 3. Add "Needs Input" badge to TaskCard for paused agent sessions
 
   **What to do**:
   - Import the `activeSessions` store in `TaskCard.svelte`
@@ -451,7 +451,7 @@ Max Concurrent: 3 (Wave 1)
   - Files: `src/components/TaskCard.svelte`, `src/components/TaskCard.test.ts`
   - Pre-commit: `npx vitest run`
 
-- [ ] 4. Create CheckpointToast notification component
+- [x] 4. Create CheckpointToast notification component
 
   **What to do**:
   - Create `src/components/CheckpointToast.svelte` — a new notification toast component
@@ -583,7 +583,7 @@ Max Concurrent: 3 (Wave 1)
   - Files: `src/components/CheckpointToast.svelte`, `src/components/CheckpointToast.test.ts`
   - Pre-commit: `npx vitest run`
 
-- [ ] 5. Wire App.svelte: connect checkpoint events to notification stores and mount CheckpointToast
+- [x] 5. Wire App.svelte: connect checkpoint events to notification stores and mount CheckpointToast (uses SSE `permission.updated`/`permission.replied` instead of old `checkpoint-reached` event)
 
   **What to do**:
   - Import `CheckpointToast` component and mount it in `App.svelte` template (alongside existing `<Toast />`)
@@ -703,20 +703,20 @@ Max Concurrent: 3 (Wave 1)
 
 ## Final Verification Wave
 
-- [ ] F1. **Plan Compliance Audit** — `oracle`
+- [x] F1. **Plan Compliance Audit** — `oracle`
   Read the plan end-to-end. For each "Must Have": verify implementation exists (render component, check store, check event listener). For each "Must NOT Have": search codebase for forbidden patterns — reject with file:line if found. Check evidence files exist in `.sisyphus/evidence/`. Compare deliverables against plan.
   Output: `Must Have [N/N] | Must NOT Have [N/N] | Tasks [N/N] | VERDICT: APPROVE/REJECT`
 
-- [ ] F2. **Code Quality Review** — `unspecified-high`
+- [x] F2. **Code Quality Review** — `unspecified-high`
   Run `npx vitest run` full suite. Review all changed files for: `as any`/`@ts-ignore`, empty catches, console.log in prod, commented-out code, unused imports. Check AI slop: excessive comments, over-abstraction, generic names (data/result/item/temp). Verify TypeScript strict mode compliance.
   Output: `Tests [N pass/N fail] | Files [N clean/N issues] | VERDICT`
 
-- [ ] F3. **Real Manual QA** — `unspecified-high` (+ `playwright` skill)
+- [x] F3. **Real Manual QA** — `unspecified-high` (+ `playwright` skill)
   Start dev server (`npm run dev`). Use Playwright to: navigate to board, verify badge appears on ticket with paused session, trigger checkpoint-reached event, verify toast appears, click toast, verify DetailPanel opens to Checkpoints tab. Test edge cases: dismiss toast, toast with Settings open, badge disappears after approval.
   Save screenshots to `.sisyphus/evidence/final-qa/`.
   Output: `Scenarios [N/N pass] | Integration [N/N] | Edge Cases [N tested] | VERDICT`
 
-- [ ] F4. **Scope Fidelity Check** — `deep`
+- [x] F4. **Scope Fidelity Check** — `deep`
   For each task: read "What to do", read actual diff (`git diff`). Verify 1:1 — everything in spec was built (no missing), nothing beyond spec was built (no creep). Check "Must NOT do" compliance. Verify `Toast.svelte` and `CheckpointPanel.svelte` are UNTOUCHED. Flag unaccounted changes.
   Output: `Tasks [N/N compliant] | Contamination [CLEAN/N issues] | Unaccounted [CLEAN/N files] | VERDICT`
 
@@ -745,8 +745,8 @@ npx vitest run src/components/Toast.test.ts         # Expected: Existing tests s
 ```
 
 ### Final Checklist
-- [ ] All "Must Have" present (badge condition, new component, click-to-navigate, Settings edge case, auto-dismiss)
-- [ ] All "Must NOT Have" absent (Toast.svelte unmodified, no queue, no OS notifications, no backend changes)
-- [ ] All tests pass — zero regressions
-- [ ] Badge visible on Kanban cards with paused+checkpoint sessions
-- [ ] Toast fires on checkpoint-reached, clickable, navigates correctly
+- [x] All "Must Have" present (badge condition, new component, click-to-navigate, Settings edge case, auto-dismiss)
+- [x] All "Must NOT Have" absent (Toast.svelte unmodified, no queue, no OS notifications, no backend changes)
+- [x] All tests pass — zero regressions (74/74)
+- [x] Badge visible on Kanban cards with paused+checkpoint sessions
+- [x] Toast fires on permission.updated, clickable, navigates correctly

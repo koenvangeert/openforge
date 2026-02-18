@@ -119,6 +119,22 @@ export async function getTaskDetail(taskId: string): Promise<Task> {
   return invoke<Task>("get_task_detail", { taskId });
 }
 
+export async function persistSessionStatus(taskId: string, status: string, errorMessage: string | null): Promise<void> {
+  return invoke("persist_session_status", { taskId, status, errorMessage });
+}
+
+export async function getLatestSession(taskId: string): Promise<AgentSession | null> {
+  return invoke<AgentSession | null>("get_latest_session", { taskId });
+}
+
+export async function getLatestSessions(taskIds: string[]): Promise<AgentSession[]> {
+  return invoke<AgentSession[]>("get_latest_sessions", { taskIds });
+}
+
+export async function getSessionOutput(taskId: string): Promise<string> {
+  return invoke<string>("get_session_output", { taskId });
+}
+
 export async function updateTaskFields(taskId: string, acceptanceCriteria: string, planText: string): Promise<void> {
   return invoke("update_task_fields", { taskId, acceptanceCriteria, planText });
 }

@@ -2,8 +2,8 @@
   import { onMount, onDestroy } from 'svelte'
   import { listen } from '@tauri-apps/api/event'
   import type { UnlistenFn } from '@tauri-apps/api/event'
-  import { tasks, selectedTaskId, activeSessions, ticketPrs, error, isLoading, projects, activeProjectId } from './lib/stores'
-  import { getProjects, getTasksForProject, getOpenCodeStatus, getPullRequests, startImplementation, getSessionStatus } from './lib/ipc'
+  import { tasks, selectedTaskId, activeSessions, checkpointNotification, ticketPrs, error, isLoading, projects, activeProjectId } from './lib/stores'
+  import { getProjects, getTasksForProject, getOpenCodeStatus, getPullRequests, startImplementation, getSessionStatus, getLatestSessions, persistSessionStatus } from './lib/ipc'
   import type { Task, PullRequestInfo, OpenCodeStatus, AgentEvent } from './lib/types'
   import KanbanBoard from './components/KanbanBoard.svelte'
   import TaskDetailView from './components/TaskDetailView.svelte'
@@ -11,6 +11,7 @@
 import SettingsPanel from './components/SettingsPanel.svelte'
 import GlobalSettingsPanel from './components/GlobalSettingsPanel.svelte'
 import Toast from './components/Toast.svelte'
+import CheckpointToast from './components/CheckpointToast.svelte'
 import ProjectSwitcher from './components/ProjectSwitcher.svelte'
 import ProjectSetupDialog from './components/ProjectSetupDialog.svelte'
 
@@ -26,7 +27,7 @@ import ProjectSetupDialog from './components/ProjectSetupDialog.svelte'
 
   $: selectedTask = $tasks.find(t => t.id === $selectedTaskId) || null
 
-  // Close settings panels when a task is selected
+  // Close settings panels when a task is selected (includes toast click navigation)
   $: if ($selectedTaskId) { showSettings = false; showGlobalSettings = false }
 
   // Reload tasks when active project changes
@@ -58,11 +59,29 @@ import ProjectSetupDialog from './components/ProjectSetupDialog.svelte'
     $isLoading = true
     try {
       $tasks = await getTasksForProject($activeProjectId)
+      await loadSessions()
     } catch (e) {
       console.error('Failed to load tasks:', e)
       $error = String(e)
     } finally {
       $isLoading = false
+    }
+  }
+
+  async function loadSessions() {
+    try {
+      const taskIds = $tasks.map(t => t.id)
+      if (taskIds.length === 0) return
+      const sessions = await getLatestSessions(taskIds)
+      const updated = new Map($activeSessions)
+      for (const session of sessions) {
+        if (session.status === 'completed' || session.status === 'failed') {
+          updated.set(session.ticket_id, session)
+        }
+      }
+      $activeSessions = updated
+    } catch (e) {
+      console.error('Failed to load sessions:', e)
     }
   }
 
@@ -146,6 +165,12 @@ import ProjectSetupDialog from './components/ProjectSetupDialog.svelte'
         } else {
           console.warn('[session] No active session found for completed task:', taskId)
         }
+        persistSessionStatus(taskId, 'completed', null).catch(e =>
+          console.error('[session] Failed to persist completed status:', e)
+        )
+        if ($checkpointNotification?.ticketId === taskId) {
+          $checkpointNotification = null
+        }
         loadTasks()
       })
     )
@@ -162,6 +187,12 @@ import ProjectSetupDialog from './components/ProjectSetupDialog.svelte'
           console.log('[session] Updated session status to failed for task:', taskId)
         } else {
           console.warn('[session] No active session found for failed task:', taskId)
+        }
+        persistSessionStatus(taskId, 'failed', event.payload.error).catch(e =>
+          console.error('[session] Failed to persist failed status:', e)
+        )
+        if ($checkpointNotification?.ticketId === taskId) {
+          $checkpointNotification = null
         }
         loadTasks()
       })
@@ -195,6 +226,10 @@ import ProjectSetupDialog from './components/ProjectSetupDialog.svelte'
               const updated = new Map($activeSessions)
               updated.set(taskId, { ...session, status: 'completed' })
               $activeSessions = updated
+              // Clear stale checkpoint notification for this task
+              if ($checkpointNotification?.ticketId === taskId) {
+                $checkpointNotification = null
+              }
             }
           } catch {
             if (eventType === 'session.idle') {
@@ -202,6 +237,9 @@ import ProjectSetupDialog from './components/ProjectSetupDialog.svelte'
               const updated = new Map($activeSessions)
               updated.set(taskId, { ...session, status: 'completed' })
               $activeSessions = updated
+              if ($checkpointNotification?.ticketId === taskId) {
+                $checkpointNotification = null
+              }
             }
           }
         } else if (eventType === 'session.error') {
@@ -209,6 +247,35 @@ import ProjectSetupDialog from './components/ProjectSetupDialog.svelte'
           const updated = new Map($activeSessions)
           updated.set(taskId, { ...session, status: 'failed', error_message: event.payload.data })
           $activeSessions = updated
+          // Clear stale checkpoint notification for this task
+          if ($checkpointNotification?.ticketId === taskId) {
+            $checkpointNotification = null
+          }
+        } else if (eventType === 'permission.updated') {
+          // Agent is blocked waiting for user approval
+          console.log('[session] SSE permission.updated for task:', taskId)
+          const updated = new Map($activeSessions)
+          updated.set(taskId, { ...session, status: 'paused', checkpoint_data: event.payload.data })
+          $activeSessions = updated
+          // Find the task to get ticketKey
+          const task = $tasks.find(t => t.id === taskId)
+          $checkpointNotification = {
+            ticketId: taskId,
+            ticketKey: task?.jira_key ?? null,
+            sessionId: session.id,
+            stage: session.stage,
+            message: 'Agent needs approval',
+            timestamp: Date.now(),
+          }
+        } else if (eventType === 'permission.replied') {
+          // User responded to permission prompt — agent is no longer blocked
+          console.log('[session] SSE permission.replied for task:', taskId)
+          const updated = new Map($activeSessions)
+          updated.set(taskId, { ...session, status: 'running', checkpoint_data: null })
+          $activeSessions = updated
+          if ($checkpointNotification?.ticketId === taskId) {
+            $checkpointNotification = null
+          }
         }
       })
     )
@@ -219,6 +286,9 @@ import ProjectSetupDialog from './components/ProjectSetupDialog.svelte'
         const updated = new Map($activeSessions)
         updated.delete(event.payload.ticket_id)
         $activeSessions = updated
+        if ($checkpointNotification?.ticketId === event.payload.ticket_id) {
+          $checkpointNotification = null
+        }
       })
     )
   })
@@ -284,6 +354,7 @@ import ProjectSetupDialog from './components/ProjectSetupDialog.svelte'
 </div>
 
 <Toast />
+<CheckpointToast />
 
 <style>
   :global(:root) {

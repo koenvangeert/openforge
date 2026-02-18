@@ -28,6 +28,7 @@
   }
 
   $: statusClass = session?.status || 'idle'
+  $: needsInput = session?.status === 'paused' && session?.checkpoint_data !== null
 </script>
 
 <button class="card" class:running={statusClass === 'running'} class:paused={statusClass === 'paused'} class:failed={statusClass === 'failed'} on:click={handleClick}>
@@ -36,6 +37,9 @@
       <span class="task-id">{task.id}</span>
       {#if task.jira_key}
         <span class="jira-badge">{task.jira_key}</span>
+      {/if}
+      {#if needsInput}
+        <span class="needs-input-badge">Needs Input</span>
       {/if}
     </div>
     {#if session}
@@ -137,6 +141,17 @@
     color: var(--text-secondary);
     border-radius: 3px;
     letter-spacing: 0.01em;
+  }
+
+  .needs-input-badge {
+    font-size: 0.65rem;
+    font-weight: 600;
+    padding: 1px 5px;
+    background: rgba(224, 175, 104, 0.15);
+    color: var(--warning);
+    border-radius: 3px;
+    letter-spacing: 0.01em;
+    animation: pulse 1.5s infinite;
   }
 
   .status-dot {

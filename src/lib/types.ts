@@ -33,6 +33,15 @@ export interface AgentLog {
   content: string;
 }
 
+export interface CheckpointNotification {
+  ticketId: string;
+  ticketKey: string | null;
+  sessionId: string;
+  stage: string;
+  message: string;
+  timestamp: number;
+}
+
 export interface PrComment {
   id: number;
   pr_id: number;
