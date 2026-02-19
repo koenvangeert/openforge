@@ -429,7 +429,7 @@ Max Concurrent: 3 (Wave 1)
 
   **Commit**: NO (groups with Wave 2/3 commit)
 
-- [ ] 4. Rewrite DiffViewer.svelte with `<DiffView>` component and comment snippets
+- [x] 4. Rewrite DiffViewer.svelte with `<DiffView>` component and comment snippets
 
   **What to do**:
   - **Complete rewrite** of `src/components/DiffViewer.svelte` (currently 566 lines of diff2html + manual DOM manipulation → replace with declarative @git-diff-view component)
@@ -548,7 +548,7 @@ Max Concurrent: 3 (Wave 1)
   - Files: `src/components/DiffViewer.svelte`, `src/lib/diffAdapter.ts`, `src/lib/diffComments.ts`
   - Pre-commit: `pnpm build`
 
-- [ ] 5. Tokyo Night dark theme CSS overrides for @git-diff-view
+- [x] 5. Tokyo Night dark theme CSS overrides for @git-diff-view
 
   **What to do**:
   - Create `src/components/DiffViewerTheme.css` with CSS overrides for `@git-diff-view/svelte/styles/diff-view-pure.css`

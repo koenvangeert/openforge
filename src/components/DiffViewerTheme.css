@@ -1,0 +1,75 @@
+/* Tokyo Night theme overrides for @git-diff-view */
+/* Overrides .diff-tailwindcss-wrapper[data-theme='dark'] .diff-style-root variables */
+
+.diff-tailwindcss-wrapper[data-theme='dark'] .diff-style-root {
+  --diff-border--: #3b4261;
+  --diff-add-content--: rgba(158, 206, 106, 0.1);
+  --diff-del-content--: rgba(247, 118, 142, 0.1);
+  --diff-add-lineNumber--: rgba(158, 206, 106, 0.2);
+  --diff-del-lineNumber--: rgba(247, 118, 142, 0.2);
+  --diff-plain-content--: #1a1b26;
+  --diff-expand-content--: #24283b;
+  --diff-plain-lineNumber--: #24283b;
+  --diff-expand-lineNumber--: #24283b;
+  --diff-plain-lineNumber-color--: #565f89;
+  --diff-expand-lineNumber-color--: #565f89;
+  --diff-hunk-content--: #2f3349;
+  --diff-hunk-lineNumber--: rgba(122, 162, 247, 0.15);
+  --diff-hunk-lineNumber-hover--: #7aa2f7;
+  --diff-add-content-highlight--: rgba(158, 206, 106, 0.25);
+  --diff-del-content-highlight--: rgba(247, 118, 142, 0.25);
+  --diff-add-widget--: #7aa2f7;
+  --diff-add-widget-color--: #1a1b26;
+  --diff-empty-content--: #24283b;
+  --diff-hunk-content-color--: #565f89;
+
+  color: #c0caf5;
+}
+
+/* Tokyo Night syntax highlighting overrides for dark theme */
+.diff-tailwindcss-wrapper[data-theme="dark"] .diff-line-syntax-raw .hljs {
+  color: #c0caf5;
+  background: #1a1b26;
+}
+
+.diff-tailwindcss-wrapper[data-theme="dark"] .diff-line-syntax-raw .hljs-keyword,
+.diff-tailwindcss-wrapper[data-theme="dark"] .diff-line-syntax-raw .hljs-type,
+.diff-tailwindcss-wrapper[data-theme="dark"] .diff-line-syntax-raw .hljs-variable.language_ {
+  color: #bb9af7;
+}
+
+.diff-tailwindcss-wrapper[data-theme="dark"] .diff-line-syntax-raw .hljs-title,
+.diff-tailwindcss-wrapper[data-theme="dark"] .diff-line-syntax-raw .hljs-title.class_,
+.diff-tailwindcss-wrapper[data-theme="dark"] .diff-line-syntax-raw .hljs-title.function_ {
+  color: #7aa2f7;
+}
+
+.diff-tailwindcss-wrapper[data-theme="dark"] .diff-line-syntax-raw .hljs-string,
+.diff-tailwindcss-wrapper[data-theme="dark"] .diff-line-syntax-raw .hljs-regexp {
+  color: #9ece6a;
+}
+
+.diff-tailwindcss-wrapper[data-theme="dark"] .diff-line-syntax-raw .hljs-number,
+.diff-tailwindcss-wrapper[data-theme="dark"] .diff-line-syntax-raw .hljs-literal {
+  color: #ff9e64;
+}
+
+.diff-tailwindcss-wrapper[data-theme="dark"] .diff-line-syntax-raw .hljs-comment {
+  color: #565f89;
+  font-style: italic;
+}
+
+.diff-tailwindcss-wrapper[data-theme="dark"] .diff-line-syntax-raw .hljs-built_in,
+.diff-tailwindcss-wrapper[data-theme="dark"] .diff-line-syntax-raw .hljs-symbol {
+  color: #e0af68;
+}
+
+.diff-tailwindcss-wrapper[data-theme="dark"] .diff-line-syntax-raw .hljs-attr,
+.diff-tailwindcss-wrapper[data-theme="dark"] .diff-line-syntax-raw .hljs-variable {
+  color: #73daca;
+}
+
+.diff-tailwindcss-wrapper[data-theme="dark"] .diff-line-syntax-raw .hljs-name,
+.diff-tailwindcss-wrapper[data-theme="dark"] .diff-line-syntax-raw .hljs-selector-tag {
+  color: #f7768e;
+}

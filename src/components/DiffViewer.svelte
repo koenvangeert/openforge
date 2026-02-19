@@ -1,10 +1,11 @@
 <script lang="ts">
-  import { onMount } from 'svelte'
-  import { html as diff2htmlHtml } from 'diff2html'
-  import { ColorSchemeType } from 'diff2html/lib/types'
-  import 'diff2html/bundles/css/diff2html.min.css'
+  import { DiffView, DiffModeEnum, SplitSide } from '@git-diff-view/svelte'
+  import '@git-diff-view/svelte/styles/diff-view-pure.css'
+  import './DiffViewerTheme.css'
   import type { PrFileDiff, ReviewComment, ReviewSubmissionComment } from '../lib/types'
-  import { pendingManualComments, reviewComments } from '../lib/stores'
+  import { pendingManualComments } from '../lib/stores'
+  import { toGitDiffViewData } from '../lib/diffAdapter'
+  import { buildExtendData, type CommentDisplayData } from '../lib/diffComments'
 
   interface Props {
     files?: PrFileDiff[]
@@ -13,261 +14,120 @@
     repoName?: string
   }
 
-  let { files = [], existingComments = [], repoOwner = '', repoName = '' }: Props = $props()
+  let { files = [], existingComments = [], repoOwner: _repoOwner = '', repoName: _repoName = '' }: Props = $props()
 
-  let container: HTMLElement
-  let outputFormat = $state<'side-by-side' | 'line-by-line'>('side-by-side')
-  let activeCommentLine = $state<{ path: string; line: number; side: string } | null>(null)
+  let diffViewMode = $state<DiffModeEnum>(DiffModeEnum.Split)
   let commentText = $state('')
 
-  $effect(() => {
-    if (container && files.length > 0) {
-      renderDiffs()
-    }
-  })
-
-  function renderDiffs() {
-    if (!container) return
-
-    const diffStrings = files
-      .filter(f => f.patch)
-      .map(f => {
-        const header = `--- a/${f.filename}\n+++ b/${f.filename}\n`
-        return header + f.patch
-      })
-
-    const fullDiff = diffStrings.join('\n')
-
-    if (!fullDiff.trim()) {
-      container.innerHTML = '<div class="no-diff">No diff data available</div>'
-      return
-    }
-
-    try {
-      const html = diff2htmlHtml(fullDiff, {
-        drawFileList: false,
-        outputFormat,
-        matching: 'lines',
-        colorScheme: ColorSchemeType.DARK,
-      })
-      container.innerHTML = html
-      attachLineHandlers()
-    } catch (e) {
-      console.error('Failed to render diff:', e)
-      container.innerHTML = '<div class="error">Failed to render diff</div>'
-    }
-  }
-
-  function attachLineHandlers() {
-    if (!container) return
-    
-    // Add "+" buttons to line number cells
-    const lineNumbers = container.querySelectorAll('.d2h-code-linenumber, .d2h-code-side-linenumber')
-    for (const cell of lineNumbers) {
-      const lineNum = extractLineNumber(cell)
-      if (lineNum === null) continue
-      
-      const btn = document.createElement('span')
-      btn.className = 'comment-add-btn'
-      btn.textContent = '+'
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation()
-        const path = getFilePathForElement(cell)
-        if (path) {
-          activeCommentLine = { path, line: lineNum, side: 'RIGHT' }
-          commentText = ''
-          insertCommentForm(cell.closest('tr'))
-        }
-      })
-      const cellEl = cell as HTMLElement
-      cellEl.style.position = 'relative'
-      cellEl.appendChild(btn)
-    }
-    
-    // Render existing comments
-    renderExistingComments()
-    // Render pending comments
-    renderPendingComments()
-  }
-
-  function extractLineNumber(cell: Element): number | null {
-    // diff2html puts the line number as text content in the cell
-    const text = cell.textContent?.trim() ?? ''
-    const num = parseInt(text, 10)
-    return isNaN(num) ? null : num
-  }
-
-  function getFilePathForElement(el: Element): string | null {
-    const fileWrapper = el.closest('.d2h-file-wrapper')
-    if (!fileWrapper) return null
-    const nameEl = fileWrapper.querySelector('.d2h-file-name')
-    return nameEl?.textContent?.trim() ?? null
-  }
-
-  function insertCommentForm(afterRow: Element | null) {
-    if (!afterRow || !container) return
-    // Remove any existing form
-    container.querySelectorAll('.inline-comment-form').forEach(el => el.remove())
-    
-    const formRow = document.createElement('tr')
-    formRow.className = 'inline-comment-form'
-    const td = document.createElement('td')
-    td.colSpan = 20 // span all columns
-    td.innerHTML = `
-      <div class="comment-form-inner">
-        <textarea class="comment-textarea" placeholder="Leave a comment..." rows="3"></textarea>
-        <div class="comment-form-actions">
-          <button class="comment-cancel-btn">Cancel</button>
-          <button class="comment-submit-btn">Add Comment</button>
-        </div>
-      </div>
-    `
-    formRow.appendChild(td)
-    afterRow.after(formRow)
-    
-    const textarea = td.querySelector('.comment-textarea') as HTMLTextAreaElement
-    textarea?.focus()
-    
-    td.querySelector('.comment-cancel-btn')?.addEventListener('click', () => {
-      formRow.remove()
-      activeCommentLine = null
-    })
-    
-    td.querySelector('.comment-submit-btn')?.addEventListener('click', () => {
-      if (!activeCommentLine || !textarea?.value.trim()) return
-      const comment: ReviewSubmissionComment = {
-        path: activeCommentLine.path,
-        line: activeCommentLine.line,
-        side: activeCommentLine.side,
-        body: textarea.value.trim()
-      }
-      $pendingManualComments = [...$pendingManualComments, comment]
-      formRow.remove()
-      activeCommentLine = null
-      // Re-render pending comments
-      renderPendingComments()
-    })
-  }
-
-  function renderExistingComments() {
-    if (!container) return
-    container.querySelectorAll('.existing-comment-row').forEach(el => el.remove())
-    
-    for (const comment of existingComments) {
-      if (comment.line === null) continue
-      const row = findLineRow(comment.path, comment.line)
-      if (!row) continue
-      
-      const commentRow = document.createElement('tr')
-      commentRow.className = 'existing-comment-row'
-      const td = document.createElement('td')
-      td.colSpan = 20
-      td.innerHTML = `
-        <div class="inline-comment existing">
-          <div class="comment-header">
-            <strong class="comment-author">${escapeHtml(comment.author)}</strong>
-            <span class="comment-time">${comment.created_at}</span>
-          </div>
-          <div class="comment-body">${escapeHtml(comment.body)}</div>
-        </div>
-      `
-      commentRow.appendChild(td)
-      row.after(commentRow)
-    }
-  }
-
-  function renderPendingComments() {
-    if (!container) return
-    container.querySelectorAll('.pending-comment-row').forEach(el => el.remove())
-    
-    $pendingManualComments.forEach((comment, index) => {
-      const row = findLineRow(comment.path, comment.line)
-      if (!row) return
-      
-      const commentRow = document.createElement('tr')
-      commentRow.className = 'pending-comment-row'
-      const td = document.createElement('td')
-      td.colSpan = 20
-      td.innerHTML = `
-        <div class="inline-comment pending">
-          <div class="comment-header">
-            <span class="pending-badge">Pending</span>
-            <button class="comment-delete-btn" data-index="${index}">✕</button>
-          </div>
-          <div class="comment-body">${escapeHtml(comment.body)}</div>
-        </div>
-      `
-      commentRow.appendChild(td)
-      
-      td.querySelector('.comment-delete-btn')?.addEventListener('click', () => {
-        $pendingManualComments = $pendingManualComments.filter((_, i) => i !== index)
-        renderPendingComments()
-      })
-      
-      row.after(commentRow)
-    })
-  }
-
-  function findLineRow(path: string, line: number): Element | null {
-    if (!container) return null
-    const fileWrappers = container.querySelectorAll('.d2h-file-wrapper')
-    for (const wrapper of fileWrappers) {
-      const nameEl = wrapper.querySelector('.d2h-file-name')
-      const fileName = nameEl?.textContent?.trim() ?? ''
-      if (fileName !== path && !path.endsWith(fileName) && !fileName.endsWith(path)) continue
-      
-      const lineNumbers = wrapper.querySelectorAll('.d2h-code-linenumber, .d2h-code-side-linenumber')
-      for (const cell of lineNumbers) {
-        const num = parseInt(cell.textContent?.trim() ?? '', 10)
-        if (num === line) {
-          return cell.closest('tr')
-        }
-      }
-    }
-    return null
-  }
-
-  function escapeHtml(text: string): string {
-    const div = document.createElement('div')
-    div.textContent = text
-    return div.innerHTML
-  }
-
   export function scrollToFile(filename: string) {
-    if (!container) return
-    const fileHeaders = container.querySelectorAll('.d2h-file-name')
-    for (const header of fileHeaders) {
-      const text = header.textContent?.trim() ?? ''
-      if (text === filename || text.endsWith('/' + filename) || filename.endsWith(text)) {
-        const wrapper = header.closest('.d2h-file-wrapper')
-        if (wrapper) {
-          wrapper.scrollIntoView({ behavior: 'smooth', block: 'start' })
-          return
-        }
-      }
+    const el = document.querySelector(`[data-diff-file="${filename}"]`)
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' })
     }
   }
-
-  onMount(() => {
-    if (files.length > 0) {
-      renderDiffs()
-    }
-  })
 </script>
 
 <div class="diff-viewer">
   <div class="controls">
-    <button class:active={outputFormat === 'side-by-side'} onclick={() => outputFormat = 'side-by-side'}>
+    <button
+      class:active={diffViewMode === DiffModeEnum.Split}
+      onclick={() => (diffViewMode = DiffModeEnum.Split)}
+    >
       Split
     </button>
-    <button class:active={outputFormat === 'line-by-line'} onclick={() => outputFormat = 'line-by-line'}>
+    <button
+      class:active={diffViewMode === DiffModeEnum.Unified}
+      onclick={() => (diffViewMode = DiffModeEnum.Unified)}
+    >
       Unified
     </button>
   </div>
-  
-  <div class="diff-container" bind:this={container}>
+
+  <div class="diff-container">
     {#if files.length === 0}
       <div class="empty">No files to display</div>
+    {:else}
+      {#each files as file (file.filename)}
+        <div data-diff-file={file.filename} class="diff-file-wrapper">
+          <DiffView
+            data={toGitDiffViewData(file)}
+            extendData={buildExtendData(file.filename, existingComments, $pendingManualComments)}
+            diffViewMode={diffViewMode}
+            diffViewTheme="dark"
+            diffViewHighlight={true}
+            diffViewAddWidget={true}
+            diffViewFontSize={12}
+            onAddWidgetClick={(_lineNumber, _side) => {
+              commentText = ''
+            }}
+          >
+            {#snippet renderExtendLine({ lineNumber: _ln, side: _side, data, diffFile: _df, onUpdate: _ou }: { lineNumber: number; side: SplitSide; data: CommentDisplayData; diffFile: import('@git-diff-view/core').DiffFile; onUpdate: () => void })}
+              <div class="extend-line-content">
+                {#each data.comments as comment}
+                  <div
+                    class="inline-comment"
+                    class:existing={comment.type === 'existing'}
+                    class:pending={comment.type === 'pending'}
+                  >
+                    <div class="comment-header">
+                      {#if comment.type === 'existing'}
+                        <strong class="comment-author">{comment.author}</strong>
+                        <span class="comment-time">{comment.createdAt}</span>
+                      {:else}
+                        <span class="pending-badge">Pending</span>
+                        <button
+                          class="comment-delete-btn"
+                          onclick={() => {
+                            $pendingManualComments = $pendingManualComments.filter(
+                              (_, i) => i !== comment.index
+                            )
+                          }}
+                        >✕</button>
+                      {/if}
+                    </div>
+                    <div class="comment-body">{comment.body}</div>
+                  </div>
+                {/each}
+              </div>
+            {/snippet}
+
+            {#snippet renderWidgetLine({ lineNumber, side, diffFile, onClose }: { lineNumber: number; side: SplitSide; diffFile: import('@git-diff-view/core').DiffFile; onClose: () => void })}
+              <div class="comment-form-inner">
+                <textarea
+                  class="comment-textarea"
+                  placeholder="Leave a comment..."
+                  rows="3"
+                  bind:value={commentText}
+                ></textarea>
+                <div class="comment-form-actions">
+                  <button
+                    class="comment-cancel-btn"
+                    onclick={() => {
+                      onClose()
+                    }}
+                  >Cancel</button>
+                  <button
+                    class="comment-submit-btn"
+                    onclick={() => {
+                      if (!commentText.trim()) return
+                      const path = diffFile._newFileName || diffFile._oldFileName || ''
+                      const newComment: ReviewSubmissionComment = {
+                        path,
+                        line: lineNumber,
+                        side: side === SplitSide.old ? 'LEFT' : 'RIGHT',
+                        body: commentText.trim()
+                      }
+                      $pendingManualComments = [...$pendingManualComments, newComment]
+                      onClose()
+                      commentText = ''
+                    }}
+                  >Add Comment</button>
+                </div>
+              </div>
+            {/snippet}
+          </DiffView>
+        </div>
+      {/each}
     {/if}
   </div>
 </div>
@@ -319,9 +179,11 @@
     background: var(--bg-primary);
   }
 
-  .empty,
-  .no-diff,
-  .error {
+  .diff-file-wrapper {
+    margin-bottom: 1px;
+  }
+
+  .empty {
     display: flex;
     align-items: center;
     justify-content: center;
@@ -330,114 +192,79 @@
     font-size: 0.85rem;
   }
 
-  .error {
+  /* ── Extend line / comment display ────────────────────────────────────── */
+
+  .extend-line-content {
+    width: 100%;
+  }
+
+  .inline-comment {
+    padding: 10px 16px;
+    margin: 6px 16px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 0.8rem;
+  }
+
+  .inline-comment.pending {
+    border-color: var(--warning);
+    border-left: 3px solid var(--warning);
+  }
+
+  .inline-comment.existing {
+    border-left: 3px solid var(--accent);
+  }
+
+  .comment-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+  }
+
+  .comment-author {
+    color: var(--text-primary);
+    font-weight: 600;
+    font-size: 0.75rem;
+  }
+
+  .comment-time {
+    color: var(--text-secondary);
+    font-size: 0.7rem;
+  }
+
+  .pending-badge {
+    padding: 2px 6px;
+    font-size: 0.65rem;
+    font-weight: 600;
+    color: var(--warning);
+    background: rgba(224, 175, 104, 0.15);
+    border-radius: 3px;
+  }
+
+  .comment-delete-btn {
+    all: unset;
+    margin-left: auto;
+    padding: 2px 6px;
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+    cursor: pointer;
+  }
+
+  .comment-delete-btn:hover {
     color: var(--error);
   }
 
-  :global(.d2h-wrapper) {
-    font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', 'Droid Sans Mono', 'Source Code Pro', monospace;
-    font-size: 12px;
-    overflow-x: hidden;
+  .comment-body {
+    color: var(--text-primary);
+    line-height: 1.5;
+    white-space: pre-wrap;
   }
 
-  :global(.d2h-file-wrapper) {
-    overflow-x: auto;
-  }
+  /* ── Widget / comment form ─────────────────────────────────────────────── */
 
-  :global(.d2h-file-header) {
-    background: var(--bg-card) !important;
-    border-color: var(--border) !important;
-    color: var(--text-primary) !important;
-  }
-
-  :global(.d2h-file-name) {
-    color: var(--accent) !important;
-  }
-
-  :global(.d2h-code-line) {
-    background: var(--bg-secondary) !important;
-    color: var(--text-primary) !important;
-  }
-
-  :global(.d2h-code-line-ctn) {
-    color: var(--text-primary) !important;
-  }
-
-  :global(.d2h-ins) {
-    background: rgba(158, 206, 106, 0.15) !important;
-  }
-
-  :global(.d2h-del) {
-    background: rgba(247, 118, 142, 0.15) !important;
-  }
-
-  :global(.d2h-info) {
-    background: var(--bg-card) !important;
-    color: var(--text-secondary) !important;
-    border-color: var(--border) !important;
-  }
-
-  :global(.d2h-diff-table) {
-    border-collapse: separate !important;
-    border-spacing: 0;
-  }
-
-  :global(.d2h-code-linenumber) {
-    position: sticky !important;
-    left: 0;
-    z-index: 1;
-    background: var(--bg-card) !important;
-    color: var(--text-secondary) !important;
-    border-color: var(--border) !important;
-  }
-
-  :global(.d2h-code-side-linenumber) {
-    position: sticky !important;
-    left: 0;
-    z-index: 1;
-    background: var(--bg-card) !important;
-    color: var(--text-secondary) !important;
-    border-color: var(--border) !important;
-  }
-
-  :global(.d2h-moved-tag) {
-    background: rgba(224, 175, 104, 0.2) !important;
-    color: var(--warning) !important;
-  }
-
-  :global(.comment-add-btn) {
-    display: none;
-    position: absolute;
-    right: -2px;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 20px;
-    height: 20px;
-    border-radius: 50%;
-    background: var(--accent);
-    color: var(--bg-primary);
-    font-size: 14px;
-    font-weight: bold;
-    line-height: 20px;
-    text-align: center;
-    cursor: pointer;
-    z-index: 10;
-  }
-
-  :global(.d2h-code-linenumber:hover .comment-add-btn),
-  :global(.d2h-code-side-linenumber:hover .comment-add-btn) {
-    display: block;
-  }
-
-  :global(.inline-comment-form td),
-  :global(.existing-comment-row td),
-  :global(.pending-comment-row td) {
-    padding: 0 !important;
-    background: var(--bg-primary) !important;
-    border: none !important;
-  }
-
-  :global(.comment-form-inner) {
+  .comment-form-inner {
     padding: 12px 16px;
     background: var(--bg-card);
     border: 1px solid var(--border);
@@ -445,7 +272,7 @@
     margin: 8px 16px;
   }
 
-  :global(.comment-textarea) {
+  .comment-textarea {
     width: 100%;
     min-height: 60px;
     padding: 8px;
@@ -456,21 +283,22 @@
     font-family: inherit;
     font-size: 0.8rem;
     resize: vertical;
+    box-sizing: border-box;
   }
 
-  :global(.comment-textarea:focus) {
+  .comment-textarea:focus {
     outline: none;
     border-color: var(--accent);
   }
 
-  :global(.comment-form-actions) {
+  .comment-form-actions {
     display: flex;
     justify-content: flex-end;
     gap: 8px;
     margin-top: 8px;
   }
 
-  :global(.comment-cancel-btn) {
+  .comment-cancel-btn {
     all: unset;
     padding: 6px 12px;
     font-size: 0.75rem;
@@ -480,11 +308,11 @@
     cursor: pointer;
   }
 
-  :global(.comment-cancel-btn:hover) {
+  .comment-cancel-btn:hover {
     color: var(--text-primary);
   }
 
-  :global(.comment-submit-btn) {
+  .comment-submit-btn {
     all: unset;
     padding: 6px 12px;
     font-size: 0.75rem;
@@ -495,71 +323,7 @@
     font-weight: 500;
   }
 
-  :global(.comment-submit-btn:hover) {
+  .comment-submit-btn:hover {
     opacity: 0.9;
-  }
-
-  :global(.inline-comment) {
-    padding: 10px 16px;
-    margin: 6px 16px;
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    font-size: 0.8rem;
-  }
-
-  :global(.inline-comment.pending) {
-    border-color: var(--warning);
-    border-left: 3px solid var(--warning);
-  }
-
-  :global(.inline-comment.existing) {
-    border-left: 3px solid var(--accent);
-  }
-
-  :global(.comment-header) {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 6px;
-  }
-
-  :global(.comment-author) {
-    color: var(--text-primary);
-    font-weight: 600;
-    font-size: 0.75rem;
-  }
-
-  :global(.comment-time) {
-    color: var(--text-secondary);
-    font-size: 0.7rem;
-  }
-
-  :global(.pending-badge) {
-    padding: 2px 6px;
-    font-size: 0.65rem;
-    font-weight: 600;
-    color: var(--warning);
-    background: rgba(224, 175, 104, 0.15);
-    border-radius: 3px;
-  }
-
-  :global(.comment-delete-btn) {
-    all: unset;
-    margin-left: auto;
-    padding: 2px 6px;
-    font-size: 0.7rem;
-    color: var(--text-secondary);
-    cursor: pointer;
-  }
-
-  :global(.comment-delete-btn:hover) {
-    color: var(--error);
-  }
-
-  :global(.comment-body) {
-    color: var(--text-primary);
-    line-height: 1.5;
-    white-space: pre-wrap;
   }
 </style>
