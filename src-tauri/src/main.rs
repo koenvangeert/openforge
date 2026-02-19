@@ -1641,6 +1641,73 @@ async fn get_task_diff(
     Ok(diff_parser::parse_unified_diff(&diff_output))
 }
 
+/// Fetch old and new file content for a file in a task's worktree.
+/// Old content comes from `git show <merge_base>:<path>`, new content from the worktree file.
+#[tauri::command]
+async fn get_task_file_contents(
+    task_id: String,
+    path: String,
+    old_path: Option<String>,
+    status: String,
+    db: State<'_, Mutex<db::Database>>,
+) -> Result<(String, String), String> {
+    let worktree_path = {
+        let db = db.lock().unwrap();
+        let row = db
+            .get_worktree_for_task(&task_id)
+            .map_err(|e| format!("Failed to get worktree for task: {}", e))?;
+        row.ok_or_else(|| format!("No worktree found for task {}", task_id))?
+            .worktree_path
+    };
+
+    let merge_base_output = tokio::process::Command::new("git")
+        .arg("-C")
+        .arg(&worktree_path)
+        .args(["merge-base", "origin/main", "HEAD"])
+        .output()
+        .await
+        .map_err(|e| format!("Failed to run git merge-base: {}", e))?;
+
+    if !merge_base_output.status.success() {
+        let stderr = String::from_utf8_lossy(&merge_base_output.stderr);
+        return Err(format!("git merge-base failed: {}", stderr));
+    }
+
+    let merge_base = String::from_utf8_lossy(&merge_base_output.stdout)
+        .trim()
+        .to_string();
+
+    let old_content = if status == "added" {
+        String::new()
+    } else {
+        let old_file_path = old_path.as_deref().unwrap_or(&path);
+        let old_output = tokio::process::Command::new("git")
+            .arg("-C")
+            .arg(&worktree_path)
+            .args(["show", &format!("{}:{}", merge_base, old_file_path)])
+            .output()
+            .await
+            .map_err(|e| format!("Failed to run git show: {}", e))?;
+
+        if old_output.status.success() {
+            String::from_utf8_lossy(&old_output.stdout).to_string()
+        } else {
+            String::new()
+        }
+    };
+
+    let new_content = if status == "deleted" {
+        String::new()
+    } else {
+        let full_path = std::path::Path::new(&worktree_path).join(&path);
+        tokio::fs::read_to_string(&full_path)
+            .await
+            .unwrap_or_default()
+    };
+
+    Ok((old_content, new_content))
+}
+
 #[tauri::command]
 async fn add_self_review_comment(
     task_id: String,
@@ -1950,6 +2017,7 @@ fn main() {
             pty_resize,
             pty_kill,
             get_task_diff,
+            get_task_file_contents,
             add_self_review_comment,
             get_active_self_review_comments,
             get_archived_self_review_comments,

@@ -3,8 +3,9 @@
   import { listen } from '@tauri-apps/api/event'
   import type { UnlistenFn, Event } from '@tauri-apps/api/event'
   import { selfReviewDiffFiles, selfReviewGeneralComments, selfReviewArchivedComments, pendingManualComments, ticketPrs } from '../lib/stores'
-  import { getTaskDiff, getActiveSelfReviewComments, getArchivedSelfReviewComments, getPrComments, openUrl } from '../lib/ipc'
-  import type { Task, PullRequestInfo, PrComment, AgentEvent } from '../lib/types'
+  import { getTaskDiff, getTaskFileContents, getActiveSelfReviewComments, getArchivedSelfReviewComments, getPrComments, openUrl } from '../lib/ipc'
+  import type { Task, PullRequestInfo, PrComment, AgentEvent, PrFileDiff } from '../lib/types'
+  import type { FileContents } from '../lib/diffAdapter'
   import FileTree from './FileTree.svelte'
   import DiffViewer from './DiffViewer.svelte'
   import GeneralCommentsSidebar from './GeneralCommentsSidebar.svelte'
@@ -54,6 +55,16 @@
     debounceTimer = setTimeout(() => {
       handleRefresh()
     }, DEBOUNCE_MS)
+  }
+
+  async function fetchTaskFileContents(file: PrFileDiff): Promise<FileContents> {
+    const [oldContent, newContent] = await getTaskFileContents(
+      task.id,
+      file.filename,
+      file.previous_filename,
+      file.status,
+    )
+    return { oldContent, newContent }
   }
 
   onMount(async () => {
@@ -149,6 +160,7 @@
           existingComments={[]}
           {fileTreeVisible}
           onToggleFileTree={() => { fileTreeVisible = !fileTreeVisible }}
+          fetchFileContents={fetchTaskFileContents}
         />
         <div class="sidebar-container">
           {#if linkedPr}

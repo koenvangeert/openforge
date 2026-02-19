@@ -192,6 +192,10 @@ export async function getTaskDiff(taskId: string): Promise<PrFileDiff[]> {
   return invoke<PrFileDiff[]>("get_task_diff", { taskId });
 }
 
+export async function getTaskFileContents(taskId: string, path: string, oldPath: string | null, status: string): Promise<[string, string]> {
+  return invoke<[string, string]>("get_task_file_contents", { taskId, path, oldPath, status });
+}
+
 export async function addSelfReviewComment(taskId: string, commentType: string, filePath: string | null, lineNumber: number | null, body: string): Promise<number> {
   return invoke<number>("add_self_review_comment", { taskId, commentType, filePath, lineNumber, body });
 }

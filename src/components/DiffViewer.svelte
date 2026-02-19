@@ -4,7 +4,7 @@
   import './DiffViewerTheme.css'
   import type { PrFileDiff, ReviewComment, ReviewSubmissionComment } from '../lib/types'
   import { pendingManualComments } from '../lib/stores'
-  import { toGitDiffViewData } from '../lib/diffAdapter'
+  import { toGitDiffViewData, type FileContents } from '../lib/diffAdapter'
   import { buildExtendData, type CommentDisplayData } from '../lib/diffComments'
 
   interface Props {
@@ -14,12 +14,32 @@
     repoName?: string
     fileTreeVisible?: boolean
     onToggleFileTree?: () => void
+    fetchFileContents?: (file: PrFileDiff) => Promise<FileContents>
   }
 
-  let { files = [], existingComments = [], repoOwner: _repoOwner = '', repoName: _repoName = '', fileTreeVisible = true, onToggleFileTree }: Props = $props()
+  let { files = [], existingComments = [], repoOwner: _repoOwner = '', repoName: _repoName = '', fileTreeVisible = true, onToggleFileTree, fetchFileContents }: Props = $props()
 
   let diffViewMode = $state<DiffModeEnum>(DiffModeEnum.Split)
   let commentText = $state('')
+  let fileContentsMap = $state<Map<string, FileContents>>(new Map())
+
+  let fetchedKeys = new Set<string>()
+
+  $effect(() => {
+    if (!fetchFileContents || files.length === 0) return
+
+    const fetcher = fetchFileContents
+    for (const file of files) {
+      if (!file.patch || fetchedKeys.has(file.filename)) continue
+      fetchedKeys.add(file.filename)
+
+      fetcher(file).then(contents => {
+        fileContentsMap = new Map(fileContentsMap).set(file.filename, contents)
+      }).catch(err => {
+        console.error(`Failed to fetch content for ${file.filename}:`, err)
+      })
+    }
+  })
 
   export function scrollToFile(filename: string) {
     const el = document.querySelector(`[data-diff-file="${filename}"]`)
@@ -62,7 +82,7 @@
       {#each files as file (file.filename)}
         <div data-diff-file={file.filename} class="diff-file-wrapper">
           <DiffView
-            data={toGitDiffViewData(file)}
+            data={toGitDiffViewData(file, fileContentsMap.get(file.filename))}
             extendData={buildExtendData(file.filename, existingComments, $pendingManualComments)}
             diffViewMode={diffViewMode}
             diffViewTheme="dark"

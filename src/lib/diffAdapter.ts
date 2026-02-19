@@ -1,16 +1,20 @@
 import type { PrFileDiff } from './types'
 
-/**
- * Data format expected by @git-diff-view/svelte's <DiffView> component
- */
+export interface FileContents {
+  oldContent: string
+  newContent: string
+}
+
 export interface DiffViewData {
   oldFile: {
     fileName: string
     fileLang?: string
+    content?: string | null
   }
   newFile: {
     fileName: string
     fileLang?: string
+    content?: string | null
   }
   hunks: string[]
 }
@@ -44,22 +48,13 @@ export function getFileLanguage(filename: string): string {
   return languageMap[ext] || 'text'
 }
 
-/**
- * Transforms a PrFileDiff into the data format expected by @git-diff-view's <DiffView> component
- * @param file - The file diff from GitHub PR API
- * @returns DiffViewData compatible with @git-diff-view
- */
-export function toGitDiffViewData(file: PrFileDiff): DiffViewData {
-  // Determine old and new filenames (handles renames)
+export function toGitDiffViewData(file: PrFileDiff, contents?: FileContents): DiffViewData {
   const oldFileName = file.previous_filename || file.filename
   const newFileName = file.filename
 
-  // Get language for syntax highlighting
   const oldFileLang = getFileLanguage(oldFileName)
   const newFileLang = getFileLanguage(newFileName)
 
-  // Build hunks array from patch
-  // If patch is null (binary files, renames without content), use empty array
   const hunks: string[] = file.patch
     ? [`--- a/${oldFileName}\n+++ b/${newFileName}\n${file.patch}`]
     : []
@@ -68,10 +63,12 @@ export function toGitDiffViewData(file: PrFileDiff): DiffViewData {
     oldFile: {
       fileName: oldFileName,
       fileLang: oldFileLang,
+      content: contents?.oldContent ?? null,
     },
     newFile: {
       fileName: newFileName,
       fileLang: newFileLang,
+      content: contents?.newContent ?? null,
     },
     hunks,
   }
