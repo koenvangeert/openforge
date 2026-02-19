@@ -392,10 +392,10 @@
           <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
           <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
           <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-        <div class="text-base font-semibold text-base-content">No active agent session</div>
-        <div class="text-sm text-base-content/50 text-center max-w-[320px] leading-relaxed">Start an implementation from the Kanban board context menu</div>
-      </div>
+       </svg>
+         <div class="text-base font-semibold text-base-content">No active agent session</div>
+         <div class="text-sm text-base-content/50 text-center max-w-[320px] leading-relaxed">Use the action buttons in the header to get started</div>
+       </div>
     {/if}
   </div>
 </div>

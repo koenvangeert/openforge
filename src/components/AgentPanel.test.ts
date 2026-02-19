@@ -57,9 +57,9 @@ describe('AgentPanel', () => {
     expect(screen.getByText('No active agent session')).toBeTruthy()
   })
 
-  it('shows guidance text "Start an implementation from the Kanban board context menu"', () => {
+  it('shows guidance text "Use the action buttons in the header to get started"', () => {
     render(AgentPanel, { props: { taskId: 'T-1' } })
-    expect(screen.getByText('Start an implementation from the Kanban board context menu')).toBeTruthy()
+    expect(screen.getByText('Use the action buttons in the header to get started')).toBeTruthy()
   })
 
   it('status text shows "No active implementation" when idle', () => {
