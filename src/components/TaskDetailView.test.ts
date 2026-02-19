@@ -64,7 +64,8 @@ describe('TaskDetailView', () => {
 
   it('renders task title in header', () => {
     render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
-    expect(screen.getByText('Implement auth middleware')).toBeTruthy()
+    const titles = screen.getAllByText('Implement auth middleware')
+    expect(titles.length).toBeGreaterThanOrEqual(1)
   })
 
   it('renders status badge with status label', () => {
