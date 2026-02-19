@@ -2,7 +2,7 @@ import { render, screen, fireEvent } from '@testing-library/svelte'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import KanbanBoard from './KanbanBoard.svelte'
 import type { Task, AgentSession, Action } from '../lib/types'
-import { tasks, activeSessions, activeProjectId } from '../lib/stores'
+import { tasks, activeSessions, activeProjectId, searchQuery } from '../lib/stores'
 
 // Mock IPC functions
 vi.mock('../lib/ipc', () => ({
@@ -42,6 +42,7 @@ describe('KanbanBoard', () => {
     tasks.set([baseTask])
     activeSessions.set(new Map())
     activeProjectId.set('proj-1')
+    searchQuery.set('')
   })
 
   it('renders kanban columns', () => {
@@ -166,5 +167,100 @@ describe('KanbanBoard', () => {
       actionPrompt: 'Implement this task',
       agent: null,
     })
+  })
+
+  it('renders search input', () => {
+    render(KanbanBoard)
+    expect(screen.getByPlaceholderText('Search tasks...')).toBeTruthy()
+  })
+
+  it('filters tasks by title', async () => {
+    const taskA: Task = { ...baseTask, id: 'T-1', title: 'Fix auth bug', status: 'backlog' }
+    const taskB: Task = { ...baseTask, id: 'T-2', title: 'Add dashboard', status: 'backlog' }
+    tasks.set([taskA, taskB])
+
+    render(KanbanBoard)
+
+    // Both visible initially
+    expect(screen.getByText('Fix auth bug')).toBeTruthy()
+    expect(screen.getByText('Add dashboard')).toBeTruthy()
+
+    // Type in search
+    const input = screen.getByPlaceholderText('Search tasks...')
+    await fireEvent.input(input, { target: { value: 'auth' } })
+    searchQuery.set('auth')
+    await new Promise(resolve => setTimeout(resolve, 10))
+
+    expect(screen.getByText('Fix auth bug')).toBeTruthy()
+    expect(screen.queryByText('Add dashboard')).toBeNull()
+  })
+
+  it('filters tasks by task id', async () => {
+    const taskA: Task = { ...baseTask, id: 'T-100', title: 'First task', status: 'backlog' }
+    const taskB: Task = { ...baseTask, id: 'T-200', title: 'Second task', status: 'doing' }
+    tasks.set([taskA, taskB])
+
+    searchQuery.set('T-100')
+    render(KanbanBoard)
+    await new Promise(resolve => setTimeout(resolve, 10))
+
+    expect(screen.getByText('First task')).toBeTruthy()
+    expect(screen.queryByText('Second task')).toBeNull()
+  })
+
+  it('filters tasks by jira key', async () => {
+    const taskA: Task = { ...baseTask, id: 'T-1', title: 'Task A', jira_key: 'PROJ-42', status: 'backlog' }
+    const taskB: Task = { ...baseTask, id: 'T-2', title: 'Task B', jira_key: 'OTHER-10', status: 'backlog' }
+    tasks.set([taskA, taskB])
+
+    searchQuery.set('PROJ')
+    render(KanbanBoard)
+    await new Promise(resolve => setTimeout(resolve, 10))
+
+    expect(screen.getByText('Task A')).toBeTruthy()
+    expect(screen.queryByText('Task B')).toBeNull()
+  })
+
+  it('search is case insensitive', async () => {
+    const taskA: Task = { ...baseTask, id: 'T-1', title: 'Fix Auth Bug', status: 'backlog' }
+    tasks.set([taskA])
+
+    searchQuery.set('fix auth')
+    render(KanbanBoard)
+    await new Promise(resolve => setTimeout(resolve, 10))
+
+    expect(screen.getByText('Fix Auth Bug')).toBeTruthy()
+  })
+
+  it('shows result count when searching', async () => {
+    const taskA: Task = { ...baseTask, id: 'T-1', title: 'Match me', status: 'backlog' }
+    const taskB: Task = { ...baseTask, id: 'T-2', title: 'Skip me', status: 'doing' }
+    tasks.set([taskA, taskB])
+
+    searchQuery.set('Match')
+    render(KanbanBoard)
+    await new Promise(resolve => setTimeout(resolve, 10))
+
+    expect(screen.getByText('1 of 2 tasks')).toBeTruthy()
+  })
+
+  it('shows all tasks when search is cleared', async () => {
+    const taskA: Task = { ...baseTask, id: 'T-1', title: 'Task A', status: 'backlog' }
+    const taskB: Task = { ...baseTask, id: 'T-2', title: 'Task B', status: 'doing' }
+    tasks.set([taskA, taskB])
+
+    searchQuery.set('Task A')
+    render(KanbanBoard)
+    await new Promise(resolve => setTimeout(resolve, 10))
+
+    expect(screen.getByText('Task A')).toBeTruthy()
+    expect(screen.queryByText('Task B')).toBeNull()
+
+    // Clear search
+    searchQuery.set('')
+    await new Promise(resolve => setTimeout(resolve, 10))
+
+    expect(screen.getByText('Task A')).toBeTruthy()
+    expect(screen.getByText('Task B')).toBeTruthy()
   })
 })

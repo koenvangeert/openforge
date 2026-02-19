@@ -27,3 +27,5 @@ export const pendingManualComments = writable<ReviewSubmissionComment[]>([]);
 export const selfReviewGeneralComments = writable<SelfReviewComment[]>([]);
 export const selfReviewArchivedComments = writable<SelfReviewComment[]>([]);
 export const selfReviewDiffFiles = writable<PrFileDiff[]>([]);
+
+export const searchQuery = writable<string>("");
