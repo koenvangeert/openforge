@@ -316,9 +316,17 @@ async fn get_worktree_for_task(
 // Implementation Orchestration Commands
 // ============================================================================
 
-#[tauri::command]
-fn build_task_prompt(task: &db::TaskRow, action_instruction: &str) -> String {
-    let mut prompt = format!("You are working on task {}: {}\n\n", task.id, task.title);
+fn build_task_prompt(task: &db::TaskRow, action_instruction: &str, additional_instructions: Option<&str>) -> String {
+    let mut prompt = String::new();
+    
+    if let Some(instructions) = additional_instructions {
+        if !instructions.is_empty() {
+            prompt.push_str(instructions);
+            prompt.push_str("\n\n");
+        }
+    }
+    
+    prompt.push_str(&format!("You are working on task {}: {}\n\n", task.id, task.title));
     
     if let Some(ref plan_text) = task.plan_text {
         if !plan_text.is_empty() {
@@ -341,13 +349,16 @@ async fn start_implementation(
     task_id: String,
     repo_path: String,
 ) -> Result<serde_json::Value, String> {
-    let (task, project_id_owned) = {
+    let (task, project_id_owned, additional_instructions) = {
         let db = db.lock().unwrap();
         let task = db.get_task(&task_id)
             .map_err(|e| format!("Failed to get task: {}", e))?
             .ok_or("Task not found")?;
         let project_id = task.project_id.clone().unwrap_or_default();
-        (task, project_id)
+        let instructions = db.get_project_config(&project_id, "additional_instructions")
+            .ok()
+            .flatten();
+        (task, project_id, instructions)
     };
     
     let branch = git_worktree::slugify_branch_name(&task_id, &task.title);
@@ -406,7 +417,7 @@ async fn start_implementation(
         .await
         .map_err(|e| e.to_string())?;
     
-    let prompt = build_task_prompt(&task, "Implement this task. Create a branch, make the changes, and create a pull request when done.");
+    let prompt = build_task_prompt(&task, "Implement this task. Create a branch, make the changes, and create a pull request when done.", additional_instructions.as_deref());
     
     client
         .prompt_async(&opencode_session_id, prompt, None)
@@ -452,16 +463,17 @@ async fn run_action(
     action_prompt: String,
     agent: Option<String>,
 ) -> Result<serde_json::Value, String> {
-    let (task, project_id_owned) = {
+    let (task, project_id_owned, additional_instructions) = {
         let db = db.lock().unwrap();
         let task = db.get_task(&task_id)
             .map_err(|e| format!("Failed to get task: {}", e))?
             .ok_or("Task not found")?;
         let project_id = task.project_id.clone().unwrap_or_default();
-        (task, project_id)
+        let instructions = db.get_project_config(&project_id, "additional_instructions")
+            .ok()
+            .flatten();
+        (task, project_id, instructions)
     };
-    
-    let prompt = build_task_prompt(&task, &action_prompt);
     
     let existing_session = {
         let db = db.lock().unwrap();
@@ -492,6 +504,8 @@ async fn run_action(
                         }
                         
                         let client = OpenCodeClient::with_base_url(format!("http://127.0.0.1:{}", port));
+                        
+                        let prompt = build_task_prompt(&task, &action_prompt, None);
                         
                         client
                             .prompt_async(opencode_session_id, prompt, agent.clone())
@@ -596,6 +610,8 @@ async fn run_action(
         .start_bridge(app.clone(), task_id.clone(), Some(opencode_session_id.clone()), port)
         .await
         .map_err(|e| e.to_string())?;
+    
+    let prompt = build_task_prompt(&task, &action_prompt, additional_instructions.as_deref());
     
     client
         .prompt_async(&opencode_session_id, prompt, agent)
@@ -1963,7 +1979,7 @@ mod tests {
             updated_at: 0,
         };
 
-        let prompt = build_task_prompt(&task, "Do the thing!");
+        let prompt = build_task_prompt(&task, "Do the thing!", None);
         
         assert!(prompt.contains("You are working on task T-123: Test Task"));
         assert!(prompt.contains("Plan:"));
@@ -1986,7 +2002,7 @@ mod tests {
             updated_at: 0,
         };
 
-        let prompt = build_task_prompt(&task, "Execute now!");
+        let prompt = build_task_prompt(&task, "Execute now!", None);
         
         assert!(prompt.contains("You are working on task T-456: Minimal Task"));
         assert!(!prompt.contains("Acceptance Criteria:"));
@@ -2009,11 +2025,75 @@ mod tests {
             updated_at: 0,
         };
 
-        let prompt = build_task_prompt(&task, "Run test!");
+        let prompt = build_task_prompt(&task, "Run test!", None);
         
         assert!(prompt.contains("You are working on task T-789: Empty Fields Task"));
         assert!(!prompt.contains("Acceptance Criteria:"));
         assert!(!prompt.contains("Plan:"));
         assert!(prompt.ends_with("Run test!"));
+    }
+
+    #[test]
+    fn test_build_task_prompt_with_additional_instructions() {
+        let task = db::TaskRow {
+            id: "T-999".to_string(),
+            title: "Instructions Task".to_string(),
+            plan_text: Some("Step 1: Do this\nStep 2: Do that".to_string()),
+            status: "backlog".to_string(),
+            jira_key: None,
+            jira_status: None,
+            jira_assignee: None,
+            project_id: None,
+            created_at: 0,
+            updated_at: 0,
+        };
+
+        let prompt = build_task_prompt(&task, "Do the thing!", Some("Always use TypeScript strict mode.\nFollow the project coding standards."));
+        
+        assert!(prompt.starts_with("Always use TypeScript strict mode."));
+        assert!(prompt.contains("You are working on task"));
+        assert!(prompt.contains("Plan:\n"));
+        assert!(prompt.ends_with("Do the thing!"));
+    }
+
+    #[test]
+    fn test_build_task_prompt_with_empty_additional_instructions() {
+        let task = db::TaskRow {
+            id: "T-111".to_string(),
+            title: "Empty Instructions Task".to_string(),
+            plan_text: Some("Step 1: Do this\nStep 2: Do that".to_string()),
+            status: "backlog".to_string(),
+            jira_key: None,
+            jira_status: None,
+            jira_assignee: None,
+            project_id: None,
+            created_at: 0,
+            updated_at: 0,
+        };
+
+        let prompt_with_empty = build_task_prompt(&task, "Do the thing!", Some(""));
+        let prompt_with_none = build_task_prompt(&task, "Do the thing!", None);
+        
+        assert_eq!(prompt_with_empty, prompt_with_none);
+    }
+
+    #[test]
+    fn test_build_task_prompt_with_none_additional_instructions() {
+        let task = db::TaskRow {
+            id: "T-222".to_string(),
+            title: "None Instructions Task".to_string(),
+            plan_text: Some("Step 1: Do this\nStep 2: Do that".to_string()),
+            status: "backlog".to_string(),
+            jira_key: None,
+            jira_status: None,
+            jira_assignee: None,
+            project_id: None,
+            created_at: 0,
+            updated_at: 0,
+        };
+
+        let prompt = build_task_prompt(&task, "Do the thing!", None);
+        
+        assert!(prompt.starts_with("You are working on task"));
     }
 }

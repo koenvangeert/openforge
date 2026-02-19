@@ -68,6 +68,11 @@ describe('SettingsPanel', () => {
     expect(screen.getByPlaceholderText('owner/repo')).toBeTruthy()
   })
 
+  it('renders additional instructions textarea', () => {
+    render(SettingsPanel)
+    expect(screen.getByPlaceholderText('Optional instructions prepended to the first prompt when starting a new task...')).toBeTruthy()
+  })
+
   it('renders project name field', () => {
     render(SettingsPanel)
     

@@ -15,6 +15,7 @@
   let path = $state('')
   let jiraBoardId = $state('')
   let githubDefaultRepo = $state('')
+  let agentInstructions = $state('')
   let actions = $state<Action[]>([])
   let availableAgents = $state<AgentInfo[]>([])
   let isSaving = $state(false)
@@ -41,6 +42,7 @@
     try {
       jiraBoardId = (await getProjectConfig(projectId, 'jira_board_id')) || ''
       githubDefaultRepo = (await getProjectConfig(projectId, 'github_default_repo')) || ''
+      agentInstructions = (await getProjectConfig(projectId, 'additional_instructions')) || ''
       actions = await loadActions(projectId)
       availableAgents = await getAgents().catch(() => [])
     } catch (e) {
@@ -57,6 +59,7 @@
       await updateProject($activeProjectId, projectName, path)
       await setProjectConfig($activeProjectId, 'jira_board_id', jiraBoardId)
       await setProjectConfig($activeProjectId, 'github_default_repo', githubDefaultRepo)
+      await setProjectConfig($activeProjectId, 'additional_instructions', agentInstructions)
       await saveActions($activeProjectId, actions)
       saved = true
       setTimeout(() => { saved = false }, 2000)
@@ -143,16 +146,24 @@
         </label>
       </section>
 
-      <section class="section">
-        <h3>GitHub</h3>
-        <label class="field">
-          <span>Default Repository</span>
-          <input type="text" bind:value={githubDefaultRepo} placeholder="owner/repo" />
-        </label>
-      </section>
+       <section class="section">
+         <h3>GitHub</h3>
+         <label class="field">
+           <span>Default Repository</span>
+           <input type="text" bind:value={githubDefaultRepo} placeholder="owner/repo" />
+         </label>
+       </section>
 
-      <section class="section">
-        <h3>Actions</h3>
+       <section class="section">
+         <h3>Agent</h3>
+         <label class="field">
+           <span>Additional Instructions</span>
+           <textarea bind:value={agentInstructions} placeholder="Optional instructions prepended to the first prompt when starting a new task..." rows="5"></textarea>
+         </label>
+       </section>
+
+       <section class="section">
+         <h3>Actions</h3>
         <p class="section-description">Configure actions available in the task context menu. Each action sends its prompt to the AI agent along with the task context.</p>
         
         {#each actions as action, i (action.id)}
