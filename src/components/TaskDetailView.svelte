@@ -15,16 +15,22 @@
 
   let reviewMode = $state(false)
   let hasWorktree = $state(false)
+  // Plain variable (not $state) so it's not tracked as a reactive dependency.
+  // Used to detect actual task changes vs. same-task prop re-renders.
+  let lastTaskId = ''
 
   let currentSession = $derived($activeSessions.get(task.id))
   let agentStatus = $derived(currentSession?.status ?? null)
 
   $effect(() => {
     const taskId = task.id
-    reviewMode = false
-    getWorktreeForTask(taskId).then((worktree) => {
-      hasWorktree = worktree !== null
-    })
+    if (taskId !== lastTaskId) {
+      lastTaskId = taskId
+      reviewMode = false
+      getWorktreeForTask(taskId).then((worktree) => {
+        hasWorktree = worktree !== null
+      })
+    }
   })
 
   function handleBack() {
