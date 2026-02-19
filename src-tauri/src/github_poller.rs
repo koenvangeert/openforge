@@ -231,10 +231,12 @@ pub async fn poll_github_once(app: &AppHandle, github_client: &GitHubClient) -> 
     );
 
     println!(
-        "[GitHub Poller] Cycle completed in {:.1}s ({} projects, {} new comments, {} errors)",
+        "[GitHub Poller] Cycle completed in {:.1}s ({} projects, {} new comments, {} CI changes, {} review changes, {} errors)",
         cycle_start.elapsed().as_secs_f64(),
         project_count,
         total_new_comments,
+        total_ci_changes,
+        total_review_changes,
         total_errors
     );
 

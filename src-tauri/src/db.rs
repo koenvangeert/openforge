@@ -287,7 +287,7 @@ impl Database {
             ("opencode_port", "4096"),
             ("opencode_auto_start", "true"),
             ("jira_poll_interval", "60"),
-            ("github_poll_interval", "30"),
+            ("github_poll_interval", "15"),
         ];
 
         for (key, value) in &default_configs {
