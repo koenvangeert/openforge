@@ -79,7 +79,7 @@ Order: external packages, then internal modules. Use `import type` for type-only
 - **Functions/variables**: camelCase (`loadTickets`, `selectedTicket`)
 - **Types/interfaces**: PascalCase (`Ticket`, `AgentSession`, `KanbanColumn`)
 - **Constants**: UPPER_SNAKE_CASE (`COLUMN_LABELS`, `COLUMNS`)
-- **CSS classes**: kebab-case (`card-header`, `status-dot`)
+- **CSS classes**: daisyUI semantic classes (`btn`, `badge`, `modal-box`) + Tailwind utilities (`flex`, `gap-2`, `p-4`)
 
 ### Types
 
@@ -156,16 +156,40 @@ async function loadTickets() {
 
 ### Styling
 
-Component-scoped `<style>` blocks. Global CSS variables defined in `App.svelte` on `:root`.
-Dark theme with Tokyo Night-inspired palette. No CSS framework — plain CSS with variables.
+daisyUI v5 component classes + Tailwind CSS v4 utilities in markup. No component-scoped
+`<style>` blocks (except for custom `@keyframes` animations and xterm-specific CSS).
+Light "corporate" theme configured in `src/app.css` via `@plugin "daisyui"`.
+No `tailwind.config.js` — Tailwind v4 uses CSS-first configuration.
 
-Key variables: `--bg-primary`, `--bg-secondary`, `--bg-card`, `--text-primary`,
-`--text-secondary`, `--accent`, `--success`, `--warning`, `--error`, `--border`.
+**Theme**: `corporate` (light, flat with `--depth: 0`). Set via `data-theme="corporate"` on `<html>`.
+Add explicit `shadow-*` utilities where visual depth is needed.
+
+**Color mapping** (daisyUI semantic colors):
+- Backgrounds: `bg-base-100` (primary), `bg-base-200` (secondary), `bg-base-300` (tertiary)
+- Text: `text-base-content` (primary), `text-base-content/50` (secondary/muted)
+- Accent: `text-primary`, `bg-primary`, `border-primary`
+- Status: `text-success`/`text-error`/`text-warning` + `bg-success`/`bg-error`/`bg-warning`
+- Borders: `border-base-300`
+
+**Common daisyUI components used**: `btn`, `badge`, `modal`, `card`, `alert`, `toast`,
+`input`, `textarea`, `select`, `checkbox`, `toggle`, `tabs`, `loading`, `status`, `navbar`.
+
+**Rules**:
+- No `@apply` in component files — use classes directly in markup
+- No hardcoded hex color values — use daisyUI semantic colors
+- No `all: unset` button patterns — use daisyUI `btn` classes
+- No CSS custom properties on `:root` — use daisyUI theme tokens
+- Custom `@keyframes` animations allowed in `<style>` blocks with `:global()` wrapper
 
 ### TypeScript Config
 
 Strict mode enabled. Key settings: `noUnusedLocals`, `noUnusedParameters`,
 `verbatimModuleSyntax`, target ES2020. No ESLint or Prettier — rely on TypeScript strictness.
+
+### CSS Config
+
+Tailwind CSS v4 + daisyUI v5. Configuration in `src/app.css` (CSS-first, no JS config files).
+Vite plugin: `@tailwindcss/vite` — must be listed BEFORE `svelte()` in `vite.config.ts` plugins.
 
 ## Rust Conventions
 
