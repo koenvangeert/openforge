@@ -316,9 +316,17 @@ async fn get_worktree_for_task(
 // Implementation Orchestration Commands
 // ============================================================================
 
-#[tauri::command]
-fn build_task_prompt(task: &db::TaskRow, action_instruction: &str) -> String {
-    let mut prompt = format!("You are working on task {}: {}\n\n", task.id, task.title);
+fn build_task_prompt(task: &db::TaskRow, action_instruction: &str, additional_instructions: Option<&str>) -> String {
+    let mut prompt = String::new();
+    
+    if let Some(instructions) = additional_instructions {
+        if !instructions.is_empty() {
+            prompt.push_str(instructions);
+            prompt.push_str("\n\n");
+        }
+    }
+    
+    prompt.push_str(&format!("You are working on task {}: {}\n\n", task.id, task.title));
     
     if let Some(ref plan_text) = task.plan_text {
         if !plan_text.is_empty() {
@@ -1944,7 +1952,7 @@ mod tests {
             updated_at: 0,
         };
 
-        let prompt = build_task_prompt(&task, "Do the thing!");
+        let prompt = build_task_prompt(&task, "Do the thing!", None);
         
         assert!(prompt.contains("You are working on task T-123: Test Task"));
         assert!(prompt.contains("Plan:"));
@@ -1967,7 +1975,7 @@ mod tests {
             updated_at: 0,
         };
 
-        let prompt = build_task_prompt(&task, "Execute now!");
+        let prompt = build_task_prompt(&task, "Execute now!", None);
         
         assert!(prompt.contains("You are working on task T-456: Minimal Task"));
         assert!(!prompt.contains("Acceptance Criteria:"));
@@ -1990,11 +1998,75 @@ mod tests {
             updated_at: 0,
         };
 
-        let prompt = build_task_prompt(&task, "Run test!");
+        let prompt = build_task_prompt(&task, "Run test!", None);
         
         assert!(prompt.contains("You are working on task T-789: Empty Fields Task"));
         assert!(!prompt.contains("Acceptance Criteria:"));
         assert!(!prompt.contains("Plan:"));
         assert!(prompt.ends_with("Run test!"));
+    }
+
+    #[test]
+    fn test_build_task_prompt_with_additional_instructions() {
+        let task = db::TaskRow {
+            id: "T-999".to_string(),
+            title: "Instructions Task".to_string(),
+            plan_text: Some("Step 1: Do this\nStep 2: Do that".to_string()),
+            status: "backlog".to_string(),
+            jira_key: None,
+            jira_status: None,
+            jira_assignee: None,
+            project_id: None,
+            created_at: 0,
+            updated_at: 0,
+        };
+
+        let prompt = build_task_prompt(&task, "Do the thing!", Some("Always use TypeScript strict mode.\nFollow the project coding standards."));
+        
+        assert!(prompt.starts_with("Always use TypeScript strict mode."));
+        assert!(prompt.contains("You are working on task"));
+        assert!(prompt.contains("Plan:\n"));
+        assert!(prompt.ends_with("Do the thing!"));
+    }
+
+    #[test]
+    fn test_build_task_prompt_with_empty_additional_instructions() {
+        let task = db::TaskRow {
+            id: "T-111".to_string(),
+            title: "Empty Instructions Task".to_string(),
+            plan_text: Some("Step 1: Do this\nStep 2: Do that".to_string()),
+            status: "backlog".to_string(),
+            jira_key: None,
+            jira_status: None,
+            jira_assignee: None,
+            project_id: None,
+            created_at: 0,
+            updated_at: 0,
+        };
+
+        let prompt_with_empty = build_task_prompt(&task, "Do the thing!", Some(""));
+        let prompt_with_none = build_task_prompt(&task, "Do the thing!", None);
+        
+        assert_eq!(prompt_with_empty, prompt_with_none);
+    }
+
+    #[test]
+    fn test_build_task_prompt_with_none_additional_instructions() {
+        let task = db::TaskRow {
+            id: "T-222".to_string(),
+            title: "None Instructions Task".to_string(),
+            plan_text: Some("Step 1: Do this\nStep 2: Do that".to_string()),
+            status: "backlog".to_string(),
+            jira_key: None,
+            jira_status: None,
+            jira_assignee: None,
+            project_id: None,
+            created_at: 0,
+            updated_at: 0,
+        };
+
+        let prompt = build_task_prompt(&task, "Do the thing!", None);
+        
+        assert!(prompt.starts_with("You are working on task"));
     }
 }
