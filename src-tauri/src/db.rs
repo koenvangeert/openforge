@@ -1124,24 +1124,47 @@ impl Database {
         Ok(())
     }
 
+    /// Delete a task and all associated data (sessions, logs, PRs, comments, worktrees, reviews).
+    ///
+    /// Wrapped in a transaction so all-or-nothing: if any step fails the DB stays consistent.
+    ///
+    /// # Arguments
+    /// * `id` - Task ID to delete
     pub fn delete_task(&self, id: &str) -> Result<()> {
         let conn = self.conn.lock().unwrap();
-        conn.execute("DELETE FROM agent_logs WHERE session_id IN (SELECT id FROM agent_sessions WHERE ticket_id = ?1)", rusqlite::params![id])?;
-        conn.execute(
-            "DELETE FROM agent_sessions WHERE ticket_id = ?1",
-            rusqlite::params![id],
-        )?;
-        conn.execute("DELETE FROM pr_comments WHERE pr_id IN (SELECT id FROM pull_requests WHERE ticket_id = ?1)", rusqlite::params![id])?;
-        conn.execute(
-            "DELETE FROM pull_requests WHERE ticket_id = ?1",
-            rusqlite::params![id],
-        )?;
-        conn.execute(
-            "DELETE FROM worktrees WHERE task_id = ?1",
-            rusqlite::params![id],
-        )?;
-        conn.execute("DELETE FROM tasks WHERE id = ?1", rusqlite::params![id])?;
-        Ok(())
+        conn.execute_batch("BEGIN IMMEDIATE")?;
+        let result = (|| -> Result<()> {
+            conn.execute("DELETE FROM agent_logs WHERE session_id IN (SELECT id FROM agent_sessions WHERE ticket_id = ?1)", rusqlite::params![id])?;
+            conn.execute(
+                "DELETE FROM agent_sessions WHERE ticket_id = ?1",
+                rusqlite::params![id],
+            )?;
+            conn.execute("DELETE FROM pr_comments WHERE pr_id IN (SELECT id FROM pull_requests WHERE ticket_id = ?1)", rusqlite::params![id])?;
+            conn.execute(
+                "DELETE FROM pull_requests WHERE ticket_id = ?1",
+                rusqlite::params![id],
+            )?;
+            conn.execute(
+                "DELETE FROM self_review_comments WHERE task_id = ?1",
+                rusqlite::params![id],
+            )?;
+            conn.execute(
+                "DELETE FROM worktrees WHERE task_id = ?1",
+                rusqlite::params![id],
+            )?;
+            conn.execute("DELETE FROM tasks WHERE id = ?1", rusqlite::params![id])?;
+            Ok(())
+        })();
+        match result {
+            Ok(()) => {
+                conn.execute_batch("COMMIT")?;
+                Ok(())
+            }
+            Err(e) => {
+                let _ = conn.execute_batch("ROLLBACK");
+                Err(e)
+            }
+        }
     }
 
     pub fn update_task_jira_info(
@@ -3579,6 +3602,81 @@ mod tests {
 
         let nonexistent = db.get_pr_last_polled(999).expect("get nonexistent failed");
         assert_eq!(nonexistent, None);
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_delete_task_basic() {
+        let (db, path) = make_test_db("delete_task_basic");
+
+        let task = db
+            .create_task("Deletable", "backlog", None, None)
+            .expect("create failed");
+        let tasks = db.get_all_tasks().expect("get failed");
+        assert_eq!(tasks.len(), 1);
+
+        db.delete_task(&task.id).expect("delete failed");
+
+        let tasks = db.get_all_tasks().expect("get failed");
+        assert_eq!(tasks.len(), 0);
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_delete_task_with_children() {
+        let (db, path) = make_test_db("delete_task_children");
+        insert_test_task(&db);
+
+        db.create_agent_session("ses-del", "T-100", None, "implement", "running")
+            .expect("create session failed");
+        db.insert_agent_log("ses-del", "info", "log entry")
+            .expect("add log failed");
+
+        db.insert_pull_request(
+            99,
+            "T-100",
+            "acme",
+            "repo",
+            "PR title",
+            "https://example.com",
+            "open",
+            1000,
+            1000,
+        )
+        .expect("insert pr failed");
+        db.insert_pr_comment(
+            501,
+            99,
+            "reviewer",
+            "Fix this",
+            "review",
+            Some("main.rs"),
+            Some(10),
+            1000,
+        )
+        .expect("insert comment failed");
+
+        db.insert_self_review_comment("T-100", "issue", Some("main.rs"), Some(5), "Looks wrong")
+            .expect("insert self review failed");
+
+        db.delete_task("T-100").expect("delete failed");
+
+        let task = db.get_task("T-100").expect("get failed");
+        assert!(task.is_none());
+
+        let sessions = db
+            .get_latest_session_for_ticket("T-100")
+            .expect("get session failed");
+        assert!(sessions.is_none());
+
+        let comments = db
+            .get_active_self_review_comments("T-100")
+            .expect("get self review failed");
+        assert!(comments.is_empty());
 
         drop(db);
         let _ = fs::remove_file(&path);
