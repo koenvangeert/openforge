@@ -1,5 +1,0 @@
-QA4: Verify worktree operations intact in git_worktree.rs
-Command: grep -c "create_worktree" src-tauri/src/git_worktree.rs
-Expected: > 0
-Result: 4
-Status: PASS

@@ -1,4 +1,0 @@
-Build Verification: cargo build
-Status: SUCCESS (exit 0)
-Output: Finished `dev` profile [unoptimized + debuginfo] target(s) in 12.19s
-Warnings: 28 (pre-existing, unrelated to scan_repos removal)
