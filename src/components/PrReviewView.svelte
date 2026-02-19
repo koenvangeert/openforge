@@ -1,12 +1,13 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import { reviewPrs, selectedReviewPr, prFileDiffs, reviewRequestCount, reviewComments, pendingManualComments } from '../lib/stores'
-  import { fetchReviewPrs, getReviewPrs, getPrFileDiffs, openUrl, getReviewComments } from '../lib/ipc'
+  import { fetchReviewPrs, getReviewPrs, getPrFileDiffs, openUrl, getReviewComments, getFileContent, getFileAtRef } from '../lib/ipc'
   import ReviewPrCard from './ReviewPrCard.svelte'
   import FileTree from './FileTree.svelte'
   import DiffViewer from './DiffViewer.svelte'
   import ReviewSubmitPanel from './ReviewSubmitPanel.svelte'
-  import type { ReviewPullRequest } from '../lib/types'
+  import type { ReviewPullRequest, PrFileDiff } from '../lib/types'
+  import type { FileContents } from '../lib/diffAdapter'
 
   let isLoading = $state(false)
   let error = $state<string | null>(null)
@@ -102,6 +103,27 @@
     return `${days}d ago`
   }
 
+  async function fetchPrFileContents(file: PrFileDiff): Promise<FileContents> {
+    const pr = $selectedReviewPr!
+    let oldContent = ''
+    let newContent = ''
+
+    if (file.status !== 'removed' && file.sha) {
+      try {
+        newContent = await getFileContent(pr.repo_owner, pr.repo_name, file.sha)
+      } catch { /* file may not exist */ }
+    }
+
+    if (file.status !== 'added') {
+      const oldPath = file.previous_filename || file.filename
+      try {
+        oldContent = await getFileAtRef(pr.repo_owner, pr.repo_name, oldPath, pr.base_ref)
+      } catch { /* file may not exist on base */ }
+    }
+
+    return { oldContent, newContent }
+  }
+
   onMount(() => {
     loadPrs()
   })
@@ -152,6 +174,7 @@
             repoName={$selectedReviewPr.repo_name}
             {fileTreeVisible}
             onToggleFileTree={() => { fileTreeVisible = !fileTreeVisible }}
+            fetchFileContents={fetchPrFileContents}
           />
         {/if}
       </div>
