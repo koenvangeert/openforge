@@ -2,6 +2,7 @@
   import type { Task, AgentSession, PullRequestInfo } from '../lib/types'
   import { isReadyToMerge } from '../lib/types'
   import { openUrl } from '../lib/ipc'
+  import Card from './Card.svelte'
 
   interface Props {
     task: Task
@@ -35,8 +36,8 @@
   let hasVisibleStatus = $derived(session !== null && ['running', 'completed', 'paused', 'failed', 'interrupted'].includes(session?.status ?? ''))
 </script>
 
-<button
-  class="block w-full text-left px-3 py-2.5 bg-base-100 border border-base-300 rounded-md shadow-sm cursor-pointer transition-all hover:border-primary hover:shadow-md {statusClass === 'running' ? 'running' : ''} {statusClass === 'paused' ? 'paused' : ''} {statusClass === 'failed' ? 'failed' : ''} {statusClass === 'interrupted' ? 'interrupted' : ''} {statusClass === 'completed' ? 'completed' : ''} {needsInput ? 'needs-input' : ''}"
+<Card
+  class="block px-3 py-2.5 {statusClass === 'running' ? 'running' : ''} {statusClass === 'paused' ? 'paused' : ''} {statusClass === 'failed' ? 'failed' : ''} {statusClass === 'interrupted' ? 'interrupted' : ''} {statusClass === 'completed' ? 'completed' : ''} {needsInput ? 'needs-input' : ''}"
   onclick={handleClick}
 >
   <div class="flex items-center justify-between mb-1">
@@ -124,7 +125,7 @@
   {#if task.jira_assignee}
     <div class="text-[0.7rem] text-base-content/50">{task.jira_assignee}</div>
   {/if}
-</button>
+</Card>
 
 <style>
   /* Status border-left indicators — use daisyUI theme color vars */

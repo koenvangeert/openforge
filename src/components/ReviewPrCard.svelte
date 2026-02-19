@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { ReviewPullRequest } from '../lib/types'
+  import Card from './Card.svelte'
 
   interface Props {
     pr: ReviewPullRequest
@@ -21,8 +22,9 @@
   }
 </script>
 
-<button
-  class="flex flex-col gap-2.5 p-4 bg-base-100 border rounded-lg cursor-pointer transition-all duration-150 text-left w-full {selected ? 'selected border-2 border-primary bg-primary/10' : 'border-base-300 hover:border-primary hover:-translate-y-px hover:shadow-md'}"
+<Card
+  class="flex flex-col gap-2.5 p-4 duration-150 {!selected ? 'hover:-translate-y-px' : ''}"
+  {selected}
   onclick={onClick}
 >
   <div class="flex items-center gap-2">
@@ -50,4 +52,4 @@
     <span class="font-medium text-success">+{pr.additions}</span>
     <span class="font-medium text-error">−{pr.deletions}</span>
   </div>
-</button>
+</Card>
