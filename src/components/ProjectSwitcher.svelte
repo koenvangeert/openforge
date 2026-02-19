@@ -53,7 +53,7 @@
 </script>
 
 <div class="relative" bind:this={dropdownRef}>
-  <button class="btn btn-ghost btn-sm gap-2 border border-base-300" onclick={toggleDropdown} type="button">
+  <button class="btn btn-sm gap-2 bg-base-100 border border-base-300" onclick={toggleDropdown} type="button">
     <span class="font-medium">{activeProject ? activeProject.name : 'No Project'}</span>
     <span class="text-[0.6rem] text-base-content/50 transition-transform duration-200 {isOpen ? 'rotate-180' : ''}">▼</span>
   </button>
