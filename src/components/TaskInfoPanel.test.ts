@@ -1,12 +1,13 @@
-import { render, screen } from '@testing-library/svelte'
+import { render, screen, fireEvent } from '@testing-library/svelte'
 import { describe, it, expect, vi } from 'vitest'
-import { writable } from 'svelte/store'
+import { writable, get } from 'svelte/store'
 import TaskInfoPanel from './TaskInfoPanel.svelte'
 import type { Task, PullRequestInfo } from '../lib/types'
-import { ticketPrs } from '../lib/stores'
+import { ticketPrs, selectedTaskId } from '../lib/stores'
 
 vi.mock('../lib/stores', () => ({
   ticketPrs: writable(new Map()),
+  selectedTaskId: writable('T-42'),
 }))
 
 vi.mock('../lib/ipc', () => ({
@@ -85,6 +86,17 @@ describe('TaskInfoPanel', () => {
     render(TaskInfoPanel, { props: { task: baseTask } })
     expect(screen.queryByText('Edit Task')).toBeNull()
     expect(screen.queryByText('Delete')).toBeNull()
+  })
+
+  it('navigates back to board after marking task as done', async () => {
+    selectedTaskId.set('T-42')
+    render(TaskInfoPanel, { props: { task: baseTask } })
+
+    const btn = screen.getByText('Move to Done')
+    await fireEvent.click(btn)
+
+    await new Promise((r) => setTimeout(r, 10))
+    expect(get(selectedTaskId)).toBeNull()
   })
 
   it('renders pipeline status section when PRs have CI data', async () => {

@@ -2,7 +2,7 @@
   import { onMount } from 'svelte'
   import type { Task, PrComment, KanbanColumn, WorktreeInfo } from '../lib/types'
   import { COLUMN_LABELS, parseCheckRuns, isReadyToMerge } from '../lib/types'
-  import { ticketPrs } from '../lib/stores'
+  import { ticketPrs, selectedTaskId } from '../lib/stores'
   import { 
     updateTaskStatus, 
     getPrComments, 
@@ -66,6 +66,9 @@
     if (newStatus === task.status) return
     try {
       await updateTaskStatus(task.id, newStatus)
+      if (newStatus === 'done') {
+        $selectedTaskId = null
+      }
     } catch (e) {
       console.error('Failed to update status:', e)
     }
