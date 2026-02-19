@@ -27,6 +27,7 @@
   let fitAddon: FitAddon | null = null
   let resizeObserver: ResizeObserver | null = null
   let resizeTimeout: ReturnType<typeof setTimeout> | null = null
+  let visibilityObserver: IntersectionObserver | null = null
   let ptySpawned = $state(false)
   let terminalMounted = false
   let opencodePort: number | null = null
@@ -40,7 +41,9 @@
   $effect(() => {
     if (questionText !== undefined) {
       // Re-fit terminal when banner visibility changes
-      setTimeout(() => fitAddon?.fit(), 50)
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => safeFit())
+      })
     }
   })
 
@@ -72,7 +75,7 @@
       }
       opencodePort = port
 
-      mountTerminal()
+      await mountTerminal()
       await setupPtyListeners()
 
       const cols = terminal?.cols ?? 80
@@ -156,29 +159,37 @@
     }
   }
 
-  function mountTerminal() {
+  function safeFit(): void {
+    if (!fitAddon || !terminalContainer) return
+    if (terminalContainer.clientWidth === 0 || terminalContainer.clientHeight === 0) return
+    const proposed = fitAddon.proposeDimensions()
+    if (!proposed || isNaN(proposed.cols) || isNaN(proposed.rows)) return
+    fitAddon.fit()
+  }
+
+  async function mountTerminal(): Promise<void> {
     if (terminalMounted || !terminal || !terminalContainer) return
+
+    // Wait for fonts to load so CharSizeService measures correctly
+    await Promise.race([
+      document.fonts.ready,
+      new Promise<void>(resolve => setTimeout(resolve, 3000))
+    ])
+
     terminal.open(terminalContainer)
     terminalMounted = true
-    fitAddon?.fit()
+    requestAnimationFrame(() => {
+      safeFit()
+    })
 
-    resizeObserver = new ResizeObserver(() => {
+    resizeObserver = new ResizeObserver((entries) => {
       if (!terminal || !terminalContainer) return
-      if (!resizeTimeout) {
-        // Leading edge: fire immediately on first resize event
-        fitAddon?.fit()
-        if (terminal && ptySpawned) {
-          resizePty(taskId, terminal.cols, terminal.rows).catch((e) => {
-            console.error('[AgentPanel] Failed to resize PTY:', e)
-          })
-        }
-      } else {
-        clearTimeout(resizeTimeout)
-      }
+      const { width, height } = entries[0].contentRect
+      if (width === 0 || height === 0) return
+      if (resizeTimeout) clearTimeout(resizeTimeout)
       resizeTimeout = setTimeout(() => {
         resizeTimeout = null
-        // Trailing edge: fire once more to catch final size
-        fitAddon?.fit()
+        safeFit()
         if (terminal && ptySpawned) {
           resizePty(taskId, terminal.cols, terminal.rows).catch((e) => {
             console.error('[AgentPanel] Failed to resize PTY:', e)
@@ -187,6 +198,18 @@
       }, 100)
     })
     resizeObserver.observe(terminalContainer)
+
+    // Re-fit and refresh terminal when it becomes visible (e.g., after tab/view switch)
+    visibilityObserver = new IntersectionObserver((entries) => {
+      const entry = entries[entries.length - 1]
+      if (entry.isIntersecting) {
+        requestAnimationFrame(() => {
+          safeFit()
+          terminal?.refresh(0, (terminal?.rows ?? 1) - 1)
+        })
+      }
+    }, { threshold: 0 })
+    visibilityObserver.observe(terminalContainer)
 
     terminal.onData((data) => {
       if (ptySpawned) {
@@ -238,7 +261,7 @@
 
     // Mount terminal immediately — by onMount time, bind:this has set terminalContainer.
     // In Svelte 5, $effect won't track plain let variables, so we mount directly here.
-    mountTerminal()
+    await mountTerminal()
 
     await loadSessionHistory()
 
@@ -277,6 +300,7 @@
     if (ptyExitUnlisten) ptyExitUnlisten()
     if (resizeTimeout) clearTimeout(resizeTimeout)
     if (resizeObserver) resizeObserver.disconnect()
+    if (visibilityObserver) visibilityObserver.disconnect()
     const isSessionRunning = session?.status === 'running'
     if (ptySpawned && !isSessionRunning) {
       killPty(taskId).catch((e) => {

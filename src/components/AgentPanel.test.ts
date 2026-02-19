@@ -11,6 +11,7 @@ vi.mock('@xterm/xterm', () => {
     dispose: vi.fn(),
     onData: vi.fn(),
     loadAddon: vi.fn(),
+    refresh: vi.fn(),
     cols: 80,
     rows: 24,
   }))
@@ -20,6 +21,7 @@ vi.mock('@xterm/xterm', () => {
 vi.mock('@xterm/addon-fit', () => {
   const FitAddon = vi.fn().mockImplementation(() => ({
     fit: vi.fn(),
+    proposeDimensions: vi.fn().mockReturnValue({ cols: 80, rows: 24 }),
   }))
   return { FitAddon }
 })
