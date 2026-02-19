@@ -24,8 +24,7 @@
 </script>
 
 <button
-  class="copy-btn"
-  class:copied
+  class="btn btn-ghost btn-square btn-xs text-base-content/50 hover:text-primary {copied ? 'text-success hover:text-success' : ''}"
   disabled={copied}
   title={copied ? 'Copied!' : label}
   onclick={handleCopy}
@@ -37,31 +36,3 @@
   {/if}
 </button>
 
-<style>
-  .copy-btn {
-    all: unset;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    width: 26px;
-    height: 26px;
-    border-radius: 4px;
-    color: var(--text-secondary);
-    cursor: pointer;
-    transition: all 0.15s ease;
-  }
-
-  .copy-btn:hover:not(:disabled) {
-    color: var(--accent);
-    background: rgba(122, 162, 247, 0.1);
-  }
-
-  .copy-btn:disabled {
-    cursor: default;
-  }
-
-  .copy-btn.copied {
-    color: var(--success);
-  }
-</style>
