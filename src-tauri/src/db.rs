@@ -1,5 +1,6 @@
 use rusqlite::{Connection, Result};
 use serde::Serialize;
+use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
@@ -443,6 +444,25 @@ impl Database {
         if !ci_check_runs_exists {
             conn.execute(
                 "ALTER TABLE pull_requests ADD COLUMN ci_check_runs TEXT",
+                [],
+            )?;
+        }
+
+        // ============================================================================
+        // Migration: Add last_polled_at column to pull_requests table
+        // ============================================================================
+        let last_polled_at_exists: bool = conn.query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('pull_requests') WHERE name='last_polled_at'",
+            [],
+            |row| {
+                let count: i64 = row.get(0)?;
+                Ok(count > 0)
+            },
+        )?;
+
+        if !last_polled_at_exists {
+            conn.execute(
+                "ALTER TABLE pull_requests ADD COLUMN last_polled_at INTEGER DEFAULT 0",
                 [],
             )?;
         }
@@ -1304,6 +1324,40 @@ impl Database {
         } else {
             Ok(None)
         }
+    }
+
+    /// Get existing comment IDs for a PR as a HashSet for efficient batch lookups
+    pub fn get_existing_comment_ids(&self, pr_id: i64) -> Result<HashSet<i64>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare("SELECT id FROM pr_comments WHERE pr_id = ?1")?;
+        let ids = stmt.query_map([pr_id], |row| row.get(0))?;
+        let mut result = HashSet::new();
+        for id in ids {
+            result.insert(id?);
+        }
+        Ok(result)
+    }
+
+    /// Get the last polled timestamp for a PR, or None if PR doesn't exist
+    pub fn get_pr_last_polled(&self, pr_id: i64) -> Result<Option<i64>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare("SELECT last_polled_at FROM pull_requests WHERE id = ?1")?;
+        let mut rows = stmt.query([pr_id])?;
+        if let Some(row) = rows.next()? {
+            Ok(row.get(0)?)
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Set the last polled timestamp for a PR
+    pub fn set_pr_last_polled(&self, pr_id: i64, timestamp: i64) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE pull_requests SET last_polled_at = ?1 WHERE id = ?2",
+            rusqlite::params![timestamp, pr_id],
+        )?;
+        Ok(())
     }
 
     /// Get all comments for a specific PR
@@ -3363,6 +3417,83 @@ mod tests {
             .expect("get t200 failed");
         assert_eq!(comments_200.len(), 1);
         assert_eq!(comments_200[0].task_id, "T-200");
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_get_existing_comment_ids() {
+        let (db, path) = make_test_db("existing_comment_ids");
+        insert_test_task(&db);
+
+        db.insert_pull_request(
+            50,
+            "T-100",
+            "acme",
+            "repo",
+            "PR",
+            "https://example.com",
+            "open",
+            1000,
+            1000,
+        )
+        .expect("insert pr failed");
+
+        db.insert_pr_comment(801, 50, "alice", "c1", "review_comment", None, None, 5000)
+            .expect("insert c1 failed");
+        db.insert_pr_comment(802, 50, "bob", "c2", "review_comment", None, None, 5001)
+            .expect("insert c2 failed");
+        db.insert_pr_comment(803, 50, "carol", "c3", "review_comment", None, None, 5002)
+            .expect("insert c3 failed");
+
+        let existing = db
+            .get_existing_comment_ids(50)
+            .expect("get existing comment ids failed");
+
+        assert_eq!(existing.len(), 3);
+        assert!(existing.contains(&801));
+        assert!(existing.contains(&802));
+        assert!(existing.contains(&803));
+
+        let empty = db
+            .get_existing_comment_ids(999)
+            .expect("get for nonexistent pr failed");
+        assert_eq!(empty.len(), 0);
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_pr_last_polled_lifecycle() {
+        let (db, path) = make_test_db("pr_last_polled");
+        insert_test_task(&db);
+
+        db.insert_pull_request(
+            60,
+            "T-100",
+            "acme",
+            "repo",
+            "PR",
+            "https://example.com",
+            "open",
+            1000,
+            1000,
+        )
+        .expect("insert pr failed");
+
+        let initial = db.get_pr_last_polled(60).expect("get initial failed");
+        assert_eq!(initial, Some(0));
+
+        db.set_pr_last_polled(60, 1700000000)
+            .expect("set last polled failed");
+
+        let updated = db.get_pr_last_polled(60).expect("get updated failed");
+        assert_eq!(updated, Some(1700000000));
+
+        let nonexistent = db.get_pr_last_polled(999).expect("get nonexistent failed");
+        assert_eq!(nonexistent, None);
 
         drop(db);
         let _ = fs::remove_file(&path);
