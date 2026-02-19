@@ -49,43 +49,43 @@
   }
 </script>
 
-<div class="diff-viewer">
-  <div class="controls">
+<div class="flex flex-col flex-1 min-w-0 h-full overflow-hidden">
+  <div class="flex items-center gap-1 px-3 py-2 bg-base-200 border-b border-base-300">
     {#if onToggleFileTree}
       <button
-        class:active={fileTreeVisible}
+        class="btn btn-ghost btn-xs {fileTreeVisible ? 'text-primary bg-primary/10 border border-primary' : 'text-base-content/50'}"
         title={fileTreeVisible ? 'Hide file tree' : 'Show file tree'}
         onclick={() => onToggleFileTree!()}
       >
         {fileTreeVisible ? '◧' : '☰'}
       </button>
-      <div class="controls-separator"></div>
+      <div class="w-px h-5 bg-base-300 mx-1 self-center"></div>
     {/if}
     <button
-      class:active={diffViewMode === DiffModeEnum.Split}
+      class="btn btn-ghost btn-xs {diffViewMode === DiffModeEnum.Split ? 'text-primary bg-primary/10 border border-primary' : 'text-base-content/50'}"
       onclick={() => (diffViewMode = DiffModeEnum.Split)}
     >
       Split
     </button>
     <button
-      class:active={diffViewMode === DiffModeEnum.Unified}
+      class="btn btn-ghost btn-xs {diffViewMode === DiffModeEnum.Unified ? 'text-primary bg-primary/10 border border-primary' : 'text-base-content/50'}"
       onclick={() => (diffViewMode = DiffModeEnum.Unified)}
     >
       Unified
     </button>
   </div>
 
-  <div class="diff-container">
+  <div class="flex-1 overflow-y-auto overflow-x-hidden bg-base-100">
     {#if files.length === 0}
-      <div class="empty">No files to display</div>
+      <div class="flex items-center justify-center h-full text-base-content/50 text-sm">No files to display</div>
     {:else}
       {#each files as file (file.filename)}
-        <div data-diff-file={file.filename} class="diff-file-wrapper">
+        <div data-diff-file={file.filename} class="mb-px">
           <DiffView
             data={toGitDiffViewData(file, fileContentsMap.get(file.filename))}
             extendData={buildExtendData(file.filename, existingComments, $pendingManualComments)}
             diffViewMode={diffViewMode}
-            diffViewTheme="dark"
+            diffViewTheme="light"
             diffViewHighlight={true}
             diffViewAddWidget={true}
             diffViewFontSize={12}
@@ -94,21 +94,17 @@
             }}
           >
             {#snippet renderExtendLine({ lineNumber: _ln, side: _side, data, diffFile: _df, onUpdate: _ou }: { lineNumber: number; side: SplitSide; data: CommentDisplayData; diffFile: import('@git-diff-view/core').DiffFile; onUpdate: () => void })}
-              <div class="extend-line-content">
+              <div class="w-full">
                 {#each data.comments as comment}
-                  <div
-                    class="inline-comment"
-                    class:existing={comment.type === 'existing'}
-                    class:pending={comment.type === 'pending'}
-                  >
-                    <div class="comment-header">
+                  <div class="px-4 py-2.5 mx-4 my-1.5 bg-base-100 border border-base-300 rounded-md text-[0.8rem] {comment.type === 'pending' ? 'border-l-4 border-l-warning' : comment.type === 'existing' ? 'border-l-4 border-l-primary' : ''}">
+                    <div class="flex items-center gap-2 mb-1.5">
                       {#if comment.type === 'existing'}
-                        <strong class="comment-author">{comment.author}</strong>
-                        <span class="comment-time">{comment.createdAt}</span>
+                        <strong class="text-base-content font-semibold text-xs">{comment.author}</strong>
+                        <span class="text-base-content/50 text-[0.7rem]">{comment.createdAt}</span>
                       {:else}
-                        <span class="pending-badge">Pending</span>
+                        <span class="badge badge-warning badge-sm">Pending</span>
                         <button
-                          class="comment-delete-btn"
+                          class="btn btn-ghost btn-xs text-base-content/50 hover:text-error ml-auto"
                           onclick={() => {
                             $pendingManualComments = $pendingManualComments.filter(
                               (_, i) => i !== comment.index
@@ -117,29 +113,29 @@
                         >✕</button>
                       {/if}
                     </div>
-                    <div class="comment-body">{comment.body}</div>
+                    <div class="text-base-content leading-relaxed whitespace-pre-wrap">{comment.body}</div>
                   </div>
                 {/each}
               </div>
             {/snippet}
 
             {#snippet renderWidgetLine({ lineNumber, side, diffFile, onClose }: { lineNumber: number; side: SplitSide; diffFile: import('@git-diff-view/core').DiffFile; onClose: () => void })}
-              <div class="comment-form-inner">
+              <div class="p-3 mx-4 my-2 bg-base-100 border border-base-300 rounded-md">
                 <textarea
-                  class="comment-textarea"
+                  class="textarea textarea-bordered w-full min-h-[60px] text-[0.8rem] resize-y"
                   placeholder="Leave a comment..."
                   rows="3"
                   bind:value={commentText}
                 ></textarea>
-                <div class="comment-form-actions">
+                <div class="flex justify-end gap-2 mt-2">
                   <button
-                    class="comment-cancel-btn"
+                    class="btn btn-ghost btn-xs border border-base-300"
                     onclick={() => {
                       onClose()
                     }}
                   >Cancel</button>
                   <button
-                    class="comment-submit-btn"
+                    class="btn btn-primary btn-xs"
                     onclick={() => {
                       if (!commentText.trim()) return
                       const path = diffFile._newFileName || diffFile._oldFileName || ''
@@ -163,207 +159,3 @@
     {/if}
   </div>
 </div>
-
-<style>
-  .diff-viewer {
-    display: flex;
-    flex-direction: column;
-    flex: 1;
-    min-width: 0;
-    height: 100%;
-    overflow: hidden;
-  }
-
-  .controls {
-    display: flex;
-    gap: 4px;
-    padding: 12px;
-    background: var(--bg-secondary);
-    border-bottom: 1px solid var(--border);
-  }
-
-  .controls button {
-    all: unset;
-    padding: 6px 12px;
-    font-size: 0.75rem;
-    color: var(--text-secondary);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    cursor: pointer;
-    transition: all 0.15s;
-  }
-
-  .controls button:hover {
-    color: var(--text-primary);
-    border-color: var(--accent);
-  }
-
-  .controls button.active {
-    color: var(--accent);
-    border-color: var(--accent);
-    background: rgba(122, 162, 247, 0.1);
-  }
-
-  .controls-separator {
-    width: 1px;
-    height: 20px;
-    background: var(--border);
-    margin: 0 4px;
-    align-self: center;
-  }
-
-  .diff-container {
-    flex: 1;
-    overflow-y: auto;
-    overflow-x: hidden;
-    background: var(--bg-primary);
-  }
-
-  .diff-file-wrapper {
-    margin-bottom: 1px;
-  }
-
-  .empty {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    height: 100%;
-    color: var(--text-secondary);
-    font-size: 0.85rem;
-  }
-
-  /* ── Extend line / comment display ────────────────────────────────────── */
-
-  .extend-line-content {
-    width: 100%;
-  }
-
-  .inline-comment {
-    padding: 10px 16px;
-    margin: 6px 16px;
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    font-size: 0.8rem;
-  }
-
-  .inline-comment.pending {
-    border-color: var(--warning);
-    border-left: 3px solid var(--warning);
-  }
-
-  .inline-comment.existing {
-    border-left: 3px solid var(--accent);
-  }
-
-  .comment-header {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 6px;
-  }
-
-  .comment-author {
-    color: var(--text-primary);
-    font-weight: 600;
-    font-size: 0.75rem;
-  }
-
-  .comment-time {
-    color: var(--text-secondary);
-    font-size: 0.7rem;
-  }
-
-  .pending-badge {
-    padding: 2px 6px;
-    font-size: 0.65rem;
-    font-weight: 600;
-    color: var(--warning);
-    background: rgba(224, 175, 104, 0.15);
-    border-radius: 3px;
-  }
-
-  .comment-delete-btn {
-    all: unset;
-    margin-left: auto;
-    padding: 2px 6px;
-    font-size: 0.7rem;
-    color: var(--text-secondary);
-    cursor: pointer;
-  }
-
-  .comment-delete-btn:hover {
-    color: var(--error);
-  }
-
-  .comment-body {
-    color: var(--text-primary);
-    line-height: 1.5;
-    white-space: pre-wrap;
-  }
-
-  /* ── Widget / comment form ─────────────────────────────────────────────── */
-
-  .comment-form-inner {
-    padding: 12px 16px;
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    margin: 8px 16px;
-  }
-
-  .comment-textarea {
-    width: 100%;
-    min-height: 60px;
-    padding: 8px;
-    background: var(--bg-primary);
-    color: var(--text-primary);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    font-family: inherit;
-    font-size: 0.8rem;
-    resize: vertical;
-    box-sizing: border-box;
-  }
-
-  .comment-textarea:focus {
-    outline: none;
-    border-color: var(--accent);
-  }
-
-  .comment-form-actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: 8px;
-    margin-top: 8px;
-  }
-
-  .comment-cancel-btn {
-    all: unset;
-    padding: 6px 12px;
-    font-size: 0.75rem;
-    color: var(--text-secondary);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    cursor: pointer;
-  }
-
-  .comment-cancel-btn:hover {
-    color: var(--text-primary);
-  }
-
-  .comment-submit-btn {
-    all: unset;
-    padding: 6px 12px;
-    font-size: 0.75rem;
-    color: var(--bg-primary);
-    background: var(--accent);
-    border-radius: 4px;
-    cursor: pointer;
-    font-weight: 500;
-  }
-
-  .comment-submit-btn:hover {
-    opacity: 0.9;
-  }
-</style>

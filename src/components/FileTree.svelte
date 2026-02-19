@@ -79,13 +79,13 @@
     }
   }
 
-  function getStatusColor(status: string): string {
+  function getStatusClass(status: string): string {
     switch (status) {
-      case 'added': return 'var(--success)'
-      case 'removed': return 'var(--error)'
-      case 'modified': return 'var(--warning)'
-      case 'renamed': return 'var(--accent)'
-      default: return 'var(--text-secondary)'
+      case 'added': return 'text-success'
+      case 'removed': return 'text-error'
+      case 'modified': return 'text-warning'
+      case 'renamed': return 'text-primary'
+      default: return 'text-base-content/50'
     }
   }
 
@@ -123,148 +123,42 @@
   let flattenedNodes = $derived(flattenTree(tree, 0, expandedDirs))
 </script>
 
-<div class="file-tree">
-  <div class="header">
-    <div class="stats">
-      <span class="count">{files.length} files</span>
-      <span class="additions">+{totalStats.additions}</span>
-      <span class="deletions">−{totalStats.deletions}</span>
+<div class="flex flex-col h-full bg-base-200 border-r border-base-300">
+  <div class="px-3 py-3 border-b border-base-300">
+    <div class="flex gap-3 text-xs">
+      <span class="text-base-content font-medium">{files.length} files</span>
+      <span class="text-success">+{totalStats.additions}</span>
+      <span class="text-error">−{totalStats.deletions}</span>
     </div>
   </div>
 
-  <div class="tree-container">
+  <div class="flex-1 overflow-y-auto py-2">
     {#each flattenedNodes as { node, depth }}
       {#if node.isDir}
-        <button class="dir-toggle" style="padding-left: {12 + depth * 16}px" onclick={() => toggleDir(node.fullPath)}>
-          <span class="icon">{expandedDirs.has(node.fullPath) ? '▼' : '▶'}</span>
-          <span class="name">{node.name}/</span>
+        <button
+          class="w-full flex items-center gap-2 text-xs text-base-content cursor-pointer hover:bg-base-content/5 transition-colors py-1.5 pr-3"
+          style="padding-left: {12 + depth * 16}px"
+          onclick={() => toggleDir(node.fullPath)}
+        >
+          <span class="text-[0.6rem] text-base-content/50 shrink-0">{expandedDirs.has(node.fullPath) ? '▼' : '▶'}</span>
+          <span class="text-base-content/50 font-medium flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left">{node.name}/</span>
         </button>
       {:else if node.file}
-        <button 
-          class="tree-node file" 
-          class:selected={selectedFile === node.file.filename}
-          style="padding-left: {12 + depth * 16}px"
+        <button
+          class="w-full flex items-center gap-2 text-xs cursor-pointer transition-colors py-1.5 pr-3 text-base-content {selectedFile === node.file.filename ? 'bg-primary/10 border-l-2 border-l-primary' : 'hover:bg-primary/5'}"
+          style="padding-left: {selectedFile === node.file.filename ? 10 + depth * 16 : 12 + depth * 16}px"
           onclick={() => node.file && handleFileClick(node.file)}
         >
-          <span class="status-icon" style="color: {getStatusColor(node.file.status)}">
+          <span class="font-bold text-sm w-4 text-center shrink-0 {getStatusClass(node.file.status)}">
             {getStatusIcon(node.file.status)}
           </span>
-          <span class="name">{node.name}</span>
-          <span class="file-stats">
-            <span class="additions">+{node.file.additions}</span>
-            <span class="deletions">−{node.file.deletions}</span>
+          <span class="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left">{node.name}</span>
+          <span class="flex gap-2 text-[0.7rem] ml-auto shrink-0">
+            <span class="text-success">+{node.file.additions}</span>
+            <span class="text-error">−{node.file.deletions}</span>
           </span>
         </button>
       {/if}
     {/each}
   </div>
 </div>
-
-<style>
-  .file-tree {
-    display: flex;
-    flex-direction: column;
-    height: 100%;
-    background: var(--bg-secondary);
-    border-right: 1px solid var(--border);
-  }
-
-  .header {
-    padding: 12px;
-    border-bottom: 1px solid var(--border);
-  }
-
-  .stats {
-    display: flex;
-    gap: 12px;
-    font-size: 0.75rem;
-  }
-
-  .count {
-    color: var(--text-primary);
-    font-weight: 500;
-  }
-
-  .additions {
-    color: var(--success);
-  }
-
-  .deletions {
-    color: var(--error);
-  }
-
-  .tree-container {
-    flex: 1;
-    overflow-y: auto;
-    padding: 8px 0;
-  }
-
-  .tree-node {
-    all: unset;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 6px 12px;
-    font-size: 0.8rem;
-    color: var(--text-primary);
-    cursor: pointer;
-    transition: background 0.1s;
-  }
-
-  .tree-node:hover {
-    background: rgba(122, 162, 247, 0.1);
-  }
-
-  .tree-node.selected {
-    background: rgba(122, 162, 247, 0.2);
-    border-left: 2px solid var(--accent);
-  }
-
-  .dir-toggle {
-    all: unset;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 6px 12px;
-    font-size: 0.8rem;
-    color: var(--text-primary);
-    cursor: pointer;
-    transition: background 0.1s;
-    width: 100%;
-  }
-
-  .dir-toggle:hover {
-    background: rgba(122, 162, 247, 0.1);
-  }
-
-  .dir-toggle .icon {
-    font-size: 0.6rem;
-    color: var(--text-secondary);
-  }
-
-  .dir-toggle .name {
-    color: var(--text-secondary);
-    font-weight: 500;
-  }
-
-  .status-icon {
-    font-weight: bold;
-    font-size: 0.9rem;
-    width: 16px;
-    text-align: center;
-  }
-
-  .name {
-    flex: 1;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .file-stats {
-    display: flex;
-    gap: 8px;
-    font-size: 0.7rem;
-    margin-left: auto;
-  }
-</style>
