@@ -10,6 +10,7 @@
     openUrl, 
     getWorktreeForTask 
   } from '../lib/ipc'
+  import CopyButton from './CopyButton.svelte'
 
   interface Props {
     task: Task
@@ -142,11 +143,17 @@
     {#if worktree}
       <div class="field">
         <span class="label">Worktree Branch</span>
-        <span class="value monospace">{worktree.branch_name}</span>
+        <div class="copyable-field">
+          <span class="value monospace">{worktree.branch_name}</span>
+          <CopyButton text={worktree.branch_name} label="Copy branch name" />
+        </div>
       </div>
       <div class="field">
         <span class="label">Worktree Path</span>
-        <span class="value monospace small">{worktree.worktree_path}</span>
+        <div class="copyable-field">
+          <span class="value monospace small">{worktree.worktree_path}</span>
+          <CopyButton text={worktree.worktree_path} label="Copy path" />
+        </div>
       </div>
       {#if worktree.opencode_port}
         <div class="field">
@@ -337,6 +344,17 @@
   .value.small {
     font-size: 0.75rem;
     word-break: break-all;
+  }
+
+  .copyable-field {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+  }
+
+  .copyable-field .value {
+    flex: 1;
+    min-width: 0;
   }
 
   .status-badge {
