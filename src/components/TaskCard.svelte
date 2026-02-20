@@ -21,16 +21,6 @@
     return text.length > max ? text.slice(0, max) + '...' : text
   }
 
-  function stageLabel(stage: string): string {
-    const labels: Record<string, string> = {
-      read_ticket: 'Reading ticket',
-      implement: 'Implementing',
-      create_pr: 'Creating PR',
-      address_comments: 'Addressing comments',
-    }
-    return labels[stage] || stage
-  }
-
   let statusClass = $derived(session?.status || 'idle')
   let needsInput = $derived(session?.status === 'paused' && session?.checkpoint_data !== null)
   let hasVisibleStatus = $derived(session !== null && ['running', 'completed', 'paused', 'failed', 'interrupted'].includes(session?.status ?? ''))
@@ -74,21 +64,7 @@
   {#if task.jira_title}
     <div class="text-xs text-base-content/50 leading-tight mb-1.5">{truncate(task.jira_title, 80)}</div>
   {/if}
-  {#if session}
-    <div class="text-[0.7rem] mb-1 {statusClass === 'running' ? 'text-success' : statusClass === 'completed' ? 'text-primary' : statusClass === 'failed' ? 'text-error' : statusClass === 'paused' ? 'text-warning' : 'text-base-content/50'}">
-      {#if session.status === 'running'}
-        {stageLabel(session.stage)}...
-      {:else if session.status === 'paused'}
-        Awaiting approval
-      {:else if session.status === 'failed'}
-        {session.error_message || 'Error'}
-      {:else if session.status === 'interrupted'}
-        Interrupted
-      {:else if session.status === 'completed'}
-        Completed
-      {/if}
-    </div>
-  {/if}
+
   {#if pullRequests.length > 0}
     <div class="flex flex-wrap gap-1 mb-1">
       {#each pullRequests as pr}

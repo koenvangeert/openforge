@@ -79,7 +79,6 @@ describe('TaskCard', () => {
       updated_at: 2000,
     }
     render(TaskCard, { props: { task: baseTask, session } })
-    expect(screen.getByText('Implementing...')).toBeTruthy()
     expect(screen.getByText('Running')).toBeTruthy()
   })
 
@@ -97,7 +96,6 @@ describe('TaskCard', () => {
     }
     render(TaskCard, { props: { task: baseTask, session } })
     expect(screen.getByText('Done')).toBeTruthy()
-    expect(screen.getByText('Completed')).toBeTruthy()
   })
 
   it('applies completed class to card when session is completed', () => {
@@ -130,7 +128,6 @@ describe('TaskCard', () => {
       updated_at: 2000,
     }
     render(TaskCard, { props: { task: baseTask, session } })
-    expect(screen.getByText('Awaiting approval')).toBeTruthy()
     expect(screen.getByText('Paused')).toBeTruthy()
   })
 
@@ -147,7 +144,6 @@ describe('TaskCard', () => {
       updated_at: 2000,
     }
     render(TaskCard, { props: { task: baseTask, session } })
-    expect(screen.getByText('Build failed')).toBeTruthy()
     const card = screen.getByRole('button')
     expect(card.classList.contains('failed')).toBe(true)
   })
@@ -166,7 +162,6 @@ describe('TaskCard', () => {
     }
     render(TaskCard, { props: { task: baseTask, session } })
     expect(screen.getByText('Stopped')).toBeTruthy()
-    expect(screen.getByText('Interrupted')).toBeTruthy()
   })
 
   it('shows needs-input badge when session is paused with checkpoint data', () => {
