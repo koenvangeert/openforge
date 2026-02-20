@@ -76,7 +76,7 @@
     </button>
     <div class="flex items-center gap-3">
       <span class="text-[0.8125rem] font-semibold text-base-content/50 font-mono">{task.jira_key || task.id}</span>
-      <h1 class="text-2xl font-bold text-base-content m-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap min-w-0 max-[800px]:text-xl">{task.title}</h1>
+      <h1 class="text-2xl font-bold text-base-content m-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap min-w-0 max-[800px]:text-xl">{task.jira_title || task.title}</h1>
       <span class="badge {task.status === 'doing' ? 'badge-success' : task.status === 'done' ? 'badge-primary' : 'badge-ghost'} uppercase tracking-wider text-xs font-semibold">
         {getStatusLabel(task.status)}
       </span>
