@@ -1615,7 +1615,7 @@ async fn get_task_diff(
     }
 
     let diff_output = String::from_utf8_lossy(&output.stdout);
-    Ok(diff_parser::parse_unified_diff(&diff_output))
+    Ok(diff_parser::parse_unified_diff(&diff_output, true))
 }
 
 /// Fetch old and new file content for a file in a task's worktree.

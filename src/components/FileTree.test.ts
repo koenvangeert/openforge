@@ -13,6 +13,8 @@ const baseFiles: PrFileDiff[] = [
     changes: 15,
     patch: '@@ -1,3 +1,5 @@',
     previous_filename: null,
+    is_truncated: false,
+    patch_line_count: null,
   },
   {
     sha: 'a2',
@@ -23,6 +25,8 @@ const baseFiles: PrFileDiff[] = [
     changes: 20,
     patch: '@@ -0,0 +1,20 @@',
     previous_filename: null,
+    is_truncated: false,
+    patch_line_count: null,
   },
   {
     sha: 'a3',
@@ -33,6 +37,8 @@ const baseFiles: PrFileDiff[] = [
     changes: 4,
     patch: '@@ -1,5 +1,7 @@',
     previous_filename: null,
+    is_truncated: false,
+    patch_line_count: null,
   },
 ]
 
@@ -74,6 +80,8 @@ describe('FileTree', () => {
       changes: 2,
       patch: '@@ -1,1 +1,1 @@',
       previous_filename: null,
+    is_truncated: false,
+    patch_line_count: null,
     }
     render(FileTree, { props: { files: [modifiedFile], onSelectFile } })
     expect(screen.getByText('±')).toBeTruthy()
@@ -90,6 +98,8 @@ describe('FileTree', () => {
       changes: 10,
       patch: '@@ -0,0 +1,10 @@',
       previous_filename: null,
+    is_truncated: false,
+    patch_line_count: null,
     }
     render(FileTree, { props: { files: [addedFile], onSelectFile } })
     expect(screen.getByText('+')).toBeTruthy()
@@ -106,6 +116,8 @@ describe('FileTree', () => {
       changes: 10,
       patch: '@@ -1,10 +0,0 @@',
       previous_filename: null,
+    is_truncated: false,
+    patch_line_count: null,
     }
     render(FileTree, { props: { files: [removedFile], onSelectFile } })
     expect(screen.getByText('−')).toBeTruthy()
@@ -122,6 +134,8 @@ describe('FileTree', () => {
       changes: 0,
       patch: null,
       previous_filename: 'oldname.ts',
+      is_truncated: false,
+      patch_line_count: null,
     }
     render(FileTree, { props: { files: [renamedFile], onSelectFile } })
     expect(screen.getByText('→')).toBeTruthy()
@@ -141,6 +155,8 @@ describe('FileTree', () => {
       changes: 2,
       patch: '@@ -1,1 +1,1 @@',
       previous_filename: null,
+    is_truncated: false,
+    patch_line_count: null,
     }
     render(FileTree, { props: { files: [singleFile], onSelectFile } })
     const fileButton = screen.getByText('test.ts')
@@ -160,6 +176,8 @@ describe('FileTree', () => {
         changes: 7,
         patch: '@@ -1,3 +1,5 @@',
         previous_filename: null,
+    is_truncated: false,
+    patch_line_count: null,
       },
     ]
     render(FileTree, { props: { files: nestedFiles, onSelectFile } })
@@ -180,6 +198,8 @@ describe('FileTree', () => {
         changes: 2,
         patch: '@@ -1,1 +1,1 @@',
         previous_filename: null,
+    is_truncated: false,
+    patch_line_count: null,
       },
     ]
     render(FileTree, { props: { files: nestedFiles, onSelectFile } })
@@ -201,6 +221,8 @@ describe('FileTree', () => {
         changes: 2,
         patch: '@@ -1,1 +1,1 @@',
         previous_filename: null,
+    is_truncated: false,
+    patch_line_count: null,
       },
     ]
     render(FileTree, { props: { files: nestedFiles, onSelectFile } })
@@ -222,6 +244,8 @@ describe('FileTree', () => {
       changes: 23,
       patch: '@@ -1,10 +1,17 @@',
       previous_filename: null,
+    is_truncated: false,
+    patch_line_count: null,
     }
     render(FileTree, { props: { files: [fileWithStats], onSelectFile } })
     expect(screen.getAllByText('+15').length).toBeGreaterThan(0)

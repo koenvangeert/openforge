@@ -1,11 +1,15 @@
 <script lang="ts">
   import { DiffView, DiffModeEnum, SplitSide } from '@git-diff-view/svelte'
+  import { setEnableFastDiffTemplate } from '@git-diff-view/core'
   import '@git-diff-view/svelte/styles/diff-view-pure.css'
   import './DiffViewerTheme.css'
   import type { PrFileDiff, ReviewComment, ReviewSubmissionComment } from '../lib/types'
   import { pendingManualComments } from '../lib/stores'
-  import { toGitDiffViewData, type FileContents } from '../lib/diffAdapter'
+  import { toGitDiffViewData, isTruncated, getTruncationStats, type FileContents } from '../lib/diffAdapter'
   import { buildExtendData, type CommentDisplayData } from '../lib/diffComments'
+  import { diffHighlighter } from '../lib/diffHighlighter'
+
+  setEnableFastDiffTemplate(true)
 
   interface Props {
     files?: PrFileDiff[]
@@ -22,8 +26,10 @@
   let diffViewMode = $state<DiffModeEnum>(DiffModeEnum.Split)
   let commentText = $state('')
   let fileContentsMap = $state<Map<string, FileContents>>(new Map())
-
   let collapsedFiles = $state(new Set<string>())
+
+  // Auto-collapse large files on initial load (plain let, not $state — only a guard)
+  let hasAutoCollapsed = false
 
   function getStatusIcon(status: string): string {
     switch (status) {
@@ -65,6 +71,22 @@
     collapsedFiles = next
   }
 
+  // Auto-collapse large files on initial load
+  $effect(() => {
+    if (hasAutoCollapsed) return
+    if (files.length === 0) return
+
+    const largeFiles = new Set<string>()
+    for (const file of files) {
+      if (file.additions + file.deletions > 500 || file.is_truncated === true) {
+        largeFiles.add(file.filename)
+      }
+    }
+    collapsedFiles = largeFiles
+    hasAutoCollapsed = true
+  })
+
+  // Fetch file contents for all files with patches
   let fetchedKeys = new Set<string>()
 
   $effect(() => {
@@ -89,6 +111,12 @@
       el.scrollIntoView({ behavior: 'smooth', block: 'start' })
     }
   }
+
+  // Large diff warning banner calculations
+  const totalChanges = $derived(files.reduce((sum, f) => sum + f.additions + f.deletions, 0))
+  const totalFiles = $derived(files.length)
+  const collapsedCount = $derived(collapsedFiles.size)
+  const showLargeDiffWarning = $derived(totalChanges > 5000)
 </script>
 
 <div class="flex flex-col flex-1 min-w-0 h-full overflow-hidden">
@@ -121,7 +149,14 @@
     {#if files.length === 0}
       <div class="flex items-center justify-center h-full text-base-content/50 text-sm">No files to display</div>
     {:else}
+      {#if showLargeDiffWarning}
+        <div class="alert alert-warning py-2 px-4 rounded-none border-x-0 border-t-0 text-sm">
+          <span>Large diff — {totalFiles} files, {totalChanges} total changes. {collapsedCount} files auto-collapsed for performance.</span>
+        </div>
+      {/if}
       {#each files as file (file.filename)}
+        {@const truncated = isTruncated(file)}
+        {@const truncStats = getTruncationStats(file)}
         <div data-diff-file={file.filename} class="border border-base-300 rounded-md overflow-hidden mb-3">
           <button class="w-full flex items-center gap-2 px-4 py-3 bg-base-200 hover:bg-base-300 transition-colors cursor-pointer border-b border-base-300" onclick={() => toggleCollapse(file.filename)}>
             <span class="text-xs text-base-content/50 flex-shrink-0">{collapsedFiles.has(file.filename) ? '▶' : '▼'}</span>
@@ -142,79 +177,87 @@
             </span>
           </button>
           {#if !collapsedFiles.has(file.filename)}
-          <DiffView
-            data={toGitDiffViewData(file, fileContentsMap.get(file.filename))}
-            extendData={buildExtendData(file.filename, existingComments, $pendingManualComments)}
-            diffViewMode={diffViewMode}
-            diffViewTheme="light"
-            diffViewHighlight={true}
-            diffViewAddWidget={true}
-            diffViewFontSize={12}
-            onAddWidgetClick={(_lineNumber, _side) => {
-              commentText = ''
-            }}
-          >
-            {#snippet renderExtendLine({ lineNumber: _ln, side: _side, data, diffFile: _df, onUpdate: _ou }: { lineNumber: number; side: SplitSide; data: CommentDisplayData; diffFile: import('@git-diff-view/core').DiffFile; onUpdate: () => void })}
-              <div class="w-full">
-                {#each data.comments as comment}
-                  <div class="px-4 py-2.5 mx-4 my-1.5 bg-base-100 border border-base-300 rounded-md text-[0.8rem] {comment.type === 'pending' ? 'border-l-4 border-l-warning' : comment.type === 'existing' ? 'border-l-4 border-l-primary' : ''}">
-                    <div class="flex items-center gap-2 mb-1.5">
-                      {#if comment.type === 'existing'}
-                        <strong class="text-base-content font-semibold text-xs">{comment.author}</strong>
-                        <span class="text-base-content/50 text-[0.7rem]">{comment.createdAt}</span>
-                      {:else}
-                        <span class="badge badge-warning badge-sm">Pending</span>
-                        <button
-                          class="btn btn-ghost btn-xs text-base-content/50 hover:text-error ml-auto"
-                          onclick={() => {
-                            $pendingManualComments = $pendingManualComments.filter(
-                              (_, i) => i !== comment.index
-                            )
-                          }}
-                        >✕</button>
-                      {/if}
-                    </div>
-                    <div class="text-base-content leading-relaxed whitespace-pre-wrap">{comment.body}</div>
+            {#if truncated}
+              <div class="alert alert-info py-1.5 px-4 rounded-none border-x-0 text-xs">
+                <span>
+                  Diff truncated — {truncStats ? `${truncStats.total} lines total, showing first ${truncStats.shown}` : 'showing partial diff'}
+                </span>
+              </div>
+            {/if}
+            <DiffView
+              data={toGitDiffViewData(file, fileContentsMap.get(file.filename))}
+              extendData={buildExtendData(file.filename, existingComments, $pendingManualComments)}
+              diffViewMode={diffViewMode}
+              diffViewTheme="light"
+              diffViewHighlight={true}
+              diffViewAddWidget={true}
+              diffViewFontSize={12}
+              registerHighlighter={diffHighlighter}
+              onAddWidgetClick={(_lineNumber, _side) => {
+                commentText = ''
+              }}
+            >
+                {#snippet renderExtendLine({ lineNumber: _ln, side: _side, data, diffFile: _df, onUpdate: _ou }: { lineNumber: number; side: SplitSide; data: CommentDisplayData; diffFile: import('@git-diff-view/core').DiffFile; onUpdate: () => void })}
+                  <div class="w-full">
+                    {#each data.comments as comment}
+                      <div class="px-4 py-2.5 mx-4 my-1.5 bg-base-100 border border-base-300 rounded-md text-[0.8rem] {comment.type === 'pending' ? 'border-l-4 border-l-warning' : comment.type === 'existing' ? 'border-l-4 border-l-primary' : ''}">
+                        <div class="flex items-center gap-2 mb-1.5">
+                          {#if comment.type === 'existing'}
+                            <strong class="text-base-content font-semibold text-xs">{comment.author}</strong>
+                            <span class="text-base-content/50 text-[0.7rem]">{comment.createdAt}</span>
+                          {:else}
+                            <span class="badge badge-warning badge-sm">Pending</span>
+                            <button
+                              class="btn btn-ghost btn-xs text-base-content/50 hover:text-error ml-auto"
+                              onclick={() => {
+                                $pendingManualComments = $pendingManualComments.filter(
+                                  (_, i) => i !== comment.index
+                                )
+                              }}
+                            >✕</button>
+                          {/if}
+                        </div>
+                        <div class="text-base-content leading-relaxed whitespace-pre-wrap">{comment.body}</div>
+                      </div>
+                    {/each}
                   </div>
-                {/each}
-              </div>
-            {/snippet}
+                {/snippet}
 
-            {#snippet renderWidgetLine({ lineNumber, side, diffFile, onClose }: { lineNumber: number; side: SplitSide; diffFile: import('@git-diff-view/core').DiffFile; onClose: () => void })}
-              <div class="p-3 mx-4 my-2 bg-base-100 border border-base-300 rounded-md">
-                <textarea
-                  class="textarea textarea-bordered w-full min-h-[60px] text-[0.8rem] resize-y"
-                  placeholder="Leave a comment..."
-                  rows="3"
-                  bind:value={commentText}
-                ></textarea>
-                <div class="flex justify-end gap-2 mt-2">
-                  <button
-                    class="btn btn-ghost btn-xs border border-base-300"
-                    onclick={() => {
-                      onClose()
-                    }}
-                  >Cancel</button>
-                  <button
-                    class="btn btn-primary btn-xs"
-                    onclick={() => {
-                      if (!commentText.trim()) return
-                      const path = diffFile._newFileName || diffFile._oldFileName || ''
-                      const newComment: ReviewSubmissionComment = {
-                        path,
-                        line: lineNumber,
-                        side: side === SplitSide.old ? 'LEFT' : 'RIGHT',
-                        body: commentText.trim()
-                      }
-                      $pendingManualComments = [...$pendingManualComments, newComment]
-                      onClose()
-                      commentText = ''
-                    }}
-                  >Add Comment</button>
-                </div>
-              </div>
-            {/snippet}
-          </DiffView>
+                {#snippet renderWidgetLine({ lineNumber, side, diffFile, onClose }: { lineNumber: number; side: SplitSide; diffFile: import('@git-diff-view/core').DiffFile; onClose: () => void })}
+                  <div class="p-3 mx-4 my-2 bg-base-100 border border-base-300 rounded-md">
+                    <textarea
+                      class="textarea textarea-bordered w-full min-h-[60px] text-[0.8rem] resize-y"
+                      placeholder="Leave a comment..."
+                      rows="3"
+                      bind:value={commentText}
+                    ></textarea>
+                    <div class="flex justify-end gap-2 mt-2">
+                      <button
+                        class="btn btn-ghost btn-xs border border-base-300"
+                        onclick={() => {
+                          onClose()
+                        }}
+                      >Cancel</button>
+                      <button
+                        class="btn btn-primary btn-xs"
+                        onclick={() => {
+                          if (!commentText.trim()) return
+                          const path = diffFile._newFileName || diffFile._oldFileName || ''
+                          const newComment: ReviewSubmissionComment = {
+                            path,
+                            line: lineNumber,
+                            side: side === SplitSide.old ? 'LEFT' : 'RIGHT',
+                            body: commentText.trim()
+                          }
+                          $pendingManualComments = [...$pendingManualComments, newComment]
+                          onClose()
+                          commentText = ''
+                        }}
+                      >Add Comment</button>
+                    </div>
+                  </div>
+                {/snippet}
+              </DiffView>
           {/if}
         </div>
       {/each}

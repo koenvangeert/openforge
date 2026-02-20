@@ -183,6 +183,8 @@ export interface PrFileDiff {
   changes: number;
   patch: string | null;
   previous_filename: string | null;
+  is_truncated: boolean;
+  patch_line_count: number | null;
 }
 
 /** Inline review comment from GitHub PR */

@@ -294,6 +294,8 @@ describe('PrReviewView', () => {
         changes: 2,
         patch: '@@ -1,1 +1,1 @@',
         previous_filename: null,
+        is_truncated: false,
+        patch_line_count: null,
       },
     ])
 

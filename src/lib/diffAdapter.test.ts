@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import type { PrFileDiff } from './types'
-import { getFileLanguage, toGitDiffViewData } from './diffAdapter'
+import { getFileLanguage, toGitDiffViewData, isTruncated, getTruncationStats } from './diffAdapter'
 
 // ============================================================================
 // Test Fixtures
@@ -15,6 +15,8 @@ const baseFile: PrFileDiff = {
   changes: 7,
   patch: '@@ -1,3 +1,4 @@\n line1\n+added\n line2',
   previous_filename: null,
+  is_truncated: false,
+  patch_line_count: null,
 }
 
 // ============================================================================
@@ -263,5 +265,67 @@ describe('toGitDiffViewData', () => {
     expect(result.newFile).toHaveProperty('fileName')
     expect(result.newFile).toHaveProperty('fileLang')
     expect(Array.isArray(result.hunks)).toBe(true)
+  })
+})
+
+// ============================================================================
+// isTruncated Tests
+// ============================================================================
+
+describe('isTruncated', () => {
+  it('returns true for truncated file', () => {
+    const file: PrFileDiff = { ...baseFile, is_truncated: true, patch_line_count: 15000 }
+    expect(isTruncated(file)).toBe(true)
+  })
+
+  it('returns false for normal file', () => {
+    expect(isTruncated(baseFile)).toBe(false)
+  })
+
+  it('returns false when is_truncated is false even with patch_line_count', () => {
+    const file: PrFileDiff = { ...baseFile, is_truncated: false, patch_line_count: 5000 }
+    expect(isTruncated(file)).toBe(false)
+  })
+})
+
+// ============================================================================
+// getTruncationStats Tests
+// ============================================================================
+
+describe('getTruncationStats', () => {
+  it('returns stats for truncated file', () => {
+    const file: PrFileDiff = { ...baseFile, is_truncated: true, patch_line_count: 15000 }
+    const stats = getTruncationStats(file)
+    expect(stats).toEqual({ shown: 200, total: 15000 })
+  })
+
+  it('returns null for normal file', () => {
+    expect(getTruncationStats(baseFile)).toBeNull()
+  })
+
+  it('returns null when is_truncated but patch_line_count is null', () => {
+    const file: PrFileDiff = { ...baseFile, is_truncated: true, patch_line_count: null }
+    expect(getTruncationStats(file)).toBeNull()
+  })
+})
+
+// ============================================================================
+// Auto-collapse Threshold Logic Tests
+// ============================================================================
+
+describe('auto-collapse threshold logic', () => {
+  it('files with >500 changes should be identified for collapse', () => {
+    const file: PrFileDiff = { ...baseFile, additions: 300, deletions: 250 }
+    expect(file.additions + file.deletions > 500 || file.is_truncated).toBe(true)
+  })
+
+  it('files with exactly 500 changes should NOT be collapsed', () => {
+    const file: PrFileDiff = { ...baseFile, additions: 300, deletions: 200 }
+    expect(file.additions + file.deletions > 500 || file.is_truncated).toBe(false)
+  })
+
+  it('truncated files should be collapsed regardless of change count', () => {
+    const file: PrFileDiff = { ...baseFile, additions: 1, deletions: 0, is_truncated: true }
+    expect(file.additions + file.deletions > 500 || file.is_truncated).toBe(true)
   })
 })

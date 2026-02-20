@@ -73,3 +73,19 @@ export function toGitDiffViewData(file: PrFileDiff, contents?: FileContents): Di
     hunks,
   }
 }
+
+/**
+ * Check if a file's diff was truncated by the backend
+ */
+export function isTruncated(file: PrFileDiff): boolean {
+  return file.is_truncated === true
+}
+
+/**
+ * Get truncation statistics for a file
+ * @returns Object with shown/total line counts, or null if not truncated
+ */
+export function getTruncationStats(file: PrFileDiff): { shown: number; total: number } | null {
+  if (!file.is_truncated || file.patch_line_count == null) return null
+  return { shown: 200, total: file.patch_line_count }
+}

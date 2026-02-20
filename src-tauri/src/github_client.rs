@@ -1138,6 +1138,10 @@ pub struct PrFileDiff {
     pub changes: i64,
     pub patch: Option<String>,
     pub previous_filename: Option<String>,
+    #[serde(default)]
+    pub is_truncated: bool,
+    #[serde(default)]
+    pub patch_line_count: Option<i32>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

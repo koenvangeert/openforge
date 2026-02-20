@@ -16,16 +16,15 @@ pub struct TaskFileDiff {
     pub changes: i32,
     pub patch: Option<String>,
     pub previous_filename: Option<String>,
+    /// Whether the patch was truncated due to exceeding 10,000 lines
+    pub is_truncated: bool,
+    /// Total number of patch lines before truncation (None if not truncated)
+    pub patch_line_count: Option<i32>,
 }
 
-/// Parse unified diff output into per-file structs
-///
-/// # Arguments
-/// * `diff_output` - Raw unified diff string (e.g., from `git diff`)
-///
-/// # Returns
-/// Vec of TaskFileDiff, one per file. Empty vec if input is empty or no diffs found.
-pub fn parse_unified_diff(diff_output: &str) -> Vec<TaskFileDiff> {
+/// Parse unified diff output into per-file structs.
+/// When `truncate` is true, patches exceeding 10,000 lines are truncated to 200 lines.
+pub fn parse_unified_diff(diff_output: &str, truncate: bool) -> Vec<TaskFileDiff> {
     if diff_output.trim().is_empty() {
         return Vec::new();
     }
@@ -40,8 +39,14 @@ pub fn parse_unified_diff(diff_output: &str) -> Vec<TaskFileDiff> {
         if line.starts_with("diff --git a/") {
             // Save previous file if exists
             if let Some(mut file) = current_file.take() {
-                if !patch_lines.is_empty() {
-                    file.patch = Some(patch_lines.join("\n"));
+                if !patch_lines.is_empty() && file.status != "binary" {
+                    if truncate && patch_lines.len() > 10_000 {
+                        file.patch_line_count = Some(patch_lines.len() as i32);
+                        file.patch = Some(patch_lines[..200].join("\n"));
+                        file.is_truncated = true;
+                    } else {
+                        file.patch = Some(patch_lines.join("\n"));
+                    }
                 }
                 diffs.push(file);
                 patch_lines.clear();
@@ -58,6 +63,8 @@ pub fn parse_unified_diff(diff_output: &str) -> Vec<TaskFileDiff> {
                 changes: 0,
                 patch: None,
                 previous_filename: None,
+                is_truncated: false,
+                patch_line_count: None,
             });
             in_patch = false;
         } else if let Some(ref mut file) = current_file {
@@ -100,8 +107,14 @@ pub fn parse_unified_diff(diff_output: &str) -> Vec<TaskFileDiff> {
 
     // Save last file
     if let Some(mut file) = current_file.take() {
-        if !patch_lines.is_empty() {
-            file.patch = Some(patch_lines.join("\n"));
+        if !patch_lines.is_empty() && file.status != "binary" {
+            if truncate && patch_lines.len() > 10_000 {
+                file.patch_line_count = Some(patch_lines.len() as i32);
+                file.patch = Some(patch_lines[..200].join("\n"));
+                file.is_truncated = true;
+            } else {
+                file.patch = Some(patch_lines.join("\n"));
+            }
         }
         diffs.push(file);
     }
@@ -131,10 +144,10 @@ mod tests {
 
     #[test]
     fn test_empty_input() {
-        let result = parse_unified_diff("");
+        let result = parse_unified_diff("", true);
         assert_eq!(result.len(), 0);
 
-        let result = parse_unified_diff("   \n  \n  ");
+        let result = parse_unified_diff("   \n  \n  ", true);
         assert_eq!(result.len(), 0);
     }
 
@@ -150,7 +163,7 @@ index 1234567..abcdefg 100644
      println!("world");
  }"#;
 
-        let result = parse_unified_diff(diff);
+        let result = parse_unified_diff(diff, true);
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].filename, "src/main.rs");
         assert_eq!(result[0].status, "modified");
@@ -172,7 +185,7 @@ index 0000000..1234567
 +}
 "#;
 
-        let result = parse_unified_diff(diff);
+        let result = parse_unified_diff(diff, true);
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].filename, "src/new.rs");
         assert_eq!(result[0].status, "added");
@@ -192,7 +205,7 @@ index 1234567..0000000
 -}
 "#;
 
-        let result = parse_unified_diff(diff);
+        let result = parse_unified_diff(diff, true);
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].filename, "src/old.rs");
         assert_eq!(result[0].status, "removed");
@@ -208,7 +221,7 @@ rename from src/old_name.rs
 rename to src/new_name.rs
 "#;
 
-        let result = parse_unified_diff(diff);
+        let result = parse_unified_diff(diff, true);
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].filename, "src/new_name.rs");
         assert_eq!(result[0].status, "renamed");
@@ -227,7 +240,7 @@ index 1234567..abcdefg 100644
 Binary files a/image.png and b/image.png differ
 "#;
 
-        let result = parse_unified_diff(diff);
+        let result = parse_unified_diff(diff, true);
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].filename, "image.png");
         assert_eq!(result[0].status, "binary");
@@ -252,7 +265,7 @@ index 0000000..1234567
 +new content
 "#;
 
-        let result = parse_unified_diff(diff);
+        let result = parse_unified_diff(diff, true);
         assert_eq!(result.len(), 2);
 
         assert_eq!(result[0].filename, "file1.rs");
@@ -279,11 +292,111 @@ index 1234567..abcdefg 100644
  line3
 "#;
 
-        let result = parse_unified_diff(diff);
+        let result = parse_unified_diff(diff, true);
         assert_eq!(result.len(), 1);
         let patch = result[0].patch.as_ref().unwrap();
         assert!(patch.contains("@@ -1,3 +1,4 @@"));
         assert!(patch.contains("+added"));
         assert!(patch.contains(" line1"));
+    }
+
+    #[test]
+    fn test_truncation_large_patch() {
+        let mut diff = String::from("diff --git a/big.rs b/big.rs\nindex 1234567..abcdefg 100644\n--- a/big.rs\n+++ b/big.rs\n@@ -0,0 +1,10001 @@\n");
+        for i in 0..10001 {
+            diff.push_str(&format!("+line {}\n", i));
+        }
+
+        let result = parse_unified_diff(&diff, true);
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].filename, "big.rs");
+        assert_eq!(result[0].is_truncated, true);
+        assert_eq!(result[0].patch_line_count, Some(10002)); // 10001 lines + 1 @@ header
+
+        let patch = result[0].patch.as_ref().unwrap();
+        let patch_line_count = patch.lines().count();
+        assert_eq!(patch_line_count, 201); // 200 lines + 1 @@ header
+    }
+
+    #[test]
+    fn test_no_truncation_small_patch() {
+        let mut diff = String::from("diff --git a/small.rs b/small.rs\nindex 1234567..abcdefg 100644\n--- a/small.rs\n+++ b/small.rs\n@@ -0,0 +1,100 @@\n");
+        for i in 0..100 {
+            diff.push_str(&format!("+line {}\n", i));
+        }
+
+        let result = parse_unified_diff(&diff, true);
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].filename, "small.rs");
+        assert_eq!(result[0].is_truncated, false);
+        assert_eq!(result[0].patch_line_count, None);
+
+        let patch = result[0].patch.as_ref().unwrap();
+        let patch_line_count = patch.lines().count();
+        assert_eq!(patch_line_count, 101); // 100 lines + 1 @@ header
+    }
+
+    #[test]
+    fn test_truncation_boundary() {
+        let mut diff = String::from("diff --git a/boundary.rs b/boundary.rs\nindex 1234567..abcdefg 100644\n--- a/boundary.rs\n+++ b/boundary.rs\n@@ -0,0 +1,9999 @@\n");
+        for i in 0..9999 {
+            diff.push_str(&format!("+line {}\n", i));
+        }
+
+        let result = parse_unified_diff(&diff, true);
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].filename, "boundary.rs");
+        assert_eq!(result[0].is_truncated, false);
+        assert_eq!(result[0].patch_line_count, None);
+
+        let patch = result[0].patch.as_ref().unwrap();
+        let patch_line_count = patch.lines().count();
+        assert_eq!(patch_line_count, 10000); // 9999 lines + 1 @@ header
+    }
+
+    #[test]
+    fn test_truncation_binary_not_affected() {
+        let diff = r#"diff --git a/image.png b/image.png
+index 1234567..abcdefg 100644
+Binary files a/image.png and b/image.png differ
+"#;
+
+        let result = parse_unified_diff(diff, true);
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].filename, "image.png");
+        assert_eq!(result[0].status, "binary");
+        assert_eq!(result[0].patch, None);
+        assert_eq!(result[0].is_truncated, false);
+        assert_eq!(result[0].patch_line_count, None);
+    }
+
+    #[test]
+    fn test_multi_file_mixed_truncation() {
+        let mut diff = String::from("diff --git a/small.rs b/small.rs\nindex 1234567..abcdefg 100644\n--- a/small.rs\n+++ b/small.rs\n@@ -0,0 +1,10 @@\n");
+        for i in 0..10 {
+            diff.push_str(&format!("+line {}\n", i));
+        }
+
+        diff.push_str("diff --git a/big.rs b/big.rs\nindex 1234567..abcdefg 100644\n--- a/big.rs\n+++ b/big.rs\n@@ -0,0 +1,10001 @@\n");
+        for i in 0..10001 {
+            diff.push_str(&format!("+line {}\n", i));
+        }
+
+        let result = parse_unified_diff(&diff, true);
+        assert_eq!(result.len(), 2);
+
+        // First file: small, not truncated
+        assert_eq!(result[0].filename, "small.rs");
+        assert_eq!(result[0].is_truncated, false);
+        assert_eq!(result[0].patch_line_count, None);
+        let small_patch = result[0].patch.as_ref().unwrap();
+        assert_eq!(small_patch.lines().count(), 11); // 10 lines + 1 @@ header
+
+        // Second file: large, truncated
+        assert_eq!(result[1].filename, "big.rs");
+        assert_eq!(result[1].is_truncated, true);
+        assert_eq!(result[1].patch_line_count, Some(10002)); // 10001 lines + 1 @@ header
+        let big_patch = result[1].patch.as_ref().unwrap();
+        assert_eq!(big_patch.lines().count(), 201); // 200 lines + 1 @@ header
     }
 }
