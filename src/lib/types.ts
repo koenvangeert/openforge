@@ -242,6 +242,7 @@ export interface PtySpawnRequest {
 export interface PtyEvent {
   task_id: string;
   data: string;
+  instance_id?: number;
 }
 
 

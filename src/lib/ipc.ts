@@ -168,8 +168,8 @@ export async function submitPrReview(owner: string, repo: string, prNumber: numb
   return invoke<void>("submit_pr_review", { owner, repo, prNumber, event, body, comments, commitId });
 }
 
-export async function spawnPty(taskId: string, serverPort: number, opencodeSessionId: string, cols: number, rows: number): Promise<void> {
-  return invoke("pty_spawn", { taskId, serverPort, opencodeSessionId, cols, rows });
+export async function spawnPty(taskId: string, serverPort: number, opencodeSessionId: string, cols: number, rows: number): Promise<number> {
+  return invoke<number>("pty_spawn", { taskId, serverPort, opencodeSessionId, cols, rows });
 }
 
 export async function writePty(taskId: string, data: string): Promise<void> {
