@@ -406,7 +406,7 @@
 </script>
 
 <div class="flex flex-col h-screen overflow-hidden">
-  <header class="navbar bg-base-200 border-b border-base-300 px-5 gap-5 min-h-14 shrink-0">
+  <header class="navbar bg-base-200 border-b border-base-300 px-6 gap-5 min-h-14 shrink-0">
     <div class="flex items-center gap-4 flex-1">
       <h1 class="text-sm font-semibold text-base-content tracking-wide m-0">AI Command Center</h1>
       <ProjectSwitcher onNewProject={() => showProjectSetup = true} />
@@ -468,7 +468,7 @@
   <main class="flex-1 overflow-hidden flex">
     {#if $currentView === 'settings' || $currentView === 'global_settings'}
       <div class="flex flex-col flex-1 overflow-hidden w-full">
-        <div class="flex bg-base-200 border-b border-base-300 px-5 shrink-0">
+        <div class="flex bg-base-200 border-b border-base-300 px-6 shrink-0">
           <button
             class="btn btn-ghost btn-sm rounded-none border-b-2 {$currentView === 'settings' ? 'text-primary border-b-primary' : 'border-transparent'}"
             onclick={() => $currentView = 'settings'}

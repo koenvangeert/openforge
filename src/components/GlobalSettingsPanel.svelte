@@ -53,12 +53,12 @@
 </script>
 
 <div class="flex flex-col h-full w-full bg-base-200">
-  <div class="flex items-center justify-between px-5 py-3.5 border-b border-base-300">
+  <div class="flex items-center justify-between px-6 py-4 border-b border-base-300">
     <h2 class="text-[0.9rem] font-semibold text-base-content m-0">Global Settings</h2>
     <button class="btn btn-ghost btn-xs text-base-content/50 hover:bg-error hover:text-error-content" onclick={close}>✕</button>
   </div>
 
-  <div class="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-6">
+  <div class="flex-1 overflow-y-auto py-5 flex flex-col gap-6 max-w-2xl mx-auto w-full px-6">
     <section class="flex flex-col gap-2">
       <h3 class="text-xs font-semibold text-primary uppercase tracking-wider mb-3 mt-0">JIRA</h3>
       <label class="flex flex-col gap-1">
@@ -84,7 +84,7 @@
     </section>
   </div>
 
-  <div class="px-5 py-3 border-t border-base-300">
+  <div class="py-4 border-t border-base-300 max-w-2xl mx-auto w-full px-6">
     <button class="btn btn-primary btn-block" onclick={save} disabled={isSaving}>
       {#if isSaving}Saving...{:else if saved}Saved!{:else}Save Settings{/if}
     </button>

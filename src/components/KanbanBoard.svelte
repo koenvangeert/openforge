@@ -131,7 +131,7 @@
 <svelte:window onclick={closeContextMenu} onkeydown={handleGlobalKeydown} />
 
 <div class="flex flex-col h-full overflow-hidden">
-  <div class="flex items-center gap-2 px-4 pt-3 pb-1 shrink-0">
+  <div class="flex items-center gap-3 px-6 pt-4 pb-2 shrink-0">
     <label class="input input-bordered input-sm flex items-center gap-2 w-64">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" class="h-4 w-4 opacity-50"><path fill-rule="evenodd" d="M9.965 11.026a5 5 0 1 1 1.06-1.06l2.755 2.754a.75.75 0 1 1-1.06 1.06l-2.755-2.754ZM10.5 7a3.5 3.5 0 1 1-7 0 3.5 3.5 0 0 1 7 0Z" clip-rule="evenodd" /></svg>
       <input
@@ -169,11 +169,11 @@
     </button>
   </div>
 
-  <div class="flex gap-3 p-4 flex-1 overflow-x-auto">
+  <div class="flex gap-4 p-4 pt-2 flex-1 overflow-x-auto">
   {#each COLUMNS as column}
     {@const columnTasks = tasksForColumn(filteredTasks, column)}
     <div class="flex-1 min-w-0 flex flex-col bg-base-200 rounded-lg border border-base-300">
-       <div class="flex items-center justify-between px-3.5 py-3 border-b border-base-300">
+       <div class="flex items-center justify-between px-4 py-3 border-b border-base-300">
          <span class="text-xs font-semibold text-base-content uppercase tracking-wider">{COLUMN_LABELS[column]}</span>
           <div class="flex items-center gap-2">
             {#if column === 'done' && columnTasks.length > 0}
@@ -193,7 +193,7 @@
             <span class="badge badge-ghost badge-sm">{columnTasks.length}</span>
           </div>
        </div>
-      <div class="flex-1 p-2 flex flex-col gap-2 overflow-y-auto">
+      <div class="flex-1 p-3 flex flex-col gap-2.5 overflow-y-auto">
         {#each columnTasks as task (task.id)}
           <div oncontextmenu={(e: MouseEvent) => handleContextMenu(e, task.id)}>
             <TaskCard {task} session={getSession($activeSessions, task.id)} pullRequests={$ticketPrs.get(task.id) || []} onSelect={handleSelect} />

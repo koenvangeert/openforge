@@ -234,7 +234,7 @@
       <h3 class="text-xs font-semibold text-primary uppercase tracking-wider m-0">Pull Requests</h3>
       <div class="flex flex-col gap-2">
         {#each taskPrs as pr (pr.id)}
-          <div class="bg-base-100 border border-base-300 rounded-md p-2.5 flex flex-col gap-1.5">
+          <div class="bg-base-100 border border-base-300 rounded-md p-3 flex flex-col gap-2">
             <div class="flex items-center gap-2">
               <span class="text-[0.65rem] font-semibold uppercase px-1.5 py-0.5 rounded tracking-wider {pr.state === 'open' ? 'bg-success text-success-content' : pr.state === 'merged' ? 'bg-secondary text-secondary-content' : 'bg-error text-error-content'}">
                 {pr.state}
@@ -328,7 +328,7 @@
             </div>
             <div class="flex flex-col gap-2">
               {#each comments as comment (comment.id)}
-                <div class="bg-base-100 border border-base-300 rounded-md p-2.5 flex flex-col gap-1.5 {comment.addressed === 1 ? 'opacity-60' : ''}">
+                <div class="bg-base-100 border border-base-300 rounded-md p-3 flex flex-col gap-2 {comment.addressed === 1 ? 'opacity-60' : ''}">
                   <div class="flex gap-2 items-center flex-wrap">
                     <span class="text-xs font-semibold text-primary">@{comment.author}</span>
                     {#if comment.file_path}

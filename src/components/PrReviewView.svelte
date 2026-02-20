@@ -224,7 +224,7 @@
         </button>
       </div>
 
-      <div class="flex-1 overflow-y-auto p-6">
+      <div class="flex-1 overflow-y-auto p-6 pb-8">
         {#if isLoading && $reviewPrs.length === 0}
           <div class="flex flex-col items-center justify-center h-full gap-3 text-base-content/50 text-sm">
             <span class="loading loading-spinner loading-md text-primary"></span>
@@ -245,7 +245,7 @@
           {#each [...groupedPrs.entries()] as [repo, prs]}
             <div class="mb-8">
               <h3 class="text-xs font-semibold text-base-content/50 m-0 mb-3 uppercase tracking-wider">{repo}</h3>
-              <div class="grid grid-cols-[repeat(auto-fill,minmax(400px,1fr))] gap-4">
+              <div class="grid grid-cols-[repeat(auto-fill,minmax(340px,1fr))] gap-5 max-w-6xl">
                 {#each prs as pr}
                   <ReviewPrCard
                     {pr}

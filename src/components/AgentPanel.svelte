@@ -352,7 +352,7 @@
 </script>
 
 <div class="flex flex-col gap-3 h-full">
-  <div class="flex items-center justify-between px-4 py-3 bg-base-200 border border-base-300 rounded-md">
+  <div class="flex items-center justify-between px-5 py-3.5 bg-base-200 border border-base-300 rounded-md">
     <div class="flex items-start gap-2.5">
       <span class="mt-1.5 shrink-0 {status === 'idle' ? 'status status-neutral' : status === 'running' ? 'status status-success' : status === 'complete' ? 'status status-primary' : 'status status-error'}"></span>
       <div class="flex flex-col gap-1.5">
@@ -390,7 +390,7 @@
   </div>
 
   {#if questionText}
-    <div class="flex items-start gap-2.5 px-4 py-2.5 bg-warning/10 border border-warning/30 rounded-md">
+    <div class="flex items-start gap-3 px-5 py-3 bg-warning/10 border border-warning/30 rounded-md">
       <span class="flex items-center justify-center w-5 h-5 rounded-full bg-warning/20 text-warning text-xs font-bold shrink-0 mt-0.5">?</span>
       <span class="text-[0.8125rem] text-base-content leading-relaxed line-clamp-3">{questionText}</span>
     </div>
@@ -422,7 +422,7 @@
   .terminal-wrapper {
     width: 100%;
     height: 100%;
-    padding: 8px;
+    padding: 12px;
   }
 
   /* Light theme scrollbar overrides for xterm viewport */

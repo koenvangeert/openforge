@@ -107,11 +107,11 @@
     {#if reviewMode}
       <SelfReviewView {task} {agentStatus} onSendToAgent={handleSendToAgent} />
     {:else}
-      <div class="basis-[70%] p-6 overflow-hidden max-[800px]:basis-auto max-[800px]:p-4">
+      <div class="basis-[70%] p-5 overflow-hidden max-[800px]:basis-auto max-[800px]:p-4">
         <AgentPanel taskId={task.id} />
       </div>
       <div class="w-px bg-base-300 shrink-0 max-[800px]:w-full max-[800px]:h-px"></div>
-      <div class="basis-[30%] p-6 overflow-y-auto bg-base-200 max-[800px]:basis-auto max-[800px]:p-4">
+      <div class="basis-[30%] overflow-y-auto bg-base-200 max-[800px]:basis-auto">
         <TaskInfoPanel task={task} />
       </div>
     {/if}
