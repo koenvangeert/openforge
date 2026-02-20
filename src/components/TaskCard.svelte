@@ -21,6 +21,10 @@
     return text.length > max ? text.slice(0, max) + '...' : text
   }
 
+  function firstLine(text: string): string {
+    return text.split('\n')[0]
+  }
+
   function stageLabel(stage: string): string {
     const labels: Record<string, string> = {
       read_ticket: 'Reading ticket',
@@ -69,7 +73,12 @@
       </span>
     {/if}
   </div>
-  <div class="text-sm text-base-content leading-tight mb-1">{truncate(task.title, 60)}</div>
+  <div class="text-sm text-base-content leading-tight mb-1">
+    {truncate(firstLine(task.title), 80)}
+    {#if task.title.includes('\n')}
+      <span class="text-[0.6rem] text-base-content/40 ml-1">+{task.title.split('\n').length - 1} lines</span>
+    {/if}
+  </div>
   {#if task.jira_title}
     <div class="text-xs text-base-content/50 leading-tight mb-1.5">{truncate(task.jira_title, 80)}</div>
   {/if}
