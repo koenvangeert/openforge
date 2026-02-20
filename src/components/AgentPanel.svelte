@@ -416,15 +416,15 @@
   }
 
   :global(.terminal-wrapper .xterm-viewport::-webkit-scrollbar-track) {
-    background: oklch(var(--color-base-200));
+    background: var(--color-base-200);
   }
 
   :global(.terminal-wrapper .xterm-viewport::-webkit-scrollbar-thumb) {
-    background: oklch(var(--color-base-300));
+    background: var(--color-base-300);
     border-radius: 3px;
   }
 
   :global(.terminal-wrapper .xterm-viewport::-webkit-scrollbar-thumb:hover) {
-    background: oklch(var(--color-base-content) / 0.4);
+    background: color-mix(in oklch, var(--color-base-content) 40%, transparent);
   }
 </style>

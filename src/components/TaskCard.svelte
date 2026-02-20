@@ -37,7 +37,7 @@
 </script>
 
 <Card
-  class="block px-3 py-2.5 {statusClass === 'running' ? 'running' : ''} {statusClass === 'paused' ? 'paused' : ''} {statusClass === 'failed' ? 'failed' : ''} {statusClass === 'interrupted' ? 'interrupted' : ''} {statusClass === 'completed' ? 'completed' : ''} {needsInput ? 'needs-input' : ''}"
+  class="block px-3 py-2.5 {statusClass === 'running' ? 'running' : ''} {statusClass === 'paused' && !needsInput ? 'paused' : ''} {statusClass === 'failed' ? 'failed' : ''} {statusClass === 'interrupted' ? 'interrupted' : ''} {statusClass === 'completed' ? 'completed' : ''} {needsInput ? 'needs-input' : ''}"
   onclick={handleClick}
 >
   <div class="flex items-center justify-between mb-1">
@@ -128,36 +128,53 @@
 </Card>
 
 <style>
-  /* Status border-left indicators — use daisyUI theme color vars */
+  /* Status border indicators — daisyUI v5 vars are full oklch() values, use var() directly */
   :global(.running) {
-    border-left: 3px solid oklch(var(--color-success));
-    background-image: linear-gradient(to right, oklch(var(--color-success) / 0.05), transparent 40%);
+    border: 2px solid var(--color-success);
+    background-color: var(--color-base-100);
+    background-image: linear-gradient(to right, color-mix(in oklch, var(--color-success) 5%, transparent), transparent 40%);
+    animation: border-pulse-success 2s ease-in-out infinite;
   }
   :global(.completed) {
-    border-left: 3px solid oklch(var(--color-primary));
-    background-image: linear-gradient(to right, oklch(var(--color-primary) / 0.08), transparent 40%);
+    border-left: 3px solid var(--color-primary);
+    background-image: linear-gradient(to right, color-mix(in oklch, var(--color-primary) 8%, transparent), transparent 40%);
   }
   :global(.paused) {
-    border-left: 3px solid oklch(var(--color-warning));
-    background-image: linear-gradient(to right, oklch(var(--color-warning) / 0.05), transparent 40%);
+    border-left: 3px solid var(--color-warning);
+    background-image: linear-gradient(to right, color-mix(in oklch, var(--color-warning) 5%, transparent), transparent 40%);
   }
   :global(.failed) {
-    border-left: 3px solid oklch(var(--color-error));
-    background-image: linear-gradient(to right, oklch(var(--color-error) / 0.05), transparent 40%);
+    border-left: 3px solid var(--color-error);
+    background-image: linear-gradient(to right, color-mix(in oklch, var(--color-error) 5%, transparent), transparent 40%);
   }
   :global(.interrupted) {
-    border-left: 3px solid oklch(var(--color-base-content) / 0.3);
-    background-image: linear-gradient(to right, oklch(var(--color-base-content) / 0.03), transparent 40%);
+    border-left: 3px solid color-mix(in oklch, var(--color-base-content) 30%, transparent);
+    background-image: linear-gradient(to right, color-mix(in oklch, var(--color-base-content) 3%, transparent), transparent 40%);
   }
   :global(.needs-input) {
-    border: 2px solid oklch(var(--color-warning));
-    background: oklch(var(--color-warning) / 0.08);
-    box-shadow: 0 0 12px oklch(var(--color-warning) / 0.15);
-    animation: needs-input-pulse 2s ease-in-out infinite;
+    border: 2px solid var(--color-warning);
+    background-color: var(--color-base-100);
+    animation: border-pulse-warning 2s ease-in-out infinite;
   }
-  @keyframes needs-input-pulse {
-    0%, 100% { box-shadow: 0 0 12px oklch(var(--color-warning) / 0.15); }
-    50% { box-shadow: 0 0 20px oklch(var(--color-warning) / 0.3); }
+  @keyframes border-pulse-success {
+    0%, 100% {
+      border-color: var(--color-success);
+      box-shadow: 0 0 8px color-mix(in oklch, var(--color-success) 30%, transparent);
+    }
+    50% {
+      border-color: color-mix(in oklch, var(--color-success) 40%, transparent);
+      box-shadow: 0 0 3px color-mix(in oklch, var(--color-success) 10%, transparent);
+    }
+  }
+  @keyframes border-pulse-warning {
+    0%, 100% {
+      border-color: var(--color-warning);
+      box-shadow: 0 0 8px color-mix(in oklch, var(--color-warning) 30%, transparent);
+    }
+    50% {
+      border-color: color-mix(in oklch, var(--color-warning) 40%, transparent);
+      box-shadow: 0 0 3px color-mix(in oklch, var(--color-warning) 10%, transparent);
+    }
   }
   @keyframes badge-pulse {
     0%, 100% { opacity: 1; }
