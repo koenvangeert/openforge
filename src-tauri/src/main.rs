@@ -21,6 +21,7 @@ use jira_client::JiraClient;
 use github_client::GitHubClient;
 use base64::Engine as _;
 use pty_manager::PtyManager;
+use serde::Serialize;
 
 // ============================================================================
 // Tauri Commands
@@ -1374,6 +1375,21 @@ async fn get_file_at_ref(
         .map_err(|e| format!("UTF-8 decode error: {}", e))
 }
 
+#[derive(Debug, Clone, Serialize)]
+struct FrontendReviewComment {
+    id: i64,
+    pr_number: i64,
+    repo_owner: String,
+    repo_name: String,
+    path: String,
+    line: Option<i32>,
+    side: Option<String>,
+    body: String,
+    author: String,
+    created_at: String,
+    in_reply_to_id: Option<i64>,
+}
+
 #[tauri::command]
 async fn get_review_comments(
     db: State<'_, Mutex<db::Database>>,
@@ -1381,7 +1397,7 @@ async fn get_review_comments(
     owner: String,
     repo: String,
     pr_number: i64,
-) -> Result<Vec<github_client::PrReviewComment>, String> {
+) -> Result<Vec<FrontendReviewComment>, String> {
     let token = {
         let db_lock = db.lock().unwrap();
         db_lock.get_config("github_token")
@@ -1389,10 +1405,36 @@ async fn get_review_comments(
             .ok_or("github_token not configured")?
     };
 
-    github_client
+    let comments = github_client
         .get_pr_review_comments(&owner, &repo, pr_number, &token)
         .await
-        .map_err(|e| format!("Failed to get review comments: {}", e))
+        .map_err(|e| format!("Failed to get review comments: {}", e))?;
+
+    let mapped: Vec<FrontendReviewComment> = comments
+        .into_iter()
+        .map(|c| {
+            // For outdated comments where `line` is null, fall back to `original_line`
+            // from the extra GitHub API fields.
+            let line = c.line.or_else(|| {
+                c.extra.get("original_line").and_then(|v| v.as_i64()).map(|v| v as i32)
+            });
+            FrontendReviewComment {
+                id: c.id,
+                pr_number,
+                repo_owner: owner.clone(),
+                repo_name: repo.clone(),
+                path: c.path,
+                line,
+                side: c.side,
+                body: c.body,
+                author: c.user.login,
+                created_at: c.created_at,
+                in_reply_to_id: c.in_reply_to_id,
+            }
+        })
+        .collect();
+
+    Ok(mapped)
 }
 
 #[tauri::command]
