@@ -1456,6 +1456,7 @@ async fn get_task_diff(
         .trim()
         .to_string();
 
+    // Diff from merge-base to working tree (includes committed + staged + unstaged changes)
     let output = tokio::process::Command::new("git")
         .arg("-C")
         .arg(&worktree_path)
@@ -1471,44 +1472,7 @@ async fn get_task_diff(
     }
 
     let diff_output = String::from_utf8_lossy(&output.stdout);
-    let mut diffs = diff_parser::parse_unified_diff(&diff_output, true);
-
-    // Include untracked files (new files never `git add`ed)
-    let untracked_output = tokio::process::Command::new("git")
-        .arg("-C")
-        .arg(&worktree_path)
-        .args(["ls-files", "--others", "--exclude-standard"])
-        .output()
-        .await
-        .map_err(|e| format!("Failed to list untracked files: {}", e))?;
-
-    if untracked_output.status.success() {
-        let untracked_list = String::from_utf8_lossy(&untracked_output.stdout);
-        for file_name in untracked_list.lines().filter(|l| !l.is_empty()) {
-            let full_path = std::path::Path::new(&worktree_path).join(file_name);
-            match tokio::fs::read_to_string(&full_path).await {
-                Ok(content) => {
-                    diffs.push(diff_parser::create_added_file_diff(file_name, &content, true));
-                }
-                Err(_) => {
-                    diffs.push(diff_parser::TaskFileDiff {
-                        sha: String::new(),
-                        filename: file_name.to_string(),
-                        status: "binary".to_string(),
-                        additions: 0,
-                        deletions: 0,
-                        changes: 0,
-                        patch: None,
-                        previous_filename: None,
-                        is_truncated: false,
-                        patch_line_count: None,
-                    });
-                }
-            }
-        }
-    }
-
-    Ok(diffs)
+    Ok(diff_parser::parse_unified_diff(&diff_output, true))
 }
 
 /// Fetch old and new file content for a file in a task's worktree.

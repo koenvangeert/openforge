@@ -127,43 +127,6 @@ pub fn parse_unified_diff(diff_output: &str, truncate: bool) -> Vec<TaskFileDiff
     diffs
 }
 
-/// Create a `TaskFileDiff` for a new (untracked) file from its content.
-/// Generates a synthetic unified-diff patch with all lines as additions.
-/// Applies the same 10,000-line truncation rules as `parse_unified_diff`.
-pub fn create_added_file_diff(filename: &str, content: &str, truncate: bool) -> TaskFileDiff {
-    let lines: Vec<&str> = content.lines().collect();
-    let line_count = lines.len();
-
-    let mut patch_lines: Vec<String> = Vec::with_capacity(line_count + 2);
-    patch_lines.push(format!("@@ -0,0 +1,{} @@", line_count));
-    for line in &lines {
-        patch_lines.push(format!("+{}", line));
-    }
-    if !content.ends_with('\n') && !content.is_empty() {
-        patch_lines.push("\\ No newline at end of file".to_string());
-    }
-
-    let (patch, is_truncated, patch_line_count) = if truncate && patch_lines.len() > 10_000 {
-        let total = patch_lines.len() as i32;
-        (Some(patch_lines[..200].join("\n")), true, Some(total))
-    } else {
-        (Some(patch_lines.join("\n")), false, None)
-    };
-
-    TaskFileDiff {
-        sha: String::new(),
-        filename: filename.to_string(),
-        status: "added".to_string(),
-        additions: line_count as i32,
-        deletions: 0,
-        changes: line_count as i32,
-        patch,
-        previous_filename: None,
-        is_truncated,
-        patch_line_count,
-    }
-}
-
 /// Extract filename from "diff --git a/path b/path" line
 fn extract_filename_from_diff_header(line: &str) -> String {
     // Format: "diff --git a/path b/path"
@@ -435,76 +398,5 @@ Binary files a/image.png and b/image.png differ
         assert_eq!(result[1].patch_line_count, Some(10002)); // 10001 lines + 1 @@ header
         let big_patch = result[1].patch.as_ref().unwrap();
         assert_eq!(big_patch.lines().count(), 201); // 200 lines + 1 @@ header
-    }
-
-    #[test]
-    fn test_create_added_file_diff_basic() {
-        let result = create_added_file_diff(
-            "src/new.rs",
-            "fn main() {\n    println!(\"hello\");\n}\n",
-            true,
-        );
-        assert_eq!(result.filename, "src/new.rs");
-        assert_eq!(result.status, "added");
-        assert_eq!(result.additions, 3);
-        assert_eq!(result.deletions, 0);
-        assert_eq!(result.changes, 3);
-        assert_eq!(result.is_truncated, false);
-        assert_eq!(result.patch_line_count, None);
-
-        let patch = result.patch.unwrap();
-        assert!(patch.starts_with("@@ -0,0 +1,3 @@"));
-        assert!(patch.contains("+fn main() {"));
-        assert!(patch.contains("+    println!(\"hello\");"));
-        assert!(patch.contains("+}"));
-        assert!(!patch.contains("No newline"));
-    }
-
-    #[test]
-    fn test_create_added_file_diff_no_trailing_newline() {
-        let result = create_added_file_diff("file.txt", "hello\nworld", true);
-        let patch = result.patch.unwrap();
-        assert!(patch.contains("\\ No newline at end of file"));
-        assert_eq!(result.additions, 2);
-    }
-
-    #[test]
-    fn test_create_added_file_diff_empty_content() {
-        let result = create_added_file_diff("empty.txt", "", true);
-        assert_eq!(result.additions, 0);
-        assert_eq!(result.changes, 0);
-
-        let patch = result.patch.unwrap();
-        assert!(patch.starts_with("@@ -0,0 +1,0 @@"));
-        assert!(!patch.contains("No newline"));
-    }
-
-    #[test]
-    fn test_create_added_file_diff_truncation() {
-        let mut content = String::new();
-        for i in 0..10001 {
-            content.push_str(&format!("line {}\n", i));
-        }
-
-        let result = create_added_file_diff("big.rs", &content, true);
-        assert_eq!(result.is_truncated, true);
-        assert!(result.patch_line_count.unwrap() > 10_000);
-        assert_eq!(result.additions, 10001);
-
-        let patch = result.patch.unwrap();
-        assert_eq!(patch.lines().count(), 200);
-    }
-
-    #[test]
-    fn test_create_added_file_diff_no_truncation_when_disabled() {
-        let mut content = String::new();
-        for i in 0..10001 {
-            content.push_str(&format!("line {}\n", i));
-        }
-
-        let result = create_added_file_diff("big.rs", &content, false);
-        assert_eq!(result.is_truncated, false);
-        assert_eq!(result.patch_line_count, None);
-        assert_eq!(result.additions, 10001);
     }
 }
