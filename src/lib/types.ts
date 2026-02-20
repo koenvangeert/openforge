@@ -69,6 +69,7 @@ export interface PullRequestInfo {
   merged_at: number | null;
   created_at: number;
   updated_at: number;
+  unaddressed_comment_count: number;
 }
 
 export interface PollResult {

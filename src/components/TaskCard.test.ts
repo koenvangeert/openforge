@@ -406,4 +406,28 @@ describe('TaskCard', () => {
     const card = screen.getByRole('button')
     expect(card.classList.contains('ci-failed')).toBe(true)
   })
+
+  it('shows unaddressed comment badge when comments exist', () => {
+    const pr = { ...basePr, unaddressed_comment_count: 3 }
+    render(TaskCard, { props: { task: baseTask, pullRequests: [pr] } })
+    expect(screen.getByText('3 unaddressed')).toBeTruthy()
+  })
+
+  it('hides unaddressed comment badge when count is 0', () => {
+    const pr = { ...basePr, unaddressed_comment_count: 0 }
+    render(TaskCard, { props: { task: baseTask, pullRequests: [pr] } })
+    expect(screen.queryByText('unaddressed')).toBeNull()
+  })
+
+  it('sums unaddressed counts across multiple PRs', () => {
+    const pr1 = { ...basePr, id: 1, unaddressed_comment_count: 2 }
+    const pr2 = { ...basePr, id: 2, unaddressed_comment_count: 1 }
+    render(TaskCard, { props: { task: baseTask, pullRequests: [pr1, pr2] } })
+    expect(screen.getByText('3 unaddressed')).toBeTruthy()
+  })
+
+  it('hides badge when no pull requests', () => {
+    render(TaskCard, { props: { task: baseTask } })
+    expect(screen.queryByText('unaddressed')).toBeNull()
+  })
 })

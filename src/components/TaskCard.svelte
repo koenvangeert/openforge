@@ -25,6 +25,9 @@
   let needsInput = $derived(session?.status === 'paused' && session?.checkpoint_data !== null)
   let hasVisibleStatus = $derived(session !== null && ['running', 'completed', 'paused', 'failed', 'interrupted'].includes(session?.status ?? ''))
   let hasCiFailure = $derived(pullRequests.some(pr => pr.ci_status === 'failure' && pr.state === 'open'))
+  let totalUnaddressed = $derived(
+    pullRequests.reduce((sum, pr) => sum + (pr.unaddressed_comment_count || 0), 0)
+  )
 </script>
 
 <Card
@@ -98,6 +101,11 @@
         <div class="text-[0.7rem] font-semibold px-2 py-0.5 rounded mt-1 text-center bg-success/15 text-success border border-success/30">Ready to merge</div>
       {/if}
     {/each}
+  {/if}
+  {#if totalUnaddressed > 0}
+    <div class="flex items-center gap-1 mt-1">
+      <span class="badge badge-error badge-xs">{totalUnaddressed} unaddressed</span>
+    </div>
   {/if}
   {#if task.jira_assignee}
     <div class="text-[0.7rem] text-base-content/50">{task.jira_assignee}</div>

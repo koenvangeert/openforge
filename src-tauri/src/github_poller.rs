@@ -36,7 +36,7 @@
 //! - Skips projects with missing GitHub config
 
 use crate::db::{Database, PrRow};
-use crate::github_client::{aggregate_ci_status, aggregate_review_status, CheckRunsResponse, CombinedStatusResponse, GitHubClient, PrComment, PrReview};
+use crate::github_client::{aggregate_ci_status, aggregate_review_status, CheckRunsResponse, CombinedStatusResponse, GitHubClient, GitHubUser, PrComment, PrReview};
 use futures::future::join_all;
 use serde::Serialize;
 use std::collections::{HashMap, HashSet};
@@ -45,6 +45,24 @@ use std::sync::Mutex;
 use std::time::Instant;
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::time::{sleep, Duration};
+
+// ============================================================================
+// Bot Detection
+// ============================================================================
+
+/// Check if a GitHub user is a bot.
+///
+/// Returns true if either:
+/// - The user's type field (from GitHub API) is "Bot"
+/// - The user's login ends with "[bot]"
+fn is_bot(user: &GitHubUser) -> bool {
+    // Check if type field is "Bot"
+    if user.extra.get("type").and_then(|v| v.as_str()) == Some("Bot") {
+        return true;
+    }
+    // Fallback: check if login ends with "[bot]"
+    user.login.ends_with("[bot]")
+}
 
 // ============================================================================
 // PollResult
@@ -836,6 +854,7 @@ async fn poll_prs_for_project(
                 &comment.comment_type,
                 comment.path.as_deref(),
                 comment.line,
+                is_bot(&comment.user),
                 created_at,
             ) {
                 eprintln!("[GitHub Poller] Failed to insert comment {}: {}", comment.id, e);
@@ -1170,5 +1189,43 @@ mod tests {
 
         drop(db_mutex);
         let _ = fs::remove_file(&db_path);
+    }
+
+    #[test]
+    fn test_is_bot() {
+        // Test: login ends with [bot] and type is Bot
+        let user1 = GitHubUser {
+            login: "dependabot[bot]".into(),
+            extra: serde_json::json!({"type": "Bot"}),
+        };
+        assert!(is_bot(&user1));
+
+        // Test: login ends with [bot], type field missing (fallback)
+        let user2 = GitHubUser {
+            login: "dependabot[bot]".into(),
+            extra: serde_json::json!({}),
+        };
+        assert!(is_bot(&user2));
+
+        // Test: type field is Bot, login doesn't end with [bot]
+        let user3 = GitHubUser {
+            login: "some-app".into(),
+            extra: serde_json::json!({"type": "Bot"}),
+        };
+        assert!(is_bot(&user3));
+
+        // Test: human user with type User
+        let user4 = GitHubUser {
+            login: "johndoe".into(),
+            extra: serde_json::json!({"type": "User"}),
+        };
+        assert!(!is_bot(&user4));
+
+        // Test: human user with no type field
+        let user5 = GitHubUser {
+            login: "johndoe".into(),
+            extra: serde_json::json!({}),
+        };
+        assert!(!is_bot(&user5));
     }
 }

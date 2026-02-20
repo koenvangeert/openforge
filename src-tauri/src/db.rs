@@ -64,6 +64,7 @@ pub struct PrRow {
     pub merged_at: Option<i64>,
     pub created_at: i64,
     pub updated_at: i64,
+    pub unaddressed_comment_count: i64,
 }
 
 /// PR comment row from database
@@ -612,6 +613,14 @@ impl Database {
                 created_at INTEGER NOT NULL,
                 archived_at INTEGER
             )",
+            [],
+        )?;
+
+        // ============================================================================
+        // Retroactive migration: Mark existing bot comments as addressed
+        // ============================================================================
+        conn.execute(
+            "UPDATE pr_comments SET addressed = 1 WHERE author LIKE '%[bot]%' AND addressed = 0",
             [],
         )?;
 
@@ -1272,7 +1281,8 @@ impl Database {
     pub fn get_open_prs(&self) -> Result<Vec<PrRow>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT id, ticket_id, repo_owner, repo_name, title, url, state, head_sha, ci_status, ci_check_runs, review_status, merged_at, created_at, updated_at
+            "SELECT id, ticket_id, repo_owner, repo_name, title, url, state, head_sha, ci_status, ci_check_runs, review_status, merged_at, created_at, updated_at,
+                    (SELECT COUNT(*) FROM pr_comments WHERE pr_id = pull_requests.id AND addressed = 0) as unaddressed_comment_count
              FROM pull_requests
              WHERE state = 'open'
              ORDER BY updated_at DESC"
@@ -1294,6 +1304,7 @@ impl Database {
                 merged_at: row.get(11)?,
                 created_at: row.get(12)?,
                 updated_at: row.get(13)?,
+                unaddressed_comment_count: row.get(14)?,
             })
         })?;
 
@@ -1307,7 +1318,8 @@ impl Database {
     pub fn get_all_pull_requests(&self) -> Result<Vec<PrRow>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT id, ticket_id, repo_owner, repo_name, title, url, state, head_sha, ci_status, ci_check_runs, review_status, merged_at, created_at, updated_at
+            "SELECT id, ticket_id, repo_owner, repo_name, title, url, state, head_sha, ci_status, ci_check_runs, review_status, merged_at, created_at, updated_at,
+                    (SELECT COUNT(*) FROM pr_comments WHERE pr_id = pull_requests.id AND addressed = 0) as unaddressed_comment_count
              FROM pull_requests
              ORDER BY updated_at DESC",
         )?;
@@ -1328,6 +1340,7 @@ impl Database {
                 merged_at: row.get(11)?,
                 created_at: row.get(12)?,
                 updated_at: row.get(13)?,
+                unaddressed_comment_count: row.get(14)?,
             })
         })?;
 
@@ -1356,12 +1369,13 @@ impl Database {
         comment_type: &str,
         file_path: Option<&str>,
         line_number: Option<i32>,
+        addressed: bool,
         created_at: i64,
     ) -> Result<()> {
         let conn = self.conn.lock().unwrap();
         conn.execute(
-            "INSERT INTO pr_comments (id, pr_id, author, body, comment_type, file_path, line_number, created_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            "INSERT INTO pr_comments (id, pr_id, author, body, comment_type, file_path, line_number, addressed, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
             rusqlite::params![
                 id,
                 pr_id,
@@ -1370,6 +1384,7 @@ impl Database {
                 comment_type,
                 file_path,
                 line_number,
+                if addressed { 1 } else { 0 },
                 created_at,
             ],
         )?;
@@ -2485,6 +2500,7 @@ mod tests {
             "review_comment",
             Some("src/main.rs"),
             Some(42),
+            false,
             2000,
         )
         .expect("insert comment failed");
@@ -2496,6 +2512,7 @@ mod tests {
             "review_comment",
             None,
             None,
+            false,
             2001,
         )
         .expect("insert comment 2 failed");
@@ -2545,6 +2562,7 @@ mod tests {
             "review_comment",
             None,
             None,
+            false,
             3000,
         )
         .expect("insert 1 failed");
@@ -2556,6 +2574,7 @@ mod tests {
             "review_comment",
             None,
             None,
+            false,
             3001,
         )
         .expect("insert 2 failed");
@@ -2567,6 +2586,7 @@ mod tests {
             "issue_comment",
             None,
             None,
+            false,
             3002,
         )
         .expect("insert 3 failed");
@@ -2603,12 +2623,42 @@ mod tests {
         )
         .expect("insert pr failed");
 
-        db.insert_pr_comment(701, 30, "a", "c1", "review_comment", None, None, 4000)
-            .expect("insert failed");
-        db.insert_pr_comment(702, 30, "b", "c2", "review_comment", None, None, 4001)
-            .expect("insert failed");
-        db.insert_pr_comment(703, 30, "c", "c3", "review_comment", None, None, 4002)
-            .expect("insert failed");
+        db.insert_pr_comment(
+            701,
+            30,
+            "a",
+            "c1",
+            "review_comment",
+            None,
+            None,
+            false,
+            4000,
+        )
+        .expect("insert failed");
+        db.insert_pr_comment(
+            702,
+            30,
+            "b",
+            "c2",
+            "review_comment",
+            None,
+            None,
+            false,
+            4001,
+        )
+        .expect("insert failed");
+        db.insert_pr_comment(
+            703,
+            30,
+            "c",
+            "c3",
+            "review_comment",
+            None,
+            None,
+            false,
+            4002,
+        )
+        .expect("insert failed");
 
         db.mark_comments_addressed(&[701, 703])
             .expect("batch mark failed");
@@ -3611,12 +3661,42 @@ mod tests {
         )
         .expect("insert pr failed");
 
-        db.insert_pr_comment(801, 50, "alice", "c1", "review_comment", None, None, 5000)
-            .expect("insert c1 failed");
-        db.insert_pr_comment(802, 50, "bob", "c2", "review_comment", None, None, 5001)
-            .expect("insert c2 failed");
-        db.insert_pr_comment(803, 50, "carol", "c3", "review_comment", None, None, 5002)
-            .expect("insert c3 failed");
+        db.insert_pr_comment(
+            801,
+            50,
+            "alice",
+            "c1",
+            "review_comment",
+            None,
+            None,
+            false,
+            5000,
+        )
+        .expect("insert c1 failed");
+        db.insert_pr_comment(
+            802,
+            50,
+            "bob",
+            "c2",
+            "review_comment",
+            None,
+            None,
+            false,
+            5001,
+        )
+        .expect("insert c2 failed");
+        db.insert_pr_comment(
+            803,
+            50,
+            "carol",
+            "c3",
+            "review_comment",
+            None,
+            None,
+            false,
+            5002,
+        )
+        .expect("insert c3 failed");
 
         let existing = db
             .get_existing_comment_ids(50)
@@ -3761,6 +3841,7 @@ mod tests {
             "review",
             Some("main.rs"),
             Some(10),
+            false,
             1000,
         )
         .expect("insert comment failed");
@@ -3782,6 +3863,251 @@ mod tests {
             .get_active_self_review_comments("T-100")
             .expect("get self review failed");
         assert!(comments.is_empty());
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_insert_pr_comment_with_addressed() {
+        let (db, path) = make_test_db("pr_comment_addressed");
+        insert_test_task(&db);
+
+        db.insert_pull_request(
+            100,
+            "T-100",
+            "acme",
+            "repo",
+            "PR title",
+            "https://example.com",
+            "open",
+            1000,
+            1000,
+        )
+        .expect("insert pr failed");
+
+        // Insert comment with addressed=true
+        db.insert_pr_comment(
+            701,
+            100,
+            "bot-user",
+            "Automated check passed",
+            "review_comment",
+            None,
+            None,
+            true,
+            2000,
+        )
+        .expect("insert addressed comment failed");
+
+        // Insert comment with addressed=false
+        db.insert_pr_comment(
+            702,
+            100,
+            "human-reviewer",
+            "Please fix this",
+            "review_comment",
+            None,
+            None,
+            false,
+            2001,
+        )
+        .expect("insert unaddressed comment failed");
+
+        let comments = db.get_comments_for_pr(100).expect("get comments failed");
+        assert_eq!(comments.len(), 2);
+        assert_eq!(comments[0].id, 701);
+        assert_eq!(comments[0].addressed, 1);
+        assert_eq!(comments[1].id, 702);
+        assert_eq!(comments[1].addressed, 0);
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_unaddressed_comment_count_subquery() {
+        let (db, path) = make_test_db("unaddressed_count");
+        insert_test_task(&db);
+
+        // Insert first PR with 3 comments (1 addressed, 2 unaddressed)
+        db.insert_pull_request(
+            101,
+            "T-100",
+            "acme",
+            "repo",
+            "PR 1",
+            "https://example.com/1",
+            "open",
+            1000,
+            1000,
+        )
+        .expect("insert pr 1 failed");
+
+        db.insert_pr_comment(
+            711,
+            101,
+            "bot",
+            "Check passed",
+            "review_comment",
+            None,
+            None,
+            true,
+            2000,
+        )
+        .expect("insert comment 1 failed");
+        db.insert_pr_comment(
+            712,
+            101,
+            "reviewer",
+            "Fix this",
+            "review_comment",
+            None,
+            None,
+            false,
+            2001,
+        )
+        .expect("insert comment 2 failed");
+        db.insert_pr_comment(
+            713,
+            101,
+            "reviewer",
+            "Also fix that",
+            "review_comment",
+            None,
+            None,
+            false,
+            2002,
+        )
+        .expect("insert comment 3 failed");
+
+        // Insert second PR with 0 comments
+        db.insert_pull_request(
+            102,
+            "T-100",
+            "acme",
+            "repo",
+            "PR 2",
+            "https://example.com/2",
+            "open",
+            1000,
+            1000,
+        )
+        .expect("insert pr 2 failed");
+
+        let prs = db.get_all_pull_requests().expect("get prs failed");
+        let pr1 = prs.iter().find(|p| p.id == 101).expect("pr 1 not found");
+        let pr2 = prs.iter().find(|p| p.id == 102).expect("pr 2 not found");
+
+        assert_eq!(pr1.unaddressed_comment_count, 2);
+        assert_eq!(pr2.unaddressed_comment_count, 0);
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_retroactive_bot_migration() {
+        let (db, path) = make_test_db("bot_migration");
+        insert_test_task(&db);
+
+        db.insert_pull_request(
+            103,
+            "T-100",
+            "acme",
+            "repo",
+            "PR title",
+            "https://example.com",
+            "open",
+            1000,
+            1000,
+        )
+        .expect("insert pr failed");
+
+        // Insert comments with various authors, all with addressed=false
+        db.insert_pr_comment(
+            721,
+            103,
+            "dependabot[bot]",
+            "Dependency update",
+            "review_comment",
+            None,
+            None,
+            false,
+            2000,
+        )
+        .expect("insert dependabot comment failed");
+        db.insert_pr_comment(
+            722,
+            103,
+            "codecov[bot]",
+            "Coverage report",
+            "review_comment",
+            None,
+            None,
+            false,
+            2001,
+        )
+        .expect("insert codecov comment failed");
+        db.insert_pr_comment(
+            723,
+            103,
+            "renovate[bot]",
+            "Renovate update",
+            "review_comment",
+            None,
+            None,
+            false,
+            2002,
+        )
+        .expect("insert renovate comment failed");
+        db.insert_pr_comment(
+            724,
+            103,
+            "human-reviewer",
+            "Please fix this",
+            "review_comment",
+            None,
+            None,
+            false,
+            2003,
+        )
+        .expect("insert human comment failed");
+
+        // Run the retroactive migration SQL
+        let conn = db.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE pr_comments SET addressed = 1 WHERE author LIKE '%[bot]%' AND addressed = 0",
+            [],
+        )
+        .expect("migration failed");
+        drop(conn);
+
+        // Query comments back and verify
+        let comments = db.get_comments_for_pr(103).expect("get comments failed");
+        assert_eq!(comments.len(), 4);
+
+        let dependabot = comments
+            .iter()
+            .find(|c| c.id == 721)
+            .expect("dependabot not found");
+        let codecov = comments
+            .iter()
+            .find(|c| c.id == 722)
+            .expect("codecov not found");
+        let renovate = comments
+            .iter()
+            .find(|c| c.id == 723)
+            .expect("renovate not found");
+        let human = comments
+            .iter()
+            .find(|c| c.id == 724)
+            .expect("human not found");
+
+        assert_eq!(dependabot.addressed, 1);
+        assert_eq!(codecov.addressed, 1);
+        assert_eq!(renovate.addressed, 1);
+        assert_eq!(human.addressed, 0);
 
         drop(db);
         let _ = fs::remove_file(&path);
