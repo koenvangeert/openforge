@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/svelte'
+import { render, screen, waitFor } from '@testing-library/svelte'
 import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest'
 import { writable } from 'svelte/store'
 import type { Task, PrFileDiff } from '../lib/types'
@@ -114,6 +114,24 @@ describe('SelfReviewView uncommitted toggle', () => {
     })
   })
 
+  it('toggle visible even with no diff files (empty state)', async () => {
+    vi.mocked(getTaskDiff).mockResolvedValue([])
+
+    render(SelfReviewView, {
+      props: {
+        task: baseTask,
+        agentStatus: null,
+        onSendToAgent: vi.fn(),
+      },
+    })
+
+    await waitFor(() => {
+      const checkbox = screen.getByRole('checkbox')
+      expect(checkbox).toBeTruthy()
+      expect((checkbox as HTMLInputElement).checked).toBe(false)
+    })
+  })
+
   it('toggling checkbox calls getTaskDiff with includeUncommitted=true', async () => {
     const mockGetTaskDiff = vi.mocked(getTaskDiff).mockResolvedValue([baseDiff])
 
@@ -125,14 +143,16 @@ describe('SelfReviewView uncommitted toggle', () => {
       },
     })
 
-    await waitFor(() => {
-      expect(screen.getByRole('checkbox')).toBeTruthy()
-    })
-
+    await screen.findByRole('checkbox')
     mockGetTaskDiff.mockClear()
 
-    const checkbox = screen.getByRole('checkbox')
-    await fireEvent.click(checkbox)
+    await waitFor(() => {
+      expect(screen.getByRole('checkbox').isConnected).toBe(true)
+    })
+
+    const cb = screen.getByRole('checkbox') as HTMLInputElement
+    cb.click()
+    cb.dispatchEvent(new Event('change', { bubbles: true }))
 
     await waitFor(() => {
       expect(mockGetTaskDiff).toHaveBeenCalledWith('task-1', true)

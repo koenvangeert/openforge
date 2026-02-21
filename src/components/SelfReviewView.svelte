@@ -205,10 +205,10 @@
     {/if}
   </div>
 
-  {#if $selfReviewDiffFiles.length > 0}
+  {#if !isLoading && !error}
     <div class="flex items-center gap-2 px-3 py-1.5 border-t border-base-300 bg-base-200 text-xs">
       <label class="flex items-center gap-1.5 cursor-pointer">
-        <input type="checkbox" class="checkbox checkbox-xs" bind:checked={includeUncommitted} onchange={handleRefresh} />
+        <input type="checkbox" class="checkbox checkbox-xs" checked={includeUncommitted} onchange={(e: Event) => { includeUncommitted = (e.target as HTMLInputElement).checked; handleRefresh() }} />
         <span class="text-base-content/70">Include uncommitted changes</span>
       </label>
     </div>
