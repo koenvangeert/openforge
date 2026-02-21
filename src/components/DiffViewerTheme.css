@@ -73,3 +73,19 @@
 .diff-tailwindcss-wrapper[data-theme="light"] .diff-line-syntax-raw .hljs-selector-tag {
   color: #22863a;
 }
+
+/* Search & occurrence highlighting (CSS Custom Highlight API) */
+::highlight(diff-search-match) {
+  background-color: #fde68a;
+  color: #1f2937;
+}
+
+::highlight(diff-search-current) {
+  background-color: #f59e0b;
+  color: #ffffff;
+}
+
+::highlight(diff-occurrence-match) {
+  background-color: #bfdbfe;
+  color: #1f2937;
+}
