@@ -113,6 +113,10 @@
     }
   }
 
+  function autofocus(node: HTMLElement) {
+    node.focus()
+  }
+
   // Large diff warning banner calculations
   const totalChanges = $derived(files.reduce((sum, f) => sum + f.additions + f.deletions, 0))
   const totalFiles = $derived(files.length)
@@ -240,6 +244,7 @@
                       placeholder="Leave a comment..."
                       rows="3"
                       bind:value={commentText}
+                      use:autofocus
                     ></textarea>
                     <div class="flex justify-end gap-2 mt-2">
                       <button
