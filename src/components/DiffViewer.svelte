@@ -214,6 +214,7 @@
       >✕</button>
     {/if}
     {#if toolbarExtra}
+      <div class="ml-auto"></div>
       {@render toolbarExtra()}
     {/if}
   </div>
