@@ -3,6 +3,7 @@
   import { parseCheckRuns, isReadyToMerge } from '../lib/types'
   import { ticketPrs } from '../lib/stores'
   import { getPrComments, markCommentAddressed, openUrl } from '../lib/ipc'
+  import MarkdownContent from './MarkdownContent.svelte'
 
   interface Props {
     task: Task
@@ -51,8 +52,15 @@
     return new Date(timestamp * 1000).toLocaleDateString()
   }
 
-  function getUnaddressedCount(comments: PrComment[]): number {
-    return comments.filter(c => c.addressed === 0).length
+  function timeAgo(timestamp: number): string {
+    const seconds = Math.floor((Date.now() / 1000) - timestamp)
+    if (seconds < 60) return 'just now'
+    const minutes = Math.floor(seconds / 60)
+    if (minutes < 60) return `${minutes}m ago`
+    const hours = Math.floor(minutes / 60)
+    if (hours < 24) return `${hours}h ago`
+    const days = Math.floor(hours / 24)
+    return `${days}d ago`
   }
 
   let taskPrs = $derived($ticketPrs.get(task.id) || [])
@@ -179,47 +187,57 @@
 
   <!-- PR Comments Section -->
   {#if taskPrs.length > 0}
-    <section class="flex flex-col gap-2.5">
-      <h3 class="text-xs font-semibold text-primary uppercase tracking-wider m-0">PR Comments</h3>
-      {#each taskPrs as pr (pr.id)}
-        {@const comments = prCommentsByPr.get(pr.id) || []}
-        {@const unaddressedCount = getUnaddressedCount(comments)}
-        {#if comments.length > 0}
-          <div class="mb-4">
-            <div class="flex items-center justify-between gap-2 mb-2 pb-1.5 border-b border-base-300">
-              <span class="text-xs text-base-content/50 font-medium">{pr.title}</span>
-              {#if unaddressedCount > 0}
-                <span class="badge badge-error badge-sm">{unaddressedCount} unaddressed</span>
-              {/if}
-            </div>
+    {@const allComments = taskPrs.flatMap(pr => (prCommentsByPr.get(pr.id) || []).map(c => ({ ...c, prTitle: pr.title })))}
+    {@const totalUnaddressed = allComments.filter(c => c.addressed === 0).length}
+    {#if allComments.length > 0}
+      <section class="flex flex-col gap-2.5">
+        <div class="flex items-center gap-2">
+          <h3 class="text-xs font-semibold text-primary uppercase tracking-wider m-0">PR Comments</h3>
+          {#if totalUnaddressed > 0}
+            <span class="badge badge-error badge-xs">{totalUnaddressed}</span>
+          {:else}
+            <span class="badge badge-success badge-xs">All addressed</span>
+          {/if}
+        </div>
+        {#each taskPrs as pr (pr.id)}
+          {@const comments = prCommentsByPr.get(pr.id) || []}
+          {#if comments.length > 0}
             <div class="flex flex-col gap-2">
               {#each comments as comment (comment.id)}
-                <div class="bg-base-100 border border-base-300 rounded-md p-3 flex flex-col gap-2 {comment.addressed === 1 ? 'opacity-60' : ''}">
-                  <div class="flex gap-2 items-center flex-wrap">
-                    <span class="text-xs font-semibold text-primary">@{comment.author}</span>
-                    {#if comment.file_path}
-                      <span class="text-[0.7rem] text-base-content/50 font-mono">
-                        {comment.file_path}{#if comment.line_number}:{comment.line_number}{/if}
-                      </span>
+                <div class="bg-base-100 border border-base-300 rounded-lg overflow-hidden {comment.addressed === 1 ? 'opacity-50' : ''}">
+                  <div class="flex items-center gap-2 px-3 py-2 bg-base-200 border-b border-base-300">
+                    <div class="w-5 h-5 rounded-full bg-primary/15 flex items-center justify-center text-[0.6rem] font-bold text-primary shrink-0">
+                      {comment.author.charAt(0).toUpperCase()}
+                    </div>
+                    <span class="text-xs font-semibold text-base-content">@{comment.author}</span>
+                    <span class="text-[0.65rem] text-base-content/40 ml-auto">{timeAgo(comment.created_at)}</span>
+                  </div>
+                  {#if comment.file_path}
+                    <div class="px-3 py-1 bg-base-200/50 border-b border-base-300 text-[0.65rem] font-mono text-base-content/50">
+                      {comment.file_path}{#if comment.line_number}:{comment.line_number}{/if}
+                    </div>
+                  {/if}
+                  <div class="px-3 py-2.5 text-sm [&_.markdown-body]:text-sm [&_.markdown-body_pre]:text-xs [&_.markdown-body_code]:text-xs [&_.markdown-body_p]:my-1">
+                    <MarkdownContent content={comment.body} />
+                  </div>
+                  <div class="px-3 py-1.5 border-t border-base-300 bg-base-200/30">
+                    {#if comment.addressed === 0}
+                      <button
+                        class="btn btn-ghost btn-xs text-base-content/50 hover:text-success hover:bg-success/10"
+                        onclick={() => handleMarkAddressed(comment.id, pr.id)}>
+                        ✓ Mark addressed
+                      </button>
+                    {:else}
+                      <span class="text-[0.65rem] text-success font-medium">✓ Addressed</span>
                     {/if}
                   </div>
-                  <div class="text-sm text-base-content leading-snug whitespace-pre-wrap break-words">{comment.body}</div>
-                  {#if comment.addressed === 0}
-                    <button 
-                      class="btn btn-soft btn-xs w-fit shadow-sm hover:shadow-md transition-shadow"
-                      onclick={() => handleMarkAddressed(comment.id, pr.id)}>
-                      Mark Addressed
-                    </button>
-                  {:else}
-                    <span class="text-[0.7rem] text-success font-medium">✓ Addressed</span>
-                  {/if}
                 </div>
               {/each}
             </div>
-          </div>
-        {/if}
-      {/each}
-     </section>
+          {/if}
+        {/each}
+      </section>
+    {/if}
    {/if}
 
  </div>

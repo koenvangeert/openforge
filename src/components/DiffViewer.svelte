@@ -9,6 +9,7 @@
   import { buildExtendData, type CommentDisplayData } from '../lib/diffComments'
   import { diffHighlighter } from '../lib/diffHighlighter'
   import { createDiffSearch } from '../lib/useDiffSearch.svelte'
+  import type { Snippet } from 'svelte'
 
   setEnableFastDiffTemplate(true)
 
@@ -20,9 +21,10 @@
     fileTreeVisible?: boolean
     onToggleFileTree?: () => void
     fetchFileContents?: (file: PrFileDiff) => Promise<FileContents>
+    toolbarExtra?: Snippet
   }
 
-  let { files = [], existingComments = [], repoOwner: _repoOwner = '', repoName: _repoName = '', fileTreeVisible = true, onToggleFileTree, fetchFileContents }: Props = $props()
+  let { files = [], existingComments = [], repoOwner: _repoOwner = '', repoName: _repoName = '', fileTreeVisible = true, onToggleFileTree, fetchFileContents, toolbarExtra }: Props = $props()
 
   let diffViewMode = $state<DiffModeEnum>(DiffModeEnum.Split)
   let diffViewWrap = $state(false)
@@ -208,6 +210,9 @@
         onclick={search.close}
         title="Close search (Escape)"
       >✕</button>
+    {/if}
+    {#if toolbarExtra}
+      {@render toolbarExtra()}
     {/if}
   </div>
 

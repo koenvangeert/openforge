@@ -86,4 +86,54 @@ describe('compileReviewPrompt', () => {
     const result = compileReviewPrompt('My Special Feature', [{ path: 'x.ts', line: 1, body: 'Fix' }], [])
     expect(result).toContain('"My Special Feature"')
   })
+
+  it('includes PR review comments section when prReviewComments provided', () => {
+    const prComments = [
+      { body: 'Consider using a constant here', author: 'reviewer1', file_path: 'src/config.ts', line_number: 15 }
+    ]
+    const result = compileReviewPrompt('PR Task', [], [], prComments)
+    expect(result).toContain('## PR Review Comments')
+    expect(result).toContain('[reviewer1]')
+    expect(result).toContain('`src/config.ts:15`')
+    expect(result).toContain('Consider using a constant here')
+  })
+
+  it('includes file path and author in PR review comments', () => {
+    const prComments = [
+      { body: 'Fix naming', author: 'alice', file_path: 'src/utils.ts', line_number: 42 },
+      { body: 'Add docs', author: 'bob', file_path: 'src/api.ts', line_number: null }
+    ]
+    const result = compileReviewPrompt('Review', [], [], prComments)
+    expect(result).toContain('1. [alice] `src/utils.ts:42` — Fix naming')
+    expect(result).toContain('2. [bob] `src/api.ts` — Add docs')
+  })
+
+  it('handles PR comments without file path (general comments)', () => {
+    const prComments = [
+      { body: 'Overall looks good but needs more tests', author: 'reviewer', file_path: null, line_number: null }
+    ]
+    const result = compileReviewPrompt('General PR', [], [], prComments)
+    expect(result).toContain('1. [reviewer] (general) — Overall looks good but needs more tests')
+  })
+
+  it('includes all three sections when all comment types present', () => {
+    const inline = [{ path: 'a.ts', line: 1, body: 'Inline comment' }]
+    const general = [{ body: 'General comment' }]
+    const prComments = [{ body: 'PR comment', author: 'dev', file_path: 'b.ts', line_number: 5 }]
+    const result = compileReviewPrompt('All Types', inline, general, prComments)
+    expect(result).toContain('## Code Comments')
+    expect(result).toContain('## PR Review Comments')
+    expect(result).toContain('## General Feedback')
+    // Verify order: Code Comments before PR Review Comments before General Feedback
+    const codeIdx = result.indexOf('## Code Comments')
+    const prIdx = result.indexOf('## PR Review Comments')
+    const generalIdx = result.indexOf('## General Feedback')
+    expect(codeIdx).toBeLessThan(prIdx)
+    expect(prIdx).toBeLessThan(generalIdx)
+  })
+
+  it('returns empty string when only empty arrays provided (including prReviewComments)', () => {
+    const result = compileReviewPrompt('Empty', [], [], [])
+    expect(result).toBe('')
+  })
 })

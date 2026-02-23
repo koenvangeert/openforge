@@ -2,6 +2,7 @@
   import { pendingManualComments, selfReviewGeneralComments, selfReviewArchivedComments } from '../lib/stores'
   import { archiveSelfReviewComments, getActiveSelfReviewComments, getArchivedSelfReviewComments } from '../lib/ipc'
   import { compileReviewPrompt } from '../lib/reviewPrompt'
+  import type { PrComment } from '../lib/types'
 
   interface Props {
     taskId: string
@@ -9,9 +10,11 @@
     agentStatus: string | null
     onSendToAgent: (prompt: string) => void
     onRefresh: () => void
+    selectedPrComments?: PrComment[]
+    onSendComplete?: () => void
   }
 
-  let { taskId, taskTitle, agentStatus, onSendToAgent, onRefresh }: Props = $props()
+  let { taskId, taskTitle, agentStatus, onSendToAgent, onRefresh, selectedPrComments = [], onSendComplete }: Props = $props()
 
   let isSending = $state(false)
   let error = $state<string | null>(null)
@@ -19,7 +22,8 @@
 
   let inlineCount = $derived($pendingManualComments.length)
   let generalCount = $derived($selfReviewGeneralComments.length)
-  let hasComments = $derived(inlineCount > 0 || generalCount > 0)
+  let prCommentCount = $derived(selectedPrComments.length)
+  let hasComments = $derived(inlineCount > 0 || generalCount > 0 || prCommentCount > 0)
   let isAgentBusy = $derived(agentStatus === 'running' || agentStatus === 'paused')
   let canSend = $derived(hasComments && !isAgentBusy && !isSending)
 
@@ -28,7 +32,13 @@
 
     const inlineComments = $pendingManualComments.map(c => ({ path: c.path, line: c.line, body: c.body }))
     const generalComments = $selfReviewGeneralComments.map(c => ({ body: c.body }))
-    const prompt = compileReviewPrompt(taskTitle, inlineComments, generalComments)
+    const prReviewComments = selectedPrComments.map(c => ({
+      body: c.body,
+      author: c.author,
+      file_path: c.file_path,
+      line_number: c.line_number
+    }))
+    const prompt = compileReviewPrompt(taskTitle, inlineComments, generalComments, prReviewComments)
 
     isSending = true
     error = null
@@ -55,6 +65,7 @@
       }, 3000)
 
       onSendToAgent(prompt)
+      onSendComplete?.()
     } catch (e) {
       console.error('Failed to send to agent:', e)
       error = String(e)
@@ -85,6 +96,12 @@
           <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[0.72rem] font-semibold whitespace-nowrap text-warning bg-warning/12 border border-warning/25">
             <span class="inline-block w-[5px] h-[5px] rounded-full bg-current shrink-0"></span>
             {generalCount} general {generalCount === 1 ? 'comment' : 'comments'}
+          </span>
+        {/if}
+        {#if prCommentCount > 0}
+          <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[0.72rem] font-semibold whitespace-nowrap text-error bg-error/12 border border-error/25">
+            <span class="inline-block w-[5px] h-[5px] rounded-full bg-current shrink-0"></span>
+            {prCommentCount} PR {prCommentCount === 1 ? 'comment' : 'comments'}
           </span>
         {/if}
       </div>
