@@ -239,6 +239,8 @@
         const taskId = event.payload.task_id
         const session = $activeSessions.get(taskId)
         if (session) {
+          // Guard: only update if status is not already 'completed'
+          if (session.status === 'completed') return
           const updated = new Map($activeSessions)
           updated.set(taskId, { ...session, status: 'completed' })
           $activeSessions = updated
@@ -256,6 +258,8 @@
         const taskId = event.payload.task_id
         const session = $activeSessions.get(taskId)
         if (session) {
+          // Guard: only update if status is not already 'failed'
+          if (session.status === 'failed') return
           const updated = new Map($activeSessions)
           updated.set(taskId, { ...session, status: 'failed', error_message: event.payload.error })
           $activeSessions = updated
@@ -326,6 +330,8 @@
             const parsed = JSON.parse(event.payload.data)
             const statusType = parsed.properties?.status?.type
             if (eventType === 'session.idle' || statusType === 'idle') {
+              // Guard: only update if status is not already 'completed'
+              if (session.status === 'completed') return
               const updated = new Map($activeSessions)
               updated.set(taskId, { ...session, status: 'completed' })
               $activeSessions = updated
@@ -334,6 +340,8 @@
                 $checkpointNotification = null
               }
             } else if (statusType === 'busy') {
+              // Guard: only update if status is not already 'running'
+              if (session.status === 'running') return
               console.log('[session] SSE session busy for task:', taskId)
               const updated = new Map($activeSessions)
               updated.set(taskId, { ...session, status: 'running', checkpoint_data: null })
@@ -342,6 +350,8 @@
                 $checkpointNotification = null
               }
             } else if (statusType === 'retry') {
+              // Guard: only update if status is not already 'running'
+              if (session.status === 'running') return
               console.log('[session] SSE session retry for task:', taskId)
               const updated = new Map($activeSessions)
               updated.set(taskId, { ...session, status: 'running', checkpoint_data: null })
@@ -352,6 +362,8 @@
             }
           } catch {
             if (eventType === 'session.idle') {
+              // Guard: only update if status is not already 'completed'
+              if (session.status === 'completed') return
               const updated = new Map($activeSessions)
               updated.set(taskId, { ...session, status: 'completed' })
               $activeSessions = updated
@@ -361,6 +373,8 @@
             }
           }
         } else if (eventType === 'session.error') {
+          // Guard: only update if status is not already 'failed'
+          if (session.status === 'failed') return
           const updated = new Map($activeSessions)
           updated.set(taskId, { ...session, status: 'failed', error_message: event.payload.data })
           $activeSessions = updated
@@ -369,6 +383,8 @@
             $checkpointNotification = null
           }
         } else if (eventType === 'permission.updated' || eventType === 'question.asked') {
+          // Guard: only update if status is not already 'paused'
+          if (session.status === 'paused') return
           const updated = new Map($activeSessions)
           updated.set(taskId, { ...session, status: 'paused', checkpoint_data: event.payload.data })
           $activeSessions = updated
@@ -382,6 +398,8 @@
             timestamp: Date.now(),
           }
         } else if (eventType === 'permission.replied' || eventType === 'question.answered') {
+          // Guard: only update if status is not already 'running'
+          if (session.status === 'running') return
           const updated = new Map($activeSessions)
           updated.set(taskId, { ...session, status: 'running', checkpoint_data: null })
           $activeSessions = updated
