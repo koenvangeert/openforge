@@ -148,7 +148,7 @@
     onclick={handleClick}
     disabled={disabled || voiceState === 'transcribing'}
     aria-label={voiceState === 'recording' ? 'Stop recording' : 'Start voice input'}
-    title={voiceState === 'recording' ? 'Stop recording (⌘⇧D)' : 'Voice input (⌘⇧D)'}
+    title={voiceState === 'recording' ? 'Stop recording (⌘D)' : 'Voice input (⌘D)'}
   >
     {#if voiceState === 'transcribing'}
       <span class="loading loading-spinner loading-xs"></span>
@@ -173,6 +173,7 @@
         <line x1="12" y1="19" x2="12" y2="22" />
         <line x1="8" y1="22" x2="16" y2="22" />
       </svg>
+      <span class="text-[0.6rem] opacity-50">⌘D</span>
     {/if}
   </button>
 
