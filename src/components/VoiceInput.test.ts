@@ -63,6 +63,13 @@ describe('VoiceInput', () => {
     expect(svg).toBeTruthy()
   })
 
+
+  it('shows keyboard shortcut hint in tooltip', () => {
+    render(VoiceInput, { props: baseProps })
+    const button = screen.getByRole('button', { name: 'Start voice input' })
+    expect(button.getAttribute('title')).toBe('Voice input (⌘⇧D)')
+  })
+
   it('responds to toggle-voice-recording event when listenToHotkey is true', async () => {
     vi.mocked(getWhisperModelStatus).mockResolvedValue({
       downloaded: false,
