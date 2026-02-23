@@ -36,10 +36,15 @@ describe('VoiceInput', () => {
 
   it('shows model not downloaded message when model status returns downloaded: false', async () => {
     vi.mocked(getWhisperModelStatus).mockResolvedValue({
+      size: 'small',
+      display_name: 'Small',
       downloaded: false,
       model_path: null,
       model_size_bytes: null,
       model_name: 'ggml-small.bin',
+      disk_size_mb: 466,
+      ram_usage_mb: 1000,
+      is_active: true,
     })
 
     render(VoiceInput, { props: baseProps })
@@ -72,10 +77,15 @@ describe('VoiceInput', () => {
 
   it('responds to toggle-voice-recording event when listenToHotkey is true', async () => {
     vi.mocked(getWhisperModelStatus).mockResolvedValue({
+      size: 'small',
+      display_name: 'Small',
       downloaded: false,
       model_path: null,
       model_size_bytes: null,
       model_name: 'ggml-small.bin',
+      disk_size_mb: 466,
+      ram_usage_mb: 1000,
+      is_active: true,
     })
 
     render(VoiceInput, { props: { ...baseProps, listenToHotkey: true } })

@@ -9,6 +9,8 @@ vi.mock('../lib/ipc', () => ({
   updateProject: vi.fn(),
   deleteProject: vi.fn(),
   getAgents: vi.fn(() => Promise.resolve([{ name: 'build' }, { name: 'oracle' }])),
+  getAllWhisperModelStatuses: vi.fn(() => Promise.resolve([])),
+  setWhisperModel: vi.fn(),
 }))
 
 vi.mock('../lib/actions', () => ({

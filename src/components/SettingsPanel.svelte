@@ -1,8 +1,8 @@
 <script lang="ts">
   import { activeProjectId, projects } from '../lib/stores'
-  import { getProjectConfig, setProjectConfig, updateProject, deleteProject, getAgents, getWhisperModelStatus } from '../lib/ipc'
+  import { getProjectConfig, setProjectConfig, updateProject, deleteProject, getAgents, getAllWhisperModelStatuses, setWhisperModel } from '../lib/ipc'
   import { loadActions, saveActions, createAction, DEFAULT_ACTIONS } from '../lib/actions'
-  import type { Action, AgentInfo, WhisperModelStatus } from '../lib/types'
+  import type { Action, AgentInfo, WhisperModelStatus, WhisperModelSizeId } from '../lib/types'
   import ModelDownloadProgress from './ModelDownloadProgress.svelte'
 
   interface Props {
@@ -22,9 +22,10 @@
   let isSaving = $state(false)
   let saved = $state(false)
   let isDeleting = $state(false)
-  let whisperStatus = $state<WhisperModelStatus | null>(null)
-  let showDownloadProgress = $state(false)
+  let modelStatuses = $state<WhisperModelStatus[]>([])
+  let downloadingModel = $state<WhisperModelSizeId | null>(null)
 
+  let activeModel = $derived(modelStatuses.find(m => m.is_active))
   let currentProject = $derived($projects.find((p: typeof $projects[0]) => p.id === $activeProjectId))
 
   $effect(() => {
@@ -48,10 +49,28 @@
       agentInstructions = (await getProjectConfig(projectId, 'additional_instructions')) || ''
       actions = await loadActions(projectId)
       availableAgents = await getAgents().catch(() => [])
-      whisperStatus = await getWhisperModelStatus().catch(() => null)
+      modelStatuses = await getAllWhisperModelStatuses().catch(() => [])
     } catch (e) {
       console.error('Failed to load settings:', e)
     }
+  }
+
+  async function handleModelChange(newSize: WhisperModelSizeId) {
+    try {
+      await setWhisperModel(newSize)
+      modelStatuses = await getAllWhisperModelStatuses().catch(() => [])
+    } catch (e) {
+      console.error('Failed to switch model:', e)
+    }
+  }
+
+  async function refreshModelStatuses() {
+    downloadingModel = null
+    modelStatuses = await getAllWhisperModelStatuses().catch(() => [])
+  }
+
+  function formatSize(mb: number): string {
+    return mb >= 1000 ? (mb / 1000).toFixed(1) + ' GB' : mb + ' MB'
   }
 
   async function save() {
@@ -169,45 +188,66 @@
 
        <section class="flex flex-col gap-2">
          <h3 class="text-xs font-semibold text-primary uppercase tracking-wider mb-3 mt-0">Voice Input</h3>
-         
-         {#if showDownloadProgress}
+
+         <label class="flex flex-col gap-1">
+           <span class="text-[0.7rem] text-base-content/50">Whisper Model</span>
+           <select
+             class="select select-bordered select-sm w-full"
+             value={activeModel?.size ?? 'small'}
+             onchange={(e) => handleModelChange((e.currentTarget as HTMLSelectElement).value as WhisperModelSizeId)}
+           >
+             {#each modelStatuses as model}
+               <option value={model.size}>
+                 {model.display_name} — {formatSize(model.disk_size_mb)} download, ~{formatSize(model.ram_usage_mb)} RAM{model.downloaded ? ' ✓' : ''}
+               </option>
+             {/each}
+           </select>
+         </label>
+
+         {#if downloadingModel}
            <ModelDownloadProgress
-             onComplete={async () => {
-               showDownloadProgress = false
-               whisperStatus = await getWhisperModelStatus().catch(() => null)
-             }}
-             onError={() => { showDownloadProgress = false }}
+             modelSize={downloadingModel}
+             modelDisplayName={modelStatuses.find(m => m.size === downloadingModel)?.display_name ?? downloadingModel}
+             diskSizeMb={modelStatuses.find(m => m.size === downloadingModel)?.disk_size_mb ?? 0}
+             onComplete={refreshModelStatuses}
+             onError={() => { downloadingModel = null }}
            />
-         {:else if whisperStatus?.downloaded}
+         {:else if activeModel?.downloaded}
            <div class="flex flex-col gap-1">
              <div class="flex items-center gap-2">
                <span class="badge badge-success badge-sm">Downloaded</span>
-               <span class="text-[0.7rem] text-base-content/50">{whisperStatus.model_name}</span>
+               <span class="text-[0.7rem] text-base-content/50">{activeModel.model_name}</span>
              </div>
-             {#if whisperStatus.model_size_bytes}
+             {#if activeModel.model_size_bytes}
                <span class="text-[0.7rem] text-base-content/50">
-                 Size: {(whisperStatus.model_size_bytes / 1024 / 1024).toFixed(0)} MB
+                 Size: {(activeModel.model_size_bytes / 1024 / 1024).toFixed(0)} MB
                </span>
              {/if}
-             {#if whisperStatus.model_path}
+             {#if activeModel.model_path}
                <span class="text-[0.7rem] text-base-content/50 break-all">
-                 Path: {whisperStatus.model_path}
+                 Path: {activeModel.model_path}
                </span>
              {/if}
-             <button class="btn btn-ghost btn-sm mt-1" onclick={() => { showDownloadProgress = true }}>
+             <button class="btn btn-ghost btn-sm mt-1" onclick={() => { if (activeModel) downloadingModel = activeModel.size }}>
                Re-download Model
              </button>
            </div>
-         {:else}
+         {:else if activeModel}
            <div class="flex flex-col gap-2">
-             <p class="text-[0.7rem] text-base-content/50">Whisper Small model required for voice dictation (~462 MB download).</p>
-             <button class="btn btn-primary btn-sm" onclick={() => { showDownloadProgress = true }}>
+             <p class="text-[0.7rem] text-base-content/50">Whisper {activeModel.display_name} model required for voice dictation (~{formatSize(activeModel.disk_size_mb)} download).</p>
+             <button class="btn btn-primary btn-sm" onclick={() => { if (activeModel) downloadingModel = activeModel.size }}>
                Download Model
              </button>
            </div>
          {/if}
-         
-         <p class="text-[0.7rem] text-base-content/50 mt-1">Uses approximately 1 GB of RAM during transcription.</p>
+
+         <p class="text-[0.7rem] text-base-content/50 mt-1">
+           {#if activeModel}
+             Uses approximately {formatSize(activeModel.ram_usage_mb)} of RAM during transcription.
+           {:else}
+             Uses approximately 1 GB of RAM during transcription.
+           {/if}
+         </p>
          <p class="text-[0.7rem] text-base-content/50">Note: macOS may re-prompt for microphone permission on each app launch (Tauri v2 known issue).</p>
        </section>
 

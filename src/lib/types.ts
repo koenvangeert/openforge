@@ -337,9 +337,15 @@ export interface TranscriptionResult {
   duration_ms: number;
 }
 
+export type WhisperModelSizeId = 'tiny' | 'base' | 'small' | 'medium';
 export interface WhisperModelStatus {
+  size: WhisperModelSizeId;
+  display_name: string;
   downloaded: boolean;
   model_path: string | null;
   model_size_bytes: number | null;
   model_name: string;
+  disk_size_mb: number;
+  ram_usage_mb: number;
+  is_active: boolean;
 }

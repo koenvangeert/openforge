@@ -4,18 +4,18 @@
 //! Handles model download with progress events, SHA1 integrity verification,
 //! lazy context loading, and transcription inference via whisper-rs.
 //!
-//! ## Model
-//! Uses whisper-small (`ggml-small.bin`) stored in the user's data directory.
-//! Model URL: `https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin`
-//! SHA1: `55356645c2b361a969dfd0ef2c5a50d530afd8d5`
+//! ## Models
+//! Supports multiple model sizes (tiny, base, small, medium) stored in the
+//! user's data directory. Models are downloaded from HuggingFace.
 //!
 //! ## Usage
-//! 1. Call `get_model_status()` to check if model is present on disk.
-//! 2. Call `download_model()` to fetch and verify the model file.
-//! 3. Call `transcribe()` with 16 kHz mono f32 PCM audio data.
+//! 1. Call `get_all_model_statuses()` to check which models are present on disk.
+//! 2. Call `set_active_model()` to select the desired model size.
+//! 3. Call `download_model()` to fetch and verify a model file.
+//! 4. Call `transcribe()` with 16 kHz mono f32 PCM audio data.
 
 use reqwest::Client;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use sha1::{Digest, Sha1};
 use std::error::Error as StdError;
 use std::fmt;
@@ -27,18 +27,122 @@ use tauri::{AppHandle, Emitter};
 use tokio_stream::StreamExt;
 use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
 
-use crate::db::Database;
-
 // ============================================================================
 // Constants
 // ============================================================================
 
-const MODEL_NAME: &str = "ggml-small.bin";
-const MODEL_URL: &str = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin";
-const MODEL_SHA1: &str = "55356645c2b361a969dfd0ef2c5a50d530afd8d5";
 const APP_DIR_NAME: &str = "ai-command-center";
 const MODELS_SUBDIR: &str = "models";
-const CONFIG_KEY: &str = "whisper_model_path";
+
+// ============================================================================
+// Model Size Enum
+// ============================================================================
+
+/// Available Whisper model sizes, ordered from smallest to largest.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum WhisperModelSize {
+    Tiny,
+    Base,
+    Small,
+    Medium,
+}
+
+impl WhisperModelSize {
+    /// All available model sizes in order.
+    pub fn all() -> &'static [WhisperModelSize] {
+        &[
+            WhisperModelSize::Tiny,
+            WhisperModelSize::Base,
+            WhisperModelSize::Small,
+            WhisperModelSize::Medium,
+        ]
+    }
+
+    /// Parse a model size from a string (case-insensitive).
+    pub fn from_str(s: &str) -> Option<WhisperModelSize> {
+        match s.to_lowercase().as_str() {
+            "tiny" => Some(WhisperModelSize::Tiny),
+            "base" => Some(WhisperModelSize::Base),
+            "small" => Some(WhisperModelSize::Small),
+            "medium" => Some(WhisperModelSize::Medium),
+            _ => None,
+        }
+    }
+
+    /// Return the specification (metadata) for this model size.
+    pub fn spec(&self) -> ModelSpec {
+        match self {
+            WhisperModelSize::Tiny => ModelSpec {
+                size: *self,
+                display_name: "Tiny",
+                filename: "ggml-tiny.bin",
+                url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin",
+                sha1: "bd577a113a864445d4c299885e0cb97d4ba92b5f",
+                disk_size_mb: 75,
+                ram_usage_mb: 390,
+            },
+            WhisperModelSize::Base => ModelSpec {
+                size: *self,
+                display_name: "Base",
+                filename: "ggml-base.bin",
+                url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin",
+                sha1: "465707469ff3a37a2b9b8d8f89f2f99de7299dac",
+                disk_size_mb: 142,
+                ram_usage_mb: 500,
+            },
+            WhisperModelSize::Small => ModelSpec {
+                size: *self,
+                display_name: "Small",
+                filename: "ggml-small.bin",
+                url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin",
+                sha1: "55356645c2b361a969dfd0ef2c5a50d530afd8d5",
+                disk_size_mb: 466,
+                ram_usage_mb: 1000,
+            },
+            WhisperModelSize::Medium => ModelSpec {
+                size: *self,
+                display_name: "Medium",
+                filename: "ggml-medium.bin",
+                url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium.bin",
+                sha1: "fd9727b6e1217c2f614f9b698455c4ffd82463b4",
+                disk_size_mb: 1500,
+                ram_usage_mb: 2600,
+            },
+        }
+    }
+
+    /// Serde-compatible string representation.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            WhisperModelSize::Tiny => "tiny",
+            WhisperModelSize::Base => "base",
+            WhisperModelSize::Small => "small",
+            WhisperModelSize::Medium => "medium",
+        }
+    }
+}
+
+impl fmt::Display for WhisperModelSize {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
+// ============================================================================
+// Model Spec
+// ============================================================================
+
+/// Metadata for a specific Whisper model variant.
+pub struct ModelSpec {
+    pub size: WhisperModelSize,
+    pub display_name: &'static str,
+    pub filename: &'static str,
+    pub url: &'static str,
+    pub sha1: &'static str,
+    pub disk_size_mb: u32,
+    pub ram_usage_mb: u32,
+}
 
 // ============================================================================
 // Public Data Types
@@ -53,22 +157,34 @@ pub struct TranscriptionResult {
     pub duration_ms: u64,
 }
 
-/// Status of the local Whisper model on disk.
+/// Status of a Whisper model on disk.
 #[derive(Debug, Clone, Serialize)]
 pub struct WhisperModelStatus {
+    /// Model size identifier ("tiny", "base", "small", "medium").
+    pub size: String,
+    /// Human-readable display name ("Tiny", "Base", "Small", "Medium").
+    pub display_name: String,
     /// Whether the model file exists on disk.
     pub downloaded: bool,
-    /// Absolute path to the model file, if present.
+    /// Absolute path to the model file, if resolvable.
     pub model_path: Option<String>,
     /// File size in bytes, if present.
     pub model_size_bytes: Option<u64>,
-    /// Human-readable model name.
+    /// Human-readable model filename.
     pub model_name: String,
+    /// Approximate download size in megabytes.
+    pub disk_size_mb: u32,
+    /// Approximate RAM usage during inference in megabytes.
+    pub ram_usage_mb: u32,
+    /// Whether this model is the currently active/selected model.
+    pub is_active: bool,
 }
 
 /// Progress payload emitted as a Tauri event during model download.
 #[derive(Debug, Clone, Serialize)]
 pub struct WhisperDownloadProgress {
+    /// Which model size is being downloaded.
+    pub model_size: String,
     pub bytes_downloaded: u64,
     pub total_bytes: u64,
     pub percentage: f32,
@@ -91,6 +207,8 @@ pub enum WhisperError {
     InferenceError(String),
     /// Loading the WhisperContext from the model file failed.
     ContextLoadError(String),
+    /// Invalid model size string.
+    InvalidModelSize(String),
 }
 
 impl fmt::Display for WhisperError {
@@ -115,6 +233,9 @@ impl fmt::Display for WhisperError {
             WhisperError::ContextLoadError(msg) => {
                 write!(f, "Failed to load Whisper context: {}", msg)
             }
+            WhisperError::InvalidModelSize(s) => {
+                write!(f, "Invalid model size: {}", s)
+            }
         }
     }
 }
@@ -127,7 +248,10 @@ impl StdError for WhisperError {}
 
 /// Manages the Whisper model context with lazy initialisation.
 ///
-/// The `WhisperContext` is loaded on first use and cached for subsequent calls.
+/// Supports multiple model sizes. The active model can be changed at runtime;
+/// the `WhisperContext` is loaded lazily on first use and reloaded when the
+/// active model changes.
+///
 /// Thread-safe via `RwLock` — multiple concurrent readers are allowed, but
 /// loading/unloading holds an exclusive write lock.
 pub struct WhisperManager {
@@ -135,16 +259,27 @@ pub struct WhisperManager {
     context: RwLock<Option<WhisperContext>>,
     /// Path to the model file resolved at load time.
     model_path: RwLock<Option<PathBuf>>,
+    /// Which model size is currently loaded in `context`. `None` if nothing loaded.
+    loaded_model: RwLock<Option<WhisperModelSize>>,
+    /// The user-selected model size (persisted in config DB).
+    active_model: RwLock<WhisperModelSize>,
     /// Reusable HTTP client for model downloads.
     client: Client,
 }
 
 impl WhisperManager {
-    /// Create a new `WhisperManager` with no context loaded.
+    /// Create a new `WhisperManager` with "small" as the default active model.
     pub fn new() -> Self {
+        Self::with_active_model(WhisperModelSize::Small)
+    }
+
+    /// Create a new `WhisperManager` with a specific active model.
+    pub fn with_active_model(size: WhisperModelSize) -> Self {
         Self {
             context: RwLock::new(None),
             model_path: RwLock::new(None),
+            loaded_model: RwLock::new(None),
+            active_model: RwLock::new(size),
             client: Client::new(),
         }
     }
@@ -153,73 +288,137 @@ impl WhisperManager {
     // Model Path Helpers
     // ============================================================================
 
-    /// Return the expected on-disk path for the model file.
+    /// Return the expected on-disk path for a model file of the given size.
     ///
-    /// Path: `$DATA_DIR/ai-command-center/models/ggml-small.bin`
-    fn model_file_path() -> Option<PathBuf> {
-        dirs::data_dir().map(|d| d.join(APP_DIR_NAME).join(MODELS_SUBDIR).join(MODEL_NAME))
+    /// Path: `$DATA_DIR/ai-command-center/models/<filename>`
+    fn model_file_path_for(size: WhisperModelSize) -> Option<PathBuf> {
+        let spec = size.spec();
+        dirs::data_dir().map(|d| d.join(APP_DIR_NAME).join(MODELS_SUBDIR).join(spec.filename))
     }
 
     // ============================================================================
     // Public API
     // ============================================================================
 
-    /// Return the current status of the model file on disk.
-    ///
-    /// Does not attempt to load or download the model.
+    /// Return the currently active model size.
+    pub fn get_active_model(&self) -> WhisperModelSize {
+        *self.active_model.read().unwrap()
+    }
+
+    /// Set the active model size. If the loaded model differs, the context is
+    /// unloaded so it will be lazily reloaded on next transcription.
+    pub fn set_active_model(&self, size: WhisperModelSize) {
+        let mut active = self.active_model.write().unwrap();
+        let previous = *active;
+        *active = size;
+        drop(active);
+
+        // If the loaded model differs from the new active model, unload context.
+        let loaded = self.loaded_model.read().unwrap();
+        if loaded.as_ref() != Some(&size) && loaded.is_some() && previous != size {
+            drop(loaded);
+            let mut ctx_guard = self.context.write().unwrap();
+            *ctx_guard = None;
+            let mut path_guard = self.model_path.write().unwrap();
+            *path_guard = None;
+            let mut loaded_guard = self.loaded_model.write().unwrap();
+            *loaded_guard = None;
+            println!("[whisper] Unloaded model (switching from {} to {})", previous, size);
+        }
+    }
+
+    /// Return the status of the currently active model.
     pub fn get_model_status(&self) -> WhisperModelStatus {
-        match Self::model_file_path() {
+        let active = self.get_active_model();
+        self.get_model_status_for(active)
+    }
+
+    /// Return the status of a specific model size.
+    pub fn get_model_status_for(&self, size: WhisperModelSize) -> WhisperModelStatus {
+        let spec = size.spec();
+        let active = self.get_active_model();
+
+        match Self::model_file_path_for(size) {
             None => WhisperModelStatus {
+                size: size.as_str().to_string(),
+                display_name: spec.display_name.to_string(),
                 downloaded: false,
                 model_path: None,
                 model_size_bytes: None,
-                model_name: MODEL_NAME.to_string(),
+                model_name: spec.filename.to_string(),
+                disk_size_mb: spec.disk_size_mb,
+                ram_usage_mb: spec.ram_usage_mb,
+                is_active: size == active,
             },
             Some(path) => {
                 if path.exists() {
-                    let size = std::fs::metadata(&path).ok().map(|m| m.len());
+                    let file_size = std::fs::metadata(&path).ok().map(|m| m.len());
                     WhisperModelStatus {
+                        size: size.as_str().to_string(),
+                        display_name: spec.display_name.to_string(),
                         downloaded: true,
                         model_path: Some(path.to_string_lossy().to_string()),
-                        model_size_bytes: size,
-                        model_name: MODEL_NAME.to_string(),
+                        model_size_bytes: file_size,
+                        model_name: spec.filename.to_string(),
+                        disk_size_mb: spec.disk_size_mb,
+                        ram_usage_mb: spec.ram_usage_mb,
+                        is_active: size == active,
                     }
                 } else {
                     WhisperModelStatus {
+                        size: size.as_str().to_string(),
+                        display_name: spec.display_name.to_string(),
                         downloaded: false,
                         model_path: Some(path.to_string_lossy().to_string()),
                         model_size_bytes: None,
-                        model_name: MODEL_NAME.to_string(),
+                        model_name: spec.filename.to_string(),
+                        disk_size_mb: spec.disk_size_mb,
+                        ram_usage_mb: spec.ram_usage_mb,
+                        is_active: size == active,
                     }
                 }
             }
         }
     }
 
-    /// Ensure the `WhisperContext` is loaded from disk.
+    /// Return the status of all available models.
+    pub fn get_all_model_statuses(&self) -> Vec<WhisperModelStatus> {
+        WhisperModelSize::all()
+            .iter()
+            .map(|size| self.get_model_status_for(*size))
+            .collect()
+    }
+
+    /// Ensure the `WhisperContext` is loaded for the active model.
     ///
-    /// If the context is already loaded, this is a no-op (cheap read-lock check).
-    /// On first call, acquires a write lock and loads the model from disk.
+    /// If the context is already loaded for the active model, this is a no-op.
+    /// If a different model is loaded, it is unloaded first. On first call or
+    /// after a model switch, acquires a write lock and loads from disk.
     ///
     /// # Errors
     /// - `WhisperError::ModelNotFound` if the model file does not exist.
     /// - `WhisperError::ContextLoadError` if whisper-rs fails to open the model.
     pub fn ensure_loaded(&self) -> Result<(), WhisperError> {
-        // Fast path: already loaded.
+        let active = self.get_active_model();
+
+        // Fast path: correct model already loaded.
         {
             let guard = self.context.read().unwrap();
-            if guard.is_some() {
+            let loaded = self.loaded_model.read().unwrap();
+            if guard.is_some() && *loaded == Some(active) {
                 return Ok(());
             }
         }
 
         // Slow path: load from disk.
-        let path = Self::model_file_path().ok_or(WhisperError::ModelNotFound)?;
+        let path = Self::model_file_path_for(active).ok_or(WhisperError::ModelNotFound)?;
         if !path.exists() {
             return Err(WhisperError::ModelNotFound);
         }
 
         let path_str = path.to_string_lossy().to_string();
+        println!("[whisper] Loading model: {} ({})", active, path_str);
+
         let ctx = WhisperContext::new_with_params(&path_str, WhisperContextParameters::default())
             .map_err(|e| WhisperError::ContextLoadError(e.to_string()))?;
 
@@ -229,12 +428,16 @@ impl WhisperManager {
         let mut path_guard = self.model_path.write().unwrap();
         *path_guard = Some(path);
 
+        let mut loaded_guard = self.loaded_model.write().unwrap();
+        *loaded_guard = Some(active);
+
+        println!("[whisper] Model loaded: {}", active);
         Ok(())
     }
 
     /// Transcribe 16 kHz mono f32 PCM audio data to text.
     ///
-    /// Lazily loads the model on first call via `ensure_loaded()`.
+    /// Lazily loads the active model on first call via `ensure_loaded()`.
     ///
     /// # Arguments
     /// * `audio_data` — Raw 16 kHz mono PCM samples in the range `[-1.0, 1.0]`.
@@ -296,13 +499,14 @@ impl WhisperManager {
         })
     }
 
-    /// Download the Whisper model file with SHA1 verification.
+    /// Download a Whisper model file with SHA1 verification.
     ///
     /// Emits `whisper-download-progress` Tauri events throughout the download.
     /// On completion, verifies the SHA1 hash and returns the path to the downloaded model.
     ///
     /// # Arguments
     /// * `app` — Tauri `AppHandle` used to emit progress events.
+    /// * `size` — Which model size to download.
     ///
     /// # Returns
     /// The absolute path to the downloaded model file on success.
@@ -310,9 +514,15 @@ impl WhisperManager {
     /// # Errors
     /// - `WhisperError::ModelDownloadFailed` on network or I/O errors.
     /// - `WhisperError::HashMismatch` if the downloaded file's SHA1 differs from expected.
-    pub async fn download_model(&self, app: AppHandle) -> Result<String, WhisperError> {
+    pub async fn download_model(
+        &self,
+        app: AppHandle,
+        size: WhisperModelSize,
+    ) -> Result<String, WhisperError> {
+        let spec = size.spec();
+
         // Determine the target path and ensure parent directories exist.
-        let dest_path = Self::model_file_path().ok_or_else(|| {
+        let dest_path = Self::model_file_path_for(size).ok_or_else(|| {
             WhisperError::ModelDownloadFailed("Cannot resolve data directory".to_string())
         })?;
 
@@ -322,10 +532,15 @@ impl WhisperManager {
             })?;
         }
 
+        println!(
+            "[whisper] Downloading model: {} ({}) from {}",
+            size, spec.filename, spec.url
+        );
+
         // Start HTTP GET with streaming body.
         let response = self
             .client
-            .get(MODEL_URL)
+            .get(spec.url)
             .send()
             .await
             .map_err(|e| WhisperError::ModelDownloadFailed(format!("GET failed: {}", e)))?;
@@ -369,6 +584,7 @@ impl WhisperManager {
             let _ = app.emit(
                 "whisper-download-progress",
                 WhisperDownloadProgress {
+                    model_size: size.as_str().to_string(),
                     bytes_downloaded,
                     total_bytes,
                     percentage,
@@ -381,10 +597,10 @@ impl WhisperManager {
 
         // Verify SHA1 hash.
         let actual_hash = format!("{:x}", hasher.finalize());
-        if actual_hash != MODEL_SHA1 {
+        if actual_hash != spec.sha1 {
             let _ = std::fs::remove_file(&tmp_path);
             return Err(WhisperError::HashMismatch {
-                expected: MODEL_SHA1.to_string(),
+                expected: spec.sha1.to_string(),
                 actual: actual_hash,
             });
         }
@@ -394,7 +610,7 @@ impl WhisperManager {
         })?;
 
         let path_str = dest_path.to_string_lossy().to_string();
-        println!("[whisper] Model downloaded and verified: {}", path_str);
+        println!("[whisper] Model downloaded and verified: {} ({})", size, path_str);
         Ok(path_str)
     }
 }
@@ -409,21 +625,126 @@ mod tests {
 
     #[test]
     fn test_manager_new() {
-        let _mgr = WhisperManager::new();
+        let mgr = WhisperManager::new();
+        assert_eq!(mgr.get_active_model(), WhisperModelSize::Small);
+    }
+
+    #[test]
+    fn test_manager_with_active_model() {
+        let mgr = WhisperManager::with_active_model(WhisperModelSize::Tiny);
+        assert_eq!(mgr.get_active_model(), WhisperModelSize::Tiny);
+    }
+
+    #[test]
+    fn test_model_sizes_all() {
+        let sizes = WhisperModelSize::all();
+        assert_eq!(sizes.len(), 4);
+        assert_eq!(sizes[0], WhisperModelSize::Tiny);
+        assert_eq!(sizes[3], WhisperModelSize::Medium);
+    }
+
+    #[test]
+    fn test_model_size_from_str() {
+        assert_eq!(
+            WhisperModelSize::from_str("tiny"),
+            Some(WhisperModelSize::Tiny)
+        );
+        assert_eq!(
+            WhisperModelSize::from_str("Small"),
+            Some(WhisperModelSize::Small)
+        );
+        assert_eq!(
+            WhisperModelSize::from_str("MEDIUM"),
+            Some(WhisperModelSize::Medium)
+        );
+        assert_eq!(WhisperModelSize::from_str("huge"), None);
+    }
+
+    #[test]
+    fn test_model_size_as_str() {
+        assert_eq!(WhisperModelSize::Tiny.as_str(), "tiny");
+        assert_eq!(WhisperModelSize::Base.as_str(), "base");
+        assert_eq!(WhisperModelSize::Small.as_str(), "small");
+        assert_eq!(WhisperModelSize::Medium.as_str(), "medium");
+    }
+
+    #[test]
+    fn test_model_size_display() {
+        assert_eq!(format!("{}", WhisperModelSize::Tiny), "tiny");
+        assert_eq!(format!("{}", WhisperModelSize::Medium), "medium");
+    }
+
+    #[test]
+    fn test_model_spec_tiny() {
+        let spec = WhisperModelSize::Tiny.spec();
+        assert_eq!(spec.display_name, "Tiny");
+        assert_eq!(spec.filename, "ggml-tiny.bin");
+        assert_eq!(spec.disk_size_mb, 75);
+    }
+
+    #[test]
+    fn test_model_spec_small() {
+        let spec = WhisperModelSize::Small.spec();
+        assert_eq!(spec.display_name, "Small");
+        assert_eq!(spec.filename, "ggml-small.bin");
+        assert_eq!(spec.sha1, "55356645c2b361a969dfd0ef2c5a50d530afd8d5");
+    }
+
+    #[test]
+    fn test_model_spec_medium() {
+        let spec = WhisperModelSize::Medium.spec();
+        assert_eq!(spec.display_name, "Medium");
+        assert_eq!(spec.filename, "ggml-medium.bin");
+        assert_eq!(spec.disk_size_mb, 1500);
     }
 
     #[test]
     fn test_model_file_path_contains_model_name() {
-        if let Some(path) = WhisperManager::model_file_path() {
-            assert!(path.to_string_lossy().contains(MODEL_NAME));
+        for size in WhisperModelSize::all() {
+            let spec = size.spec();
+            if let Some(path) = WhisperManager::model_file_path_for(*size) {
+                assert!(path.to_string_lossy().contains(spec.filename));
+            }
         }
     }
 
     #[test]
-    fn test_get_model_status_returns_correct_name() {
+    fn test_get_model_status_returns_correct_info() {
         let mgr = WhisperManager::new();
         let status = mgr.get_model_status();
-        assert_eq!(status.model_name, MODEL_NAME);
+        assert_eq!(status.size, "small");
+        assert_eq!(status.display_name, "Small");
+        assert_eq!(status.model_name, "ggml-small.bin");
+        assert!(status.is_active);
+    }
+
+    #[test]
+    fn test_get_all_model_statuses() {
+        let mgr = WhisperManager::new();
+        let statuses = mgr.get_all_model_statuses();
+        assert_eq!(statuses.len(), 4);
+        assert_eq!(statuses[0].size, "tiny");
+        assert_eq!(statuses[1].size, "base");
+        assert_eq!(statuses[2].size, "small");
+        assert_eq!(statuses[3].size, "medium");
+
+        // Only "small" should be active (default).
+        let active_count = statuses.iter().filter(|s| s.is_active).count();
+        assert_eq!(active_count, 1);
+        assert!(statuses[2].is_active);
+    }
+
+    #[test]
+    fn test_set_active_model() {
+        let mgr = WhisperManager::new();
+        assert_eq!(mgr.get_active_model(), WhisperModelSize::Small);
+
+        mgr.set_active_model(WhisperModelSize::Tiny);
+        assert_eq!(mgr.get_active_model(), WhisperModelSize::Tiny);
+
+        let status = mgr.get_model_status();
+        assert_eq!(status.size, "tiny");
+        assert!(status.is_active);
     }
 
     #[test]
@@ -461,11 +782,17 @@ mod tests {
     }
 
     #[test]
+    fn test_error_display_invalid_model_size() {
+        let e = WhisperError::InvalidModelSize("huge".to_string());
+        assert!(e.to_string().contains("huge"));
+    }
+
+    #[test]
     fn test_ensure_loaded_returns_not_found_when_missing() {
         let mgr = WhisperManager::new();
         // If the model is not on disk, ensure_loaded should return ModelNotFound.
         // (This test only passes in CI where the model is absent.)
-        if WhisperManager::model_file_path()
+        if WhisperManager::model_file_path_for(WhisperModelSize::Small)
             .map(|p| !p.exists())
             .unwrap_or(true)
         {
@@ -476,7 +803,7 @@ mod tests {
 
     #[test]
     fn test_get_model_status_downloaded_when_file_exists() {
-        if let Some(path) = WhisperManager::model_file_path() {
+        if let Some(path) = WhisperManager::model_file_path_for(WhisperModelSize::Small) {
             // Only create a temp file if the model isn't already on disk.
             let created = if !path.exists() {
                 if let Some(parent) = path.parent() {
@@ -510,28 +837,56 @@ mod tests {
     #[test]
     fn test_whisper_model_status_serializes() {
         let status = WhisperModelStatus {
+            size: "small".to_string(),
+            display_name: "Small".to_string(),
             downloaded: true,
             model_path: Some("/tmp/model.bin".to_string()),
             model_size_bytes: Some(1234),
             model_name: "ggml-small.bin".to_string(),
+            disk_size_mb: 466,
+            ram_usage_mb: 1000,
+            is_active: true,
         };
         let val = serde_json::to_value(&status).unwrap();
         assert_eq!(val["downloaded"], true);
         assert_eq!(val["model_name"], "ggml-small.bin");
-        assert_eq!(val["model_path"], "/tmp/model.bin");
-        assert_eq!(val["model_size_bytes"], 1234);
+        assert_eq!(val["size"], "small");
+        assert_eq!(val["display_name"], "Small");
+        assert_eq!(val["is_active"], true);
+        assert_eq!(val["disk_size_mb"], 466);
+        assert_eq!(val["ram_usage_mb"], 1000);
     }
 
     #[test]
     fn test_whisper_download_progress_serializes() {
         let progress = WhisperDownloadProgress {
+            model_size: "tiny".to_string(),
             bytes_downloaded: 512,
             total_bytes: 1024,
             percentage: 50.0,
         };
         let val = serde_json::to_value(&progress).unwrap();
+        assert_eq!(val["model_size"], "tiny");
         assert_eq!(val["bytes_downloaded"], 512);
         assert_eq!(val["total_bytes"], 1024);
         assert!((val["percentage"].as_f64().unwrap() - 50.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_model_size_serde_roundtrip() {
+        let size = WhisperModelSize::Small;
+        let json = serde_json::to_string(&size).unwrap();
+        assert_eq!(json, "\"small\"");
+        let parsed: WhisperModelSize = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed, size);
+    }
+
+    #[test]
+    fn test_all_model_sizes_serde() {
+        for size in WhisperModelSize::all() {
+            let json = serde_json::to_string(size).unwrap();
+            let parsed: WhisperModelSize = serde_json::from_str(&json).unwrap();
+            assert_eq!(&parsed, size);
+        }
     }
 }

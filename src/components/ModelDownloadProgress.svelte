@@ -3,13 +3,17 @@
   import { listen } from '@tauri-apps/api/event'
   import type { UnlistenFn } from '@tauri-apps/api/event'
   import { downloadWhisperModel } from '../lib/ipc'
+  import type { WhisperModelSizeId } from '../lib/types'
 
   interface Props {
+    modelSize: WhisperModelSizeId
+    modelDisplayName: string
+    diskSizeMb: number
     onComplete?: () => void
     onError?: (error: string) => void
   }
 
-  let { onComplete, onError }: Props = $props()
+  let { modelSize, modelDisplayName, diskSizeMb, onComplete, onError }: Props = $props()
 
   let progress = $state(0)
   let bytesDownloaded = $state(0)
@@ -31,7 +35,7 @@
     completed = false
 
     try {
-      await downloadWhisperModel()
+      await downloadWhisperModel(modelSize)
       if (!completed) {
         completed = true
         status = 'complete'
@@ -46,9 +50,10 @@
   }
 
   onMount(async () => {
-    unlisten = await listen<{ bytes_downloaded: number; total_bytes: number; percentage: number }>(
+    unlisten = await listen<{ model_size: string; bytes_downloaded: number; total_bytes: number; percentage: number }>(
       'whisper-download-progress',
       (event) => {
+        if (event.payload.model_size !== modelSize) return
         bytesDownloaded = event.payload.bytes_downloaded
         totalBytes = event.payload.total_bytes
         progress = event.payload.percentage
@@ -75,11 +80,11 @@
     {/if}
     <span class="text-sm font-medium text-base-content">
       {#if status === 'complete'}
-        Whisper Small downloaded
+        {modelDisplayName} downloaded
       {:else if status === 'error'}
         Download failed
       {:else}
-        Downloading Whisper Small (~462 MB)...
+        Downloading Whisper {modelDisplayName} (~{diskSizeMb >= 1000 ? (diskSizeMb / 1000).toFixed(1) + ' GB' : diskSizeMb + ' MB'})...
       {/if}
     </span>
     {#if status === 'complete'}
@@ -115,8 +120,4 @@
       </button>
     </div>
   {/if}
-
-  <p class="text-base-content/50 text-xs">
-    This model uses approximately 1 GB of RAM during transcription.
-  </p>
 </div>

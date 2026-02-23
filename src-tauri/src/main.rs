@@ -22,7 +22,7 @@ use jira_client::JiraClient;
 use github_client::GitHubClient;
 use opencode_client::OpenCodeClient;
 use pty_manager::PtyManager;
-use whisper_manager::WhisperManager;
+use whisper_manager::{WhisperManager, WhisperModelSize};
 
 // ============================================================================
 // Startup: Resume OpenCode Servers
@@ -149,20 +149,22 @@ fn main() {
                     eprintln!("[startup] Failed to clear stale worktree servers: {}", e);
                 }
             }
+            let whisper_model_pref = database.get_config("whisper_model_size")
+                .ok()
+                .flatten()
+                .and_then(|s| WhisperModelSize::from_str(&s))
+                .unwrap_or(WhisperModelSize::Small);
 
             app.manage(Mutex::new(database));
 
             println!("Database initialized successfully");
-
             let jira_client = JiraClient::new();
             let github_client = GitHubClient::new();
-
             let opencode_client = OpenCodeClient::with_base_url("http://127.0.0.1:4096".to_string());
-
             let server_manager = server_manager::ServerManager::new();
             let sse_bridge_manager = sse_bridge::SseBridgeManager::new();
             let pty_manager = PtyManager::new();
-            let whisper_manager = WhisperManager::new();
+            let whisper_manager = WhisperManager::with_active_model(whisper_model_pref);
 
             app.manage(opencode_client);
             app.manage(jira_client);
@@ -269,6 +271,8 @@ fn main() {
             commands::whisper::transcribe_audio,
             commands::whisper::get_whisper_model_status,
             commands::whisper::download_whisper_model,
+            commands::whisper::get_all_whisper_model_statuses,
+            commands::whisper::set_whisper_model,
             commands::opencode::list_opencode_agents,
         ])
         .run(tauri::generate_context!())

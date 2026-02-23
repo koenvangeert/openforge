@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { Task, AgentSession, AgentLog, PrComment, PollResult, PullRequestInfo, OpenCodeStatus, AgentInfo, Project, ProjectAttention, WorktreeInfo, ImplementationStatus, ReviewPullRequest, PrFileDiff, ReviewComment, ReviewSubmissionComment, SelfReviewComment, CommandInfo, AutocompleteAgentInfo, PrOverviewComment, TranscriptionResult, WhisperModelStatus } from "./types";
+import type { Task, AgentSession, AgentLog, PrComment, PollResult, PullRequestInfo, OpenCodeStatus, AgentInfo, Project, ProjectAttention, WorktreeInfo, ImplementationStatus, ReviewPullRequest, PrFileDiff, ReviewComment, ReviewSubmissionComment, SelfReviewComment, CommandInfo, AutocompleteAgentInfo, PrOverviewComment, TranscriptionResult, WhisperModelStatus, WhisperModelSizeId } from "./types";
 
 export async function createTask(title: string, status: string, jiraKey: string | null, projectId: string | null): Promise<Task> {
   return invoke<Task>("create_task", { title, status, jiraKey, projectId });
@@ -244,6 +244,14 @@ export async function getWhisperModelStatus(): Promise<WhisperModelStatus> {
   return invoke<WhisperModelStatus>("get_whisper_model_status");
 }
 
-export async function downloadWhisperModel(): Promise<void> {
-  return invoke<void>("download_whisper_model");
+export async function downloadWhisperModel(modelSize: WhisperModelSizeId): Promise<void> {
+  return invoke<void>("download_whisper_model", { modelSize });
+}
+
+export async function getAllWhisperModelStatuses(): Promise<WhisperModelStatus[]> {
+  return invoke<WhisperModelStatus[]>("get_all_whisper_model_statuses");
+}
+
+export async function setWhisperModel(modelSize: WhisperModelSizeId): Promise<void> {
+  return invoke<void>("set_whisper_model", { modelSize });
 }
