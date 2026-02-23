@@ -93,7 +93,7 @@
         title="Open in Jira"
       >↗</button>
     {/if}
-    <h1 class="text-lg font-bold text-base-content m-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap min-w-0">{task.jira_title || task.title.split('\n')[0]}</h1>
+    <h1 class="text-lg font-bold text-base-content m-0 flex-1 min-w-0" title={task.jira_title || task.title.split('\n')[0]}>{task.jira_title || task.title.split('\n')[0]}</h1>
     <span class="badge {task.status === 'doing' ? 'badge-success' : task.status === 'done' ? 'badge-primary' : 'badge-ghost'} uppercase tracking-wider text-xs font-semibold shrink-0">
       {getStatusLabel(task.status)}
     </span>
