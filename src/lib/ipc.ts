@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { Task, AgentSession, AgentLog, PrComment, PollResult, PullRequestInfo, OpenCodeStatus, AgentInfo, Project, WorktreeInfo, ImplementationStatus, ReviewPullRequest, PrFileDiff, ReviewComment, ReviewSubmissionComment, SelfReviewComment, CommandInfo, AutocompleteAgentInfo, PrOverviewComment } from "./types";
+import type { Task, AgentSession, AgentLog, PrComment, PollResult, PullRequestInfo, OpenCodeStatus, AgentInfo, Project, WorktreeInfo, ImplementationStatus, ReviewPullRequest, PrFileDiff, ReviewComment, ReviewSubmissionComment, SelfReviewComment, CommandInfo, AutocompleteAgentInfo, PrOverviewComment, TranscriptionResult, WhisperModelStatus } from "./types";
 
 export async function createTask(title: string, status: string, jiraKey: string | null, projectId: string | null): Promise<Task> {
   return invoke<Task>("create_task", { title, status, jiraKey, projectId });
@@ -230,4 +230,16 @@ export async function searchOpenCodeFiles(projectId: string, query: string): Pro
 
 export async function listOpenCodeAgents(projectId: string): Promise<AutocompleteAgentInfo[]> {
   return invoke<AutocompleteAgentInfo[]>("list_opencode_agents", { projectId });
+}
+
+export async function transcribeAudio(audioData: number[]): Promise<TranscriptionResult> {
+  return invoke<TranscriptionResult>("transcribe_audio", { audioData });
+}
+
+export async function getWhisperModelStatus(): Promise<WhisperModelStatus> {
+  return invoke<WhisperModelStatus>("get_whisper_model_status");
+}
+
+export async function downloadWhisperModel(): Promise<void> {
+  return invoke<void>("download_whisper_model");
 }

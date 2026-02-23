@@ -3,6 +3,8 @@
   import type { AutocompleteAgentInfo, CommandInfo } from '../lib/types'
   import AutocompletePopover from './AutocompletePopover.svelte'
   import type { AutocompleteItem } from './AutocompletePopover.svelte'
+  import VoiceInput from './VoiceInput.svelte'
+  import ModelDownloadProgress from './ModelDownloadProgress.svelte'
 
   interface Props {
     value?: string
@@ -28,6 +30,7 @@
   let textValue = $state(value)
   let jiraKeyValue = $state(initialJiraKey)
   let showJiraKey = $state(!!initialJiraKey)
+  let showModelDownload = $state(false)
 
   let autocompleteItems = $state<AutocompleteItem[]>([])
   let popoverVisible = $state(false)
@@ -49,6 +52,21 @@
       textareaEl.focus()
     }
   })
+
+  // ── Transcription ────────────────────────────────────────────────────────────
+  function handleTranscription(text: string) {
+    if (!textareaEl) return
+    const cursorPos = textareaEl.selectionStart ?? textValue.length
+    const before = textValue.slice(0, cursorPos)
+    const after = textValue.slice(cursorPos)
+    const separator = before.length > 0 && !before.endsWith(' ') && !before.endsWith('\n') ? ' ' : ''
+    textValue = before + separator + text + after
+    const newPos = cursorPos + separator.length + text.length
+    setTimeout(() => {
+      textareaEl?.setSelectionRange(newPos, newPos)
+      autoGrow()
+    }, 0)
+  }
 
   // ── Auto-grow ────────────────────────────────────────────────────────────────
   function autoGrow() {
@@ -292,6 +310,7 @@
 
   <div class="flex items-center justify-between px-3 pb-2">
     <div class="flex items-center gap-2">
+      <VoiceInput onTranscription={handleTranscription} />
       {#if showJiraKey}
         <input
           type="text"
@@ -318,4 +337,13 @@
     </div>
     <span class="text-xs text-base-content/40">Shift+Enter to submit · Enter for newline</span>
   </div>
+
+  {#if showModelDownload}
+    <div class="px-3 pb-2">
+      <ModelDownloadProgress
+        onComplete={() => { showModelDownload = false }}
+        onError={() => { showModelDownload = false }}
+      />
+    </div>
+  {/if}
 </div>

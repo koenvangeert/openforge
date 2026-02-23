@@ -9,3 +9,4 @@ pub mod pty;
 pub mod review;
 pub mod self_review;
 pub mod config;
+pub mod whisper;

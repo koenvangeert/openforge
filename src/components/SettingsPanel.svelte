@@ -1,8 +1,9 @@
 <script lang="ts">
   import { activeProjectId, projects } from '../lib/stores'
-  import { getProjectConfig, setProjectConfig, updateProject, deleteProject, getAgents } from '../lib/ipc'
+  import { getProjectConfig, setProjectConfig, updateProject, deleteProject, getAgents, getWhisperModelStatus } from '../lib/ipc'
   import { loadActions, saveActions, createAction, DEFAULT_ACTIONS } from '../lib/actions'
-  import type { Action, AgentInfo } from '../lib/types'
+  import type { Action, AgentInfo, WhisperModelStatus } from '../lib/types'
+  import ModelDownloadProgress from './ModelDownloadProgress.svelte'
 
   interface Props {
     onClose?: () => void
@@ -21,6 +22,8 @@
   let isSaving = $state(false)
   let saved = $state(false)
   let isDeleting = $state(false)
+  let whisperStatus = $state<WhisperModelStatus | null>(null)
+  let showDownloadProgress = $state(false)
 
   let currentProject = $derived($projects.find((p: typeof $projects[0]) => p.id === $activeProjectId))
 
@@ -45,6 +48,7 @@
       agentInstructions = (await getProjectConfig(projectId, 'additional_instructions')) || ''
       actions = await loadActions(projectId)
       availableAgents = await getAgents().catch(() => [])
+      whisperStatus = await getWhisperModelStatus().catch(() => null)
     } catch (e) {
       console.error('Failed to load settings:', e)
     }
@@ -161,6 +165,50 @@
            <span class="text-[0.7rem] text-base-content/50">Additional Instructions</span>
            <textarea bind:value={agentInstructions} placeholder="Optional instructions prepended to the first prompt when starting a new task..." rows="5" class="textarea textarea-bordered w-full text-sm resize-y"></textarea>
          </label>
+       </section>
+
+       <section class="flex flex-col gap-2">
+         <h3 class="text-xs font-semibold text-primary uppercase tracking-wider mb-3 mt-0">Voice Input</h3>
+         
+         {#if showDownloadProgress}
+           <ModelDownloadProgress
+             onComplete={async () => {
+               showDownloadProgress = false
+               whisperStatus = await getWhisperModelStatus().catch(() => null)
+             }}
+             onError={() => { showDownloadProgress = false }}
+           />
+         {:else if whisperStatus?.downloaded}
+           <div class="flex flex-col gap-1">
+             <div class="flex items-center gap-2">
+               <span class="badge badge-success badge-sm">Downloaded</span>
+               <span class="text-[0.7rem] text-base-content/50">{whisperStatus.model_name}</span>
+             </div>
+             {#if whisperStatus.model_size_bytes}
+               <span class="text-[0.7rem] text-base-content/50">
+                 Size: {(whisperStatus.model_size_bytes / 1024 / 1024).toFixed(0)} MB
+               </span>
+             {/if}
+             {#if whisperStatus.model_path}
+               <span class="text-[0.7rem] text-base-content/50 break-all">
+                 Path: {whisperStatus.model_path}
+               </span>
+             {/if}
+             <button class="btn btn-ghost btn-sm mt-1" onclick={() => { showDownloadProgress = true }}>
+               Re-download Model
+             </button>
+           </div>
+         {:else}
+           <div class="flex flex-col gap-2">
+             <p class="text-[0.7rem] text-base-content/50">Whisper Small model required for voice dictation (~462 MB download).</p>
+             <button class="btn btn-primary btn-sm" onclick={() => { showDownloadProgress = true }}>
+               Download Model
+             </button>
+           </div>
+         {/if}
+         
+         <p class="text-[0.7rem] text-base-content/50 mt-1">Uses approximately 1 GB of RAM during transcription.</p>
+         <p class="text-[0.7rem] text-base-content/50">Note: macOS may re-prompt for microphone permission on each app launch (Tauri v2 known issue).</p>
        </section>
 
        <section class="flex flex-col gap-2">

@@ -316,3 +316,21 @@ export interface Action {
   builtin: boolean;
   enabled: boolean;
 }
+
+// ============================================================================
+// Voice Input / Whisper Types
+// ============================================================================
+
+export type VoiceInputState = 'idle' | 'recording' | 'transcribing' | 'error'
+
+export interface TranscriptionResult {
+  text: string;
+  duration_ms: number;
+}
+
+export interface WhisperModelStatus {
+  downloaded: boolean;
+  model_path: string | null;
+  model_size_bytes: number | null;
+  model_name: string;
+}
