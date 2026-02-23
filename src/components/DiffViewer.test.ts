@@ -2,6 +2,10 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/svelte'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import DiffViewer from './DiffViewer.svelte'
 import type { PrFileDiff } from '../lib/types'
+import { toGitDiffViewData } from '../lib/diffAdapter'
+
+
+
 
 
 // ============================================================================
@@ -456,5 +460,67 @@ describe('DiffViewer file content fetching', () => {
     const filenames = calledFiles.map((f: PrFileDiff) => f.filename)
     expect(filenames).toContain('src/test.ts')
     expect(filenames).toContain('src/other.ts')
+  })
+})
+
+// ============================================================================
+
+// ============================================================================
+// DiffViewData Memoization Tests
+// ============================================================================
+
+describe('DiffViewData memoization', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('does not call toGitDiffViewData again on rerender when files and contents are unchanged', async () => {
+    const mockToGitDiffViewData = vi.mocked(toGitDiffViewData)
+
+    const { rerender } = render(DiffViewer, {
+      props: { files: [fileWithPatch] },
+    })
+
+    await new Promise(resolve => setTimeout(resolve, 50))
+    const initialCallCount = mockToGitDiffViewData.mock.calls.length
+
+    await rerender({ files: [fileWithPatch] })
+    await new Promise(resolve => setTimeout(resolve, 50))
+
+    expect(mockToGitDiffViewData.mock.calls.length).toBe(initialCallCount)
+  })
+
+  it('memoization prevents unnecessary toGitDiffViewData calls on rerender with same files', async () => {
+    const mockToGitDiffViewData = vi.mocked(toGitDiffViewData)
+    const batchFn = vi.fn().mockResolvedValue(new Map([
+      ['src/test.ts', { oldContent: 'old', newContent: 'new' }],
+    ]))
+
+    const { rerender } = render(DiffViewer, {
+      props: {
+        files: [fileWithPatch],
+        batchFetchFileContents: batchFn,
+      },
+    })
+
+    await waitFor(() => {
+      expect(batchFn).toHaveBeenCalledTimes(1)
+    })
+    
+    const callsAfterFirstRender = mockToGitDiffViewData.mock.calls.length
+
+    // Rerender with same files and same batch function
+    await rerender({
+      files: [fileWithPatch],
+      batchFetchFileContents: batchFn,
+    })
+
+    await new Promise(resolve => setTimeout(resolve, 50))
+
+    // toGitDiffViewData should not be called again because:
+    // 1. Files array is the same
+    // 2. fileContentsMap hasn't changed (batch fetch was already done)
+    // 3. Cache should return the same DiffViewData object
+    expect(mockToGitDiffViewData.mock.calls.length).toBe(callsAfterFirstRender)
   })
 })

@@ -5,7 +5,7 @@
   import './DiffViewerTheme.css'
   import type { PrFileDiff, ReviewComment, ReviewSubmissionComment } from '../lib/types'
   import { pendingManualComments } from '../lib/stores'
-  import { toGitDiffViewData, isTruncated, getTruncationStats, type FileContents } from '../lib/diffAdapter'
+  import { toGitDiffViewData, isTruncated, getTruncationStats, type FileContents, type DiffViewData } from '../lib/diffAdapter'
   import { buildExtendData, type CommentDisplayData } from '../lib/diffComments'
   import { diffHighlighter } from '../lib/diffHighlighter'
   import { createDiffSearch } from '../lib/useDiffSearch.svelte'
@@ -34,6 +34,9 @@
   let commentText = $state('')
   let fileContentsMap = $state<Map<string, FileContents>>(new Map())
   let collapsedFiles = $state(new Set<string>())
+
+  // Memoize per-file DiffViewData to prevent DiffFile recreation which breaks syntax highlighting
+  let diffDataCache = new Map<string, { data: DiffViewData; contents: FileContents | undefined }>()
 
   const search = createDiffSearch({
     getDiffViewMode: () => diffViewMode,
@@ -73,6 +76,15 @@
     }
   }
 
+  function getStableDiffData(file: PrFileDiff): DiffViewData {
+    const contents = fileContentsMap.get(file.filename)
+    const cached = diffDataCache.get(file.filename)
+    if (cached && cached.contents === contents) return cached.data
+    const data = toGitDiffViewData(file, contents)
+    diffDataCache.set(file.filename, { data, contents })
+    return data
+  }
+
   function toggleCollapse(filename: string) {
     const next = new Set(collapsedFiles)
     if (next.has(filename)) {
@@ -96,6 +108,14 @@
     }
     collapsedFiles = largeFiles
     hasAutoCollapsed = true
+  })
+
+  // Clean up cache entries for files no longer in the diff
+  $effect(() => {
+    const currentFiles = new Set(files.map(f => f.filename))
+    for (const key of diffDataCache.keys()) {
+      if (!currentFiles.has(key)) diffDataCache.delete(key)
+    }
   })
 
   // Fetch file contents for all files with patches
@@ -299,7 +319,7 @@
               </div>
             {/if}
             <DiffView
-              data={toGitDiffViewData(file, fileContentsMap.get(file.filename))}
+              data={getStableDiffData(file)}
               extendData={buildExtendData(file.filename, existingComments, $pendingManualComments)}
               diffViewMode={diffViewMode}
               diffViewWrap={diffViewWrap}
