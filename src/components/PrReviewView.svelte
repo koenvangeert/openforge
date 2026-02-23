@@ -7,7 +7,6 @@
   import DiffViewer from './DiffViewer.svelte'
   import ReviewSubmitPanel from './ReviewSubmitPanel.svelte'
   import PrOverviewTab from './PrOverviewTab.svelte'
-  import MarkdownContent from './MarkdownContent.svelte'
   import type { ReviewPullRequest, PrFileDiff } from '../lib/types'
   import type { FileContents } from '../lib/diffAdapter'
 
@@ -18,9 +17,6 @@
   let diffViewer = $state<DiffViewer>()
   let fileTreeVisible = $state(true)
   let activeTab = $state<PrDetailTab>('overview')
-  let sidebarVisible = $state(false)
-
-  let commentCount = $derived($reviewComments.length)
 
   let groupedPrs = $derived(groupByRepo($reviewPrs))
 
@@ -104,17 +100,6 @@
 
   function timeAgo(timestamp: number): string {
     const seconds = Math.floor((Date.now() - timestamp) / 1000)
-    if (seconds < 60) return 'just now'
-    const minutes = Math.floor(seconds / 60)
-    if (minutes < 60) return `${minutes}m ago`
-    const hours = Math.floor(minutes / 60)
-    if (hours < 24) return `${hours}h ago`
-    const days = Math.floor(hours / 24)
-    return `${days}d ago`
-  }
-
-  function commentTimeAgo(dateStr: string): string {
-    const seconds = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000)
     if (seconds < 60) return 'just now'
     const minutes = Math.floor(seconds / 60)
     if (minutes < 60) return `${minutes}m ago`
@@ -215,62 +200,7 @@
               {fileTreeVisible}
               onToggleFileTree={() => { fileTreeVisible = !fileTreeVisible }}
               fetchFileContents={fetchPrFileContents}
-            >
-              {#snippet toolbarExtra()}
-                <div class="w-px h-5 bg-base-300 mx-1 self-center"></div>
-                <button
-                  class="btn btn-ghost btn-xs gap-1 {sidebarVisible ? 'text-primary bg-primary/10 border border-primary' : 'text-base-content/50'}"
-                  onclick={() => { sidebarVisible = !sidebarVisible }}
-                  title={sidebarVisible ? 'Hide comments panel' : 'Show comments panel'}
-                >
-                  Comments
-                  {#if commentCount > 0 && !sidebarVisible}
-                    <span class="badge badge-primary badge-xs">{commentCount}</span>
-                  {/if}
-                </button>
-              {/snippet}
-            </DiffViewer>
-            {#if sidebarVisible}
-              <div class="w-[380px] shrink-0 border-l border-base-300 overflow-hidden flex flex-col bg-base-100">
-                <div class="flex items-center gap-2 px-3 py-2.5 bg-base-200 border-b border-base-300 shrink-0">
-                  <span class="text-xs font-semibold text-base-content/50 uppercase tracking-wider">Review Comments</span>
-                  {#if commentCount > 0}
-                    <span class="badge badge-primary badge-xs">{commentCount}</span>
-                  {/if}
-                </div>
-                {#if $reviewComments.length === 0}
-                  <div class="flex flex-col items-center justify-center flex-1 gap-2 px-4 py-8 text-center">
-                    <span class="text-2xl opacity-40">💬</span>
-                    <p class="m-0 text-xs text-base-content/50">No review comments on this PR yet</p>
-                  </div>
-                {:else}
-                  <div class="flex-1 overflow-y-auto">
-                    {#each $reviewComments as comment (comment.id)}
-                      <div class="px-3 py-3 border-b border-base-300 last:border-b-0">
-                        <div class="flex items-center gap-1.5 mb-1.5 flex-wrap">
-                          <div class="w-5 h-5 rounded-full bg-primary/15 flex items-center justify-center text-[0.6rem] font-bold text-primary shrink-0">
-                            {comment.author.charAt(0).toUpperCase()}
-                          </div>
-                          <span class="text-xs font-semibold text-base-content">@{comment.author}</span>
-                          <span class="text-[0.65rem] text-base-content/40 ml-auto">{commentTimeAgo(comment.created_at)}</span>
-                        </div>
-                        {#if comment.path}
-                          <button
-                            class="flex items-center gap-1 mb-1.5 cursor-pointer hover:opacity-80"
-                            onclick={() => handleFileSelect(comment.path)}
-                          >
-                            <span class="text-[0.65rem] text-base-content/50 font-mono bg-base-200 rounded px-1.5 py-0.5 overflow-hidden text-ellipsis whitespace-nowrap max-w-full">{comment.path}{#if comment.line}:{comment.line}{/if}</span>
-                          </button>
-                        {/if}
-                        <div class="text-xs text-base-content leading-relaxed [&_.markdown-body]:text-xs [&_.markdown-body_pre]:text-[0.7rem] [&_.markdown-body_code]:text-[0.7rem] [&_.markdown-body_p]:my-1">
-                          <MarkdownContent content={comment.body} />
-                        </div>
-                      </div>
-                    {/each}
-                  </div>
-                {/if}
-              </div>
-            {/if}
+            />
           {/if}
         </div>
 
