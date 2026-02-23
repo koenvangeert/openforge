@@ -1,6 +1,7 @@
-import { render, screen, fireEvent } from '@testing-library/svelte'
+import { render, screen, fireEvent, waitFor } from '@testing-library/svelte'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import DiffViewer from './DiffViewer.svelte'
+import type { PrFileDiff } from '../lib/types'
 
 
 // ============================================================================
@@ -8,7 +9,7 @@ import DiffViewer from './DiffViewer.svelte'
 // ============================================================================
 
 vi.mock('@git-diff-view/svelte', () => ({
-  DiffView: {},
+  DiffView: vi.fn().mockReturnValue(null),
   DiffModeEnum: { Split: 0, Unified: 1 },
   SplitSide: { old: 1, new: 2 },
 }))
@@ -282,5 +283,178 @@ describe('DiffViewer Search', () => {
       expect(screen.getByTitle('Enable line wrapping')).toBeTruthy()
       expect(screen.getByTitle('Search (⌘F)')).toBeTruthy()
     })
+  })
+})
+
+
+// ============================================================================
+// File Content Fetching Tests
+// ============================================================================
+
+const fileWithPatch: PrFileDiff = {
+  sha: 'abc123',
+  filename: 'src/test.ts',
+  status: 'modified',
+  additions: 2,
+  deletions: 1,
+  changes: 3,
+  patch: '@@ -1,3 +1,4 @@\n line1\n+added\n line2',
+  previous_filename: null,
+  is_truncated: false,
+  patch_line_count: null,
+}
+
+const fileWithPatch2: PrFileDiff = {
+  sha: 'def456',
+  filename: 'src/other.ts',
+  status: 'added',
+  additions: 5,
+  deletions: 0,
+  changes: 5,
+  patch: '@@ -0,0 +1,5 @@\n+line1\n+line2',
+  previous_filename: null,
+  is_truncated: false,
+  patch_line_count: null,
+}
+
+describe('DiffViewer file content fetching', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('batch fetch is called with files that have patches', async () => {
+    const batchFn = vi.fn().mockResolvedValue(new Map([
+      ['src/test.ts', { oldContent: 'old', newContent: 'new' }],
+    ]))
+
+    render(DiffViewer, {
+      props: {
+        files: [fileWithPatch],
+        batchFetchFileContents: batchFn,
+      },
+    })
+
+    await waitFor(() => {
+      expect(batchFn).toHaveBeenCalledTimes(1)
+    })
+
+    const [calledFiles] = batchFn.mock.calls[0] as [PrFileDiff[]]
+    expect(calledFiles.map((f: PrFileDiff) => f.filename)).toContain('src/test.ts')
+  })
+
+  it('batch fetch is preferred over per-file fetch when both are provided', async () => {
+    const batchFn = vi.fn().mockResolvedValue(new Map([
+      ['src/test.ts', { oldContent: '', newContent: 'content' }],
+    ]))
+    const perFileFn = vi.fn().mockResolvedValue({ oldContent: '', newContent: 'content' })
+
+    render(DiffViewer, {
+      props: {
+        files: [fileWithPatch],
+        batchFetchFileContents: batchFn,
+        fetchFileContents: perFileFn,
+      },
+    })
+
+    await waitFor(() => {
+      expect(batchFn).toHaveBeenCalledTimes(1)
+    })
+
+    expect(perFileFn).not.toHaveBeenCalled()
+  })
+
+  it('per-file fetch is used when no batch fetch is provided', async () => {
+    const perFileFn = vi.fn().mockResolvedValue({ oldContent: '', newContent: 'content' })
+
+    render(DiffViewer, {
+      props: {
+        files: [fileWithPatch],
+        fetchFileContents: perFileFn,
+      },
+    })
+
+    await waitFor(() => {
+      expect(perFileFn).toHaveBeenCalledTimes(1)
+    })
+
+    const [calledFile] = perFileFn.mock.calls[0] as [PrFileDiff]
+    expect(calledFile.filename).toBe('src/test.ts')
+  })
+
+  it('files without patches are not passed to batch fetch', async () => {
+    const fileNoPatch: PrFileDiff = {
+      ...fileWithPatch,
+      filename: 'src/nopatch.ts',
+      patch: null,
+    }
+    const batchFn = vi.fn().mockResolvedValue(new Map())
+
+    render(DiffViewer, {
+      props: {
+        files: [fileNoPatch],
+        batchFetchFileContents: batchFn,
+      },
+    })
+
+    // Give the effect time to run
+    await new Promise(resolve => setTimeout(resolve, 50))
+
+    // batchFn should not be called because no files have patches
+    expect(batchFn).not.toHaveBeenCalled()
+  })
+
+  it('re-fetches when includeUncommitted prop changes', async () => {
+    const batchFn = vi.fn().mockResolvedValue(new Map([
+      ['src/test.ts', { oldContent: '', newContent: 'content' }],
+    ]))
+
+    const { rerender } = render(DiffViewer, {
+      props: {
+        files: [fileWithPatch],
+        batchFetchFileContents: batchFn,
+        includeUncommitted: false,
+      },
+    })
+
+    // Wait for initial fetch
+    await waitFor(() => {
+      expect(batchFn).toHaveBeenCalledTimes(1)
+    })
+
+    // Change includeUncommitted — should trigger re-fetch
+    await rerender({
+      files: [fileWithPatch],
+      batchFetchFileContents: batchFn,
+      includeUncommitted: true,
+    })
+
+    await waitFor(() => {
+      expect(batchFn).toHaveBeenCalledTimes(2)
+    })
+  })
+
+  it('batch fetch called once for multiple files in a single render', async () => {
+    const batchFn = vi.fn().mockResolvedValue(new Map([
+      ['src/test.ts', { oldContent: '', newContent: 'a' }],
+      ['src/other.ts', { oldContent: '', newContent: 'b' }],
+    ]))
+
+    render(DiffViewer, {
+      props: {
+        files: [fileWithPatch, fileWithPatch2],
+        batchFetchFileContents: batchFn,
+      },
+    })
+
+    await waitFor(() => {
+      expect(batchFn).toHaveBeenCalledTimes(1)
+    })
+
+    // Both files should be in the single batch call
+    const [calledFiles] = batchFn.mock.calls[0] as [PrFileDiff[]]
+    expect(calledFiles).toHaveLength(2)
+    const filenames = calledFiles.map((f: PrFileDiff) => f.filename)
+    expect(filenames).toContain('src/test.ts')
+    expect(filenames).toContain('src/other.ts')
   })
 })
