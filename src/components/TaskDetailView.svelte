@@ -73,9 +73,6 @@
     onRunAction({ taskId: task.id, actionPrompt: prompt, agent: null })
   }
 
-  function getStatusLabel(status: string): string {
-    return status.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
-  }
 </script>
 
 <div class="flex flex-col flex-1 h-full bg-base-100 overflow-hidden">
@@ -94,9 +91,6 @@
       >↗</button>
     {/if}
     <h1 class="text-lg font-bold text-base-content m-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap min-w-0">{task.jira_title || task.title.split('\n')[0]}</h1>
-    <span class="badge {task.status === 'doing' ? 'badge-success' : task.status === 'done' ? 'badge-primary' : 'badge-ghost'} uppercase tracking-wider text-xs font-semibold shrink-0">
-      {getStatusLabel(task.status)}
-    </span>
     {#if worktreePath !== null}
       <div class="inline-flex items-center bg-base-300 border border-base-300 rounded-full p-0.5 gap-0.5 shrink-0 shadow-sm">
         <button class="btn btn-ghost btn-xs rounded-full px-4 transition-all duration-200 {!reviewMode ? 'btn-active bg-primary text-primary-content font-semibold shadow-sm' : 'hover:bg-base-200'}" onclick={() => reviewMode = false}>Code</button>
