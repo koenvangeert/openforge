@@ -29,6 +29,7 @@ describe('compileReviewPrompt', () => {
     expect(result).toContain('Add error handling throughout')
     expect(result).toContain('Consider splitting into smaller modules')
     expect(result).toContain('Please address ALL items above')
+    expect(result).toContain('After making all fixes, commit the changes and push to the branch.')
   })
 
   it('handles inline-only — omits General Feedback section', () => {
@@ -41,6 +42,7 @@ describe('compileReviewPrompt', () => {
     expect(result).toContain('`src/foo.ts:5`')
     expect(result).toContain('Fix this')
     expect(result).toContain('Please address ALL items above')
+    expect(result).toContain('After making all fixes, commit the changes and push to the branch.')
   })
 
   it('handles general-only — omits Code Comments section', () => {
@@ -52,6 +54,7 @@ describe('compileReviewPrompt', () => {
     expect(result).toContain('## General Feedback')
     expect(result).toContain('Improve test coverage')
     expect(result).toContain('Please address ALL items above')
+    expect(result).toContain('After making all fixes, commit the changes and push to the branch.')
   })
 
   it('handles special characters in comment body — backticks, quotes, newlines preserved', () => {

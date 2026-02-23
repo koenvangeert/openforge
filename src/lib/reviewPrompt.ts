@@ -55,6 +55,7 @@ export function compileReviewPrompt(
   // Closing instruction
   sections.push("Please address ALL items above. For code comments, fix the issue at the referenced location.");
   sections.push("For general feedback, investigate and fix the described behavior.");
+  sections.push("After making all fixes, commit the changes and push to the branch.");
 
   return sections.join("\n");
 }
