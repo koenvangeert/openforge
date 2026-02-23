@@ -24,6 +24,8 @@ pub struct ProjectAttentionRow {
     pub ci_failures: i64,
     /// Total unaddressed PR comments across open PRs
     pub unaddressed_comments: i64,
+    /// Number of doing tasks where the agent has completed (needs review/move)
+    pub completed_agents: i64,
 }
 
 impl super::Database {
@@ -191,7 +193,8 @@ impl super::Database {
                 "SELECT
                     t.project_id,
                     COALESCE(SUM(CASE WHEN ls.status = 'paused' AND ls.checkpoint_data IS NOT NULL THEN 1 ELSE 0 END), 0),
-                    COALESCE(SUM(CASE WHEN ls.status = 'running' THEN 1 ELSE 0 END), 0)
+                    COALESCE(SUM(CASE WHEN ls.status = 'running' THEN 1 ELSE 0 END), 0),
+                    COALESCE(SUM(CASE WHEN ls.status = 'completed' THEN 1 ELSE 0 END), 0)
                 FROM tasks t
                 LEFT JOIN (
                     SELECT s1.ticket_id, s1.status, s1.checkpoint_data
@@ -211,20 +214,23 @@ impl super::Database {
                     row.get::<_, String>(0)?,
                     row.get::<_, i64>(1)?,
                     row.get::<_, i64>(2)?,
+                    row.get::<_, i64>(3)?,
                 ))
             })?;
 
             for row in rows {
-                let (project_id, needs_input, running_agents) = row?;
+                let (project_id, needs_input, running_agents, completed_agents) = row?;
                 let entry = attention.entry(project_id.clone()).or_insert_with(|| ProjectAttentionRow {
                     project_id,
                     needs_input: 0,
                     running_agents: 0,
                     ci_failures: 0,
                     unaddressed_comments: 0,
+                    completed_agents: 0,
                 });
                 entry.needs_input = needs_input;
                 entry.running_agents = running_agents;
+                entry.completed_agents = completed_agents;
             }
         }
 
@@ -259,6 +265,7 @@ impl super::Database {
                     running_agents: 0,
                     ci_failures: 0,
                     unaddressed_comments: 0,
+                    completed_agents: 0,
                 });
                 entry.ci_failures = ci_failures;
                 entry.unaddressed_comments = unaddressed_comments;
@@ -380,6 +387,13 @@ mod tests {
         db.create_agent_session("ses-2", &task2.id, None, "implement", "running")
             .expect("create session failed");
 
+        // Create a doing task with a completed agent (needs review/move)
+        let task4 = db
+            .create_task("Doing task 4", "doing", None, Some(&project.id))
+            .expect("create task failed");
+        db.create_agent_session("ses-4", &task4.id, None, "implement", "completed")
+            .expect("create session failed");
+
         // Create a doing task with an open PR that has CI failure + unaddressed comment
         let task3 = db
             .create_task("Doing task 3", "doing", None, Some(&project.id))
@@ -398,6 +412,7 @@ mod tests {
         assert_eq!(summary.running_agents, 1);
         assert_eq!(summary.ci_failures, 1);
         assert_eq!(summary.unaddressed_comments, 1);
+        assert_eq!(summary.completed_agents, 1);
 
         drop(db);
         let _ = fs::remove_file(&path);

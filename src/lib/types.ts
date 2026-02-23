@@ -151,6 +151,7 @@ export interface ProjectAttention {
   running_agents: number;
   ci_failures: number;
   unaddressed_comments: number;
+  completed_agents: number;
 }
 
 export interface WorktreeInfo {

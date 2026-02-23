@@ -19,7 +19,7 @@
   let otherProjectsNeedAttention = $derived.by(() => {
     for (const [projectId, attn] of $projectAttention) {
       if (projectId === $activeProjectId) continue
-      if (attn.needs_input > 0 || attn.running_agents > 0 || attn.ci_failures > 0 || attn.unaddressed_comments > 0) {
+      if (attn.needs_input > 0 || attn.running_agents > 0 || attn.ci_failures > 0 || attn.unaddressed_comments > 0 || attn.completed_agents > 0) {
         return true
       }
     }
@@ -115,14 +115,13 @@
                 {#if attn}
                   {#if attn.needs_input > 0}
                     <span class="w-2 h-2 rounded-full bg-warning" title="{attn.needs_input} agent{attn.needs_input > 1 ? 's' : ''} need{attn.needs_input === 1 ? 's' : ''} input"></span>
-                  {/if}
-                  {#if attn.running_agents > 0}
+                  {:else if attn.running_agents > 0}
                     <span class="w-2 h-2 rounded-full bg-success animate-pulse" title="{attn.running_agents} agent{attn.running_agents > 1 ? 's' : ''} running"></span>
-                  {/if}
-                  {#if attn.ci_failures > 0}
+                  {:else if attn.completed_agents > 0}
+                    <span class="w-2 h-2 rounded-full bg-info" title="{attn.completed_agents} agent{attn.completed_agents > 1 ? 's' : ''} completed"></span>
+                  {:else if attn.ci_failures > 0}
                     <span class="w-2 h-2 rounded-full bg-error" title="{attn.ci_failures} CI failure{attn.ci_failures > 1 ? 's' : ''}"></span>
-                  {/if}
-                  {#if attn.unaddressed_comments > 0}
+                  {:else if attn.unaddressed_comments > 0}
                     <span class="badge badge-error badge-xs text-[0.6rem]" title="{attn.unaddressed_comments} unaddressed comment{attn.unaddressed_comments > 1 ? 's' : ''}">{attn.unaddressed_comments}</span>
                   {/if}
                 {/if}
