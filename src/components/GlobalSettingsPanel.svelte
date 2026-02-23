@@ -58,7 +58,8 @@
     <button class="btn btn-ghost btn-xs text-base-content/50 hover:bg-error hover:text-error-content" onclick={close}>✕</button>
   </div>
 
-  <div class="flex-1 overflow-y-auto py-5 flex flex-col gap-6 max-w-2xl mx-auto w-full px-6">
+  <div class="flex-1 overflow-y-auto">
+    <div class="py-5 flex flex-col gap-6 max-w-4xl mx-auto w-full px-6">
     <section class="flex flex-col gap-2">
       <h3 class="text-xs font-semibold text-primary uppercase tracking-wider mb-3 mt-0">JIRA</h3>
       <label class="flex flex-col gap-1">
@@ -82,11 +83,15 @@
         <input type="password" bind:value={githubToken} placeholder="ghp_..." class="input input-bordered input-sm w-full" />
       </label>
     </section>
+    </div>
   </div>
 
-  <div class="py-4 border-t border-base-300 max-w-2xl mx-auto w-full px-6">
-    <button class="btn btn-primary btn-block" onclick={save} disabled={isSaving}>
-      {#if isSaving}Saving...{:else if saved}Saved!{:else}Save Settings{/if}
-    </button>
+  <div class="border-t border-base-300">
+    <div class="py-4 max-w-4xl mx-auto w-full px-6">
+      <button class="btn btn-primary btn-block" onclick={save} disabled={isSaving}>
+        {#if isSaving}Saving...{:else if saved}Saved!{:else}Save Settings{/if}
+      </button>
+    </div>
   </div>
+
 </div>
