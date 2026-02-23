@@ -176,6 +176,10 @@
       e.preventDefault()
       triggerGithubSync()
     }
+    if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'D') {
+      e.preventDefault()
+      window.dispatchEvent(new CustomEvent('toggle-voice-recording'))
+    }
   }
 
   onMount(async () => {

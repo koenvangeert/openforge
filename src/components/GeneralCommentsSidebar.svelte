@@ -8,6 +8,7 @@
   } from '../lib/ipc'
   import type { SelfReviewComment } from '../lib/types'
 
+  import VoiceInput from './VoiceInput.svelte'
   interface Props {
     taskId: string
   }
@@ -20,6 +21,8 @@
   let loadError = $state<string | null>(null)
   let addError = $state<string | null>(null)
   let archivedExpanded = $state(false)
+
+  let textareaEl = $state<HTMLTextAreaElement | null>(null)
 
   let archivedCount = $derived($selfReviewArchivedComments.length)
   let canAdd = $derived(newCommentBody.trim().length > 0 && !isAdding)
@@ -94,6 +97,22 @@
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
       handleAdd()
     }
+  }
+
+  function handleTranscription(text: string) {
+    if (!textareaEl) {
+      newCommentBody += (newCommentBody.length > 0 && !newCommentBody.endsWith(' ') && !newCommentBody.endsWith('\n') ? ' ' : '') + text
+      return
+    }
+    const cursorPos = textareaEl.selectionStart ?? newCommentBody.length
+    const before = newCommentBody.slice(0, cursorPos)
+    const after = newCommentBody.slice(cursorPos)
+    const separator = before.length > 0 && !before.endsWith(' ') && !before.endsWith('\n') ? ' ' : ''
+    newCommentBody = before + separator + text + after
+    const newPos = cursorPos + separator.length + text.length
+    setTimeout(() => {
+      textareaEl?.setSelectionRange(newPos, newPos)
+    }, 0)
   }
 
   function toggleArchived() {
@@ -175,6 +194,7 @@
       </div>
     {/if}
     <textarea
+      bind:this={textareaEl}
       class="textarea textarea-bordered w-full text-xs leading-relaxed resize-y disabled:opacity-50 disabled:cursor-not-allowed"
       placeholder="Add a testing note… (Cmd+Enter to submit)"
       rows={3}
@@ -182,7 +202,8 @@
       disabled={isAdding}
       onkeydown={handleKeydown}
     ></textarea>
-    <div class="flex justify-end">
+    <div class="flex items-center justify-between">
+      <VoiceInput onTranscription={handleTranscription} disabled={isAdding} listenToHotkey />
       <button
         class="btn btn-primary btn-sm"
         onclick={handleAdd}

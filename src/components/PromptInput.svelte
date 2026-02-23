@@ -310,7 +310,7 @@
 
   <div class="flex items-center justify-between px-3 pb-2">
     <div class="flex items-center gap-2">
-      <VoiceInput onTranscription={handleTranscription} />
+      <VoiceInput onTranscription={handleTranscription} listenToHotkey />
       {#if showJiraKey}
         <input
           type="text"

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onDestroy } from 'svelte'
+  import { onMount, onDestroy } from 'svelte'
   import { createAudioRecorder } from '../lib/audioRecorder'
   import type { AudioRecorder } from '../lib/audioRecorder'
   import { transcribeAudio, getWhisperModelStatus } from '../lib/ipc'
@@ -8,9 +8,10 @@
   interface Props {
     onTranscription: (text: string) => void
     disabled?: boolean
+    listenToHotkey?: boolean
   }
 
-  let { onTranscription, disabled = false }: Props = $props()
+  let { onTranscription, disabled = false, listenToHotkey = false }: Props = $props()
 
   // ── State ────────────────────────────────────────────────────────────────────
   let voiceState = $state<VoiceInputState>('idle')
@@ -116,8 +117,19 @@
     }
   }
 
+  // ── Hotkey listener ────────────────────────────────────────────────────────
+  function handleHotkeyEvent() {
+    if (!disabled && listenToHotkey) {
+      void handleClick()
+    }
+  }
+
+  onMount(() => {
+    window.addEventListener('toggle-voice-recording', handleHotkeyEvent)
+  })
   // ── Cleanup ───────────────────────────────────────────────────────────────────
   onDestroy(() => {
+    window.removeEventListener('toggle-voice-recording', handleHotkeyEvent)
     clearDurationInterval()
     clearErrorTimer()
     if (recorder !== null) {

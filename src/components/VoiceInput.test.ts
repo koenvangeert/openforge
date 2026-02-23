@@ -62,4 +62,35 @@ describe('VoiceInput', () => {
     const svg = button.querySelector('svg')
     expect(svg).toBeTruthy()
   })
+
+  it('responds to toggle-voice-recording event when listenToHotkey is true', async () => {
+    vi.mocked(getWhisperModelStatus).mockResolvedValue({
+      downloaded: false,
+      model_path: null,
+      model_size_bytes: null,
+      model_name: 'ggml-small.bin',
+    })
+
+    render(VoiceInput, { props: { ...baseProps, listenToHotkey: true } })
+    window.dispatchEvent(new CustomEvent('toggle-voice-recording'))
+    await new Promise((r) => setTimeout(r, 10))
+
+    expect(getWhisperModelStatus).toHaveBeenCalled()
+  })
+
+  it('ignores toggle-voice-recording event when listenToHotkey is false', async () => {
+    render(VoiceInput, { props: { ...baseProps, listenToHotkey: false } })
+    window.dispatchEvent(new CustomEvent('toggle-voice-recording'))
+    await new Promise((r) => setTimeout(r, 10))
+
+    expect(getWhisperModelStatus).not.toHaveBeenCalled()
+  })
+
+  it('ignores toggle-voice-recording event when disabled', async () => {
+    render(VoiceInput, { props: { ...baseProps, listenToHotkey: true, disabled: true } })
+    window.dispatchEvent(new CustomEvent('toggle-voice-recording'))
+    await new Promise((r) => setTimeout(r, 10))
+
+    expect(getWhisperModelStatus).not.toHaveBeenCalled()
+  })
 })
