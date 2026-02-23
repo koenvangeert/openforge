@@ -12,7 +12,7 @@ mod tasks;
 mod worktrees;
 
 pub use agents::{AgentLogRow, AgentSessionRow};
-pub use projects::ProjectRow;
+pub use projects::{ProjectAttentionRow, ProjectRow};
 pub use pull_requests::{PrCommentRow, PrRow};
 pub use review::ReviewPrRow;
 pub use self_review::SelfReviewCommentRow;

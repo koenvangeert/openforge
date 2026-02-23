@@ -86,3 +86,13 @@ pub async fn get_worktree_for_task(
     db.get_worktree_for_task(&task_id)
         .map_err(|e| format!("Failed to get worktree for task: {}", e))
 }
+
+
+#[tauri::command]
+pub async fn get_project_attention(
+    db: State<'_, Mutex<db::Database>>,
+) -> Result<Vec<db::ProjectAttentionRow>, String> {
+    let db = db.lock().unwrap();
+    db.get_project_attention_summaries()
+        .map_err(|e| format!("Failed to get project attention: {}", e))
+}

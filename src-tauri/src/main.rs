@@ -225,6 +225,7 @@ fn main() {
             commands::projects::set_project_config,
             commands::projects::get_tasks_for_project,
             commands::projects::get_worktree_for_task,
+            commands::projects::get_project_attention,
             commands::orchestration::start_implementation,
             commands::orchestration::run_action,
             commands::orchestration::abort_implementation,

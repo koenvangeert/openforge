@@ -145,6 +145,14 @@ export interface Project {
   updated_at: number;
 }
 
+export interface ProjectAttention {
+  project_id: string;
+  needs_input: number;
+  running_agents: number;
+  ci_failures: number;
+  unaddressed_comments: number;
+}
+
 export interface WorktreeInfo {
   id: number;
   task_id: string;

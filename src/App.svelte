@@ -2,9 +2,9 @@
   import { onMount, onDestroy } from 'svelte'
   import { listen } from '@tauri-apps/api/event'
   import type { UnlistenFn, Event } from '@tauri-apps/api/event'
-  import { tasks, selectedTaskId, activeSessions, checkpointNotification, ciFailureNotification, ticketPrs, error, isLoading, projects, activeProjectId, currentView, reviewRequestCount } from './lib/stores'
-   import { getProjects, getTasksForProject, getOpenCodeStatus, getPullRequests, runAction, getSessionStatus, getLatestSession, getLatestSessions, forceGithubSync, createTask, updateTask } from './lib/ipc'
-  import type { Task, PullRequestInfo, OpenCodeStatus, AgentEvent } from './lib/types'
+  import { tasks, selectedTaskId, activeSessions, checkpointNotification, ciFailureNotification, ticketPrs, error, isLoading, projects, activeProjectId, currentView, reviewRequestCount, projectAttention } from './lib/stores'
+  import { getProjects, getTasksForProject, getOpenCodeStatus, getPullRequests, runAction, getSessionStatus, getLatestSession, getLatestSessions, forceGithubSync, createTask, updateTask, getProjectAttention } from './lib/ipc'
+  import type { Task, PullRequestInfo, OpenCodeStatus, AgentEvent, ProjectAttention } from './lib/types'
   import KanbanBoard from './components/KanbanBoard.svelte'
   import TaskDetailView from './components/TaskDetailView.svelte'
    import PromptInput from './components/PromptInput.svelte'
@@ -117,6 +117,19 @@
     }
   }
 
+  async function loadProjectAttention() {
+    try {
+      const summaries = await getProjectAttention()
+      const map = new Map<string, ProjectAttention>()
+      for (const s of summaries) {
+        map.set(s.project_id, s)
+      }
+      $projectAttention = map
+    } catch (e) {
+      console.error('Failed to load project attention:', e)
+    }
+  }
+
   async function triggerGithubSync() {
     if (isSyncing) return
     isSyncing = true
@@ -194,6 +207,7 @@
 
     await loadProjects()
     await checkOpenCode()
+    loadProjectAttention()
 
     unlisteners.push(
       await listen('jira-sync-complete', () => {
@@ -204,6 +218,7 @@
     unlisteners.push(
       await listen('github-sync-complete', () => {
         loadPullRequests()
+        loadProjectAttention()
       })
     )
 
@@ -232,6 +247,7 @@
           $checkpointNotification = null
         }
         loadTasks()
+        loadProjectAttention()
       })
     )
 
@@ -248,6 +264,7 @@
           $checkpointNotification = null
         }
         loadTasks()
+        loadProjectAttention()
       })
     )
 
@@ -277,6 +294,7 @@
       await listen('new-pr-comment', () => {
         loadTasks()
         loadPullRequests()
+        loadProjectAttention()
       })
     )
 
@@ -293,6 +311,7 @@
         }
         // Always refresh PR data to update CI dots on cards
         loadPullRequests()
+        loadProjectAttention()
       })
     )
 
@@ -370,6 +389,7 @@
             $checkpointNotification = null
           }
         }
+        loadProjectAttention()
       })
     )
 
@@ -381,6 +401,7 @@
         if ($checkpointNotification?.ticketId === event.payload.ticket_id) {
           $checkpointNotification = null
         }
+        loadProjectAttention()
       })
     )
 

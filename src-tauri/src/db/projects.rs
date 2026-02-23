@@ -11,6 +11,21 @@ pub struct ProjectRow {
     pub updated_at: i64,
 }
 
+
+/// Attention summary for a project (cross-domain aggregation)
+#[derive(Debug, Clone, Serialize)]
+pub struct ProjectAttentionRow {
+    pub project_id: String,
+    /// Number of doing tasks where the agent is paused waiting for input
+    pub needs_input: i64,
+    /// Number of doing tasks where the agent is running
+    pub running_agents: i64,
+    /// Number of open PRs with CI failure
+    pub ci_failures: i64,
+    /// Total unaddressed PR comments across open PRs
+    pub unaddressed_comments: i64,
+}
+
 impl super::Database {
     /// Create a new project with auto-incremented ID
     pub fn create_project(&self, name: &str, path: &str) -> Result<ProjectRow> {
@@ -160,6 +175,98 @@ impl super::Database {
         }
         Ok(result)
     }
+
+    /// Get attention summaries for all projects.
+    ///
+    /// Aggregates cross-domain signals (agent status, PR status) per project
+    /// so the project switcher can show which projects need attention.
+    pub fn get_project_attention_summaries(&self) -> Result<Vec<ProjectAttentionRow>> {
+        let conn = self.conn.lock().unwrap();
+        let mut attention: std::collections::HashMap<String, ProjectAttentionRow> =
+            std::collections::HashMap::new();
+
+        // Query 1: Task/agent attention for "doing" tasks
+        {
+            let mut stmt = conn.prepare(
+                "SELECT
+                    t.project_id,
+                    COALESCE(SUM(CASE WHEN ls.status = 'paused' AND ls.checkpoint_data IS NOT NULL THEN 1 ELSE 0 END), 0),
+                    COALESCE(SUM(CASE WHEN ls.status = 'running' THEN 1 ELSE 0 END), 0)
+                FROM tasks t
+                LEFT JOIN (
+                    SELECT s1.ticket_id, s1.status, s1.checkpoint_data
+                    FROM agent_sessions s1
+                    INNER JOIN (
+                        SELECT ticket_id, MAX(created_at) as max_created
+                        FROM agent_sessions
+                        GROUP BY ticket_id
+                    ) s2 ON s1.ticket_id = s2.ticket_id AND s1.created_at = s2.max_created
+                ) ls ON ls.ticket_id = t.id
+                WHERE t.project_id IS NOT NULL AND t.status = 'doing'
+                GROUP BY t.project_id"
+            )?;
+
+            let rows = stmt.query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, i64>(1)?,
+                    row.get::<_, i64>(2)?,
+                ))
+            })?;
+
+            for row in rows {
+                let (project_id, needs_input, running_agents) = row?;
+                let entry = attention.entry(project_id.clone()).or_insert_with(|| ProjectAttentionRow {
+                    project_id,
+                    needs_input: 0,
+                    running_agents: 0,
+                    ci_failures: 0,
+                    unaddressed_comments: 0,
+                });
+                entry.needs_input = needs_input;
+                entry.running_agents = running_agents;
+            }
+        }
+
+        // Query 2: PR attention for open PRs
+        {
+            let mut stmt = conn.prepare(
+                "SELECT
+                    t.project_id,
+                    COUNT(DISTINCT CASE WHEN pr.ci_status = 'failure' THEN pr.id END),
+                    COALESCE(SUM(
+                        (SELECT COUNT(*) FROM pr_comments WHERE pr_id = pr.id AND addressed = 0)
+                    ), 0)
+                FROM pull_requests pr
+                JOIN tasks t ON t.id = pr.ticket_id
+                WHERE t.project_id IS NOT NULL AND pr.state = 'open'
+                GROUP BY t.project_id"
+            )?;
+
+            let rows = stmt.query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, i64>(1)?,
+                    row.get::<_, i64>(2)?,
+                ))
+            })?;
+
+            for row in rows {
+                let (project_id, ci_failures, unaddressed_comments) = row?;
+                let entry = attention.entry(project_id.clone()).or_insert_with(|| ProjectAttentionRow {
+                    project_id,
+                    needs_input: 0,
+                    running_agents: 0,
+                    ci_failures: 0,
+                    unaddressed_comments: 0,
+                });
+                entry.ci_failures = ci_failures;
+                entry.unaddressed_comments = unaddressed_comments;
+            }
+        }
+
+        Ok(attention.into_values().collect())
+    }
 }
 
 #[cfg(test)]
@@ -222,6 +329,75 @@ mod tests {
             .get_project_config(&project.id, "github_default_repo")
             .expect("Failed to get project github_default_repo");
         assert_eq!(project_repo, Some("owner/repo".to_string()));
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_project_attention_summaries_empty() {
+        let (db, path) = make_test_db("attention_empty");
+
+        let project = db
+            .create_project("Empty Project", "/tmp/empty")
+            .expect("create failed");
+
+        let summaries = db.get_project_attention_summaries().expect("query failed");
+        // No doing tasks, no PRs — should return empty
+        assert!(summaries.is_empty(), "Expected no attention rows for project with no doing tasks");
+
+        // Create a backlog task — still no attention since it's not 'doing'
+        db.create_task("Backlog task", "backlog", None, Some(&project.id))
+            .expect("create task failed");
+        let summaries = db.get_project_attention_summaries().expect("query failed");
+        assert!(summaries.is_empty());
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_project_attention_summaries_with_signals() {
+        let (db, path) = make_test_db("attention_signals");
+
+        let project = db
+            .create_project("Active Project", "/tmp/active")
+            .expect("create failed");
+
+        // Create a doing task with a paused agent (needs input)
+        let task1 = db
+            .create_task("Doing task 1", "doing", None, Some(&project.id))
+            .expect("create task failed");
+        db.create_agent_session("ses-1", &task1.id, None, "implement", "paused")
+            .expect("create session failed");
+        db.update_agent_session("ses-1", "implement", "paused", Some("{\"q\":\"approve?\"}"), None)
+            .expect("update session failed");
+
+        // Create a doing task with a running agent
+        let task2 = db
+            .create_task("Doing task 2", "doing", None, Some(&project.id))
+            .expect("create task failed");
+        db.create_agent_session("ses-2", &task2.id, None, "implement", "running")
+            .expect("create session failed");
+
+        // Create a doing task with an open PR that has CI failure + unaddressed comment
+        let task3 = db
+            .create_task("Doing task 3", "doing", None, Some(&project.id))
+            .expect("create task failed");
+        db.insert_pull_request(42, &task3.id, "acme", "repo", "Fix", "https://example.com", "open", 1000, 1000)
+            .expect("insert pr failed");
+        db.update_pr_ci_status(42, "sha1", "failure", "[]")
+            .expect("update ci failed");
+        db.insert_pr_comment(501, 42, "reviewer", "Fix this", "review", Some("main.rs"), Some(10), false, 2000)
+            .expect("insert comment failed");
+
+        let summaries = db.get_project_attention_summaries().expect("query failed");
+        let summary = summaries.iter().find(|s| s.project_id == project.id).expect("project not found");
+
+        assert_eq!(summary.needs_input, 1);
+        assert_eq!(summary.running_agents, 1);
+        assert_eq!(summary.ci_failures, 1);
+        assert_eq!(summary.unaddressed_comments, 1);
 
         drop(db);
         let _ = fs::remove_file(&path);

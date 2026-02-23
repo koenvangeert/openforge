@@ -1,5 +1,5 @@
 import { writable } from "svelte/store";
-import type { Task, AgentSession, PullRequestInfo, Project, AgentEvent, CheckpointNotification, CiFailureNotification, ReviewPullRequest, PrFileDiff, AppView, ReviewComment, ReviewSubmissionComment, SelfReviewComment, PrOverviewComment } from "./types";
+import type { Task, AgentSession, PullRequestInfo, Project, AgentEvent, CheckpointNotification, CiFailureNotification, ReviewPullRequest, PrFileDiff, AppView, ReviewComment, ReviewSubmissionComment, SelfReviewComment, PrOverviewComment, ProjectAttention } from "./types";
 
 export const tasks = writable<Task[]>([]);
 // selectedTaskId serves as both selection state and navigation:
@@ -14,6 +14,7 @@ export const isLoading = writable(false);
 export const error = writable<string | null>(null);
 export const projects = writable<Project[]>([]);
 export const activeProjectId = writable<string | null>(null);
+export const projectAttention = writable<Map<string, ProjectAttention>>(new Map());
 export const agentEvents = writable<Map<string, AgentEvent[]>>(new Map());
 
 export const currentView = writable<AppView>("board");

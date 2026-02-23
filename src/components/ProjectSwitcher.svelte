@@ -1,7 +1,8 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte'
-  import { projects, activeProjectId } from '../lib/stores'
-  import type { Project } from '../lib/types'
+  import { projects, activeProjectId, projectAttention } from '../lib/stores'
+  import { getProjectAttention } from '../lib/ipc'
+  import type { Project, ProjectAttention } from '../lib/types'
 
   interface Props {
     onNewProject?: () => void
@@ -14,8 +15,39 @@
 
   let activeProject = $derived($projects.find(p => p.id === $activeProjectId))
 
+  // Compute whether any OTHER project needs attention (for button indicator)
+  let otherProjectsNeedAttention = $derived.by(() => {
+    for (const [projectId, attn] of $projectAttention) {
+      if (projectId === $activeProjectId) continue
+      if (attn.needs_input > 0 || attn.running_agents > 0 || attn.ci_failures > 0 || attn.unaddressed_comments > 0) {
+        return true
+      }
+    }
+    return false
+  })
+
+  function getAttention(projectId: string): ProjectAttention | undefined {
+    return $projectAttention.get(projectId)
+  }
+
+  async function fetchAttention() {
+    try {
+      const summaries = await getProjectAttention()
+      const map = new Map<string, ProjectAttention>()
+      for (const s of summaries) {
+        map.set(s.project_id, s)
+      }
+      $projectAttention = map
+    } catch (e) {
+      console.error('Failed to load project attention:', e)
+    }
+  }
+
   function toggleDropdown() {
     isOpen = !isOpen
+    if (isOpen) {
+      fetchAttention()
+    }
   }
 
   function selectProject(project: Project) {
@@ -44,6 +76,7 @@
   onMount(() => {
     document.addEventListener('click', handleClickOutside)
     document.addEventListener('keydown', handleKeydown)
+    fetchAttention()
   })
 
   onDestroy(() => {
@@ -55,6 +88,9 @@
 <div class="relative" bind:this={dropdownRef}>
   <button class="btn btn-sm gap-2 bg-base-100 border border-base-300" onclick={toggleDropdown} type="button">
     <span class="font-medium">{activeProject ? activeProject.name : 'No Project'}</span>
+    {#if otherProjectsNeedAttention}
+      <span class="w-2 h-2 rounded-full bg-warning" title="Other projects need attention"></span>
+    {/if}
     <span class="text-[0.6rem] text-base-content/50 transition-transform duration-200 {isOpen ? 'rotate-180' : ''}">▼</span>
   </button>
 
@@ -68,15 +104,32 @@
       {:else}
         <div class="max-h-[300px] overflow-y-auto">
           {#each $projects as project (project.id)}
+            {@const attn = getAttention(project.id)}
             <button
               class="flex items-center justify-between w-full px-3.5 py-2.5 cursor-pointer text-sm text-base-content hover:bg-base-300 transition-colors text-left {project.id === $activeProjectId ? 'bg-base-300 text-primary' : ''}"
               onclick={() => selectProject(project)}
               type="button"
             >
               <span class="flex-1 text-left">{project.name}</span>
-              {#if project.id === $activeProjectId}
-                <span class="text-primary text-[0.9rem] font-bold">✓</span>
-              {/if}
+              <span class="flex items-center gap-1.5">
+                {#if attn}
+                  {#if attn.needs_input > 0}
+                    <span class="w-2 h-2 rounded-full bg-warning" title="{attn.needs_input} agent{attn.needs_input > 1 ? 's' : ''} need{attn.needs_input === 1 ? 's' : ''} input"></span>
+                  {/if}
+                  {#if attn.running_agents > 0}
+                    <span class="w-2 h-2 rounded-full bg-success animate-pulse" title="{attn.running_agents} agent{attn.running_agents > 1 ? 's' : ''} running"></span>
+                  {/if}
+                  {#if attn.ci_failures > 0}
+                    <span class="w-2 h-2 rounded-full bg-error" title="{attn.ci_failures} CI failure{attn.ci_failures > 1 ? 's' : ''}"></span>
+                  {/if}
+                  {#if attn.unaddressed_comments > 0}
+                    <span class="badge badge-error badge-xs text-[0.6rem]" title="{attn.unaddressed_comments} unaddressed comment{attn.unaddressed_comments > 1 ? 's' : ''}">{attn.unaddressed_comments}</span>
+                  {/if}
+                {/if}
+                {#if project.id === $activeProjectId}
+                  <span class="text-primary text-[0.9rem] font-bold">✓</span>
+                {/if}
+              </span>
             </button>
           {/each}
         </div>
