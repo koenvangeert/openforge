@@ -1253,24 +1253,31 @@ pub fn aggregate_ci_status(
         return "none".to_string();
     }
 
+    // Only treat actual pipeline failures as "failure"
     for check_run in &check_runs.check_runs {
         if let Some(conclusion) = &check_run.conclusion {
             match conclusion.as_str() {
-                "failure" | "timed_out" | "action_required" | "cancelled" => {
+                "failure" | "timed_out" => {
                     return "failure".to_string();
                 }
                 _ => {}
             }
         }
     }
-
     if commit_status.state == "failure" || commit_status.state == "error" {
         return "failure".to_string();
     }
 
+    // Treat action_required as pending (e.g., workflow approval needed)
+    // Also treat in-progress checks as pending
     for check_run in &check_runs.check_runs {
         if check_run.status != "completed" {
             return "pending".to_string();
+        }
+        if let Some(conclusion) = &check_run.conclusion {
+            if conclusion == "action_required" {
+                return "pending".to_string();
+            }
         }
     }
 
@@ -1991,8 +1998,13 @@ mod tests {
         let timed_out_runs = make_check_runs(vec![("build", "completed", Some("timed_out"))]);
         assert_eq!(aggregate_ci_status(&timed_out_runs, &empty_combined), "failure");
 
+        // cancelled is no longer treated as failure — it's neutral (pipeline was stopped, not failed)
         let cancelled_runs = make_check_runs(vec![("build", "completed", Some("cancelled"))]);
-        assert_eq!(aggregate_ci_status(&cancelled_runs, &empty_combined), "failure");
+        assert_eq!(aggregate_ci_status(&cancelled_runs, &empty_combined), "success");
+
+        // action_required is treated as pending (e.g., workflow approval needed)
+        let action_required_runs = make_check_runs(vec![("build", "completed", Some("action_required"))]);
+        assert_eq!(aggregate_ci_status(&action_required_runs, &empty_combined), "pending");
 
         let failure_combined = make_combined("failure", vec!["failure"]);
         assert_eq!(aggregate_ci_status(&empty_runs, &failure_combined), "failure");
