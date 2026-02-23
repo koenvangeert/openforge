@@ -40,10 +40,17 @@ vi.mock('../lib/ipc', () => ({
   writePty: vi.fn().mockResolvedValue(undefined),
   resizePty: vi.fn().mockResolvedValue(undefined),
   killPty: vi.fn().mockResolvedValue(undefined),
+  transcribeAudio: vi.fn(),
+  getWhisperModelStatus: vi.fn(),
+  downloadWhisperModel: vi.fn(),
 }))
 
 vi.mock('@tauri-apps/api/event', () => ({
   listen: vi.fn().mockResolvedValue(() => {}),
+}))
+
+vi.mock('../lib/audioRecorder', () => ({
+  createAudioRecorder: vi.fn(),
 }))
 
 import AgentPanel from './AgentPanel.svelte'
@@ -281,5 +288,18 @@ describe('AgentPanel', () => {
     // Component should render running state
     expect(screen.getByText('Implementing')).toBeTruthy()
     expect(screen.getByText('running')).toBeTruthy()
+  })
+
+  it('renders voice input mic button', () => {
+    render(AgentPanel, { props: { taskId: 'T-1' } })
+    const button = screen.getByRole('button', { name: 'Start voice input' })
+    expect(button).toBeTruthy()
+  })
+
+  it('voice input button is present when no PTY is spawned', () => {
+    render(AgentPanel, { props: { taskId: 'T-1' } })
+    const button = screen.getByRole('button', { name: 'Start voice input' })
+    expect(button).toBeTruthy()
+    expect(button.hasAttribute('disabled')).toBe(true)
   })
 })

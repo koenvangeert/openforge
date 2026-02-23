@@ -9,6 +9,7 @@
   import { FitAddon } from '@xterm/addon-fit'
   import '@xterm/xterm/css/xterm.css'
   import { parseCheckpointQuestion } from '../lib/parseCheckpoint'
+  import VoiceInput from './VoiceInput.svelte'
 
   interface Props {
     taskId: string
@@ -319,6 +320,12 @@
     }
   }
 
+  function handleTranscription(text: string) {
+    writePty(taskId, text).catch((e) => {
+      console.error('[AgentPanel] Failed to write transcription to PTY:', e)
+    })
+  }
+
   function getStatusText(): string {
     switch (status) {
       case 'idle': return 'No active implementation'
@@ -381,6 +388,7 @@
       </div>
     </div>
     <div class="flex items-center gap-3">
+      <VoiceInput onTranscription={handleTranscription} disabled={!ptySpawned} listenToHotkey />
       {#if status === 'running'}
         <button class="btn btn-error btn-sm uppercase tracking-wide shadow-sm hover:shadow-md transition-shadow" onclick={handleAbort}>
           Abort
