@@ -473,4 +473,65 @@ mod tests {
             assert!(matches!(result, Err(WhisperError::ModelNotFound)));
         }
     }
+
+    #[test]
+    fn test_get_model_status_downloaded_when_file_exists() {
+        if let Some(path) = WhisperManager::model_file_path() {
+            // Only create a temp file if the model isn't already on disk.
+            let created = if !path.exists() {
+                if let Some(parent) = path.parent() {
+                    let _ = std::fs::create_dir_all(parent);
+                }
+                std::fs::File::create(&path).is_ok()
+            } else {
+                false
+            };
+            let mgr = WhisperManager::new();
+            let status = mgr.get_model_status();
+            assert!(status.downloaded);
+            assert!(status.model_size_bytes.is_some());
+            if created {
+                let _ = std::fs::remove_file(&path);
+            }
+        }
+    }
+
+    #[test]
+    fn test_transcription_result_serializes() {
+        let result = TranscriptionResult {
+            text: "hello".to_string(),
+            duration_ms: 100,
+        };
+        let val = serde_json::to_value(&result).unwrap();
+        assert_eq!(val["text"], "hello");
+        assert_eq!(val["duration_ms"], 100);
+    }
+
+    #[test]
+    fn test_whisper_model_status_serializes() {
+        let status = WhisperModelStatus {
+            downloaded: true,
+            model_path: Some("/tmp/model.bin".to_string()),
+            model_size_bytes: Some(1234),
+            model_name: "ggml-small.bin".to_string(),
+        };
+        let val = serde_json::to_value(&status).unwrap();
+        assert_eq!(val["downloaded"], true);
+        assert_eq!(val["model_name"], "ggml-small.bin");
+        assert_eq!(val["model_path"], "/tmp/model.bin");
+        assert_eq!(val["model_size_bytes"], 1234);
+    }
+
+    #[test]
+    fn test_whisper_download_progress_serializes() {
+        let progress = WhisperDownloadProgress {
+            bytes_downloaded: 512,
+            total_bytes: 1024,
+            percentage: 50.0,
+        };
+        let val = serde_json::to_value(&progress).unwrap();
+        assert_eq!(val["bytes_downloaded"], 512);
+        assert_eq!(val["total_bytes"], 1024);
+        assert!((val["percentage"].as_f64().unwrap() - 50.0).abs() < 0.001);
+    }
 }
