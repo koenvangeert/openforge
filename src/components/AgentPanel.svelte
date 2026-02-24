@@ -1,15 +1,17 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte'
+  import { onMount, onDestroy, untrack } from 'svelte'
   import { listen } from '@tauri-apps/api/event'
   import type { UnlistenFn } from '@tauri-apps/api/event'
-  import type { AgentEvent, PtyEvent } from '../lib/types'
+  import type { AgentEvent } from '../lib/types'
   import { activeSessions } from '../lib/stores'
-  import { abortImplementation, getLatestSession, getWorktreeForTask, spawnPty, writePty, resizePty, killPty } from '../lib/ipc'
-  import { Terminal } from '@xterm/xterm'
-  import { FitAddon } from '@xterm/addon-fit'
+  import { abortImplementation, resizePty } from '../lib/ipc'
   import '@xterm/xterm/css/xterm.css'
   import { parseCheckpointQuestion } from '../lib/parseCheckpoint'
   import VoiceInput from './VoiceInput.svelte'
+  import { createTerminal } from '../lib/useTerminal.svelte'
+  import { createPtyBridge } from '../lib/usePtyBridge.svelte'
+  import { createSessionHistory } from '../lib/useSessionHistory.svelte'
+  import type { PtyBridgeHandle } from '../lib/usePtyBridge.svelte'
 
   interface Props {
     taskId: string
@@ -19,20 +21,46 @@
 
   let status = $state<'idle' | 'running' | 'complete' | 'error'>('idle')
   let errorMessage = $state<string | null>(null)
+  let opencodePort = $state<number | null>(null)
   let unlisten: UnlistenFn | null = null
-  let ptyOutputUnlisten: UnlistenFn | null = null
-  let ptyExitUnlisten: UnlistenFn | null = null
-  let loadingHistory = $state(false)
-  let terminalContainer: HTMLDivElement
-  let terminal: Terminal | null = null
-  let fitAddon: FitAddon | null = null
-  let resizeObserver: ResizeObserver | null = null
-  let resizeTimeout: ReturnType<typeof setTimeout> | null = null
-  let visibilityObserver: IntersectionObserver | null = null
-  let ptySpawned = false
-  let expectedPtyInstance: number | null = null
-  let terminalMounted = false
-  let opencodePort: number | null = null
+  let terminalEl: HTMLDivElement
+
+  // Declare ptyBridge before termHandle so the onData/onResize closures can reference it.
+  // The variable is assigned immediately below — closures only execute after both are set.
+  let ptyBridge: PtyBridgeHandle
+
+  const termHandle = createTerminal({
+    onData: (data: string) => {
+      if (ptyBridge?.ptySpawned) ptyBridge.writeToPty(data)
+    },
+    onResize: (cols: number, rows: number) => {
+      if (ptyBridge?.ptySpawned) {
+        resizePty(taskId, cols, rows).catch((e) => {
+          console.error('[AgentPanel] Failed to resize PTY:', e)
+        })
+      }
+    },
+  })
+
+  ptyBridge = createPtyBridge({
+    taskId: untrack(() => taskId),
+    getTerminal: () => termHandle.terminal,
+    setOpencodePort: (port) => { opencodePort = port },
+    onAttached: () => {
+      const currentSession = $activeSessions.get(taskId)
+      if (currentSession?.status === 'running') status = 'running'
+    },
+  })
+
+  const sessionHistory = createSessionHistory({
+    taskId: untrack(() => taskId),
+    getOpencodePort: () => opencodePort,
+    setOpencodePort: (port) => { opencodePort = port },
+    onStatusUpdate: (s, msg) => {
+      status = s
+      if (msg !== undefined) errorMessage = msg ?? null
+    },
+  })
 
   let session = $derived($activeSessions.get(taskId) || null)
   let attachCommand = $derived(session?.opencode_session_id && opencodePort
@@ -44,218 +72,23 @@
     if (questionText !== undefined) {
       // Re-fit terminal when banner visibility changes
       requestAnimationFrame(() => {
-        requestAnimationFrame(() => safeFit())
+        requestAnimationFrame(() => termHandle.safeFit())
       })
     }
   })
 
-  // Attach PTY once for the current session. Called from onMount (existing session)
-  // and from the agent-event listener (new session becomes running).
-  async function tryAttachPty() {
-    if (ptySpawned) return
-
+  async function tryAttachPty(): Promise<void> {
     const currentSession = $activeSessions.get(taskId)
     const sessionId = currentSession?.opencode_session_id
     if (!sessionId) return
-
-    ptySpawned = true  // Set synchronously before any await to prevent duplicate calls
-
-    try {
-      const worktree = await getWorktreeForTask(taskId)
-      const port = worktree?.opencode_port
-      if (!port) {
-        console.error('[AgentPanel] No opencode_port found for task:', taskId)
-        ptySpawned = false
-        return
-      }
-      opencodePort = port
-
-      await setupPtyListeners()
-      const cols = terminal?.cols ?? 80
-      const rows = terminal?.rows ?? 24
-      expectedPtyInstance = await spawnPty(taskId, port, sessionId, cols, rows)
-      terminal?.focus()
-
-      if (currentSession.status === 'running') {
-        status = 'running'
-      }
-    } catch (e) {
-      console.error('[AgentPanel] Failed to attach PTY:', e)
-      ptySpawned = false
-    }
-  }
-
-  async function setupPtyListeners() {
-    // Clean up old listeners before registering new ones (prevents listener leak)
-    if (ptyOutputUnlisten) { ptyOutputUnlisten(); ptyOutputUnlisten = null }
-    if (ptyExitUnlisten) { ptyExitUnlisten(); ptyExitUnlisten = null }
-
-    // Listen for PTY output → write to xterm
-    ptyOutputUnlisten = await listen<PtyEvent>(`pty-output-${taskId}`, (event) => {
-      if (terminal && event.payload.data) {
-        terminal.write(event.payload.data)
-      }
-    })
-
-    ptyExitUnlisten = await listen<PtyEvent>(`pty-exit-${taskId}`, (event) => {
-      const exitInstance = event.payload?.instance_id
-      if (exitInstance != null && exitInstance !== expectedPtyInstance) {
-        console.warn(`[AgentPanel] Ignoring stale pty-exit (instance ${exitInstance}, expected ${expectedPtyInstance})`)
-        return
-      }
-      ptySpawned = false
-      expectedPtyInstance = null
-    })
-  }
-
-  async function loadSessionHistory() {
-    loadingHistory = true
-    try {
-      let existingSession = $activeSessions.get(taskId)
-      if (!existingSession) {
-        const dbSession = await getLatestSession(taskId)
-        if (dbSession && (dbSession.status === 'completed' || dbSession.status === 'failed' || dbSession.status === 'paused' || dbSession.status === 'interrupted')) {
-          const updated = new Map($activeSessions)
-          updated.set(taskId, dbSession)
-          $activeSessions = updated
-          existingSession = dbSession
-        }
-      }
-
-      if (!existingSession) return
-
-      if (!opencodePort) {
-        const worktree = await getWorktreeForTask(taskId)
-        if (worktree?.opencode_port) opencodePort = worktree.opencode_port
-      }
-
-      if (existingSession.status !== 'completed' && existingSession.status !== 'failed' && existingSession.status !== 'paused' && existingSession.status !== 'interrupted') return
-
-      if (existingSession.status === 'completed') {
-        status = 'complete'
-      } else if (existingSession.status === 'paused') {
-        status = 'idle'
-      } else {
-        status = 'error'
-        errorMessage = existingSession.error_message
-      }
-
-    } catch (e) {
-      console.error('[AgentPanel] Failed to load session history:', e)
-    } finally {
-      loadingHistory = false
-    }
-  }
-
-  function safeFit(): void {
-    if (!fitAddon || !terminalContainer) return
-    if (terminalContainer.clientWidth === 0 || terminalContainer.clientHeight === 0) return
-    const proposed = fitAddon.proposeDimensions()
-    if (!proposed || isNaN(proposed.cols) || isNaN(proposed.rows)) return
-    fitAddon.fit()
-  }
-
-  async function mountTerminal(): Promise<void> {
-    if (terminalMounted || !terminal || !terminalContainer) return
-
-    // Wait for fonts to load so CharSizeService measures correctly
-    await Promise.race([
-      document.fonts.ready,
-      new Promise<void>(resolve => setTimeout(resolve, 3000))
-    ])
-
-    terminal.open(terminalContainer)
-    terminal.focus()
-    terminalMounted = true
-    requestAnimationFrame(() => {
-      safeFit()
-    })
-
-    resizeObserver = new ResizeObserver((entries) => {
-      if (!terminal || !terminalContainer) return
-      const { width, height } = entries[0].contentRect
-      if (width === 0 || height === 0) return
-      if (resizeTimeout) clearTimeout(resizeTimeout)
-      resizeTimeout = setTimeout(() => {
-        resizeTimeout = null
-        safeFit()
-        if (terminal && ptySpawned) {
-          resizePty(taskId, terminal.cols, terminal.rows).catch((e) => {
-            console.error('[AgentPanel] Failed to resize PTY:', e)
-          })
-        }
-      }, 100)
-    })
-    resizeObserver.observe(terminalContainer)
-
-    // Re-fit and refresh terminal when it becomes visible (e.g., after tab/view switch)
-    visibilityObserver = new IntersectionObserver((entries) => {
-      const entry = entries[entries.length - 1]
-      if (entry.isIntersecting) {
-        requestAnimationFrame(() => {
-          safeFit()
-          terminal?.refresh(0, (terminal?.rows ?? 1) - 1)
-          terminal?.focus()
-        })
-      }
-    }, { threshold: 0 })
-    visibilityObserver.observe(terminalContainer)
-
-    terminal.onData((data) => {
-      if (ptySpawned) {
-        writePty(taskId, data).catch((e) => {
-          console.error('[AgentPanel] Failed to write to PTY:', e)
-        })
-      }
-    })
+    await ptyBridge.attachPty(sessionId)
   }
 
   onMount(async () => {
-    // Initialize xterm.js terminal
-    terminal = new Terminal({
-      fontFamily: "'SF Mono', 'Fira Code', 'Consolas', monospace",
-      fontSize: 13,
-      lineHeight: 1.4,
-      cursorBlink: true,
-      cursorStyle: 'block',
-      scrollback: 10000,
-      theme: {
-        background: '#ffffff',
-        foreground: '#1f2937',
-        cursor: '#1f2937',
-        cursorAccent: '#ffffff',
-        selectionBackground: '#bfdbfe',
-        selectionForeground: '#1f2937',
-        black: '#1f2937',
-        red: '#dc2626',
-        green: '#16a34a',
-        yellow: '#ca8a04',
-        blue: '#2563eb',
-        magenta: '#9333ea',
-        cyan: '#0891b2',
-        white: '#f3f4f6',
-        brightBlack: '#6b7280',
-        brightRed: '#ef4444',
-        brightGreen: '#22c55e',
-        brightYellow: '#eab308',
-        brightBlue: '#3b82f6',
-        brightMagenta: '#a855f7',
-        brightCyan: '#06b6d4',
-        brightWhite: '#ffffff',
-      },
-      allowProposedApi: true,
-    })
+    termHandle.terminalEl = terminalEl
+    await termHandle.mount()
 
-    fitAddon = new FitAddon()
-    terminal.loadAddon(fitAddon)
-
-    // Mount terminal immediately — by onMount time, bind:this has set terminalContainer.
-    // In Svelte 5, $effect won't track plain let variables, so we mount directly here.
-    await mountTerminal()
-
-    await loadSessionHistory()
-
-    // Attach PTY once for whatever session exists at panel open
+    await sessionHistory.loadSessionHistory()
     await tryAttachPty()
 
     unlisten = await listen<AgentEvent>('agent-event', (event) => {
@@ -289,28 +122,23 @@
 
   onDestroy(() => {
     if (unlisten) unlisten()
-    if (ptyOutputUnlisten) ptyOutputUnlisten()
-    if (ptyExitUnlisten) ptyExitUnlisten()
-    if (resizeTimeout) clearTimeout(resizeTimeout)
-    if (resizeObserver) resizeObserver.disconnect()
-    if (visibilityObserver) visibilityObserver.disconnect()
     const isSessionRunning = session?.status === 'running'
-    if (ptySpawned && !isSessionRunning) {
-      killPty(taskId).catch((e) => {
+    // PTY must be killed BEFORE terminal disposes
+    if (ptyBridge.ptySpawned && !isSessionRunning) {
+      ptyBridge.killPty().catch((e) => {
         console.error('[AgentPanel] Failed to kill PTY on destroy:', e)
       })
     }
-    expectedPtyInstance = null
-    if (terminal) terminal.dispose()
+    ptyBridge.dispose()
+    termHandle.dispose()
   })
 
   async function handleAbort() {
     try {
-      if (ptySpawned) {
-        await killPty(taskId).catch((e) => {
+      if (ptyBridge.ptySpawned) {
+        await ptyBridge.killPty().catch((e) => {
           console.error('[AgentPanel] Failed to kill PTY on abort:', e)
         })
-        ptySpawned = false
       }
       await abortImplementation(taskId)
       status = 'error'
@@ -321,9 +149,7 @@
   }
 
   function handleTranscription(text: string) {
-    writePty(taskId, text).catch((e) => {
-      console.error('[AgentPanel] Failed to write transcription to PTY:', e)
-    })
+    ptyBridge.writeToPty(text)
   }
 
   function getStatusText(): string {
@@ -405,8 +231,8 @@
   {/if}
 
   <div class="flex-1 overflow-hidden min-h-0 bg-base-100 border border-base-300 rounded-md relative">
-    <div class="terminal-wrapper" bind:this={terminalContainer}></div>
-    {#if loadingHistory}
+    <div class="terminal-wrapper" bind:this={terminalEl}></div>
+    {#if sessionHistory.loadingHistory}
       <div class="absolute inset-0 flex flex-col items-center justify-center p-16 gap-4 bg-base-100 z-[1] pointer-events-none">
         <span class="loading loading-spinner loading-md text-primary"></span>
         <div class="text-base font-semibold text-base-content">Loading session output...</div>

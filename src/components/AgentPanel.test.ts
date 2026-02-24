@@ -53,6 +53,36 @@ vi.mock('../lib/audioRecorder', () => ({
   createAudioRecorder: vi.fn(),
 }))
 
+// Mock composables to avoid xterm constructor issues in test environment
+vi.mock('../lib/useTerminal.svelte', () => ({
+  createTerminal: vi.fn(() => ({
+    get terminalEl() { return null },
+    set terminalEl(_el: HTMLDivElement | null) {},
+    get terminal() { return null },
+    get terminalMounted() { return false },
+    mount: vi.fn().mockResolvedValue(undefined),
+    safeFit: vi.fn(),
+    dispose: vi.fn(),
+  })),
+}))
+
+vi.mock('../lib/usePtyBridge.svelte', () => ({
+  createPtyBridge: vi.fn(() => ({
+    get ptySpawned() { return false },
+    attachPty: vi.fn().mockResolvedValue(undefined),
+    writeToPty: vi.fn(),
+    killPty: vi.fn().mockResolvedValue(undefined),
+    dispose: vi.fn(),
+  })),
+}))
+
+vi.mock('../lib/useSessionHistory.svelte', () => ({
+  createSessionHistory: vi.fn(() => ({
+    get loadingHistory() { return false },
+    loadSessionHistory: vi.fn().mockResolvedValue(undefined),
+  })),
+}))
+
 import AgentPanel from './AgentPanel.svelte'
 import { activeSessions } from '../lib/stores'
 

@@ -1,0 +1,130 @@
+import { Terminal } from '@xterm/xterm'
+import { FitAddon } from '@xterm/addon-fit'
+
+export interface TerminalHandle {
+  terminalEl: HTMLDivElement | null
+  readonly terminal: Terminal | null
+  readonly terminalMounted: boolean
+  mount(): Promise<void>
+  safeFit(): void
+  dispose(): void
+}
+
+export function createTerminal(deps: {
+  onData: (data: string) => void
+  onResize: (cols: number, rows: number) => void
+}): TerminalHandle {
+  let terminal = $state<Terminal | null>(null)
+  let fitAddon: FitAddon | null = null
+
+  let terminalEl = $state<HTMLDivElement | null>(null)
+  let terminalMounted = $state(false)
+  let resizeObserver: ResizeObserver | null = null
+  let resizeTimeout: ReturnType<typeof setTimeout> | null = null
+  let visibilityObserver: IntersectionObserver | null = null
+
+  function safeFit(): void {
+    if (!fitAddon || !terminalEl) return
+    if (terminalEl.clientWidth === 0 || terminalEl.clientHeight === 0) return
+    const proposed = fitAddon.proposeDimensions()
+    if (!proposed || isNaN(proposed.cols) || isNaN(proposed.rows)) return
+    fitAddon.fit()
+  }
+
+  async function mount(): Promise<void> {
+    if (terminalMounted || !terminalEl) return
+
+    // Initialize xterm.js Terminal (deferred to mount so mocks are active in tests)
+    terminal = new Terminal({
+      fontFamily: "'SF Mono', 'Fira Code', 'Consolas', monospace",
+      fontSize: 13,
+      lineHeight: 1.4,
+      cursorBlink: true,
+      cursorStyle: 'block',
+      scrollback: 10000,
+      theme: {
+        background: '#ffffff',
+        foreground: '#1f2937',
+        cursor: '#1f2937',
+        cursorAccent: '#ffffff',
+        selectionBackground: '#bfdbfe',
+        selectionForeground: '#1f2937',
+        black: '#1f2937',
+        red: '#dc2626',
+        green: '#16a34a',
+        yellow: '#ca8a04',
+        blue: '#2563eb',
+        magenta: '#9333ea',
+        cyan: '#0891b2',
+        white: '#f3f4f6',
+        brightBlack: '#6b7280',
+        brightRed: '#ef4444',
+        brightGreen: '#22c55e',
+        brightYellow: '#eab308',
+        brightBlue: '#3b82f6',
+        brightMagenta: '#a855f7',
+        brightCyan: '#06b6d4',
+        brightWhite: '#ffffff',
+      },
+      allowProposedApi: true,
+    })
+    fitAddon = new FitAddon()
+    terminal.loadAddon(fitAddon)
+
+    // Wait for fonts to load so CharSizeService measures correctly
+    await Promise.race([
+      document.fonts.ready,
+      new Promise<void>(resolve => setTimeout(resolve, 3000)),
+    ])
+
+    terminal.open(terminalEl)
+    terminal.focus()
+    terminalMounted = true
+    requestAnimationFrame(() => safeFit())
+
+    resizeObserver = new ResizeObserver((entries) => {
+      if (!terminalEl || !terminal) return
+      const { width, height } = entries[0].contentRect
+      if (width === 0 || height === 0) return
+      if (resizeTimeout) clearTimeout(resizeTimeout)
+      resizeTimeout = setTimeout(() => {
+        resizeTimeout = null
+        safeFit()
+        deps.onResize(terminal!.cols, terminal!.rows)
+      }, 100)
+    })
+    resizeObserver.observe(terminalEl)
+
+    // Re-fit and refresh terminal when it becomes visible (e.g., after tab/view switch)
+    visibilityObserver = new IntersectionObserver((entries) => {
+      const entry = entries[entries.length - 1]
+      if (entry.isIntersecting) {
+        requestAnimationFrame(() => {
+          safeFit()
+          terminal?.refresh(0, (terminal?.rows ?? 1) - 1)
+          terminal?.focus()
+        })
+      }
+    }, { threshold: 0 })
+    visibilityObserver.observe(terminalEl)
+
+    terminal.onData(deps.onData)
+  }
+
+  function dispose(): void {
+    if (resizeTimeout) clearTimeout(resizeTimeout)
+    if (resizeObserver) resizeObserver.disconnect()
+    if (visibilityObserver) visibilityObserver.disconnect()
+    if (terminal) terminal.dispose()
+  }
+
+  return {
+    get terminalEl() { return terminalEl },
+    set terminalEl(el: HTMLDivElement | null) { terminalEl = el },
+    get terminal() { return terminal },
+    get terminalMounted() { return terminalMounted },
+    mount,
+    safeFit,
+    dispose,
+  }
+}
