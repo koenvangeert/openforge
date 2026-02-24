@@ -104,6 +104,86 @@ Order: external packages, then internal modules. Use `import type` for type-only
 - **Constants**: UPPER_SNAKE_CASE (`COLUMN_LABELS`, `COLUMNS`)
 - **CSS classes**: daisyUI semantic classes (`btn`, `badge`, `modal-box`) + Tailwind utilities (`flex`, `gap-2`, `p-4`)
 
+### Svelte 5 Runes
+
+Svelte 5 uses runes for reactivity. The codebase uses all four core runes consistently.
+
+**`$state`** — Local component state:
+
+```ts
+let isLoading = $state(false)
+let error = $state<string | null>(null)
+let actions = $state<Action[]>([])
+```
+
+**`$derived`** — Computed values that update automatically when their dependencies change:
+
+```ts
+let activeModel = $derived(modelStatuses.find(m => m.is_active))
+let currentProject = $derived($projects.find(p => p.id === $activeProjectId))
+```
+
+**`$effect`** — Side effects that re-run when reactive dependencies change:
+
+```ts
+$effect(() => {
+  if (hasAutoCollapsed) return
+  if (files.length === 0) return
+
+  const largeFiles = new Set<string>()
+  for (const file of files) {
+    if (file.additions + file.deletions > 500 || file.is_truncated === true) {
+      largeFiles.add(file.filename)
+    }
+  }
+  collapsedFiles = largeFiles
+  hasAutoCollapsed = true
+})
+```
+
+`$effect` is NOT a replacement for `onMount`. Use `$effect` when you need to react to
+changing reactive dependencies. Use `onMount` for one-time setup after DOM mount (e.g.,
+subscribing to Tauri events, initializing a terminal). Both are valid in Svelte 5.
+
+**`$props`** — Declare component inputs with a typed `Props` interface:
+
+```ts
+interface Props {
+  task: Task
+  onRunAction: (data: { taskId: string; actionPrompt: string; agent: string | null }) => void
+}
+let { task, onRunAction }: Props = $props()
+```
+
+Every component defines a local `Props` interface and destructures via `$props()`. Optional
+props use `?` in the interface (e.g., `maxWidth?: string`).
+
+**Callback props over events** — Use `on`-prefixed callback props instead of
+Svelte's legacy event dispatcher. Never use the legacy dispatcher API in this codebase.
+
+```ts
+// Correct: callback prop with on prefix
+interface Props {
+  onClose: () => void
+  onSave: (value: string) => void
+}
+
+// Wrong: do not use the legacy event dispatcher pattern
+```
+
+**Snippets** — For flexible child content in composable components:
+
+```ts
+import type { Snippet } from 'svelte'
+
+interface Props {
+  children: Snippet
+  header?: Snippet  // optional snippet slot
+}
+```
+
+Used in `Modal.svelte` and `DiffViewer.svelte` to pass structured markup as props.
+
 ### Types
 
 All shared types live in `src/lib/types.ts` as exported interfaces. Use `interface` for
@@ -129,6 +209,8 @@ Svelte writable stores in `src/lib/stores.ts`. Access with `$store` syntax in co
 export const tickets = writable<Ticket[]>([]);
 export const error = writable<string | null>(null);
 ```
+
+For component-local state, use `$state()` runes. See the [Svelte 5 Runes](#svelte-5-runes) section above.
 
 ### IPC (Frontend ↔ Backend)
 
