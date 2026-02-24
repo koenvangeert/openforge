@@ -23,6 +23,8 @@ const basePr: ReviewPullRequest = {
   changed_files: 3,
   created_at: Date.now() - 3600000,
   updated_at: Date.now(),
+  viewed_at: null,
+  viewed_head_sha: null,
 }
 
 describe('ReviewPrCard', () => {

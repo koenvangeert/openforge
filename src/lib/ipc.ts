@@ -156,6 +156,10 @@ export async function getReviewPrs(): Promise<ReviewPullRequest[]> {
   return invoke<ReviewPullRequest[]>("get_review_prs");
 }
 
+export async function markReviewPrViewed(prId: number, headSha: string): Promise<void> {
+  return invoke('mark_review_pr_viewed', { prId, headSha });
+}
+
 export async function getPrFileDiffs(owner: string, repo: string, prNumber: number): Promise<PrFileDiff[]> {
   return invoke<PrFileDiff[]>("get_pr_file_diffs", { owner, repo, prNumber });
 }

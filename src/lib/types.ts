@@ -208,6 +208,8 @@ export interface ReviewPullRequest {
   changed_files: number;
   created_at: number;
   updated_at: number;
+  viewed_at: number | null;
+  viewed_head_sha: string | null;
 }
 
 /** File diff from PR files endpoint */
