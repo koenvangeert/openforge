@@ -42,7 +42,7 @@ pub fn parse_unified_diff(diff_output: &str, truncate: bool) -> Vec<TaskFileDiff
                 if !patch_lines.is_empty() && file.status != "binary" {
                     if truncate && patch_lines.len() > 10_000 {
                         file.patch_line_count = Some(patch_lines.len() as i32);
-                        file.patch = Some(patch_lines[..200].join("\n"));
+                        file.patch = Some(patch_lines[..201].join("\n"));
                         file.is_truncated = true;
                     } else {
                         file.patch = Some(patch_lines.join("\n"));
@@ -110,7 +110,7 @@ pub fn parse_unified_diff(diff_output: &str, truncate: bool) -> Vec<TaskFileDiff
         if !patch_lines.is_empty() && file.status != "binary" {
             if truncate && patch_lines.len() > 10_000 {
                 file.patch_line_count = Some(patch_lines.len() as i32);
-                file.patch = Some(patch_lines[..200].join("\n"));
+                file.patch = Some(patch_lines[..201].join("\n"));
                 file.is_truncated = true;
             } else {
                 file.patch = Some(patch_lines.join("\n"));

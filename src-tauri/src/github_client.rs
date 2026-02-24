@@ -2636,6 +2636,7 @@ mod tests {
         let prelim = deduped.check_runs.iter().find(|r| r.name == "preliminary-checks").unwrap();
         assert_eq!(prelim.id, 400, "should keep the newest run (highest ID)");
         assert_eq!(prelim.conclusion.as_deref(), Some("success"));
+        let build = deduped.check_runs.iter().find(|r| r.name == "build").unwrap();
         assert_eq!(build.id, 200);
     }
 
