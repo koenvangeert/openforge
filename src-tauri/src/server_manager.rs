@@ -259,7 +259,37 @@ impl ServerManager {
             };
 
             if !is_running {
-                println!("Removing stale PID file: {:?}", path);
+                println!("[cleanup] Removing stale PID file (process dead): {:?}", path);
+                let _ = std::fs::remove_file(&path);
+            } else {
+                // Process is alive — verify it's actually opencode before killing
+                let is_opencode = std::process::Command::new("ps")
+                    .args(["-p", &pid.to_string(), "-o", "command="])
+                    .output()
+                    .map(|output| {
+                        let cmd = String::from_utf8_lossy(&output.stdout);
+                        cmd.contains("opencode")
+                    })
+                    .unwrap_or(false);
+
+                if is_opencode {
+                    println!("[cleanup] Killing orphaned opencode process (PID: {})", pid);
+                    unsafe {
+                        libc::kill(pid, libc::SIGTERM);
+                    }
+                    // Brief wait for graceful shutdown
+                    std::thread::sleep(std::time::Duration::from_millis(500));
+                    // Check if still running, force kill if needed
+                    let still_running = unsafe { libc::kill(pid, 0) == 0 };
+                    if still_running {
+                        println!("[cleanup] Force killing process (PID: {})", pid);
+                        unsafe {
+                            libc::kill(pid, libc::SIGKILL);
+                        }
+                    }
+                } else {
+                    println!("[cleanup] PID {} is not opencode (PID reuse), removing stale file: {:?}", pid, path);
+                }
                 let _ = std::fs::remove_file(&path);
             }
         }
