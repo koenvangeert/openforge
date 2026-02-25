@@ -4,6 +4,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 vi.mock('../lib/ipc', () => ({
   getConfig: vi.fn().mockResolvedValue(null),
   setConfig: vi.fn().mockResolvedValue(undefined),
+  checkOpenCodeInstalled: vi.fn().mockResolvedValue({ installed: false, path: null, version: null }),
+  checkClaudeInstalled: vi.fn().mockResolvedValue({ installed: false, path: null, version: null, authenticated: false }),
 }))
 
 import GlobalSettingsPanel from './GlobalSettingsPanel.svelte'
@@ -87,6 +89,7 @@ describe('GlobalSettingsPanel', () => {
     expect(vi.mocked(setConfig)).toHaveBeenCalledWith('jira_username', 'test@example.com')
     expect(vi.mocked(setConfig)).toHaveBeenCalledWith('jira_api_token', 'token123')
     expect(vi.mocked(setConfig)).toHaveBeenCalledWith('github_token', 'ghp_abc123')
-    expect(vi.mocked(setConfig)).toHaveBeenCalledTimes(4)
+    expect(vi.mocked(setConfig)).toHaveBeenCalledWith('ai_provider', 'opencode')
+    expect(vi.mocked(setConfig)).toHaveBeenCalledTimes(5)
   })
 })
