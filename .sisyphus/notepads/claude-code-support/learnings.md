@@ -175,3 +175,93 @@ correctly: once the channel fires, the arm triggers and `break` exits the loop c
 ### BridgeHandle cleanup pattern
 The bridge HashMap entry is removed by the spawned task itself after the loop exits
 (both on EOF and on cancel). This mirrors the SSE bridge pattern.
+
+## orchestration.rs Claude Code branching (Task: add provider branching)
+
+### Pattern Used
+- Read provider at function start: `db_lock.get_config("ai_provider").ok().flatten().unwrap_or_else(|| "opencode".to_string())`
+- In `abort_task_agent`: read provider from latest session's `provider` field instead of global config (session already has it stored)
+- Plain if/else branching — NO trait/interface pattern
+- For `start_implementation`: worktree creation is SHARED before the if/else; both providers use same git worktree setup
+- For `run_action` Claude resume: get `worktree_path` from `db.get_worktree_for_task(&task_id)` (returns `WorktreeRow` with `worktree_path: String`)
+- For `run_action` Claude new start: check `existing_worktree.is_none()` before creating worktree (reuse if exists)
+- `spawn_claude` / `spawn_claude_resume` return `Result<(u32, tokio::process::ChildStdout), ClaudeProcessError>` — destructure as `let (_, stdout) = ...`
+- `start_bridge(app, task_id, stdout)` — takes `tokio::process::ChildStdout` directly (NOT `Option<>` like SSE bridge)
+- Session `provider` field on `AgentSessionRow` enables branching in abort
+
+### State params pattern
+- Adding `State<'_, ClaudeProcessManager>` and `State<'_, ClaudeBridgeManager>` to command signatures compiles fine even when those states are NOT yet managed in main.rs (Tauri resolves state at runtime, not compile time)
+- For `abort_task_agent` helper: adds `claude_process_mgr: &State<'_, ClaudeProcessManager>` and `claude_bridge_mgr: &State<'_, ClaudeBridgeManager>` params; caller passes `&claude_process_mgr` and `&claude_bridge_mgr`
+
+### Key differences from SSE bridge API
+- SSE bridge: `sse_mgr.start_bridge(app, task_id, Some(session_id), port)` — takes `Option<String>` and port
+- Claude bridge: `claude_bridge_mgr.start_bridge(app, task_id, stdout)` — takes `ChildStdout` directly
+- SSE bridge: `sse_mgr.stop_bridge(task_id).await` 
+- Claude bridge: `claude_bridge_mgr.stop_bridge(task_id).await` (same pattern)
+
+## spawn_claude_pty PTY method (Task: Add Claude PTY support)
+
+### Pattern: Cloning spawn_pty for interactive TUI process
+
+When adding a new PTY spawn method for a different process (claude vs opencode):
+- **Import**: Change `use std::path::PathBuf;` → `use std::path::{Path, PathBuf};` so method can accept `&Path`
+- **Command args**: `CommandBuilder::new("claude")` + `.arg("--resume")` + `.arg(session_id)` — NO stream-json flags for TUI mode
+- **CWD**: Use `cmd.cwd(worktree_path)` on `CommandBuilder` (NOT `.current_dir()` which is tokio's API)
+- **PID file suffix**: Use distinct suffix (`-claude-pty.pid`) to avoid collision with opencode (`-pty.pid`) and claude process (`-claude.pid`)
+- **Cleanup of old sessions**: Match the PID file suffix in the replace-guard at method start
+
+### Tauri command pattern for Path params
+The command takes `worktree_path: String` and converts inside: `std::path::Path::new(&worktree_path)` — no need to import Path in commands/pty.rs, just use the full path.
+
+### IPC wrapper convention
+`spawnClaudePty(taskId, worktreePath, claudeSessionId, cols, rows)` — camelCase params map directly to snake_case Tauri command params via Tauri's auto-conversion.
+
+### generate_handler! insertion point
+PTY commands are at lines ~262-265 in main.rs. New commands go after `commands::pty::pty_spawn`.
+
+## Claude Manager State Registration (Completed)
+
+### Task Summary
+Registered `ClaudeProcessManager` and `ClaudeBridgeManager` as Tauri managed state in `src-tauri/src/main.rs` with startup PID cleanup and shutdown handler cleanup.
+
+### Implementation Details
+
+**State Registration (lines 170-171, 180-181):**
+- Created instances in `.setup()` closure after whisper_manager
+- Registered with `app.manage()` after existing managers
+- Both managers now accessible via `app_handle.state::<T>()` in commands and shutdown handler
+
+**Startup PID Cleanup (lines 191-193):**
+- Added `claude_process_manager::ClaudeProcessManager::new().cleanup_stale_pids()` call
+- Follows same pattern as server and PTY manager cleanup
+- Only processes files ending in `-claude.pid`, ignoring opencode `.pid` files
+
+**Shutdown Handler (lines 308-309, 319-323):**
+- Retrieved state handles in `RunEvent::Exit` handler
+- Added Claude cleanup AFTER SSE bridge stop, BEFORE OpenCode server stop
+- Shutdown order: PTY → SSE → Claude Bridge → Claude Processes → OpenCode Servers
+- Used `let _ = ...` pattern to suppress unused Result warning
+
+### Build & Test Results
+- ✅ `cargo build` compiles cleanly (45 warnings, all pre-existing)
+- ✅ `cargo test` passes all 232 tests with 0 failures
+- ✅ No new warnings introduced
+
+### Key Patterns Observed
+1. **State Registration Pattern**: Create instance → `app.manage(instance)` → access via `app_handle.state::<T>()`
+2. **Startup Cleanup Pattern**: Call `Manager::new().cleanup_stale_pids()` after state registration
+3. **Shutdown Pattern**: Get state handles → `block_on(async { ... })` → call async cleanup methods
+4. **Error Handling**: Use `let _ = ...` for non-critical async operations in shutdown
+
+
+## GlobalSettingsPanel AI Provider Section (Task: add AI provider dropdown)
+
+- Added `checkOpenCodeInstalled` and `checkClaudeInstalled` imports to `GlobalSettingsPanel.svelte`
+- Both install-check calls are wrapped in separate try/catch blocks (silent failure pattern)
+- `ai_provider` defaults to `'opencode'` when `getConfig` returns null
+- Install status checks happen in `loadConfig()` after the main config loads
+- Test mock (`GlobalSettingsPanel.test.ts`) must include `checkOpenCodeInstalled` and `checkClaudeInstalled` mocks even though they're wrapped in try/catch — their absence from the vi.mock() factory doesn't cause a hard failure (caught silently), but adding them keeps the mock complete
+- `setConfig` call count in the save test increased from 4 to 5 (added `ai_provider`)
+- daisyUI `badge-xs badge-success` / `badge-xs badge-warning` work for auth status indicators
+- `alert alert-warning text-xs py-2` works for the "not installed" warning
+- `import type { ClaudeInstallStatus }` is NOT needed in the component — inline type inference from `checkClaudeInstalled()` return value is sufficient; importing unused types fails with `noUnusedLocals`
