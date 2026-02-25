@@ -189,6 +189,8 @@ fn main() {
             let sse_bridge_manager = sse_bridge::SseBridgeManager::new();
             let pty_manager = PtyManager::new();
             let whisper_manager = WhisperManager::with_active_model(whisper_model_pref);
+            let claude_process_manager = claude_process_manager::ClaudeProcessManager::new();
+            let claude_bridge_manager = claude_bridge::ClaudeBridgeManager::new();
 
             app.manage(opencode_client);
             app.manage(jira_client);
@@ -197,6 +199,8 @@ fn main() {
             app.manage(sse_bridge_manager);
             app.manage(pty_manager);
             app.manage(whisper_manager);
+            app.manage(claude_process_manager);
+            app.manage(claude_bridge_manager);
 
             if let Err(e) = server_manager::ServerManager::new().cleanup_stale_pids() {
                 eprintln!("Failed to cleanup stale server PIDs: {}", e);
@@ -204,6 +208,10 @@ fn main() {
 
             if let Err(e) = PtyManager::new().cleanup_stale_pids() {
                 eprintln!("Failed to cleanup stale PTY PIDs: {}", e);
+            }
+
+            if let Err(e) = claude_process_manager::ClaudeProcessManager::new().cleanup_stale_pids() {
+                eprintln!("Failed to cleanup stale Claude PIDs: {}", e);
             }
 
             println!("Server manager initialized");
@@ -283,6 +291,7 @@ fn main() {
             commands::review::submit_pr_review,
             commands::review::mark_review_pr_viewed,
             commands::pty::pty_spawn,
+            commands::pty::pty_spawn_claude,
             commands::pty::pty_write,
             commands::pty::pty_resize,
             commands::pty::pty_kill,
@@ -319,6 +328,8 @@ fn main() {
             let sse_mgr = app_handle.state::<sse_bridge::SseBridgeManager>();
             let server_mgr = app_handle.state::<server_manager::ServerManager>();
             let pty_mgr = app_handle.state::<pty_manager::PtyManager>();
+            let claude_bridge_mgr = app_handle.state::<claude_bridge::ClaudeBridgeManager>();
+            let claude_process_mgr = app_handle.state::<claude_process_manager::ClaudeProcessManager>();
 
             tauri::async_runtime::block_on(async {
                 // Order matters: PTY → SSE → Server
@@ -327,6 +338,12 @@ fn main() {
 
                 println!("[shutdown] Stopping all SSE bridges...");
                 sse_mgr.stop_all().await;
+
+                println!("[shutdown] Stopping all Claude bridges...");
+                claude_bridge_mgr.stop_all().await;
+
+                println!("[shutdown] Killing all Claude processes...");
+                let _ = claude_process_mgr.kill_all().await;
 
                 println!("[shutdown] Stopping all OpenCode servers...");
                 if let Err(e) = server_mgr.stop_all().await {
