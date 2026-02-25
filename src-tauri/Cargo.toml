@@ -17,6 +17,7 @@ tokio = { version = "1", features = ["full"] }
 tokio-stream = "0.1"
 bytes = "1.0"
 rusqlite = { version = "0.32", features = ["bundled"] }
+rusqlite_migration = "1.3"
 reqwest = { version = "0.12", features = ["json", "stream"] }
 which = "6.0"
 nix = { version = "0.29", features = ["signal", "process"] }
