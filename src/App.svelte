@@ -2,7 +2,7 @@
   import { onMount, onDestroy } from 'svelte'
   import { listen } from '@tauri-apps/api/event'
   import type { UnlistenFn, Event } from '@tauri-apps/api/event'
-  import { tasks, selectedTaskId, activeSessions, checkpointNotification, ciFailureNotification, ticketPrs, error, isLoading, projects, activeProjectId, currentView, reviewRequestCount, projectAttention } from './lib/stores'
+  import { tasks, selectedTaskId, activeSessions, checkpointNotification, ciFailureNotification, ticketPrs, error, isLoading, projects, activeProjectId, currentView, reviewRequestCount, projectAttention, taskSpawned } from './lib/stores'
   import { getProjects, getTasksForProject, getOpenCodeStatus, getPullRequests, runAction, getSessionStatus, getLatestSession, getLatestSessions, forceGithubSync, createTask, updateTask, getProjectAttention, getAppMode } from './lib/ipc'
   import type { Task, PullRequestInfo, OpenCodeStatus, AgentEvent, ProjectAttention } from './lib/types'
   import KanbanBoard from './components/KanbanBoard.svelte'
@@ -15,6 +15,7 @@
   import Toast from './components/Toast.svelte'
   import CheckpointToast from './components/CheckpointToast.svelte'
   import CiFailureToast from './components/CiFailureToast.svelte'
+  import TaskSpawnedToast from './components/TaskSpawnedToast.svelte'
   import ProjectSwitcher from './components/ProjectSwitcher.svelte'
   import ProjectSetupDialog from './components/ProjectSetupDialog.svelte'
 
@@ -462,6 +463,9 @@
           if ($checkpointNotification?.ticketId === taskId) {
             $checkpointNotification = null
           }
+        } else if (event.payload.action === 'created') {
+          // Trigger toast for newly created task (spawned by agent)
+          $taskSpawned = { taskId: event.payload.task_id, title: event.payload.task_id }
         }
         loadTasks()
       })
@@ -632,3 +636,4 @@
 <Toast />
 <CheckpointToast />
 <CiFailureToast />
+<TaskSpawnedToast />
