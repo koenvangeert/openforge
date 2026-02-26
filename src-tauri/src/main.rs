@@ -301,6 +301,11 @@ fn main() {
             commands::whisper::get_all_whisper_model_statuses,
             commands::whisper::set_whisper_model,
             commands::opencode::list_opencode_agents,
+            commands::agent_review::start_agent_review,
+            commands::agent_review::get_agent_review_comments,
+            commands::agent_review::update_agent_review_comment_status,
+            commands::agent_review::dismiss_all_agent_review_comments,
+            commands::agent_review::abort_agent_review,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
