@@ -207,4 +207,35 @@ describe('createCommentSelection', () => {
     expect(selection.selectedPrComments.map(c => c.id)).toContain(3)
     cleanup()
   })
+
+  it('addressedCount returns correct value with mixed addressed/unaddressed comments', () => {
+    const comments = [makeComment(1), makeComment(2), makeComment(3, 1)]
+    let selection!: ReturnType<typeof createCommentSelection>
+    const cleanup = $effect.root(() => {
+      selection = createCommentSelection({ getPrComments: () => comments })
+    })
+    flushSync()
+
+    expect(selection.addressedCount).toBe(1)
+    expect(selection.unaddressedCount).toBe(2)
+    cleanup()
+  })
+
+  it('addressedCount increments after markAddressed', async () => {
+    const comments = [makeComment(1), makeComment(2)]
+    let selection!: ReturnType<typeof createCommentSelection>
+    const cleanup = $effect.root(() => {
+      selection = createCommentSelection({ getPrComments: () => comments })
+    })
+    flushSync()
+
+    expect(selection.addressedCount).toBe(0)
+
+    await selection.markAddressed(1)
+    flushSync()
+
+    expect(selection.addressedCount).toBe(1)
+    expect(selection.unaddressedCount).toBe(1)
+    cleanup()
+  })
 })

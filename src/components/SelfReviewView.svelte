@@ -24,6 +24,7 @@
   let diffViewer = $state<DiffViewer>()
   let fileTreeVisible = $state(true)
   let includeUncommitted = $state(false)
+  let showAddressed = $state(false)
 
   // Sidebar state
   let sidebarVisible = $state(false)
@@ -38,6 +39,8 @@
   const commentSelection = createCommentSelection({
     getPrComments: () => diffLoader.prComments,
   })
+
+  let visibleComments = $derived(showAddressed ? diffLoader.prComments : commentSelection.unaddressedComments)
 
   let hasAutoOpened = false
   $effect(() => {
@@ -155,6 +158,14 @@
                     <button class="btn btn-ghost btn-xs text-base-content/40 hover:text-primary" onclick={commentSelection.selectAll}>Select all</button>
                   {/if}
                   <span class="flex-1"></span>
+                  {#if commentSelection.addressedCount > 0}
+                    <button
+                      class="btn btn-ghost btn-xs text-base-content/40"
+                      onclick={() => { showAddressed = !showAddressed }}
+                    >
+                      {showAddressed ? 'Hide addressed' : `Show ${commentSelection.addressedCount} addressed`}
+                    </button>
+                  {/if}
                   <span class="text-[0.7rem] text-primary cursor-pointer hover:underline" role="link" tabindex="0"
                     onclick={() => openUrl(diffLoader.linkedPr!.url)}
                     onkeydown={(e: KeyboardEvent) => e.key === 'Enter' && openUrl(diffLoader.linkedPr!.url)}>GitHub ↗</span>
@@ -164,11 +175,16 @@
                     <span class="text-2xl opacity-40">💬</span>
                     <p class="m-0 text-xs text-base-content/50">No review comments on this PR yet</p>
                   </div>
+                {:else if visibleComments.length === 0 && commentSelection.addressedCount > 0}
+                  <div class="flex flex-col items-center justify-center flex-1 gap-2 px-4 py-8 text-center">
+                    <span class="text-2xl opacity-40">✓</span>
+                    <p class="m-0 text-xs text-base-content/50">All comments addressed</p>
+                  </div>
                 {:else}
                   <div class="flex-1 overflow-y-auto">
-                    {#each diffLoader.prComments as comment (comment.id)}
+                    {#each visibleComments as comment (comment.id)}
                       {@const isSelected = commentSelection.selectedPrCommentIds.has(comment.id)}
-                      <div class="px-4 py-3.5 border-b border-base-300 last:border-b-0 {comment.addressed === 1 ? 'opacity-40' : ''}">
+                      <div class="px-4 py-3.5 border-b border-base-300 last:border-b-0 {comment.addressed === 1 ? 'opacity-50' : ''}">
                         <div class="flex items-start gap-2">
                           {#if comment.addressed === 0}
                             <input
@@ -184,6 +200,7 @@
                                 {comment.author.charAt(0).toUpperCase()}
                               </div>
                               <span class="text-xs font-semibold text-base-content">@{comment.author}</span>
+                              {#if comment.addressed === 1}<span class="badge badge-success badge-xs">Addressed</span>{/if}
                               <span class="text-[0.65rem] text-base-content/40 ml-auto">{timeAgo(comment.created_at * 1000)}</span>
                             </div>
                             {#if comment.file_path}

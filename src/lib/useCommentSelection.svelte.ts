@@ -9,6 +9,7 @@ export interface CommentSelectionState {
   readonly selectedPrCommentIds: Set<number>
   readonly unaddressedComments: PrComment[]
   readonly unaddressedCount: number
+  readonly addressedCount: number
   readonly selectedCount: number
   readonly selectedPrComments: PrComment[]
   toggleSelected(id: number): void
@@ -34,6 +35,7 @@ export function createCommentSelection(deps: {
 
   let unaddressedComments = $derived(localPrComments.filter(c => c.addressed === 0))
   let unaddressedCount = $derived(unaddressedComments.length)
+  let addressedCount = $derived(localPrComments.filter(c => c.addressed === 1).length)
   let selectedCount = $derived(selectedPrCommentIds.size)
   let selectedPrComments = $derived(localPrComments.filter(c => selectedPrCommentIds.has(c.id)))
 
@@ -72,6 +74,7 @@ export function createCommentSelection(deps: {
     get selectedPrCommentIds() { return selectedPrCommentIds },
     get unaddressedComments() { return unaddressedComments },
     get unaddressedCount() { return unaddressedCount },
+    get addressedCount() { return addressedCount },
     get selectedCount() { return selectedCount },
     get selectedPrComments() { return selectedPrComments },
     toggleSelected,

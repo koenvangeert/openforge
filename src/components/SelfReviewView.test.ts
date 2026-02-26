@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/svelte'
 import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest'
 import { writable } from 'svelte/store'
-import type { Task, PrFileDiff } from '../lib/types'
+import type { Task, PrFileDiff, PrComment, PullRequestInfo } from '../lib/types'
 
 vi.mock('../lib/stores', () => ({
   selfReviewDiffFiles: writable([]),
@@ -39,7 +39,7 @@ beforeAll(() => {
   })
 })
 import { selfReviewDiffFiles, selfReviewGeneralComments, selfReviewArchivedComments, pendingManualComments, ticketPrs } from '../lib/stores'
-import { getTaskDiff, getActiveSelfReviewComments, getTaskBatchFileContents } from '../lib/ipc'
+import { getTaskDiff, getActiveSelfReviewComments, getTaskBatchFileContents, getPrComments } from '../lib/ipc'
 
 const baseTask: Task = {
   id: 'task-1',
@@ -217,3 +217,161 @@ describe('SelfReviewView integration — performance fixes', () => {
   })
 })
 
+describe('SelfReviewView — hide addressed comments', () => {
+  beforeEach(() => {
+    selfReviewDiffFiles.set([baseDiff])
+    selfReviewGeneralComments.set([])
+    selfReviewArchivedComments.set([])
+    pendingManualComments.set([])
+    ticketPrs.set(new Map())
+    vi.clearAllMocks()
+  })
+
+  const makeComment = (id: number, addressed: number): PrComment => ({
+    id,
+    pr_id: 1,
+    author: 'alice',
+    body: `Comment ${id}`,
+    comment_type: 'review_comment',
+    file_path: 'src/main.rs',
+    line_number: 10,
+    addressed,
+    created_at: 1000 + id,
+  })
+
+  const mockPr: PullRequestInfo = {
+    id: 1,
+    ticket_id: 'task-1',
+    repo_owner: 'acme',
+    repo_name: 'repo',
+    title: 'Test PR',
+    url: 'https://github.com/acme/repo/pull/1',
+    state: 'open',
+    head_sha: 'abc',
+    ci_status: null,
+    ci_check_runs: null,
+    review_status: null,
+    merged_at: null,
+    created_at: 1000,
+    updated_at: 2000,
+    unaddressed_comment_count: 0,
+  }
+
+  it('addressed comments hidden by default', async () => {
+    const comments = [
+      makeComment(1, 0), // unaddressed
+      makeComment(2, 1), // addressed
+    ]
+    vi.mocked(getPrComments).mockResolvedValue(comments)
+    ticketPrs.set(new Map([['task-1', [mockPr]]]))
+    vi.mocked(getTaskDiff).mockResolvedValue([baseDiff])
+
+    render(SelfReviewView, {
+      props: {
+        task: baseTask,
+        agentStatus: null,
+        onSendToAgent: vi.fn(),
+      },
+    })
+
+    await waitFor(() => {
+      // Unaddressed comment should be visible
+      expect(screen.getByText('Comment 1')).toBeTruthy()
+      // Addressed comment should NOT be in DOM
+      expect(screen.queryByText('Comment 2')).toBeNull()
+    })
+  })
+
+  it('toggle shows addressed comments', async () => {
+    const comments = [
+      makeComment(1, 0), // unaddressed
+      makeComment(2, 1), // addressed
+    ]
+    vi.mocked(getPrComments).mockResolvedValue(comments)
+    ticketPrs.set(new Map([['task-1', [mockPr]]]))
+    vi.mocked(getTaskDiff).mockResolvedValue([baseDiff])
+
+    render(SelfReviewView, {
+      props: {
+        task: baseTask,
+        agentStatus: null,
+        onSendToAgent: vi.fn(),
+      },
+    })
+
+    await waitFor(() => {
+      expect(screen.getByText('Comment 1')).toBeTruthy()
+    })
+
+    // Find and click the toggle button
+    const toggleButton = screen.getByText(/Show 1 addressed/)
+    expect(toggleButton).toBeTruthy()
+    toggleButton.click()
+
+    await waitFor(() => {
+      // Now addressed comment should be visible
+      expect(screen.getByText('Comment 2')).toBeTruthy()
+      // Toggle text should change
+      expect(screen.getByText('Hide addressed')).toBeTruthy()
+    })
+  })
+
+  it('toggle hidden when no addressed comments', async () => {
+    const comments = [
+      makeComment(1, 0), // unaddressed only
+    ]
+    vi.mocked(getPrComments).mockResolvedValue(comments)
+    ticketPrs.set(new Map([['task-1', [mockPr]]]))
+    vi.mocked(getTaskDiff).mockResolvedValue([baseDiff])
+
+    render(SelfReviewView, {
+      props: {
+        task: baseTask,
+        agentStatus: null,
+        onSendToAgent: vi.fn(),
+      },
+    })
+
+    await waitFor(() => {
+      expect(screen.getByText('Comment 1')).toBeTruthy()
+    })
+
+    // Toggle button should not exist
+    expect(screen.queryByText(/Show.*addressed/)).toBeNull()
+  })
+
+  it('all addressed empty state', async () => {
+    const comments = [
+      makeComment(1, 1), // addressed only
+    ]
+    vi.mocked(getPrComments).mockResolvedValue(comments)
+    ticketPrs.set(new Map([['task-1', [mockPr]]]))
+    vi.mocked(getTaskDiff).mockResolvedValue([baseDiff])
+
+    render(SelfReviewView, {
+      props: {
+        task: baseTask,
+        agentStatus: null,
+        onSendToAgent: vi.fn(),
+      },
+    })
+
+    // Sidebar doesn't auto-open when all comments are addressed (unaddressedCount === 0)
+    // So we need to manually click the Comments button
+    await waitFor(() => {
+      const commentsButton = screen.getByText('Comments')
+      expect(commentsButton).toBeTruthy()
+    })
+
+    const commentsButton = screen.getByText('Comments')
+    commentsButton.click()
+
+    await waitFor(() => {
+      // Should show "All comments addressed" empty state
+      expect(screen.getByText('All comments addressed')).toBeTruthy()
+      // Comment should not be visible (toggle is OFF by default)
+      expect(screen.queryByText('Comment 1')).toBeNull()
+    })
+})
+
+})
