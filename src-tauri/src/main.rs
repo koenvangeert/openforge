@@ -14,9 +14,10 @@ mod pty_manager;
 mod agent_coordinator;
 mod diff_parser;
 mod whisper_manager;
+mod http_server;
 mod commands;
 
-use std::sync::Mutex;
+use std::sync::{Mutex, Arc};
 use tauri::{Manager, Emitter};
 use jira_client::JiraClient;
 use github_client::GitHubClient;
@@ -160,7 +161,17 @@ fn main() {
                 .and_then(|s| WhisperModelSize::from_str(&s))
                 .unwrap_or(WhisperModelSize::Small);
 
-            app.manage(Mutex::new(database));
+            let db_arc = Arc::new(Mutex::new(database));
+
+            let app_handle_http = app.handle().clone();
+            let db_for_http = db_arc.clone();
+            tauri::async_runtime::spawn(async move {
+                if let Err(e) = http_server::start_http_server(app_handle_http, db_for_http).await {
+                    eprintln!("[http_server] Failed to start: {}", e);
+                }
+            });
+            println!("HTTP server task started");
+            app.manage(db_arc.clone());
 
             println!("Database initialized successfully");
             let jira_client = JiraClient::new();
