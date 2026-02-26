@@ -2,8 +2,9 @@
   import { DiffView, DiffModeEnum, SplitSide } from '@git-diff-view/svelte'
   import '@git-diff-view/svelte/styles/diff-view-pure.css'
   import './DiffViewerTheme.css'
-  import type { PrFileDiff, ReviewComment, ReviewSubmissionComment } from '../lib/types'
-  import { pendingManualComments } from '../lib/stores'
+  import type { PrFileDiff, ReviewComment, ReviewSubmissionComment, AgentReviewComment } from '../lib/types'
+  import { pendingManualComments, agentReviewComments } from '../lib/stores'
+  import { updateAgentReviewCommentStatus } from '../lib/ipc'
   import { isTruncated, getTruncationStats, type FileContents } from '../lib/diffAdapter'
   import { buildExtendData, type CommentDisplayData } from '../lib/diffComments'
   import { diffHighlighter } from '../lib/diffHighlighter'
@@ -24,8 +25,9 @@
     batchFetchFileContents?: (files: PrFileDiff[]) => Promise<Map<string, FileContents>>
     toolbarExtra?: Snippet
     includeUncommitted?: boolean
+    agentComments?: AgentReviewComment[]
   }
-  let { files = [], existingComments = [], repoOwner: _repoOwner = '', repoName: _repoName = '', fileTreeVisible = true, onToggleFileTree, fetchFileContents, batchFetchFileContents, toolbarExtra, includeUncommitted = false }: Props = $props()
+  let { files = [], existingComments = [], repoOwner: _repoOwner = '', repoName: _repoName = '', fileTreeVisible = true, onToggleFileTree, fetchFileContents, batchFetchFileContents, toolbarExtra, includeUncommitted = false, agentComments = [] }: Props = $props()
   let diffViewMode = $state<DiffModeEnum>(DiffModeEnum.Split)
   let diffViewWrap = $state(false)
   let commentText = $state('')
@@ -217,7 +219,7 @@
             {#if workerDiffFile}
             <DiffView
               diffFile={workerDiffFile}
-              extendData={buildExtendData(file.filename, existingComments, $pendingManualComments)}
+              extendData={buildExtendData(file.filename, existingComments, $pendingManualComments, agentComments)}
               diffViewMode={diffViewMode}
               diffViewWrap={diffViewWrap}
               diffViewTheme="light"
@@ -232,11 +234,56 @@
                 {#snippet renderExtendLine({ lineNumber: _ln, side: _side, data, diffFile: _df, onUpdate: _ou }: { lineNumber: number; side: SplitSide; data: CommentDisplayData; diffFile: import('@git-diff-view/core').DiffFile; onUpdate: () => void })}
                   <div class="w-full">
                     {#each data.comments as comment}
-                      <div class="px-4 py-2.5 mx-4 my-1.5 bg-base-100 border border-base-300 rounded-md text-[0.8rem] {comment.type === 'pending' ? 'border-l-4 border-l-warning' : comment.type === 'existing' ? 'border-l-4 border-l-primary' : ''}">
+                      <div class="px-4 py-2.5 mx-4 my-1.5 bg-base-100 border border-base-300 rounded-md text-[0.8rem] {comment.type === 'pending' ? 'border-l-4 border-l-warning' : comment.type === 'existing' ? 'border-l-4 border-l-primary' : comment.type === 'agent' ? 'border-l-4 border-l-success' : ''}">
                         <div class="flex items-center gap-2 mb-1.5">
                           {#if comment.type === 'existing'}
                             <strong class="text-base-content font-semibold text-xs">{comment.author}</strong>
                             <span class="text-base-content/50 text-[0.7rem]">{comment.createdAt}</span>
+                          {:else if comment.type === 'agent'}
+                            <span class="badge badge-success badge-sm">AI Review</span>
+                            {#if comment.status === 'approved'}
+                              <span class="badge badge-info badge-sm">Approved</span>
+                            {/if}
+                            <div class="ml-auto flex gap-1">
+                              {#if comment.status !== 'approved'}
+                                <button
+                                  class="btn btn-ghost btn-xs text-success hover:text-success/80"
+                                  title="Approve — add to pending comments"
+                                  onclick={async () => {
+                                    if (comment.commentId === undefined) return
+                                    try {
+                                      await updateAgentReviewCommentStatus(comment.commentId, 'approved')
+                                      $pendingManualComments = [...$pendingManualComments, {
+                                        path: comment.filePath || '',
+                                        line: comment.lineNumber || 0,
+                                        side: comment.commentSide || 'RIGHT',
+                                        body: comment.body
+                                      }]
+                                      $agentReviewComments = $agentReviewComments.map(c =>
+                                        c.id === comment.commentId ? { ...c, status: 'approved' } : c
+                                      )
+                                    } catch (e) {
+                                      console.error('[DiffViewer] Failed to approve comment:', e)
+                                    }
+                                  }}
+                                >✓</button>
+                              {/if}
+                              <button
+                                class="btn btn-ghost btn-xs text-base-content/50 hover:text-error"
+                                title="Dismiss"
+                                onclick={async () => {
+                                  if (comment.commentId === undefined) return
+                                  try {
+                                    await updateAgentReviewCommentStatus(comment.commentId, 'dismissed')
+                                    $agentReviewComments = $agentReviewComments.map(c =>
+                                      c.id === comment.commentId ? { ...c, status: 'dismissed' } : c
+                                    )
+                                  } catch (e) {
+                                    console.error('[DiffViewer] Failed to dismiss comment:', e)
+                                  }
+                                }}
+                              >✕</button>
+                            </div>
                           {:else}
                             <span class="badge badge-warning badge-sm">Pending</span>
                             <button
