@@ -1,9 +1,7 @@
 {
-  "active_plan": "/Users/koen.vangeert/.ai-command-center/worktrees/my-command-center/T-362/.sisyphus/plans/review-pane-perf.md",
-  "started_at": "2026-02-23T15:17:09.145Z",
-  "session_ids": [
-    "ses_37537dbceffe7BEZAw5GDLlK0z"
-  ],
-  "plan_name": "review-pane-perf",
+  "active_plan": "/Users/koenpersonal/.ai-command-center/worktrees/my-command-center/T-76/.sisyphus/plans/session-spawned-tasks.md",
+  "started_at": "2026-02-26T19:54:26.697Z",
+  "session_ids": ["ses_364951b11ffeoN1ZG1Ms9Rszz4"],
+  "plan_name": "session-spawned-tasks",
   "agent": "atlas"
 }

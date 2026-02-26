@@ -196,9 +196,9 @@ Wave 3:
 
 ### Wave 1: Foundation (Simplified - No Auto-Start)
 
-- [ ] **1. Create HTTP server module with spawn endpoint**
+- [x] **1. Create HTTP server module with spawn endpoint**
 
-- [ ] **2. Create spawn handler (simple - just creates task)**
+- [x] **2. Create spawn handler (simple - just creates task)**
 
   **What to do:**
   Create a new Rust module `src-tauri/src/http_server.rs` that starts a minimal HTTP server on a localhost port (e.g., 17422 - "AI").
@@ -335,7 +335,7 @@ Wave 3:
   - Message: `feat(http): implement spawn_task handler (create only)`
   - Files: `src-tauri/src/http_server.rs`
 
-- [ ] **3. Create OpenCode `spawn_task` tool**
+- [x] **3. Create OpenCode `spawn_task` tool**
 
   **What to do:**
   Create the OpenCode tool file that agents will call to spawn tasks.
@@ -534,7 +534,7 @@ Wave 3:
   - Message: `feat(tools): add spawn_task OpenCode tool`
   - Files: `.opencode/tools/spawn_task.ts`
 
-- [ ] **5. Wire HTTP server into Tauri app lifecycle**
+- [x] **4. Wire HTTP server into Tauri app lifecycle**
 
   **What to do:**
   Integrate the HTTP server into the Tauri application so it starts/stops with the app.
@@ -616,7 +616,7 @@ Wave 3:
   - Message: `feat(tauri): wire HTTP server into app lifecycle`
   - Files: `src-tauri/src/main.rs`, `src-tauri/src/http_server.rs`
 
-- [ ] **6. Add frontend toast for spawned tasks**
+- [x] **5. Add frontend toast for spawned tasks**
 
   **What to do:**
   Listen for task creation events and show a toast notification when a task is spawned by an agent.
@@ -672,7 +672,7 @@ Wave 3:
 
 ### Wave 3: Verification & Polish
 
-- [ ] **7. Integration test - spawn task via tool**
+- [x] **6. Integration test - spawn task via tool**
 
   **What to do:**
   Write an integration test that verifies the full flow: HTTP endpoint → task creation → orchestration start.
@@ -724,7 +724,7 @@ Wave 3:
   - Message: `test(http): add integration test for spawn_task endpoint`
   - Files: `src-tauri/src/http_server.rs` (add tests)
 
-- [ ] **8. Manual QA - full spawn flow**
+- [x] **8. Manual QA - full spawn flow**
 
   **What to do:**
   End-to-end manual test of the complete feature:
@@ -778,7 +778,7 @@ Wave 3:
   
   **Commit**: NO (manual QA, no code changes)
 
-- [ ] **9. Code review and cleanup**
+- [x] **9. Code review and cleanup**
 
   **What to do:**
   Final review of all changes:
