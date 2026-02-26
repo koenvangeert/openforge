@@ -311,6 +311,13 @@
     )
 
     unlisteners.push(
+      await listen('comment-addressed', () => {
+        loadPullRequests()
+        loadProjectAttention()
+      })
+    )
+
+    unlisteners.push(
       await listen<{ task_id: string, pr_id: number, pr_title: string, ci_status: string, timestamp: number }>('ci-status-changed', (event) => {
         if (event.payload.ci_status === 'failure') {
           // Suppress CI failure toast when the task's agent is still running —

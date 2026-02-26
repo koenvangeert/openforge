@@ -1,5 +1,5 @@
 use std::sync::Mutex;
-use tauri::State;
+use tauri::{Emitter, State};
 use crate::{db, github_poller};
 
 #[tauri::command]
@@ -51,11 +51,14 @@ pub async fn get_pr_comments(
 /// Mark a PR comment as addressed
 #[tauri::command]
 pub async fn mark_comment_addressed(
+    app: tauri::AppHandle,
     db: State<'_, Mutex<db::Database>>,
     comment_id: i64,
 ) -> Result<(), String> {
     let db_lock = db.lock().unwrap();
     db_lock
         .mark_comment_addressed(comment_id)
-        .map_err(|e| format!("Failed to mark comment addressed: {}", e))
+        .map_err(|e| format!("Failed to mark comment addressed: {}", e))?;
+    let _ = app.emit("comment-addressed", ());
+    Ok(())
 }
