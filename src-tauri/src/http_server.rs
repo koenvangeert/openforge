@@ -30,10 +30,10 @@ pub struct SpawnResponse {
     pub status: String,
 }
 
-/// Handle spawn_task requests (mock implementation)
-/// 
-/// Currently returns a mock task ID. The actual task creation logic
-/// will be implemented in a future task.
+/// Handle spawn_task requests from OpenCode sessions
+///
+/// Creates a new task in the database with "backlog" status and
+/// emits a "task-changed" event to notify the frontend.
 pub async fn spawn_task_handler(
     State(state): State<AppState>,
     Json(request): Json<SpawnRequest>,
