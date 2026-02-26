@@ -497,7 +497,8 @@ impl PtyManager {
                 "Home directory not found",
             ))
         })?;
-        Ok(home.join(".ai-command-center").join("pids"))
+        let pids_dir_name = if cfg!(debug_assertions) { "pids-dev" } else { "pids" };
+        Ok(home.join(".ai-command-center").join(pids_dir_name))
     }
 }
 
@@ -714,5 +715,19 @@ mod tests {
         assert!(!pid_file.exists(), "Invalid PTY PID file should be removed");
 
         let _ = std::fs::remove_dir_all(&tmp_dir);
+    }
+
+    #[test]
+    fn test_get_pid_dir_default() {
+        let manager = PtyManager::new();
+        let pid_dir = manager.get_pid_dir().expect("get_pid_dir should succeed");
+        
+        // In test builds, debug_assertions is enabled, so we expect "pids-dev"
+        let dir_name = pid_dir.file_name().unwrap().to_str().unwrap();
+        assert_eq!(dir_name, "pids-dev", "Debug build should use pids-dev directory");
+        
+        // Verify parent is .ai-command-center
+        let parent_name = pid_dir.parent().unwrap().file_name().unwrap().to_str().unwrap();
+        assert_eq!(parent_name, ".ai-command-center");
     }
 }
