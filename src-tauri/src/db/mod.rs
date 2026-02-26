@@ -11,6 +11,7 @@ mod review;
 mod self_review;
 mod tasks;
 mod worktrees;
+mod agent_review;
 
 pub use agents::{AgentLogRow, AgentSessionRow};
 pub use projects::{ProjectAttentionRow, ProjectRow};
@@ -19,6 +20,7 @@ pub use review::ReviewPrRow;
 pub use self_review::SelfReviewCommentRow;
 pub use tasks::TaskRow;
 pub use worktrees::WorktreeRow;
+pub use agent_review::AgentReviewCommentRow;
 
 /// Database connection wrapper for thread-safe access
 pub struct Database {
@@ -315,6 +317,28 @@ INSERT OR IGNORE INTO config (key, value) VALUES ('next_project_id', '1')
                 Ok(())
             },
         ),
+        M::up(
+            r#"
+CREATE TABLE IF NOT EXISTS agent_review_comments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    review_pr_id INTEGER NOT NULL,
+    review_session_key TEXT NOT NULL,
+    comment_type TEXT NOT NULL,
+    file_path TEXT,
+    line_number INTEGER,
+    side TEXT,
+    body TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    opencode_session_id TEXT,
+    raw_agent_output TEXT,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    FOREIGN KEY (review_pr_id) REFERENCES review_prs(id)
+);
+CREATE INDEX IF NOT EXISTS idx_agent_review_comments_pr ON agent_review_comments(review_pr_id);
+CREATE INDEX IF NOT EXISTS idx_agent_review_comments_session ON agent_review_comments(review_session_key);
+            "#
+        ),
     ])
 }
 #[cfg(test)]
@@ -362,13 +386,13 @@ mod tests {
 
         let table_count: i32 = conn
             .query_row(
-                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('tasks', 'agent_sessions', 'agent_logs', 'pull_requests', 'pr_comments', 'config', 'projects', 'project_config', 'worktrees', 'review_prs', 'self_review_comments')",
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('tasks', 'agent_sessions', 'agent_logs', 'pull_requests', 'pr_comments', 'config', 'projects', 'project_config', 'worktrees', 'review_prs', 'self_review_comments', 'agent_review_comments')",
                 [],
                 |row| row.get(0),
             )
             .expect("Failed to count tables");
 
-        assert_eq!(table_count, 11, "All 11 tables should be created");
+        assert_eq!(table_count, 12, "All 12 tables should be created");
 
         let config_count: i32 = conn
             .query_row("SELECT COUNT(*) FROM config", [], |row| row.get(0))
@@ -559,7 +583,7 @@ mod tests {
         let conn = db.connection();
         let conn = conn.lock().unwrap();
         let uv: i32 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
-        assert_eq!(uv, 1, "Fresh DB should have user_version=1 after migrations, got {}", uv);
+        assert_eq!(uv, 2, "Fresh DB should have user_version=2 after migrations, got {}", uv);
 
         drop(conn);
         drop(db);
