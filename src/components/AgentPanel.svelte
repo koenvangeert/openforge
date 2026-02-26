@@ -90,6 +90,12 @@
         return
       }
 
+      // For completed/failed sessions: use replay if stored events exist
+      if (sessionHistory.storedEvents.length > 0) {
+        // Events already replayed to terminal — no PTY needed
+        return
+      }
+
       // Legacy fallback: no stored events, try PTY resume
       let claudeId = currentSession.claude_session_id
       if (!claudeId) {
@@ -185,7 +191,9 @@
       const currentSession = $activeSessions.get(taskId)
       if (currentSession?.provider === 'claude-code') {
         status = 'complete'
-        // Spawn PTY for post-session history viewing
+        // No PTY spawn — terminal already has output from live event rendering
+      } else {
+        status = 'complete'
         await tryAttachPty()
       }
     })
