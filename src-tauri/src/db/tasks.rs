@@ -57,6 +57,7 @@ impl super::Database {
         status: &str,
         jira_key: Option<&str>,
         project_id: Option<&str>,
+        plan_text: Option<&str>,
     ) -> Result<TaskRow> {
         let conn = self.conn.lock().unwrap();
 
@@ -92,7 +93,7 @@ impl super::Database {
                 None::<String>,
                 None::<String>,
                 None::<String>,
-                None::<String>,
+                plan_text,
                 project_id,
                 now,
                 now,
@@ -108,7 +109,7 @@ impl super::Database {
             jira_title: None,
             jira_status: None,
             jira_assignee: None,
-            plan_text: None,
+            plan_text: plan_text.map(|s| s.to_string()),
             project_id: project_id.map(|s| s.to_string()),
             created_at: now,
             updated_at: now,
@@ -344,7 +345,7 @@ mod tests {
         let (db, path) = make_test_db("create_task");
 
         let task = db
-            .create_task("My task", "backlog", None, None)
+            .create_task("My task", "backlog", None, None, None)
             .expect("create failed");
 
         assert_eq!(task.id, "T-1");
@@ -365,7 +366,7 @@ mod tests {
         let (db, path) = make_test_db("update_task");
 
         let task = db
-            .create_task("Original", "backlog", None, None)
+            .create_task("Original", "backlog", None, None, None)
             .expect("create failed");
 
         db.update_task(&task.id, "Updated", None)
@@ -384,7 +385,7 @@ mod tests {
         let (db, path) = make_test_db("get_task_by_id");
 
         let task = db
-            .create_task("Found me", "backlog", None, None)
+            .create_task("Found me", "backlog", None, None, None)
             .expect("create failed");
 
         let retrieved = db.get_task(&task.id).expect("get failed");
@@ -403,13 +404,13 @@ mod tests {
         let (db, path) = make_test_db("task_autoincrement");
 
         let task1 = db
-            .create_task("Task 1", "backlog", None, None)
+            .create_task("Task 1", "backlog", None, None, None)
             .expect("create 1 failed");
         let task2 = db
-            .create_task("Task 2", "backlog", None, None)
+            .create_task("Task 2", "backlog", None, None, None)
             .expect("create 2 failed");
         let task3 = db
-            .create_task("Task 3", "backlog", None, None)
+            .create_task("Task 3", "backlog", None, None, None)
             .expect("create 3 failed");
 
         assert_eq!(task1.id, "T-1");
@@ -425,7 +426,7 @@ mod tests {
         let (db, path) = make_test_db("update_task_status");
 
         let task = db
-            .create_task("My task", "backlog", None, None)
+            .create_task("My task", "backlog", None, None, None)
             .expect("create failed");
 
         db.update_task_status(&task.id, "doing")
@@ -442,9 +443,9 @@ mod tests {
     fn test_update_task_jira_info() {
         let (db, path) = make_test_db("update_jira_info");
 
-        db.create_task("Linked task", "backlog", Some("PROJ-1"), None)
+        db.create_task("Linked task", "backlog", Some("PROJ-1"), None, None)
             .expect("create 1 failed");
-        db.create_task("Unlinked task", "backlog", None, None)
+        db.create_task("Unlinked task", "backlog", None, None, None)
             .expect("create 2 failed");
 
         let updated = db
@@ -481,11 +482,11 @@ mod tests {
     fn test_get_tasks_with_jira_links() {
         let (db, path) = make_test_db("tasks_with_jira");
 
-        db.create_task("Task 1", "backlog", Some("PROJ-1"), None)
+        db.create_task("Task 1", "backlog", Some("PROJ-1"), None, None)
             .expect("create 1 failed");
-        db.create_task("Task 2", "backlog", Some("PROJ-2"), None)
+        db.create_task("Task 2", "backlog", Some("PROJ-2"), None, None)
             .expect("create 2 failed");
-        db.create_task("Task 3", "backlog", None, None)
+        db.create_task("Task 3", "backlog", None, None, None)
             .expect("create 3 failed");
 
         let linked = db.get_tasks_with_jira_links().expect("get linked failed");
@@ -499,7 +500,7 @@ mod tests {
     fn test_jira_description_null_handling() {
         let (db, path) = make_test_db("jira_desc_null");
 
-        db.create_task("Task with jira", "backlog", Some("PROJ-1"), None)
+        db.create_task("Task with jira", "backlog", Some("PROJ-1"), None, None)
             .expect("create task failed");
 
         let task = db.get_task("T-1").expect("get failed").unwrap();
@@ -542,7 +543,7 @@ mod tests {
         let (db, path) = make_test_db("delete_task_basic");
 
         let task = db
-            .create_task("Deletable", "backlog", None, None)
+            .create_task("Deletable", "backlog", None, None, None)
             .expect("create failed");
         let tasks = db.get_all_tasks().expect("get failed");
         assert_eq!(tasks.len(), 1);

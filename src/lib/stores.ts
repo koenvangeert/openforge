@@ -9,6 +9,7 @@ export const selectedTaskId = writable<string | null>(null);
 export const activeSessions = writable<Map<string, AgentSession>>(new Map());
 export const checkpointNotification = writable<CheckpointNotification | null>(null);
 export const ciFailureNotification = writable<CiFailureNotification | null>(null);
+export const taskSpawned = writable<{ taskId: string; title: string } | null>(null);
 export const ticketPrs = writable<Map<string, PullRequestInfo[]>>(new Map());
 export const isLoading = writable(false);
 export const error = writable<string | null>(null);

@@ -354,7 +354,7 @@ mod tests {
         assert!(summaries.is_empty(), "Expected no attention rows for project with no doing tasks");
 
         // Create a backlog task — still no attention since it's not 'doing'
-        db.create_task("Backlog task", "backlog", None, Some(&project.id))
+        db.create_task("Backlog task", "backlog", None, Some(&project.id), None)
             .expect("create task failed");
         let summaries = db.get_project_attention_summaries().expect("query failed");
         assert!(summaries.is_empty());
@@ -373,7 +373,7 @@ mod tests {
 
         // Create a doing task with a paused agent (needs input)
         let task1 = db
-            .create_task("Doing task 1", "doing", None, Some(&project.id))
+            .create_task("Doing task 1", "doing", None, Some(&project.id), None)
             .expect("create task failed");
         db.create_agent_session("ses-1", &task1.id, None, "implement", "paused")
             .expect("create session failed");
@@ -382,21 +382,21 @@ mod tests {
 
         // Create a doing task with a running agent
         let task2 = db
-            .create_task("Doing task 2", "doing", None, Some(&project.id))
+            .create_task("Doing task 2", "doing", None, Some(&project.id), None)
             .expect("create task failed");
         db.create_agent_session("ses-2", &task2.id, None, "implement", "running")
             .expect("create session failed");
 
         // Create a doing task with a completed agent (needs review/move)
         let task4 = db
-            .create_task("Doing task 4", "doing", None, Some(&project.id))
+            .create_task("Doing task 4", "doing", None, Some(&project.id), None)
             .expect("create task failed");
         db.create_agent_session("ses-4", &task4.id, None, "implement", "completed")
             .expect("create session failed");
 
         // Create a doing task with an open PR that has CI failure + unaddressed comment
         let task3 = db
-            .create_task("Doing task 3", "doing", None, Some(&project.id))
+            .create_task("Doing task 3", "doing", None, Some(&project.id), None)
             .expect("create task failed");
         db.insert_pull_request(42, &task3.id, "acme", "repo", "Fix", "https://example.com", "open", 1000, 1000)
             .expect("insert pr failed");

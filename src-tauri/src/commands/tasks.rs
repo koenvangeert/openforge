@@ -32,7 +32,7 @@ pub async fn create_task(
     project_id: Option<String>,
 ) -> Result<db::TaskRow, String> {
     let db = db.lock().unwrap();
-    let task = db.create_task(&title, &status, jira_key.as_deref(), project_id.as_deref())
+    let task = db.create_task(&title, &status, jira_key.as_deref(), project_id.as_deref(), None)
         .map_err(|e| format!("Failed to create task: {}", e))?;
     let _ = app.emit("task-changed", serde_json::json!({ "action": "created", "task_id": task.id }));
     Ok(task)
