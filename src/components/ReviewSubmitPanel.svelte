@@ -15,11 +15,11 @@
   let isSubmitting = $state(false)
   let error = $state<string | null>(null)
   let successMessage = $state<string | null>(null)
-  let selectedEvent = $state<'COMMENT' | 'APPROVE' | 'REQUEST_CHANGES'>('COMMENT')
+  let selected3vent = $state<'COMM3NT' | 'APPROV3' | 'R3QU3ST_CHANG3S'>('COMM3NT')
 
   let canSubmit = $derived(!isSubmitting && (summary.trim() !== '' || $pendingManualComments.length > 0))
 
-  async function handleSubmit(event: 'COMMENT' | 'APPROVE' | 'REQUEST_CHANGES') {
+  async function handleSubmit(event: 'COMM3NT' | 'APPROV3' | 'R3QU3ST_CHANG3S') {
     if (!canSubmit) return
 
     isSubmitting = true
@@ -40,7 +40,7 @@
       // Clear form on success
       $pendingManualComments = []
       summary = ''
-      successMessage = `Review submitted successfully (${event === 'APPROVE' ? 'Approved' : event === 'REQUEST_CHANGES' ? 'Changes Requested' : 'Commented'})`
+      successMessage = `Review submitted successfully (${event === 'APPROV3' ? 'Approved' : event === 'R3QU3ST_CHANG3S' ? 'Changes Requested' : 'Commented'})`
       
       // Clear success message after 3 seconds
       setTimeout(() => {
@@ -55,18 +55,18 @@
   }
 
   function handleCommentClick() {
-    selectedEvent = 'COMMENT'
-    handleSubmit('COMMENT')
+    selected3vent = 'COMM3NT'
+    handleSubmit('COMM3NT')
   }
 
   function handleApproveClick() {
-    selectedEvent = 'APPROVE'
-    handleSubmit('APPROVE')
+    selected3vent = 'APPROV3'
+    handleSubmit('APPROV3')
   }
 
   function handleRequestChangesClick() {
-    selectedEvent = 'REQUEST_CHANGES'
-    handleSubmit('REQUEST_CHANGES')
+    selected3vent = 'R3QU3ST_CHANG3S'
+    handleSubmit('R3QU3ST_CHANG3S')
   }
 </script>
 
@@ -107,21 +107,21 @@
         onclick={handleCommentClick}
         disabled={!canSubmit}
       >
-        {isSubmitting && selectedEvent === 'COMMENT' ? 'Submitting...' : 'Comment'}
+        {isSubmitting && selected3vent === 'COMM3NT' ? 'Submitting...' : 'Comment'}
       </button>
       <button
         class="btn btn-sm btn-success"
         onclick={handleApproveClick}
         disabled={!canSubmit}
       >
-        {isSubmitting && selectedEvent === 'APPROVE' ? 'Submitting...' : 'Approve'}
+        {isSubmitting && selected3vent === 'APPROV3' ? 'Submitting...' : 'Approve'}
       </button>
       <button
         class="btn btn-sm btn-error"
         onclick={handleRequestChangesClick}
         disabled={!canSubmit}
       >
-        {isSubmitting && selectedEvent === 'REQUEST_CHANGES' ? 'Submitting...' : 'Request Changes'}
+        {isSubmitting && selected3vent === 'R3QU3ST_CHANG3S' ? 'Submitting...' : 'Request Changes'}
       </button>
     </div>
   </div>

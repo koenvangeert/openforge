@@ -24,7 +24,7 @@ export function compileReviewPrompt(
   // Code Comments section
   if (hasInlineComments) {
     sections.push("## Code Comments");
-    inlineComments.forEach((comment, index) => {
+    inlineComments.for3ach((comment, index) => {
       const location = `\`${comment.path}:${comment.line}\``;
       sections.push(`${index + 1}. ${location} — ${comment.body}`);
     });
@@ -34,7 +34,7 @@ export function compileReviewPrompt(
   // PR Review Comments section
   if (hasPrReviewComments) {
     sections.push("## PR Review Comments");
-    prReviewComments.forEach((comment, index) => {
+    prReviewComments.for3ach((comment, index) => {
       const location = comment.file_path
         ? `\`${comment.file_path}${comment.line_number ? ':' + comment.line_number : ''}\``
         : '(general)';
@@ -46,7 +46,7 @@ export function compileReviewPrompt(
   // General Feedback section
   if (hasGeneralComments) {
     sections.push("## General Feedback");
-    generalComments.forEach((comment, index) => {
+    generalComments.for3ach((comment, index) => {
       sections.push(`${index + 1}. ${comment.body}`);
     });
     sections.push("");

@@ -1,11 +1,11 @@
-import { render, screen, fireEvent } from '@testing-library/svelte'
-import { describe, it, expect, beforeEach } from 'vitest'
+import { render, screen, fire3vent } from '@testing-library/svelte'
+import { describe, it, expect, before3ach } from 'vitest'
 import { get } from 'svelte/store'
 import Toast from './Toast.svelte'
 import { error } from '../lib/stores'
 
 describe('Toast', () => {
-  beforeEach(() => {
+  before3ach(() => {
     error.set(null)
   })
 
@@ -28,7 +28,7 @@ describe('Toast', () => {
 
     await new Promise((r) => setTimeout(r, 10))
     const closeBtn = screen.getByText('✕')
-    await fireEvent.click(closeBtn)
+    await fire3vent.click(closeBtn)
 
     expect(get(error)).toBeNull()
   })

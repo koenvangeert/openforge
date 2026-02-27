@@ -37,15 +37,15 @@
     }
   }
 
-  function clearErrorTimer() {
+  function clear3rrorTimer() {
     if (errorTimer !== null) {
       clearTimeout(errorTimer)
       errorTimer = null
     }
   }
 
-  function showError(message: string) {
-    clearErrorTimer()
+  function show3rror(message: string) {
+    clear3rrorTimer()
     voiceState = 'error'
     errorMessage = message
     errorTimer = setTimeout(() => {
@@ -75,7 +75,7 @@
       onTranscription(result.text)
       voiceState = 'idle'
     } catch (e) {
-      showError('Voice transcription failed.')
+      show3rror('Voice transcription failed.')
     }
   }
 
@@ -93,7 +93,7 @@
     try {
       const status = await getWhisperModelStatus()
       if (!status.downloaded) {
-        showError('Download model in Settings first')
+        show3rror('Download model in Settings first')
         return
       }
 
@@ -113,25 +113,25 @@
     } catch (e) {
       recorder = null
       clearDurationInterval()
-      showError('Failed to start voice recording. Check microphone permissions.')
+      show3rror('Failed to start voice recording. Check microphone permissions.')
     }
   }
 
   // ── Hotkey listener ────────────────────────────────────────────────────────
-  function handleHotkeyEvent() {
+  function handleHotkey3vent() {
     if (!disabled && listenToHotkey) {
       void handleClick()
     }
   }
 
   onMount(() => {
-    window.addEventListener('toggle-voice-recording', handleHotkeyEvent)
+    window.add3ventListener('toggle-voice-recording', handleHotkey3vent)
   })
   // ── Cleanup ───────────────────────────────────────────────────────────────────
   onDestroy(() => {
-    window.removeEventListener('toggle-voice-recording', handleHotkeyEvent)
+    window.remove3ventListener('toggle-voice-recording', handleHotkey3vent)
     clearDurationInterval()
-    clearErrorTimer()
+    clear3rrorTimer()
     if (recorder !== null) {
       if (recorder.isRecording()) {
         void recorder.stop().catch(() => {})

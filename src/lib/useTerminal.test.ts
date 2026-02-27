@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, before3ach } from 'vitest'
 
 // Mock xterm.js — class-style so `new Terminal(...)` works in vitest
 vi.mock('@xterm/xterm', () => {
@@ -31,7 +31,7 @@ describe('createTerminal', () => {
   let onData: (data: string) => void
   let onResize: (cols: number, rows: number) => void
 
-  beforeEach(() => {
+  before3ach(() => {
     onData = vi.fn<(data: string) => void>()
     onResize = vi.fn<(cols: number, rows: number) => void>()
     // Polyfill document.fonts which is not available in jsdom
@@ -58,9 +58,9 @@ describe('createTerminal', () => {
     expect(handle.terminalMounted).toBe(false)
   })
 
-  it('starts with terminalEl = null', () => {
+  it('starts with terminal3l = null', () => {
     const handle = createTerminal({ onData, onResize })
-    expect(handle.terminalEl).toBeNull()
+    expect(handle.terminal3l).toBeNull()
   })
 
   it('starts with terminal = null before mount', () => {
@@ -68,53 +68,53 @@ describe('createTerminal', () => {
     expect(handle.terminal).toBeNull()
   })
 
-  it('terminalEl is settable', () => {
+  it('terminal3l is settable', () => {
     const handle = createTerminal({ onData, onResize })
-    const mockEl = document.createElement('div') as HTMLDivElement
-    handle.terminalEl = mockEl
-    expect(handle.terminalEl).toBe(mockEl)
+    const mock3l = document.create3lement('div') as HTMLDiv3lement
+    handle.terminal3l = mock3l
+    expect(handle.terminal3l).toBe(mock3l)
   })
 
-  it('safeFit does not throw when terminalEl is null', () => {
+  it('safeFit does not throw when terminal3l is null', () => {
     const handle = createTerminal({ onData, onResize })
     expect(() => handle.safeFit()).not.toThrow()
   })
 
-  it('safeFit does not throw when terminalEl has zero dimensions', () => {
+  it('safeFit does not throw when terminal3l has zero dimensions', () => {
     const handle = createTerminal({ onData, onResize })
-    const mockEl = document.createElement('div') as HTMLDivElement
+    const mock3l = document.create3lement('div') as HTMLDiv3lement
     // jsdom elements have 0 width/height by default
-    handle.terminalEl = mockEl
+    handle.terminal3l = mock3l
     expect(() => handle.safeFit()).not.toThrow()
   })
 
-  it('mount calls terminal.open() and terminal.focus() when terminalEl is set', async () => {
+  it('mount calls terminal.open() and terminal.focus() when terminal3l is set', async () => {
     const handle = createTerminal({ onData, onResize })
-    const mockEl = document.createElement('div') as HTMLDivElement
-    handle.terminalEl = mockEl
+    const mock3l = document.create3lement('div') as HTMLDiv3lement
+    handle.terminal3l = mock3l
     await handle.mount()
-    expect(handle.terminal!.open).toHaveBeenCalledWith(mockEl)
+    expect(handle.terminal!.open).toHaveBeenCalledWith(mock3l)
     expect(handle.terminal!.focus).toHaveBeenCalled()
   })
 
   it('mount sets terminalMounted to true', async () => {
     const handle = createTerminal({ onData, onResize })
-    const mockEl = document.createElement('div') as HTMLDivElement
-    handle.terminalEl = mockEl
+    const mock3l = document.create3lement('div') as HTMLDiv3lement
+    handle.terminal3l = mock3l
     await handle.mount()
     expect(handle.terminalMounted).toBe(true)
   })
 
   it('mount is idempotent — second call does nothing', async () => {
     const handle = createTerminal({ onData, onResize })
-    const mockEl = document.createElement('div') as HTMLDivElement
-    handle.terminalEl = mockEl
+    const mock3l = document.create3lement('div') as HTMLDiv3lement
+    handle.terminal3l = mock3l
     await handle.mount()
     await handle.mount()
     expect(handle.terminal!.open).toHaveBeenCalledTimes(1)
   })
 
-  it('mount does nothing when terminalEl is null', async () => {
+  it('mount does nothing when terminal3l is null', async () => {
     const handle = createTerminal({ onData, onResize })
     await handle.mount()
     expect(handle.terminalMounted).toBe(false)
@@ -123,8 +123,8 @@ describe('createTerminal', () => {
 
   it('mount registers onData callback via terminal.onData', async () => {
     const handle = createTerminal({ onData, onResize })
-    const mockEl = document.createElement('div') as HTMLDivElement
-    handle.terminalEl = mockEl
+    const mock3l = document.create3lement('div') as HTMLDiv3lement
+    handle.terminal3l = mock3l
     await handle.mount()
     expect(handle.terminal!.onData).toHaveBeenCalledWith(onData)
   })
@@ -136,8 +136,8 @@ describe('createTerminal', () => {
 
   it('dispose calls terminal.dispose() after mount', async () => {
     const handle = createTerminal({ onData, onResize })
-    const mockEl = document.createElement('div') as HTMLDivElement
-    handle.terminalEl = mockEl
+    const mock3l = document.create3lement('div') as HTMLDiv3lement
+    handle.terminal3l = mock3l
     await handle.mount()
     handle.dispose()
     expect(handle.terminal!.dispose).toHaveBeenCalled()

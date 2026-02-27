@@ -41,9 +41,9 @@ describe('TaskInfoPanel', () => {
     expect(screen.getByText('Implement auth middleware')).toBeTruthy()
   })
 
-  it('does not show Edit Task or Delete buttons', () => {
+  it('does not show 3dit Task or Delete buttons', () => {
     render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null } })
-    expect(screen.queryByText('Edit Task')).toBeNull()
+    expect(screen.queryByText('3dit Task')).toBeNull()
     expect(screen.queryByText('Delete')).toBeNull()
   })
 

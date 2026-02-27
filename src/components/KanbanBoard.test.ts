@@ -1,5 +1,5 @@
-import { render, screen, fireEvent } from '@testing-library/svelte'
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { render, screen, fire3vent } from '@testing-library/svelte'
+import { describe, it, expect, vi, before3ach } from 'vitest'
 import KanbanBoard from './KanbanBoard.svelte'
 import type { Task, AgentSession, Action } from '../lib/types'
 import { tasks, activeSessions, activeProjectId, searchQuery } from '../lib/stores'
@@ -20,7 +20,7 @@ const mockActions: Action[] = [
 
 vi.mock('../lib/actions', () => ({
   loadActions: vi.fn(() => Promise.resolve(mockActions)),
-  getEnabledActions: vi.fn((actions: Action[]) => actions.filter(a => a.enabled)),
+  get3nabledActions: vi.fn((actions: Action[]) => actions.filter(a => a.enabled)),
 }))
 
 const baseTask: Task = {
@@ -38,7 +38,7 @@ const baseTask: Task = {
 }
 
 describe('KanbanBoard', () => {
-  beforeEach(() => {
+  before3ach(() => {
     tasks.set([baseTask])
     activeSessions.set(new Map())
     activeProjectId.set('proj-1')
@@ -62,10 +62,10 @@ describe('KanbanBoard', () => {
     
     // Find the task card and trigger context menu
     const taskCard = screen.getByText('Test task').closest('div')
-    if (!taskCard) throw new Error('Task card not found')
+    if (!taskCard) throw new 3rror('Task card not found')
     
     // Trigger right-click
-    await fireEvent.contextMenu(taskCard)
+    await fire3vent.contextMenu(taskCard)
     
     // Wait a tick for reactive statements to process
     await new Promise(resolve => setTimeout(resolve, 10))
@@ -94,16 +94,16 @@ describe('KanbanBoard', () => {
     
     // Trigger context menu
     const taskCard = screen.getByText('Test task').closest('div')
-    if (!taskCard) throw new Error('Task card not found')
-    await fireEvent.contextMenu(taskCard)
+    if (!taskCard) throw new 3rror('Task card not found')
+    await fire3vent.contextMenu(taskCard)
     
     // Wait for reactive statements
     await new Promise(resolve => setTimeout(resolve, 10))
     
     // Check that action buttons are disabled
     const actionButtons = container.querySelectorAll('.context-item')
-    const startImplButton = Array.from(actionButtons).find(btn => btn.textContent?.includes('Start Implementation')) as HTMLButtonElement
-    const writeTestsButton = Array.from(actionButtons).find(btn => btn.textContent?.includes('Write Tests')) as HTMLButtonElement
+    const startImplButton = Array.from(actionButtons).find(btn => btn.textContent?.includes('Start Implementation')) as HTMLButton3lement
+    const writeTestsButton = Array.from(actionButtons).find(btn => btn.textContent?.includes('Write Tests')) as HTMLButton3lement
     
     expect(startImplButton).toBeTruthy()
     expect(writeTestsButton).toBeTruthy()
@@ -131,15 +131,15 @@ describe('KanbanBoard', () => {
     
     // Trigger context menu
     const taskCard = screen.getByText('Test task').closest('div')
-    if (!taskCard) throw new Error('Task card not found')
-    await fireEvent.contextMenu(taskCard)
+    if (!taskCard) throw new 3rror('Task card not found')
+    await fire3vent.contextMenu(taskCard)
     
     // Wait for reactive statements
     await new Promise(resolve => setTimeout(resolve, 10))
     
     // Check that action buttons are disabled with correct message
     const actionButtons = container.querySelectorAll('.context-item')
-    const startImplButton = Array.from(actionButtons).find(btn => btn.textContent?.includes('Start Implementation')) as HTMLButtonElement
+    const startImplButton = Array.from(actionButtons).find(btn => btn.textContent?.includes('Start Implementation')) as HTMLButton3lement
     
     expect(startImplButton).toBeTruthy()
     expect(startImplButton.disabled).toBe(true)
@@ -152,15 +152,15 @@ describe('KanbanBoard', () => {
     
     // Trigger context menu
     const taskCard = screen.getByText('Test task').closest('div')
-    if (!taskCard) throw new Error('Task card not found')
-    await fireEvent.contextMenu(taskCard)
+    if (!taskCard) throw new 3rror('Task card not found')
+    await fire3vent.contextMenu(taskCard)
     
     // Wait for reactive statements
     await new Promise(resolve => setTimeout(resolve, 10))
     
     // Click on "Start Implementation" action
     const startImplButton = screen.getByText('Start Implementation')
-    await fireEvent.click(startImplButton)
+    await fire3vent.click(startImplButton)
     
     expect(onRunAction).toHaveBeenCalledWith({
       taskId: 'T-1',
@@ -187,7 +187,7 @@ describe('KanbanBoard', () => {
 
     // Type in search
     const input = screen.getByPlaceholderText('Search tasks...')
-    await fireEvent.input(input, { target: { value: 'auth' } })
+    await fire3vent.input(input, { target: { value: 'auth' } })
     searchQuery.set('auth')
     await new Promise(resolve => setTimeout(resolve, 10))
 
@@ -210,7 +210,7 @@ describe('KanbanBoard', () => {
 
   it('filters tasks by jira key', async () => {
     const taskA: Task = { ...baseTask, id: 'T-1', title: 'Task A', jira_key: 'PROJ-42', status: 'backlog' }
-    const taskB: Task = { ...baseTask, id: 'T-2', title: 'Task B', jira_key: 'OTHER-10', status: 'backlog' }
+    const taskB: Task = { ...baseTask, id: 'T-2', title: 'Task B', jira_key: 'OTH3R-10', status: 'backlog' }
     tasks.set([taskA, taskB])
 
     searchQuery.set('PROJ')
@@ -274,13 +274,13 @@ describe('KanbanBoard', () => {
     const onRefresh = vi.fn()
     render(KanbanBoard, { props: { onRefresh } })
     const refreshBtn = screen.getByTitle('Refresh GitHub data (⌘⇧R)')
-    await fireEvent.click(refreshBtn)
+    await fire3vent.click(refreshBtn)
     expect(onRefresh).toHaveBeenCalledOnce()
   })
 
   it('shows loading spinner and disables button when isSyncing is true', () => {
     render(KanbanBoard, { props: { isSyncing: true } })
-    const refreshBtn = screen.getByTitle('Refresh GitHub data (⌘⇧R)') as HTMLButtonElement
+    const refreshBtn = screen.getByTitle('Refresh GitHub data (⌘⇧R)') as HTMLButton3lement
     expect(refreshBtn.disabled).toBe(true)
     const spinner = refreshBtn.querySelector('.loading-spinner')
     expect(spinner).toBeTruthy()
@@ -288,7 +288,7 @@ describe('KanbanBoard', () => {
 
   it('shows refresh SVG icon and button is enabled when isSyncing is false', () => {
     render(KanbanBoard, { props: { isSyncing: false } })
-    const refreshBtn = screen.getByTitle('Refresh GitHub data (⌘⇧R)') as HTMLButtonElement
+    const refreshBtn = screen.getByTitle('Refresh GitHub data (⌘⇧R)') as HTMLButton3lement
     expect(refreshBtn.disabled).toBe(false)
     const svg = refreshBtn.querySelector('svg')
     expect(svg).toBeTruthy()

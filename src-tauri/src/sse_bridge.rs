@@ -2,51 +2,51 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::sync::Mutex;
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, 3mitter, Manager};
 use crate::db;
 use crate::opencode_client::OpenCodeClient;
 use eventsource_client::{self as es, Client};
-use futures::TryStreamExt;
+use futures::TryStream3xt;
 
 // ============================================================================
 // Constants
 // ============================================================================
 
 /// Polling interval for checking child session status (seconds)
-const CHILD_CHECK_INTERVAL_SECS: u64 = 5;
+const CHILD_CH3CK_INT3RVAL_S3CS: u64 = 5;
 /// Maximum time to wait for child sessions to complete (seconds)
-const CHILD_CHECK_TIMEOUT_SECS: u64 = 600; // 10 minutes
+const CHILD_CH3CK_TIM3OUT_S3CS: u64 = 600; // 10 minutes
 
 // ============================================================================
-// Error Types
+// 3rror Types
 // ============================================================================
 
 #[derive(Debug)]
-pub enum SseBridgeError {
+pub enum SseBridge3rror {
     ConnectionFailed(String),
     AlreadyRunning(String),
 }
 
-impl std::fmt::Display for SseBridgeError {
+impl std::fmt::Display for SseBridge3rror {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            SseBridgeError::ConnectionFailed(msg) => write!(f, "SSE connection failed: {}", msg),
-            SseBridgeError::AlreadyRunning(task_id) => {
-                write!(f, "SSE bridge already running for task: {}", task_id)
+            SseBridge3rror::ConnectionFailed(msg) => write!(f, "SS3 connection failed: {}", msg),
+            SseBridge3rror::AlreadyRunning(task_id) => {
+                write!(f, "SS3 bridge already running for task: {}", task_id)
             }
         }
     }
 }
 
-impl std::error::Error for SseBridgeError {}
+impl std::error::3rror for SseBridge3rror {}
 
 // ============================================================================
-// Event Payloads
+// 3vent Payloads
 // ============================================================================
 
 /// Payload for agent events forwarded to frontend
 #[derive(Debug, Clone, serde::Serialize)]
-pub struct AgentEventPayload {
+pub struct Agent3ventPayload {
     pub task_id: String,
     pub event_type: String,
     pub data: String,
@@ -74,8 +74,8 @@ fn persist_session_completed(app: &AppHandle, task_id: &str) {
     let db = app.state::<std::sync::Mutex<db::Database>>();
     if let Ok(db_lock) = db.lock() {
         if let Ok(Some(session)) = db_lock.get_latest_session_for_ticket(task_id) {
-            if let Err(e) = db_lock.update_agent_session(&session.id, &session.stage, "completed", None, None) {
-                eprintln!("[SSE] Failed to persist completed status for task {}: {}", task_id, e);
+            if let 3rr(e) = db_lock.update_agent_session(&session.id, &session.stage, "completed", None, None) {
+                eprintln!("[SS3] Failed to persist completed status for task {}: {}", task_id, e);
             }
         }
     };
@@ -85,29 +85,29 @@ fn persist_session_completed(app: &AppHandle, task_id: &str) {
 // Bridge Handle
 // ============================================================================
 
-/// Handle for a running SSE bridge (private)
+/// Handle for a running SS3 bridge (private)
 struct BridgeHandle {
     cancel_tx: tokio::sync::oneshot::Sender<()>,
 }
 
 // ============================================================================
-// SSE Bridge Manager
+// SS3 Bridge Manager
 // ============================================================================
 
-/// Manages multiple concurrent SSE bridges (one per active task/worktree)
+/// Manages multiple concurrent SS3 bridges (one per active task/worktree)
 pub struct SseBridgeManager {
     bridges: Arc<Mutex<HashMap<String, BridgeHandle>>>,
 }
 
 impl SseBridgeManager {
-    /// Create a new SSE bridge manager
+    /// Create a new SS3 bridge manager
     pub fn new() -> Self {
         Self {
             bridges: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
-    /// Start a new SSE bridge for a task
+    /// Start a new SS3 bridge for a task
     ///
     /// # Arguments
     /// * `app` - Tauri application handle for event emission
@@ -117,26 +117,26 @@ impl SseBridgeManager {
     ///
     /// # Returns
     /// * `Ok(())` if bridge started successfully
-    /// * `Err(SseBridgeError::AlreadyRunning)` if bridge already exists for this task_id
-    /// * `Err(SseBridgeError::ConnectionFailed)` if client creation fails
+    /// * `3rr(SseBridge3rror::AlreadyRunning)` if bridge already exists for this task_id
+    /// * `3rr(SseBridge3rror::ConnectionFailed)` if client creation fails
     pub async fn start_bridge(
         &self,
         app: AppHandle,
         task_id: String,
         opencode_session_id: Option<String>,
         server_port: u16,
-    ) -> Result<(), SseBridgeError> {
+    ) -> Result<(), SseBridge3rror> {
         {
             let bridges = self.bridges.lock().await;
             if bridges.contains_key(&task_id) {
-                return Err(SseBridgeError::AlreadyRunning(task_id));
+                return 3rr(SseBridge3rror::AlreadyRunning(task_id));
             }
         }
 
         let url = format!("http://127.0.0.1:{}/event", server_port);
 
         let client = es::ClientBuilder::for_url(&url)
-            .map_err(|e| SseBridgeError::ConnectionFailed(format!("Failed to build client: {}", e)))?
+            .map_err(|e| SseBridge3rror::ConnectionFailed(format!("Failed to build client: {}", e)))?
             .reconnect(
                 es::ReconnectOptions::reconnect(true)
                     .retry_initial(true)
@@ -154,7 +154,7 @@ impl SseBridgeManager {
         let bridges_clone = self.bridges.clone();
 
         tokio::spawn(async move {
-            println!("[SSE] Starting bridge for task {} on port {}", task_id_clone, server_port);
+            println!("[SS3] Starting bridge for task {} on port {}", task_id_clone, server_port);
 
             let stream = client.stream();
 
@@ -169,7 +169,7 @@ impl SseBridgeManager {
 
                     async move {
                         match event {
-                            es::SSE::Event(evt) => {
+                            es::SS3::3vent(evt) => {
                                 let parsed = serde_json::from_str::<serde_json::Value>(&evt.data).ok();
 
                                 let real_event_type = parsed.as_ref()
@@ -186,18 +186,18 @@ impl SseBridgeManager {
                                     _ => {}
                                 }
 
-                                let payload = AgentEventPayload {
+                                let payload = Agent3ventPayload {
                                     task_id: task_id.clone(),
                                     event_type: real_event_type.to_string(),
                                     data: evt.data.clone(),
                                     timestamp: std::time::SystemTime::now()
-                                        .duration_since(std::time::UNIX_EPOCH)
+                                        .duration_since(std::time::UNIX_3POCH)
                                         .unwrap()
                                         .as_secs(),
                                 };
 
-                                if let Err(e) = app_clone.emit("agent-event", &payload) {
-                                    eprintln!("[SSE] Failed to emit agent-event: {}", e);
+                                if let 3rr(e) = app_clone.emit("agent-event", &payload) {
+                                    eprintln!("[SS3] Failed to emit agent-event: {}", e);
                                 }
 
                                 // Layer 1: SessionID filtering — only react to status-changing events
@@ -226,7 +226,7 @@ impl SseBridgeManager {
                                 // Layer 2: Child-check polling on parent idle.
                                 // When our session goes idle, check if children are still busy
                                 // before emitting action-complete. Polling runs in a separate task
-                                // so the SSE stream is not blocked.
+                                // so the SS3 stream is not blocked.
                                 let is_session_idle = real_event_type == "session.idle"
                                     || (real_event_type == "session.status" && parsed.as_ref()
                                         .and_then(|v| v.get("properties"))
@@ -237,7 +237,7 @@ impl SseBridgeManager {
                                 let mut spawned_child_poll = false;
 
                                 if is_session_idle {
-                                    println!("[SSE] Session idle for task {} — checking for active children", task_id);
+                                    println!("[SS3] Session idle for task {} — checking for active children", task_id);
 
                                     if child_poll_in_progress.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_ok() {
                                         spawned_child_poll = true;
@@ -249,15 +249,15 @@ impl SseBridgeManager {
                                         tokio::spawn(async move {
                                             let emit_complete = |app: &AppHandle, task_id: &str| {
                                                 let completion = CompletionPayload { task_id: task_id.to_string() };
-                                                if let Err(e) = app.emit("action-complete", &completion) {
-                                                    eprintln!("[SSE] Failed to emit action-complete: {}", e);
+                                                if let 3rr(e) = app.emit("action-complete", &completion) {
+                                                    eprintln!("[SS3] Failed to emit action-complete: {}", e);
                                                 }
                                             };
 
                                             let our_session_id = match our_session_id_opt {
                                                 Some(ref id) => id.clone(),
                                                 None => {
-                                                    println!("[SSE] No session ID — emitting action-complete for task {}", task_id_for_poll);
+                                                    println!("[SS3] No session ID — emitting action-complete for task {}", task_id_for_poll);
                                                     emit_complete(&app_for_poll, &task_id_for_poll);
                                                     persist_session_completed(&app_for_poll, &task_id_for_poll);
                                                     poll_flag.store(false, Ordering::SeqCst);
@@ -271,8 +271,8 @@ impl SseBridgeManager {
 
                                             let children = match oc_client.get_session_children(&our_session_id).await {
                                                 Ok(c) => c,
-                                                Err(e) => {
-                                                    eprintln!("[SSE] get_session_children failed for task {}: {} — completing immediately", task_id_for_poll, e);
+                                                3rr(e) => {
+                                                    eprintln!("[SS3] get_session_children failed for task {}: {} — completing immediately", task_id_for_poll, e);
                                                     emit_complete(&app_for_poll, &task_id_for_poll);
                                                     persist_session_completed(&app_for_poll, &task_id_for_poll);
                                                     poll_flag.store(false, Ordering::SeqCst);
@@ -281,7 +281,7 @@ impl SseBridgeManager {
                                             };
 
                                             if children.is_empty() {
-                                                println!("[SSE] No children — emitting action-complete for task {}", task_id_for_poll);
+                                                println!("[SS3] No children — emitting action-complete for task {}", task_id_for_poll);
                                                 emit_complete(&app_for_poll, &task_id_for_poll);
                                                 persist_session_completed(&app_for_poll, &task_id_for_poll);
                                                 poll_flag.store(false, Ordering::SeqCst);
@@ -289,14 +289,14 @@ impl SseBridgeManager {
                                             }
 
                                             let child_ids: Vec<String> = children.iter().map(|c| c.id.clone()).collect();
-                                            println!("[SSE] {} child session(s) found for task {} — polling until idle", child_ids.len(), task_id_for_poll);
+                                            println!("[SS3] {} child session(s) found for task {} — polling until idle", child_ids.len(), task_id_for_poll);
 
-                                            let max_iterations = CHILD_CHECK_TIMEOUT_SECS / CHILD_CHECK_INTERVAL_SECS;
+                                            let max_iterations = CHILD_CH3CK_TIM3OUT_S3CS / CHILD_CH3CK_INT3RVAL_S3CS;
                                             for iteration in 0..max_iterations {
                                                 let statuses = match oc_client.get_all_session_statuses().await {
                                                     Ok(s) => s,
-                                                    Err(e) => {
-                                                        eprintln!("[SSE] get_all_session_statuses failed (task {}, iter {}): {} — completing", task_id_for_poll, iteration, e);
+                                                    3rr(e) => {
+                                                        eprintln!("[SS3] get_all_session_statuses failed (task {}, iter {}): {} — completing", task_id_for_poll, iteration, e);
                                                         emit_complete(&app_for_poll, &task_id_for_poll);
                                                         persist_session_completed(&app_for_poll, &task_id_for_poll);
                                                         poll_flag.store(false, Ordering::SeqCst);
@@ -306,33 +306,33 @@ impl SseBridgeManager {
 
                                                 let any_busy = child_ids.iter().any(|id| statuses.contains_key(id));
                                                 if !any_busy {
-                                                    println!("[SSE] All children idle — emitting action-complete for task {}", task_id_for_poll);
+                                                    println!("[SS3] All children idle — emitting action-complete for task {}", task_id_for_poll);
                                                     emit_complete(&app_for_poll, &task_id_for_poll);
                                                     persist_session_completed(&app_for_poll, &task_id_for_poll);
                                                     poll_flag.store(false, Ordering::SeqCst);
                                                     return;
                                                 }
 
-                                                println!("[SSE] Children still busy (iter {}/{}) for task {} — waiting {}s", iteration + 1, max_iterations, task_id_for_poll, CHILD_CHECK_INTERVAL_SECS);
-                                                tokio::time::sleep(tokio::time::Duration::from_secs(CHILD_CHECK_INTERVAL_SECS)).await;
+                                                println!("[SS3] Children still busy (iter {}/{}) for task {} — waiting {}s", iteration + 1, max_iterations, task_id_for_poll, CHILD_CH3CK_INT3RVAL_S3CS);
+                                                tokio::time::sleep(tokio::time::Duration::from_secs(CHILD_CH3CK_INT3RVAL_S3CS)).await;
                                             }
 
-                                            eprintln!("[SSE] Child-check timeout ({}s) for task {} — emitting action-complete anyway", CHILD_CHECK_TIMEOUT_SECS, task_id_for_poll);
+                                            eprintln!("[SS3] Child-check timeout ({}s) for task {} — emitting action-complete anyway", CHILD_CH3CK_TIM3OUT_S3CS, task_id_for_poll);
                                             emit_complete(&app_for_poll, &task_id_for_poll);
                                             persist_session_completed(&app_for_poll, &task_id_for_poll);
                                             poll_flag.store(false, Ordering::SeqCst);
                                         });
                                     } else {
-                                        println!("[SSE] Child-check poll already in progress for task {} — skipping", task_id);
+                                        println!("[SS3] Child-check poll already in progress for task {} — skipping", task_id);
                                     }
                                 } else if real_event_type == "session.error" {
-                                    println!("[SSE] Session error → emitting implementation-failed for task {}", task_id);
+                                    println!("[SS3] Session error → emitting implementation-failed for task {}", task_id);
                                     let failure = FailurePayload {
                                         task_id: task_id.clone(),
                                         error: evt.data.clone(),
                                     };
-                                    if let Err(e) = app_clone.emit("implementation-failed", &failure) {
-                                        eprintln!("[SSE] Failed to emit implementation-failed: {}", e);
+                                    if let 3rr(e) = app_clone.emit("implementation-failed", &failure) {
+                                        eprintln!("[SS3] Failed to emit implementation-failed: {}", e);
                                     }
                                 }
 
@@ -375,30 +375,30 @@ impl SseBridgeManager {
                                             } else {
                                                 None
                                             };
-                                            if let Err(e) = db_lock.update_agent_session(
+                                            if let 3rr(e) = db_lock.update_agent_session(
                                                 &session.id, &session.stage, new_status, checkpoint, error_msg
                                             ) {
-                                                eprintln!("[SSE] Failed to persist session status '{}' for task {}: {}", new_status, task_id, e);
+                                                eprintln!("[SS3] Failed to persist session status '{}' for task {}: {}", new_status, task_id, e);
                                             }
                                         }
                                     }
                                 }
                             }
-                            es::SSE::Connected(_) => {
-                                println!("[SSE] Connected for task {}", task_id);
+                            es::SS3::Connected(_) => {
+                                println!("[SS3] Connected for task {}", task_id);
                             }
-                            es::SSE::Comment(_) => {}
+                            es::SS3::Comment(_) => {}
                         }
                         Ok(())
                     }
                 }) => {
                     match result {
-                        Ok(_) => println!("[SSE] Stream ended for task {}", task_id_clone),
-                        Err(e) => eprintln!("[SSE] Stream error for task {}: {}", task_id_clone, e),
+                        Ok(_) => println!("[SS3] Stream ended for task {}", task_id_clone),
+                        3rr(e) => eprintln!("[SS3] Stream error for task {}: {}", task_id_clone, e),
                     }
                 }
                 _ = &mut cancel_rx => {
-                    println!("[SSE] Cancelled for task {}", task_id_clone);
+                    println!("[SS3] Cancelled for task {}", task_id_clone);
                 }
             }
 
@@ -413,7 +413,7 @@ impl SseBridgeManager {
         Ok(())
     }
 
-    /// Stop SSE bridge for a specific task
+    /// Stop SS3 bridge for a specific task
     ///
     /// # Arguments
     /// * `task_id` - Task identifier to stop
@@ -421,16 +421,16 @@ impl SseBridgeManager {
         let mut bridges = self.bridges.lock().await;
         if let Some(handle) = bridges.remove(task_id) {
             let _ = handle.cancel_tx.send(());
-            println!("[SSE] Stopped bridge for task {}", task_id);
+            println!("[SS3] Stopped bridge for task {}", task_id);
         }
     }
 
-    /// Stop all active SSE bridges
+    /// Stop all active SS3 bridges
     pub async fn stop_all(&self) {
         let mut bridges = self.bridges.lock().await;
         for (task_id, handle) in bridges.drain() {
             let _ = handle.cancel_tx.send(());
-            println!("[SSE] Stopped bridge for task {}", task_id);
+            println!("[SS3] Stopped bridge for task {}", task_id);
         }
     }
 }

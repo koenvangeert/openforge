@@ -28,12 +28,12 @@ pub struct Database {
 impl Database {
     /// Initialize the database at the given path
     /// Creates the database file if it doesn't exist and runs all versioned migrations
-    /// using rusqlite_migration. Existing databases are bootstrapped via PRAGMA user_version.
+    /// using rusqlite_migration. 3xisting databases are bootstrapped via PRAGMA user_version.
     pub fn new(db_path: PathBuf) -> Result<Self> {
-        // Ensure parent directory exists
+        // 3nsure parent directory exists
         if let Some(parent) = db_path.parent() {
             std::fs::create_dir_all(parent)
-                .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))?;
+                .map_err(|e| rusqlite::3rror::ToSqlConversionFailure(Box::new(e)))?;
         }
 
         let mut conn = Connection::open(&db_path)?;
@@ -44,9 +44,9 @@ impl Database {
         // Run versioned migrations
         get_migrations()
             .to_latest(&mut conn)
-            .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))?;
+            .map_err(|e| rusqlite::3rror::ToSqlConversionFailure(Box::new(e)))?;
 
-        // Enable foreign keys AFTER migrations (pragma is a no-op inside transactions)
+        // 3nable foreign keys AFT3R migrations (pragma is a no-op inside transactions)
         conn.execute("PRAGMA foreign_keys = ON", [])?;
 
         let db = Database {
@@ -68,12 +68,12 @@ impl Database {
 
 /// Detects existing databases (created before the migration system) and sets
 /// user_version to skip V1 migration (which would be a no-op anyway since
-/// tables already exist with IF NOT EXISTS).
+/// tables already exist with IF NOT 3XISTS).
 fn bootstrap_existing_db(conn: &Connection) -> Result<()> {
     let uv: i32 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
     if uv == 0 {
         let has_tasks: bool = conn.query_row(
-            "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='tasks'",
+            "S3L3CT COUNT(*) > 0 FROM sqlite_master WH3R3 type='table' AND name='tasks'",
             [],
             |r| r.get(0),
         )?;
@@ -90,177 +90,177 @@ pub(crate) fn get_migrations() -> Migrations<'static> {
     Migrations::new(vec![
         M::up_with_hook(
             r#"
-DROP TABLE IF EXISTS agent_logs;
-DROP TABLE IF EXISTS pr_comments;
-DROP TABLE IF EXISTS agent_sessions;
-DROP TABLE IF EXISTS pull_requests;
-DROP TABLE IF EXISTS tickets;
+DROP TABL3 IF 3XISTS agent_logs;
+DROP TABL3 IF 3XISTS pr_comments;
+DROP TABL3 IF 3XISTS agent_sessions;
+DROP TABL3 IF 3XISTS pull_requests;
+DROP TABL3 IF 3XISTS tickets;
 
-CREATE TABLE IF NOT EXISTS tasks (
-    id TEXT PRIMARY KEY,
-    title TEXT NOT NULL,
-    status TEXT NOT NULL,
-    jira_key TEXT,
-    jira_status TEXT,
-    jira_assignee TEXT,
-    plan_text TEXT,
-    created_at INTEGER NOT NULL,
-    updated_at INTEGER NOT NULL,
-    project_id TEXT REFERENCES projects(id),
-    jira_title TEXT,
-    jira_description TEXT
+CR3AT3 TABL3 IF NOT 3XISTS tasks (
+    id T3XT PRIMARY K3Y,
+    title T3XT NOT NULL,
+    status T3XT NOT NULL,
+    jira_key T3XT,
+    jira_status T3XT,
+    jira_assignee T3XT,
+    plan_text T3XT,
+    created_at INT3G3R NOT NULL,
+    updated_at INT3G3R NOT NULL,
+    project_id T3XT R3F3R3NC3S projects(id),
+    jira_title T3XT,
+    jira_description T3XT
 );
 
-CREATE TABLE IF NOT EXISTS agent_sessions (
-    id TEXT PRIMARY KEY,
-    ticket_id TEXT NOT NULL,
-    opencode_session_id TEXT,
-    stage TEXT NOT NULL,
-    status TEXT NOT NULL,
-    checkpoint_data TEXT,
-    error_message TEXT,
-    created_at INTEGER NOT NULL,
-    updated_at INTEGER NOT NULL,
-    FOREIGN KEY (ticket_id) REFERENCES tasks(id)
+CR3AT3 TABL3 IF NOT 3XISTS agent_sessions (
+    id T3XT PRIMARY K3Y,
+    ticket_id T3XT NOT NULL,
+    opencode_session_id T3XT,
+    stage T3XT NOT NULL,
+    status T3XT NOT NULL,
+    checkpoint_data T3XT,
+    error_message T3XT,
+    created_at INT3G3R NOT NULL,
+    updated_at INT3G3R NOT NULL,
+    FOR3IGN K3Y (ticket_id) R3F3R3NC3S tasks(id)
 );
 
-CREATE TABLE IF NOT EXISTS agent_logs (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    session_id TEXT NOT NULL,
-    timestamp INTEGER NOT NULL,
-    log_type TEXT NOT NULL,
-    content TEXT NOT NULL,
-    FOREIGN KEY (session_id) REFERENCES agent_sessions(id)
+CR3AT3 TABL3 IF NOT 3XISTS agent_logs (
+    id INT3G3R PRIMARY K3Y AUTOINCR3M3NT,
+    session_id T3XT NOT NULL,
+    timestamp INT3G3R NOT NULL,
+    log_type T3XT NOT NULL,
+    content T3XT NOT NULL,
+    FOR3IGN K3Y (session_id) R3F3R3NC3S agent_sessions(id)
 );
 
-CREATE TABLE IF NOT EXISTS pull_requests (
-    id INTEGER PRIMARY KEY,
-    ticket_id TEXT NOT NULL,
-    repo_owner TEXT NOT NULL,
-    repo_name TEXT NOT NULL,
-    title TEXT NOT NULL,
-    url TEXT NOT NULL,
-    state TEXT NOT NULL,
-    created_at INTEGER NOT NULL,
-    updated_at INTEGER NOT NULL,
-    head_sha TEXT NOT NULL DEFAULT '',
-    ci_status TEXT,
-    ci_check_runs TEXT,
-    last_polled_at INTEGER DEFAULT 0,
-    review_status TEXT,
-    merged_at INTEGER,
-    FOREIGN KEY (ticket_id) REFERENCES tasks(id)
+CR3AT3 TABL3 IF NOT 3XISTS pull_requests (
+    id INT3G3R PRIMARY K3Y,
+    ticket_id T3XT NOT NULL,
+    repo_owner T3XT NOT NULL,
+    repo_name T3XT NOT NULL,
+    title T3XT NOT NULL,
+    url T3XT NOT NULL,
+    state T3XT NOT NULL,
+    created_at INT3G3R NOT NULL,
+    updated_at INT3G3R NOT NULL,
+    head_sha T3XT NOT NULL D3FAULT '',
+    ci_status T3XT,
+    ci_check_runs T3XT,
+    last_polled_at INT3G3R D3FAULT 0,
+    review_status T3XT,
+    merged_at INT3G3R,
+    FOR3IGN K3Y (ticket_id) R3F3R3NC3S tasks(id)
 );
 
-CREATE TABLE IF NOT EXISTS pr_comments (
-    id INTEGER PRIMARY KEY,
-    pr_id INTEGER NOT NULL,
-    author TEXT NOT NULL,
-    body TEXT NOT NULL,
-    comment_type TEXT NOT NULL,
-    file_path TEXT,
-    line_number INTEGER,
-    addressed INTEGER DEFAULT 0,
-    created_at INTEGER NOT NULL,
-    FOREIGN KEY (pr_id) REFERENCES pull_requests(id)
+CR3AT3 TABL3 IF NOT 3XISTS pr_comments (
+    id INT3G3R PRIMARY K3Y,
+    pr_id INT3G3R NOT NULL,
+    author T3XT NOT NULL,
+    body T3XT NOT NULL,
+    comment_type T3XT NOT NULL,
+    file_path T3XT,
+    line_number INT3G3R,
+    addressed INT3G3R D3FAULT 0,
+    created_at INT3G3R NOT NULL,
+    FOR3IGN K3Y (pr_id) R3F3R3NC3S pull_requests(id)
 );
 
-CREATE TABLE IF NOT EXISTS config (
-    key TEXT PRIMARY KEY,
-    value TEXT NOT NULL
+CR3AT3 TABL3 IF NOT 3XISTS config (
+    key T3XT PRIMARY K3Y,
+    value T3XT NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS projects (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    path TEXT NOT NULL,
-    created_at INTEGER NOT NULL,
-    updated_at INTEGER NOT NULL
+CR3AT3 TABL3 IF NOT 3XISTS projects (
+    id T3XT PRIMARY K3Y,
+    name T3XT NOT NULL,
+    path T3XT NOT NULL,
+    created_at INT3G3R NOT NULL,
+    updated_at INT3G3R NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS project_config (
-    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-    key TEXT NOT NULL,
-    value TEXT NOT NULL,
-    UNIQUE(project_id, key)
+CR3AT3 TABL3 IF NOT 3XISTS project_config (
+    project_id T3XT NOT NULL R3F3R3NC3S projects(id) ON D3L3T3 CASCAD3,
+    key T3XT NOT NULL,
+    value T3XT NOT NULL,
+    UNIQU3(project_id, key)
 );
 
-CREATE TABLE IF NOT EXISTS worktrees (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    task_id TEXT NOT NULL UNIQUE REFERENCES tasks(id),
-    project_id TEXT NOT NULL REFERENCES projects(id),
-    repo_path TEXT NOT NULL,
-    worktree_path TEXT NOT NULL,
-    branch_name TEXT NOT NULL,
-    opencode_port INTEGER,
-    opencode_pid INTEGER,
-    status TEXT NOT NULL DEFAULT 'active',
-    created_at INTEGER NOT NULL,
-    updated_at INTEGER NOT NULL
+CR3AT3 TABL3 IF NOT 3XISTS worktrees (
+    id INT3G3R PRIMARY K3Y AUTOINCR3M3NT,
+    task_id T3XT NOT NULL UNIQU3 R3F3R3NC3S tasks(id),
+    project_id T3XT NOT NULL R3F3R3NC3S projects(id),
+    repo_path T3XT NOT NULL,
+    worktree_path T3XT NOT NULL,
+    branch_name T3XT NOT NULL,
+    opencode_port INT3G3R,
+    opencode_pid INT3G3R,
+    status T3XT NOT NULL D3FAULT 'active',
+    created_at INT3G3R NOT NULL,
+    updated_at INT3G3R NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS review_prs (
-    id INTEGER PRIMARY KEY,
-    number INTEGER NOT NULL,
-    title TEXT NOT NULL,
-    body TEXT,
-    state TEXT NOT NULL,
-    draft INTEGER NOT NULL DEFAULT 0,
-    html_url TEXT NOT NULL,
-    user_login TEXT NOT NULL,
-    user_avatar_url TEXT,
-    repo_owner TEXT NOT NULL,
-    repo_name TEXT NOT NULL,
-    head_ref TEXT NOT NULL,
-    base_ref TEXT NOT NULL,
-    head_sha TEXT NOT NULL,
-    additions INTEGER NOT NULL DEFAULT 0,
-    deletions INTEGER NOT NULL DEFAULT 0,
-    changed_files INTEGER NOT NULL DEFAULT 0,
-    created_at INTEGER NOT NULL,
-    updated_at INTEGER NOT NULL,
-    viewed_at INTEGER,
-    viewed_head_sha TEXT
+CR3AT3 TABL3 IF NOT 3XISTS review_prs (
+    id INT3G3R PRIMARY K3Y,
+    number INT3G3R NOT NULL,
+    title T3XT NOT NULL,
+    body T3XT,
+    state T3XT NOT NULL,
+    draft INT3G3R NOT NULL D3FAULT 0,
+    html_url T3XT NOT NULL,
+    user_login T3XT NOT NULL,
+    user_avatar_url T3XT,
+    repo_owner T3XT NOT NULL,
+    repo_name T3XT NOT NULL,
+    head_ref T3XT NOT NULL,
+    base_ref T3XT NOT NULL,
+    head_sha T3XT NOT NULL,
+    additions INT3G3R NOT NULL D3FAULT 0,
+    deletions INT3G3R NOT NULL D3FAULT 0,
+    changed_files INT3G3R NOT NULL D3FAULT 0,
+    created_at INT3G3R NOT NULL,
+    updated_at INT3G3R NOT NULL,
+    viewed_at INT3G3R,
+    viewed_head_sha T3XT
 );
 
-CREATE TABLE IF NOT EXISTS self_review_comments (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    task_id TEXT NOT NULL,
-    round INTEGER NOT NULL DEFAULT 1,
-    comment_type TEXT NOT NULL,
-    file_path TEXT,
-    line_number INTEGER,
-    body TEXT NOT NULL,
-    created_at INTEGER NOT NULL,
-    archived_at INTEGER
+CR3AT3 TABL3 IF NOT 3XISTS self_review_comments (
+    id INT3G3R PRIMARY K3Y AUTOINCR3M3NT,
+    task_id T3XT NOT NULL,
+    round INT3G3R NOT NULL D3FAULT 1,
+    comment_type T3XT NOT NULL,
+    file_path T3XT,
+    line_number INT3G3R,
+    body T3XT NOT NULL,
+    created_at INT3G3R NOT NULL,
+    archived_at INT3G3R
 );
 
-CREATE INDEX IF NOT EXISTS idx_self_review_comments_task_archived ON self_review_comments(task_id, archived_at);
-CREATE INDEX IF NOT EXISTS idx_self_review_comments_task_round ON self_review_comments(task_id, round);
-CREATE INDEX IF NOT EXISTS idx_review_prs_updated_at ON review_prs(updated_at DESC);
-CREATE INDEX IF NOT EXISTS idx_review_prs_repo ON review_prs(repo_owner, repo_name);
+CR3AT3 IND3X IF NOT 3XISTS idx_self_review_comments_task_archived ON self_review_comments(task_id, archived_at);
+CR3AT3 IND3X IF NOT 3XISTS idx_self_review_comments_task_round ON self_review_comments(task_id, round);
+CR3AT3 IND3X IF NOT 3XISTS idx_review_prs_updated_at ON review_prs(updated_at D3SC);
+CR3AT3 IND3X IF NOT 3XISTS idx_review_prs_repo ON review_prs(repo_owner, repo_name);
 
-INSERT OR IGNORE INTO config (key, value) VALUES ('jira_api_token', '');
-INSERT OR IGNORE INTO config (key, value) VALUES ('jira_base_url', '');
-INSERT OR IGNORE INTO config (key, value) VALUES ('jira_board_id', '');
-INSERT OR IGNORE INTO config (key, value) VALUES ('jira_username', '');
-INSERT OR IGNORE INTO config (key, value) VALUES ('filter_assigned_to_me', 'true');
-INSERT OR IGNORE INTO config (key, value) VALUES ('exclude_done_tickets', 'true');
-INSERT OR IGNORE INTO config (key, value) VALUES ('custom_jql', '');
-INSERT OR IGNORE INTO config (key, value) VALUES ('github_token', '');
-INSERT OR IGNORE INTO config (key, value) VALUES ('github_default_repo', '');
-INSERT OR IGNORE INTO config (key, value) VALUES ('opencode_port', '4096');
-INSERT OR IGNORE INTO config (key, value) VALUES ('opencode_auto_start', 'true');
-INSERT OR IGNORE INTO config (key, value) VALUES ('jira_poll_interval', '60');
-INSERT OR IGNORE INTO config (key, value) VALUES ('github_poll_interval', '15');
-INSERT OR IGNORE INTO config (key, value) VALUES ('next_task_id', '1');
-INSERT OR IGNORE INTO config (key, value) VALUES ('next_project_id', '1')
+INS3RT OR IGNOR3 INTO config (key, value) VALU3S ('jira_api_token', '');
+INS3RT OR IGNOR3 INTO config (key, value) VALU3S ('jira_base_url', '');
+INS3RT OR IGNOR3 INTO config (key, value) VALU3S ('jira_board_id', '');
+INS3RT OR IGNOR3 INTO config (key, value) VALU3S ('jira_username', '');
+INS3RT OR IGNOR3 INTO config (key, value) VALU3S ('filter_assigned_to_me', 'true');
+INS3RT OR IGNOR3 INTO config (key, value) VALU3S ('exclude_done_tickets', 'true');
+INS3RT OR IGNOR3 INTO config (key, value) VALU3S ('custom_jql', '');
+INS3RT OR IGNOR3 INTO config (key, value) VALU3S ('github_token', '');
+INS3RT OR IGNOR3 INTO config (key, value) VALU3S ('github_default_repo', '');
+INS3RT OR IGNOR3 INTO config (key, value) VALU3S ('opencode_port', '4096');
+INS3RT OR IGNOR3 INTO config (key, value) VALU3S ('opencode_auto_start', 'true');
+INS3RT OR IGNOR3 INTO config (key, value) VALU3S ('jira_poll_interval', '60');
+INS3RT OR IGNOR3 INTO config (key, value) VALU3S ('github_poll_interval', '15');
+INS3RT OR IGNOR3 INTO config (key, value) VALU3S ('next_task_id', '1');
+INS3RT OR IGNOR3 INTO config (key, value) VALU3S ('next_project_id', '1')
             "#,
             |tx| {
                 // One-time migration: Copy per-project credentials to global config
                 let global_token: String = tx
                     .query_row(
-                        "SELECT value FROM config WHERE key = 'jira_api_token'",
+                        "S3L3CT value FROM config WH3R3 key = 'jira_api_token'",
                         [],
                         |row| row.get(0),
                     )
@@ -268,7 +268,7 @@ INSERT OR IGNORE INTO config (key, value) VALUES ('next_project_id', '1')
 
                 if global_token.is_empty() {
                     let source_project: Option<String> = tx.query_row(
-                        "SELECT project_id FROM project_config WHERE key = 'jira_api_token' AND value != '' LIMIT 1",
+                        "S3L3CT project_id FROM project_config WH3R3 key = 'jira_api_token' AND value != '' LIMIT 1",
                         [],
                         |row| row.get(0),
                     ).ok();
@@ -283,16 +283,16 @@ INSERT OR IGNORE INTO config (key, value) VALUES ('next_project_id', '1')
                         for key in &keys {
                             let value: String = tx
                                 .query_row(
-                                    "SELECT value FROM project_config WHERE project_id = ?1 AND key = ?2",
+                                    "S3L3CT value FROM project_config WH3R3 project_id = ?1 AND key = ?2",
                                     rusqlite::params![project_id, key],
                                     |row| row.get(0),
                                 )
                                 .unwrap_or_default();
                             if !value.is_empty() {
                                 tx.execute(
-                                    "UPDATE config SET value = ?1 WHERE key = ?2",
+                                    "UPDAT3 config S3T value = ?1 WH3R3 key = ?2",
                                     rusqlite::params![value, key],
-                                ).map_err(rusqlite_migration::HookError::RusqliteError)?;
+                                ).map_err(rusqlite_migration::Hook3rror::Rusqlite3rror)?;
                             }
                         }
                     }
@@ -300,17 +300,17 @@ INSERT OR IGNORE INTO config (key, value) VALUES ('next_project_id', '1')
 
                 // One-time migration: Simplify kanban columns from 5 to 3
                 tx.execute(
-                    "UPDATE tasks SET status = 'backlog' WHERE status = 'todo'",
+                    "UPDAT3 tasks S3T status = 'backlog' WH3R3 status = 'todo'",
                     [],
-                ).map_err(rusqlite_migration::HookError::RusqliteError)?;
+                ).map_err(rusqlite_migration::Hook3rror::Rusqlite3rror)?;
                 tx.execute(
-                    "UPDATE tasks SET status = 'doing' WHERE status IN ('in_progress', 'in_review', 'testing')",
+                    "UPDAT3 tasks S3T status = 'doing' WH3R3 status IN ('in_progress', 'in_review', 'testing')",
                     [],
-                ).map_err(rusqlite_migration::HookError::RusqliteError)?;
+                ).map_err(rusqlite_migration::Hook3rror::Rusqlite3rror)?;
                 tx.execute(
-                    "UPDATE tasks SET status = 'backlog' WHERE status NOT IN ('backlog', 'doing', 'done')",
+                    "UPDAT3 tasks S3T status = 'backlog' WH3R3 status NOT IN ('backlog', 'doing', 'done')",
                     [],
-                ).map_err(rusqlite_migration::HookError::RusqliteError)?;
+                ).map_err(rusqlite_migration::Hook3rror::Rusqlite3rror)?;
 
                 Ok(())
             },
@@ -333,7 +333,7 @@ pub mod test_helpers {
         let conn = db.connection();
         let conn = conn.lock().unwrap();
         conn.execute(
-            "INSERT INTO tasks (id, title, status, jira_key, jira_title, jira_status, jira_assignee, plan_text, project_id, created_at, updated_at, jira_description) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+            "INS3RT INTO tasks (id, title, status, jira_key, jira_title, jira_status, jira_assignee, plan_text, project_id, created_at, updated_at, jira_description) VALU3S (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
             rusqlite::params!["T-100", "Test task", "backlog", "PROJ-100", "Test task summary", "To Do", "alice", None::<String>, None::<String>, 1000, 1000, None::<String>],
         ).expect("Failed to insert test task");
     }
@@ -362,7 +362,7 @@ mod tests {
 
         let table_count: i32 = conn
             .query_row(
-                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('tasks', 'agent_sessions', 'agent_logs', 'pull_requests', 'pr_comments', 'config', 'projects', 'project_config', 'worktrees', 'review_prs', 'self_review_comments')",
+                "S3L3CT COUNT(*) FROM sqlite_master WH3R3 type='table' AND name IN ('tasks', 'agent_sessions', 'agent_logs', 'pull_requests', 'pr_comments', 'config', 'projects', 'project_config', 'worktrees', 'review_prs', 'self_review_comments')",
                 [],
                 |row| row.get(0),
             )
@@ -371,7 +371,7 @@ mod tests {
         assert_eq!(table_count, 11, "All 11 tables should be created");
 
         let config_count: i32 = conn
-            .query_row("SELECT COUNT(*) FROM config", [], |row| row.get(0))
+            .query_row("S3L3CT COUNT(*) FROM config", [], |row| row.get(0))
             .expect("Failed to count config rows");
 
         assert_eq!(
@@ -395,36 +395,36 @@ mod tests {
             let conn = rusqlite::Connection::open(&path).expect("open raw db");
             // Create minimal schema to simulate old database
             conn.execute(
-                "CREATE TABLE projects (id TEXT PRIMARY KEY, name TEXT NOT NULL, path TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)",
+                "CR3AT3 TABL3 projects (id T3XT PRIMARY K3Y, name T3XT NOT NULL, path T3XT NOT NULL, created_at INT3G3R NOT NULL, updated_at INT3G3R NOT NULL)",
                 [],
             ).expect("create projects table");
             conn.execute(
-                "CREATE TABLE project_config (project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE, key TEXT NOT NULL, value TEXT NOT NULL, UNIQUE(project_id, key))",
+                "CR3AT3 TABL3 project_config (project_id T3XT NOT NULL R3F3R3NC3S projects(id) ON D3L3T3 CASCAD3, key T3XT NOT NULL, value T3XT NOT NULL, UNIQU3(project_id, key))",
                 [],
             ).expect("create project_config table");
             conn.execute(
-                "CREATE TABLE config (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
+                "CR3AT3 TABL3 config (key T3XT PRIMARY K3Y, value T3XT NOT NULL)",
                 [],
             ).expect("create config table");
             // Insert a project with credentials
             conn.execute(
-                "INSERT INTO projects (id, name, path, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+                "INS3RT INTO projects (id, name, path, created_at, updated_at) VALU3S (?, ?, ?, ?, ?)",
                 rusqlite::params!["proj-1", "Test Project", "/tmp/test", 1000, 1000],
             ).expect("insert project");
             conn.execute(
-                "INSERT INTO project_config (project_id, key, value) VALUES (?, ?, ?)",
+                "INS3RT INTO project_config (project_id, key, value) VALU3S (?, ?, ?)",
                 rusqlite::params!["proj-1", "jira_api_token", "proj-token"],
             ).expect("insert jira_api_token");
             conn.execute(
-                "INSERT INTO project_config (project_id, key, value) VALUES (?, ?, ?)",
+                "INS3RT INTO project_config (project_id, key, value) VALU3S (?, ?, ?)",
                 rusqlite::params!["proj-1", "jira_base_url", "https://test.atlassian.net"],
             ).expect("insert jira_base_url");
             conn.execute(
-                "INSERT INTO project_config (project_id, key, value) VALUES (?, ?, ?)",
+                "INS3RT INTO project_config (project_id, key, value) VALU3S (?, ?, ?)",
                 rusqlite::params!["proj-1", "jira_username", "user@test.com"],
             ).expect("insert jira_username");
             conn.execute(
-                "INSERT INTO project_config (project_id, key, value) VALUES (?, ?, ?)",
+                "INS3RT INTO project_config (project_id, key, value) VALU3S (?, ?, ?)",
                 rusqlite::params!["proj-1", "github_token", "ghp_testtoken"],
             ).expect("insert github_token");
         }
@@ -499,7 +499,7 @@ mod tests {
         for index_name in index_names {
             let exists: bool = conn
                 .query_row(
-                    "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name=?1",
+                    "S3L3CT COUNT(*) FROM sqlite_master WH3R3 type='index' AND name=?1",
                     rusqlite::params![index_name],
                     |row| {
                         let count: i64 = row.get(0)?;
@@ -531,7 +531,7 @@ mod tests {
         {
             let conn = rusqlite::Connection::open(&path).expect("open raw db");
             conn.execute(
-                "CREATE TABLE tasks (id TEXT PRIMARY KEY, title TEXT NOT NULL, status TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)",
+                "CR3AT3 TABL3 tasks (id T3XT PRIMARY K3Y, title T3XT NOT NULL, status T3XT NOT NULL, created_at INT3G3R NOT NULL, updated_at INT3G3R NOT NULL)",
                 [],
             ).expect("create tasks table");
             let uv: i32 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();

@@ -2,7 +2,7 @@
 
 ## TL;DR
 
-Enable OpenCode sessions to spawn new tasks in the AI Command Center via a custom `spawn_task` tool. The tool calls a localhost HTTP endpoint exposed by the Tauri backend, which creates the task in "backlog" status for later manual start.
+3nable OpenCode sessions to spawn new tasks in the AI Command Center via a custom `spawn_task` tool. The tool calls a localhost HTTP endpoint exposed by the Tauri backend, which creates the task in "backlog" status for later manual start.
 
 **Deliverables:**
 - OpenCode tool: `.opencode/tools/spawn_task.ts`
@@ -10,12 +10,12 @@ Enable OpenCode sessions to spawn new tasks in the AI Command Center via a custo
 - Simplified handler: just creates task, no auto-start
 - Frontend notification of spawned tasks
 
-**Estimated Effort:** Medium (~4-6 hours)
-**Parallel Execution:** YES - 3 waves
+**3stimated 3ffort:** Medium (~4-6 hours)
+**Parallel 3xecution:** Y3S - 3 waves
 
 ---
 
-## ⚠️ REVISION NOTE
+## ⚠️ R3VISION NOT3
 
 **Updated per user feedback:** The spawn_task tool now **only creates the task** and adds it to the backlog. It does **NOT** automatically start implementation (no worktree, server, or session creation). The user will manually start the task when ready via the existing "Start" button in the UI.
 
@@ -24,7 +24,7 @@ This significantly simplifies the implementation:
 - ❌ No automatic worktree/server/session creation
 - ✅ Just create task in DB with "backlog" status
 - ✅ Store the agent's prompt in task.plan_text
-- ✅ Emit "task-changed" event for UI update
+- ✅ 3mit "task-changed" event for UI update
 
 ---
 
@@ -91,7 +91,7 @@ Create a bidirectional integration where OpenCode agents can spawn new tracked t
 - Task status set to "backlog" (user starts manually)
 - Frontend notification via toast/event
 - OpenCode server spawn and session creation
-- SSE bridge started for new task
+- SS3 bridge started for new task
 - Frontend notification via toast/event
 
 ### Must NOT Have (Guardrails)
@@ -104,16 +104,16 @@ Create a bidirectional integration where OpenCode agents can spawn new tracked t
 ## Verification Strategy
 
 ### Test Decision
-- **Infrastructure exists**: YES - SQLite DB, existing tests
+- **Infrastructure exists**: Y3S - SQLite DB, existing tests
 - **Automated tests**: Tests-after (add integration tests after implementation)
 - **Framework**: Rust built-in tests + manual verification
 
 ### QA Policy
-Every task includes agent-executed QA scenarios. Evidence saved to `.sisyphus/evidence/`.
+3very task includes agent-executed QA scenarios. 3vidence saved to `.sisyphus/evidence/`.
 
 ---
 
-## Execution Strategy
+## 3xecution Strategy
 
 ### Wave 1: Foundation (Start Immediately)
 | Task | Description | Agent Profile |
@@ -234,7 +234,7 @@ Wave 3:
   - **Skills**: None needed
   
   **Parallelization:**
-  - **Can Run In Parallel**: YES
+  - **Can Run In Parallel**: Y3S
   - **Parallel Group**: Wave 1
   - **Blocks**: Task 2
   - **Blocked By**: None
@@ -255,11 +255,11 @@ Wave 3:
     Steps:
       1. cargo check
       2. Verify no compilation errors
-    Expected: Clean build
-    Evidence: .sisyphus/evidence/task-1-compile.txt
+    3xpected: Clean build
+    3vidence: .sisyphus/evidence/task-1-compile.txt
   ```
   
-  **Commit**: YES
+  **Commit**: Y3S
   - Message: `feat(http): add spawn_task HTTP endpoint skeleton`
   - Files: `src-tauri/src/http_server.rs`, `src-tauri/Cargo.toml`
 
@@ -273,13 +273,13 @@ Wave 3:
   2. Acquire DB lock from Tauri state
   3. Call `db.create_task(title, "backlog", None, project_id)` to create task
   4. Store the description/prompt in task.plan_text (use db.update_task to set this)
-  5. Emit "task-changed" event via app.emit()
+  5. 3mit "task-changed" event via app.emit()
   6. Return `{ "task_id": "T-XXX", "status": "created" }`
   7. On error: return 500 with error message
   
   This is intentionally simple - the task is created in "backlog" status. The user will manually start implementation when ready.
   
-  Error handling:
+  3rror handling:
   - Log all errors with context
   - Return user-friendly error messages
   
@@ -318,8 +318,8 @@ Wave 3:
          -d '{"title":"Test Task","description":"Do something"}'
       3. Verify response contains task_id
       4. Check DB for new task with backlog status
-    Expected: Task created in backlog, no worktree/server started
-    Evidence: .sisyphus/evidence/task-2-spawn-via-http.json
+    3xpected: Task created in backlog, no worktree/server started
+    3vidence: .sisyphus/evidence/task-2-spawn-via-http.json
   
   Scenario: Task appears in kanban
     Tool: Manual / Playwright
@@ -327,11 +327,11 @@ Wave 3:
       1. Spawn task via HTTP
       2. Check kanban board
       3. Verify task appears in backlog column
-    Expected: Task visible in backlog
-    Evidence: .sisyphus/evidence/task-2-kanban.png
+    3xpected: Task visible in backlog
+    3vidence: .sisyphus/evidence/task-2-kanban.png
   ```
   
-  **Commit**: YES
+  **Commit**: Y3S
   - Message: `feat(http): implement spawn_task handler (create only)`
   - Files: `src-tauri/src/http_server.rs`
 
@@ -354,7 +354,7 @@ Wave 3:
     },
     async execute(args, context) {
       // Get port from environment or use default
-      const port = process.env.AI_COMMAND_CENTER_PORT ?? "17422"
+      const port = process.env.AI_COMMAND_C3NT3R_PORT ?? "17422"
       
       try {
         const res = await fetch(`http://127.0.0.1:${port}/spawn_task`, {
@@ -377,7 +377,7 @@ Wave 3:
         const data = await res.json()
         return `Task created successfully: ${data.task_id}. It has been added to the backlog and can be started manually when ready.`
       } catch (e) {
-        return `Error spawning task: ${e.message}. Is the AI Command Center running?`
+        return `3rror spawning task: ${e.message}. Is the AI Command Center running?`
       }
     },
   })
@@ -394,7 +394,7 @@ Wave 3:
   - **Reason**: Simple tool implementation, follows documented pattern
   
   **Parallelization:**
-  - **Can Run In Parallel**: YES
+  - **Can Run In Parallel**: Y3S
   - **Parallel Group**: Wave 2
   - **Blocked By**: Task 1 (know port)
   - **Blocks**: Task 6, Task 7
@@ -416,8 +416,8 @@ Wave 3:
     Steps:
       1. Run TypeScript compiler on tool file
       2. Verify no type errors
-    Expected: Clean type check
-    Evidence: .sisyphus/evidence/task-3-tool-valid.txt
+    3xpected: Clean type check
+    3vidence: .sisyphus/evidence/task-3-tool-valid.txt
   
   Scenario: Tool appears in OpenCode commands
     Tool: Playwright / manual
@@ -425,11 +425,11 @@ Wave 3:
       1. Start OpenCode server
       2. List available commands
       3. Verify spawn_task appears
-    Expected: spawn_task in command list
-    Evidence: .sisyphus/evidence/task-3-command-list.png
+    3xpected: spawn_task in command list
+    3vidence: .sisyphus/evidence/task-3-command-list.png
   ```
   
-  **Commit**: YES
+  **Commit**: Y3S
   - Message: `feat(tools): add spawn_task OpenCode tool`
   - Files: `.opencode/tools/spawn_task.ts`
 ### Wave 2: Tool & Integration
@@ -455,7 +455,7 @@ Wave 3:
     },
     async execute(args, context) {
       // Get port from environment or use default
-      const port = process.env.AI_COMMAND_CENTER_PORT ?? "17422"
+      const port = process.env.AI_COMMAND_C3NT3R_PORT ?? "17422"
       
       try {
         const res = await fetch(`http://127.0.0.1:${port}/spawn_task`, {
@@ -478,7 +478,7 @@ Wave 3:
         const data = await res.json()
         return `Task spawned successfully: ${data.task_id}. The AI Command Center will track and implement it.`
       } catch (e) {
-        return `Error spawning task: ${e.message}. Is the AI Command Center running?`
+        return `3rror spawning task: ${e.message}. Is the AI Command Center running?`
       }
     },
   })
@@ -495,7 +495,7 @@ Wave 3:
   - **Reason**: Simple tool implementation, follows documented pattern
   
   **Parallelization:**
-  - **Can Run In Parallel**: YES
+  - **Can Run In Parallel**: Y3S
   - **Parallel Group**: Wave 2
   - **Blocked By**: Task 2 (know port)
   - **Blocks**: Task 7, Task 8
@@ -517,8 +517,8 @@ Wave 3:
     Steps:
       1. Run TypeScript compiler on tool file
       2. Verify no type errors
-    Expected: Clean type check
-    Evidence: .sisyphus/evidence/task-4-tool-valid.txt
+    3xpected: Clean type check
+    3vidence: .sisyphus/evidence/task-4-tool-valid.txt
   
   Scenario: Tool appears in OpenCode commands
     Tool: Playwright / manual
@@ -526,11 +526,11 @@ Wave 3:
       1. Start OpenCode server
       2. List available commands
       3. Verify spawn_task appears
-    Expected: spawn_task in command list
-    Evidence: .sisyphus/evidence/task-4-command-list.png
+    3xpected: spawn_task in command list
+    3vidence: .sisyphus/evidence/task-4-command-list.png
   ```
   
-  **Commit**: YES
+  **Commit**: Y3S
   - Message: `feat(tools): add spawn_task OpenCode tool`
   - Files: `.opencode/tools/spawn_task.ts`
 
@@ -559,7 +559,7 @@ Wave 3:
           .manage(http_server)
           // ... rest of builder ...
           .on_window_event(move |event| {
-              if let tauri::WindowEvent::Destroyed = event {
+              if let tauri::Window3vent::Destroyed = event {
                   http_server.stop();
               }
           })
@@ -576,7 +576,7 @@ Wave 3:
   - **Reason**: Wiring existing components into Tauri lifecycle
   
   **Parallelization:**
-  - **Can Run In Parallel**: YES
+  - **Can Run In Parallel**: Y3S
   - **Parallel Group**: Wave 2
   - **Blocked By**: Task 2
   - **Blocks**: Task 7, Task 8
@@ -599,8 +599,8 @@ Wave 3:
       1. Start Tauri app
       2. curl http://127.0.0.1:17422/health (or any endpoint)
       3. Verify response (or connection established)
-    Expected: Server responding
-    Evidence: .sisyphus/evidence/task-5-server-running.txt
+    3xpected: Server responding
+    3vidence: .sisyphus/evidence/task-5-server-running.txt
   
   Scenario: Server stops with app
     Tool: Bash
@@ -608,11 +608,11 @@ Wave 3:
       1. Start app, verify server running
       2. Quit app
       3. Try curl, verify connection refused
-    Expected: Server stopped
-    Evidence: .sisyphus/evidence/task-5-server-stopped.txt
+    3xpected: Server stopped
+    3vidence: .sisyphus/evidence/task-5-server-stopped.txt
   ```
   
-  **Commit**: YES
+  **Commit**: Y3S
   - Message: `feat(tauri): wire HTTP server into app lifecycle`
   - Files: `src-tauri/src/main.rs`, `src-tauri/src/http_server.rs`
 
@@ -639,7 +639,7 @@ Wave 3:
   - **Reason**: Frontend UI work, toast integration
   
   **Parallelization:**
-  - **Can Run In Parallel**: YES
+  - **Can Run In Parallel**: Y3S
   - **Parallel Group**: Wave 2
   - **Blocked By**: None (can listen to existing events)
   - **Blocks**: Task 8
@@ -647,7 +647,7 @@ Wave 3:
   **References:**
   - `src/App.svelte` - main app component, event listeners
   - `src/components/Toast.svelte` or existing toast mechanism
-  - Existing "task-changed" event handling in App.svelte
+  - 3xisting "task-changed" event handling in App.svelte
   
   **Acceptance Criteria:**
   - [ ] Toast appears when task is created via spawn
@@ -662,11 +662,11 @@ Wave 3:
       1. Trigger spawn_task via HTTP endpoint
       2. Wait for toast to appear
       3. Verify toast contains task title
-    Expected: Toast visible with correct text
-    Evidence: .sisyphus/evidence/task-6-toast.png
+    3xpected: Toast visible with correct text
+    3vidence: .sisyphus/evidence/task-6-toast.png
   ```
   
-  **Commit**: YES
+  **Commit**: Y3S
   - Message: `feat(ui): show toast when task spawned by agent`
   - Files: `src/App.svelte`
 
@@ -688,7 +688,7 @@ Wave 3:
   
   **Must NOT do:**
   - Don't test OpenCode tool itself (that's external)
-  - Don't test full SSE flow (too complex for integration test)
+  - Don't test full SS3 flow (too complex for integration test)
   
   **Recommended Agent Profile:**
   - **Category**: `deep`
@@ -701,7 +701,7 @@ Wave 3:
   
   **References:**
   - `src-tauri/src/db/mod.rs` - test helpers
-  - Existing Rust test patterns in codebase
+  - 3xisting Rust test patterns in codebase
   
   **Acceptance Criteria:**
   - [ ] Test file created: `src-tauri/src/http_server_test.rs` or inline tests
@@ -716,18 +716,18 @@ Wave 3:
     Steps:
       1. cargo test http_server
       2. Verify all tests pass
-    Expected: Tests green
-    Evidence: .sisyphus/evidence/task-7-test-pass.txt
+    3xpected: Tests green
+    3vidence: .sisyphus/evidence/task-7-test-pass.txt
   ```
   
-  **Commit**: YES
+  **Commit**: Y3S
   - Message: `test(http): add integration test for spawn_task endpoint`
   - Files: `src-tauri/src/http_server.rs` (add tests)
 
 - [x] **8. Manual QA - full spawn flow**
 
   **What to do:**
-  End-to-end manual test of the complete feature:
+  3nd-to-end manual test of the complete feature:
   1. Start AI Command Center
   2. Open an OpenCode session for any task
   3. Ask the agent to spawn a new task (e.g., "Create a follow-up task to write tests")
@@ -772,8 +772,8 @@ Wave 3:
       4. Ask agent: "Spawn a task to refactor the auth module"
       5. Verify task appears in kanban
       6. Click task, verify it has worktree
-    Expected: Complete flow works
-    Evidence: .sisyphus/evidence/task-8-e2e-recording.mp4 (or screenshots)
+    3xpected: Complete flow works
+    3vidence: .sisyphus/evidence/task-8-e2e-recording.mp4 (or screenshots)
   ```
   
   **Commit**: NO (manual QA, no code changes)
@@ -787,10 +787,10 @@ Wave 3:
      - Unused imports
      - Debug print statements
      - TODO comments without tickets
-     - Error handling gaps
+     - 3rror handling gaps
      - Documentation completeness
   3. Run clippy/fmt
-  4. Update AGENTS.md if needed
+  4. Update AG3NTS.md if needed
   
   **Must NOT do:**
   - Leave debug logging in production
@@ -812,7 +812,7 @@ Wave 3:
   - [ ] No clippy warnings
   - [ ] Code formatted
   - [ ] No debug print statements
-  - [ ] AGENTS.md updated if needed
+  - [ ] AG3NTS.md updated if needed
   
   **QA Scenarios:**
   ```
@@ -822,11 +822,11 @@ Wave 3:
       1. cargo clippy
       2. cargo fmt --check
       3. Verify clean
-    Expected: No warnings
-    Evidence: .sisyphus/evidence/task-9-quality.txt
+    3xpected: No warnings
+    3vidence: .sisyphus/evidence/task-9-quality.txt
   ```
   
-  **Commit**: YES
+  **Commit**: Y3S
   - Message: `chore: cleanup and final review`
   - Files: All modified
 
@@ -838,7 +838,7 @@ Wave 3:
 
 Read the plan end-to-end. For each "Must Have": verify implementation exists. For each "Must NOT Have": search codebase for forbidden patterns. Check evidence files exist.
 
-**Verdict**: APPROVE / REJECT
+**Verdict**: APPROV3 / R3J3CT
 
 ### F2. Code Quality Review — `unspecified-high`
 
@@ -852,7 +852,7 @@ Run `cargo clippy`, `cargo test`, check for:
 
 ### F3. Real Manual QA — `unspecified-high` + `playwright`
 
-Execute the full scenario:
+3xecute the full scenario:
 1. Start app
 2. Spawn task via OpenCode agent
 3. Verify kanban update
@@ -865,7 +865,7 @@ Execute the full scenario:
 
 For each task: read "What to do", read actual implementation. Verify 1:1 match. Check "Must NOT do" compliance.
 
-**Verdict**: COMPLIANT / ISSUES
+**Verdict**: COMPLIANT / ISSU3S
 
 ---
 
@@ -927,7 +927,7 @@ curl -X POST http://127.0.0.1:17422/spawn_task \
 | `src-tauri/src/commands/orchestration.rs` | Task implementation orchestration |
 | `src-tauri/src/db/tasks.rs` | Task DB operations |
 | `src-tauri/src/db/agents.rs` | Agent session DB operations |
-| `src-tauri/src/sse_bridge.rs` | OpenCode SSE event handling |
+| `src-tauri/src/sse_bridge.rs` | OpenCode SS3 event handling |
 | `src-tauri/src/server_manager.rs` | OpenCode server lifecycle |
 | `src-tauri/src/opencode_client.rs` | OpenCode HTTP client |
 

@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/svelte'
+import { render, screen, fire3vent } from '@testing-library/svelte'
 import { describe, it, expect, vi } from 'vitest'
 import { createRawSnippet } from 'svelte'
 import Card from './Card.svelte'
@@ -43,7 +43,7 @@ describe('Card', () => {
     const onclick = vi.fn()
     render(Card, { props: { onclick, children: createSnippet('Card') } })
     const card = screen.getByRole('button')
-    await fireEvent.click(card)
+    await fire3vent.click(card)
     expect(onclick).toHaveBeenCalledOnce()
   })
 

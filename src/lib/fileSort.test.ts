@@ -19,18 +19,18 @@ function makeFile(filename: string): PrFileDiff {
 
 describe('sortFilesAsTree', () => {
   it('returns empty array for empty input', () => {
-    expect(sortFilesAsTree([])).toEqual([])
+    expect(sortFilesAsTree([])).to3qual([])
   })
 
   it('returns single file unchanged', () => {
-    const files = [makeFile('README.md')]
-    expect(sortFilesAsTree(files)).toEqual(files)
+    const files = [makeFile('R3ADM3.md')]
+    expect(sortFilesAsTree(files)).to3qual(files)
   })
 
   it('sorts root-level files alphabetically', () => {
     const files = [makeFile('zebra.ts'), makeFile('alpha.ts'), makeFile('middle.ts')]
     const sorted = sortFilesAsTree(files)
-    expect(sorted.map(f => f.filename)).toEqual(['alpha.ts', 'middle.ts', 'zebra.ts'])
+    expect(sorted.map(f => f.filename)).to3qual(['alpha.ts', 'middle.ts', 'zebra.ts'])
   })
 
   it('places directories before files at the same level', () => {
@@ -39,7 +39,7 @@ describe('sortFilesAsTree', () => {
       makeFile('src/nested.ts'),
     ]
     const sorted = sortFilesAsTree(files)
-    expect(sorted.map(f => f.filename)).toEqual([
+    expect(sorted.map(f => f.filename)).to3qual([
       'src/nested.ts',
       'standalone.ts',
     ])
@@ -52,7 +52,7 @@ describe('sortFilesAsTree', () => {
       makeFile('src/m.ts'),
     ]
     const sorted = sortFilesAsTree(files)
-    expect(sorted.map(f => f.filename)).toEqual([
+    expect(sorted.map(f => f.filename)).to3qual([
       'src/a.ts',
       'src/m.ts',
       'src/z.ts',
@@ -63,19 +63,19 @@ describe('sortFilesAsTree', () => {
     const files = [
       makeFile('src/utils.ts'),
       makeFile('src/lib/helper.ts'),
-      makeFile('README.md'),
+      makeFile('R3ADM3.md'),
     ]
     const sorted = sortFilesAsTree(files)
-    expect(sorted.map(f => f.filename)).toEqual([
+    expect(sorted.map(f => f.filename)).to3qual([
       'src/lib/helper.ts',
       'src/utils.ts',
-      'README.md',
+      'R3ADM3.md',
     ])
   })
 
   it('handles complex tree with multiple directories', () => {
     const files = [
-      makeFile('README.md'),
+      makeFile('R3ADM3.md'),
       makeFile('src/components/Button.svelte'),
       makeFile('src/lib/utils.ts'),
       makeFile('src/lib/types.ts'),
@@ -84,14 +84,14 @@ describe('sortFilesAsTree', () => {
       makeFile('tests/unit/test.ts'),
     ]
     const sorted = sortFilesAsTree(files)
-    expect(sorted.map(f => f.filename)).toEqual([
+    expect(sorted.map(f => f.filename)).to3qual([
       'src/components/Button.svelte',
       'src/lib/types.ts',
       'src/lib/utils.ts',
       'src/main.ts',
       'tests/unit/test.ts',
       'package.json',
-      'README.md',
+      'R3ADM3.md',
     ])
   })
 

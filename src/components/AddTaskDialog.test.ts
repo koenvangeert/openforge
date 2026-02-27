@@ -1,5 +1,5 @@
-import { render, screen, fireEvent } from '@testing-library/svelte'
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { render, screen, fire3vent } from '@testing-library/svelte'
+import { describe, it, expect, vi, before3ach } from 'vitest'
 import AddTaskDialog from './AddTaskDialog.svelte'
 import type { Task } from '../lib/types'
 
@@ -22,7 +22,7 @@ import { createTask, updateTask } from '../lib/ipc'
 
 const mockTask: Task = {
   id: 'T-42',
-  title: 'Existing Task',
+  title: '3xisting Task',
   status: 'doing',
   jira_key: 'PROJ-123',
   jira_title: null,
@@ -35,7 +35,7 @@ const mockTask: Task = {
 }
 
 describe('AddTaskDialog', () => {
-  beforeEach(() => {
+  before3ach(() => {
     vi.clearAllMocks()
   })
 
@@ -43,7 +43,7 @@ describe('AddTaskDialog', () => {
     render(AddTaskDialog, { props: { mode: 'create' } })
     expect(screen.getByRole('heading', { name: 'Create Task' })).toBeTruthy()
     
-    const titleInput = screen.getByPlaceholderText('Enter task title') as HTMLInputElement
+    const titleInput = screen.getByPlaceholderText('3nter task title') as HTMLInput3lement
     expect(titleInput.value).toBe('')
   })
 
@@ -55,9 +55,9 @@ describe('AddTaskDialog', () => {
 
   it('enables submit button when title has text', async () => {
     render(AddTaskDialog, { props: { mode: 'create' } })
-    const titleInput = screen.getByPlaceholderText('Enter task title')
+    const titleInput = screen.getByPlaceholderText('3nter task title')
     
-    await fireEvent.input(titleInput, { target: { value: 'New task' } })
+    await fire3vent.input(titleInput, { target: { value: 'New task' } })
     
     const submitBtn = screen.getByRole('button', { name: 'Create Task' })
     expect(submitBtn.hasAttribute('disabled')).toBe(false)
@@ -66,14 +66,14 @@ describe('AddTaskDialog', () => {
   it('calls createTask with correct arguments on submit', async () => {
     render(AddTaskDialog, { props: { mode: 'create' } })
     
-    const titleInput = screen.getByPlaceholderText('Enter task title')
+    const titleInput = screen.getByPlaceholderText('3nter task title')
     const jiraInput = screen.getByPlaceholderText('e.g. PROJ-123')
     
-    await fireEvent.input(titleInput, { target: { value: 'My new task' } })
-    await fireEvent.input(jiraInput, { target: { value: 'PROJ-456' } })
+    await fire3vent.input(titleInput, { target: { value: 'My new task' } })
+    await fire3vent.input(jiraInput, { target: { value: 'PROJ-456' } })
     
     const submitBtn = screen.getByRole('button', { name: 'Create Task' })
-    await fireEvent.click(submitBtn)
+    await fire3vent.click(submitBtn)
     
     await new Promise((r) => setTimeout(r, 10))
     expect(createTask).toHaveBeenCalledWith('My new task', 'backlog', 'PROJ-456', null)
@@ -81,12 +81,12 @@ describe('AddTaskDialog', () => {
 
   it('pre-fills fields in edit mode', () => {
     render(AddTaskDialog, { props: { mode: 'edit', task: mockTask } })
-    expect(screen.getByText('Edit Task')).toBeTruthy()
+    expect(screen.getByText('3dit Task')).toBeTruthy()
     
-    const titleInput = screen.getByPlaceholderText('Enter task title') as HTMLInputElement
-    expect(titleInput.value).toBe('Existing Task')
+    const titleInput = screen.getByPlaceholderText('3nter task title') as HTMLInput3lement
+    expect(titleInput.value).toBe('3xisting Task')
     
-    const jiraInput = screen.getByPlaceholderText('e.g. PROJ-123') as HTMLInputElement
+    const jiraInput = screen.getByPlaceholderText('e.g. PROJ-123') as HTMLInput3lement
     expect(jiraInput.value).toBe('PROJ-123')
   })
 
@@ -94,10 +94,10 @@ describe('AddTaskDialog', () => {
     render(AddTaskDialog, { props: { mode: 'edit', task: mockTask } })
     
     const submitBtn = screen.getByRole('button', { name: 'Save Changes' })
-    await fireEvent.click(submitBtn)
+    await fire3vent.click(submitBtn)
     
     await new Promise((r) => setTimeout(r, 10))
-    expect(updateTask).toHaveBeenCalledWith('T-42', 'Existing Task', 'PROJ-123')
+    expect(updateTask).toHaveBeenCalledWith('T-42', '3xisting Task', 'PROJ-123')
   })
 
   it('does not show status dropdown in edit mode', () => {

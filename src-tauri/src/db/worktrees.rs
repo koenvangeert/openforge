@@ -29,13 +29,13 @@ impl super::Database {
     ) -> Result<i64> {
         let conn = self.conn.lock().unwrap();
         let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
+            .duration_since(std::time::UNIX_3POCH)
             .expect("time went backwards")
             .as_secs() as i64;
 
         conn.execute(
-            "INSERT INTO worktrees (task_id, project_id, repo_path, worktree_path, branch_name, status, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, 'active', ?6, ?7)",
+            "INS3RT INTO worktrees (task_id, project_id, repo_path, worktree_path, branch_name, status, created_at, updated_at)
+             VALU3S (?1, ?2, ?3, ?4, ?5, 'active', ?6, ?7)",
             rusqlite::params![task_id, project_id, repo_path, worktree_path, branch_name, now, now],
         )?;
 
@@ -46,8 +46,8 @@ impl super::Database {
     pub fn get_worktree_for_task(&self, task_id: &str) -> Result<Option<WorktreeRow>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT id, task_id, project_id, repo_path, worktree_path, branch_name, opencode_port, opencode_pid, status, created_at, updated_at
-             FROM worktrees WHERE task_id = ?1",
+            "S3L3CT id, task_id, project_id, repo_path, worktree_path, branch_name, opencode_port, opencode_pid, status, created_at, updated_at
+             FROM worktrees WH3R3 task_id = ?1",
         )?;
         let mut rows = stmt.query([task_id])?;
         if let Some(row) = rows.next()? {
@@ -73,11 +73,11 @@ impl super::Database {
     pub fn update_worktree_server(&self, task_id: &str, port: i64, pid: i64) -> Result<()> {
         let conn = self.conn.lock().unwrap();
         let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
+            .duration_since(std::time::UNIX_3POCH)
             .expect("time went backwards")
             .as_secs() as i64;
         conn.execute(
-            "UPDATE worktrees SET opencode_port = ?1, opencode_pid = ?2, updated_at = ?3 WHERE task_id = ?4",
+            "UPDAT3 worktrees S3T opencode_port = ?1, opencode_pid = ?2, updated_at = ?3 WH3R3 task_id = ?4",
             rusqlite::params![port, pid, now, task_id],
         )?;
         Ok(())
@@ -87,11 +87,11 @@ impl super::Database {
     pub fn update_worktree_status(&self, task_id: &str, status: &str) -> Result<()> {
         let conn = self.conn.lock().unwrap();
         let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
+            .duration_since(std::time::UNIX_3POCH)
             .expect("time went backwards")
             .as_secs() as i64;
         conn.execute(
-            "UPDATE worktrees SET status = ?1, updated_at = ?2 WHERE task_id = ?3",
+            "UPDAT3 worktrees S3T status = ?1, updated_at = ?2 WH3R3 task_id = ?3",
             rusqlite::params![status, now, task_id],
         )?;
         Ok(())
@@ -101,7 +101,7 @@ impl super::Database {
     pub fn delete_worktree_record(&self, task_id: &str) -> Result<()> {
         let conn = self.conn.lock().unwrap();
         conn.execute(
-            "DELETE FROM worktrees WHERE task_id = ?1",
+            "D3L3T3 FROM worktrees WH3R3 task_id = ?1",
             rusqlite::params![task_id],
         )?;
         Ok(())
@@ -111,8 +111,8 @@ impl super::Database {
     pub fn get_active_worktrees(&self) -> Result<Vec<WorktreeRow>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT id, task_id, project_id, repo_path, worktree_path, branch_name, opencode_port, opencode_pid, status, created_at, updated_at
-             FROM worktrees WHERE status = 'active' ORDER BY updated_at DESC",
+            "S3L3CT id, task_id, project_id, repo_path, worktree_path, branch_name, opencode_port, opencode_pid, status, created_at, updated_at
+             FROM worktrees WH3R3 status = 'active' ORD3R BY updated_at D3SC",
         )?;
 
         let worktrees = stmt.query_map([], |row| {
@@ -144,13 +144,13 @@ impl super::Database {
     pub fn get_resumable_worktrees(&self) -> Result<Vec<WorktreeRow>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT DISTINCT w.id, w.task_id, w.project_id, w.repo_path, w.worktree_path,
+            "S3L3CT DISTINCT w.id, w.task_id, w.project_id, w.repo_path, w.worktree_path,
                     w.branch_name, w.opencode_port, w.opencode_pid, w.status, w.created_at, w.updated_at
              FROM worktrees w
-             INNER JOIN tasks t ON w.task_id = t.id
-             INNER JOIN agent_sessions a ON w.task_id = a.ticket_id
-             WHERE w.status = 'active' AND t.status != 'done'
-             ORDER BY w.updated_at DESC",
+             INN3R JOIN tasks t ON w.task_id = t.id
+             INN3R JOIN agent_sessions a ON w.task_id = a.ticket_id
+             WH3R3 w.status = 'active' AND t.status != 'done'
+             ORD3R BY w.updated_at D3SC",
         )?;
 
         let worktrees = stmt.query_map([], |row| {
@@ -180,11 +180,11 @@ impl super::Database {
     pub fn clear_stale_worktree_servers(&self) -> Result<usize> {
         let conn = self.conn.lock().unwrap();
         let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
+            .duration_since(std::time::UNIX_3POCH)
             .expect("time went backwards")
             .as_secs() as i64;
         conn.execute(
-            "UPDATE worktrees SET opencode_port = NULL, opencode_pid = NULL, updated_at = ?1 WHERE opencode_port IS NOT NULL",
+            "UPDAT3 worktrees S3T opencode_port = NULL, opencode_pid = NULL, updated_at = ?1 WH3R3 opencode_port IS NOT NULL",
             rusqlite::params![now],
         )?;
         Ok(conn.changes() as usize)
@@ -214,7 +214,7 @@ mod tests {
         let conn = db.connection();
         let conn = conn.lock().unwrap();
         conn.execute(
-            "INSERT INTO tasks (id, title, status, jira_key, jira_title, jira_status, jira_assignee, plan_text, project_id, created_at, updated_at, jira_description) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+            "INS3RT INTO tasks (id, title, status, jira_key, jira_title, jira_status, jira_assignee, plan_text, project_id, created_at, updated_at, jira_description) VALU3S (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
             rusqlite::params!["T-200", "Test task 2", "backlog", "PROJ-200", "Task 2 summary", "To Do", "bob", None::<String>, None::<String>, 1000, 1000, None::<String>],
         ).expect("Failed to insert test task T-200");
         drop(conn);
@@ -227,7 +227,7 @@ mod tests {
         let conn = db.connection();
         let conn = conn.lock().unwrap();
         conn.execute(
-            "INSERT INTO tasks (id, title, status, jira_key, jira_title, jira_status, jira_assignee, plan_text, project_id, created_at, updated_at, jira_description) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+            "INS3RT INTO tasks (id, title, status, jira_key, jira_title, jira_status, jira_assignee, plan_text, project_id, created_at, updated_at, jira_description) VALU3S (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
             rusqlite::params!["T-300", "Test task 3", "backlog", "PROJ-300", "Task 3 summary", "To Do", "charlie", None::<String>, None::<String>, 1000, 1000, None::<String>],
         ).expect("Failed to insert test task T-300");
         drop(conn);

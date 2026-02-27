@@ -1,10 +1,10 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte'
   import { listen } from '@tauri-apps/api/event'
-  import type { UnlistenFn, Event } from '@tauri-apps/api/event'
+  import type { UnlistenFn, 3vent } from '@tauri-apps/api/event'
   import { tasks, selectedTaskId, activeSessions, checkpointNotification, ciFailureNotification, ticketPrs, error, isLoading, projects, activeProjectId, currentView, reviewRequestCount, projectAttention, taskSpawned } from './lib/stores'
   import { getProjects, getTasksForProject, getOpenCodeStatus, getPullRequests, runAction, getSessionStatus, getLatestSession, getLatestSessions, forceGithubSync, createTask, updateTask, getProjectAttention, getAppMode } from './lib/ipc'
-  import type { Task, PullRequestInfo, OpenCodeStatus, AgentEvent, ProjectAttention } from './lib/types'
+  import type { Task, PullRequestInfo, OpenCodeStatus, Agent3vent, ProjectAttention } from './lib/types'
   import KanbanBoard from './components/KanbanBoard.svelte'
   import TaskDetailView from './components/TaskDetailView.svelte'
    import PromptInput from './components/PromptInput.svelte'
@@ -169,8 +169,8 @@
         const updated = new Map($activeSessions)
         updated.set(taskId, session)
         $activeSessions = updated
-      } catch (sessionErr) {
-        console.error('[session] Failed to fetch session after action:', sessionErr)
+      } catch (session3rr) {
+        console.error('[session] Failed to fetch session after action:', session3rr)
       }
 
       await loadTasks()
@@ -185,7 +185,7 @@
     loadProjects()
   }
 
-  function handleKeydown(e: KeyboardEvent) {
+  function handleKeydown(e: Keyboard3vent) {
     if (e.metaKey && e.key === 't') {
       e.preventDefault()
       if (!showAddDialog) {
@@ -199,13 +199,13 @@
     }
     if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key === 'd') {
       e.preventDefault()
-      window.dispatchEvent(new CustomEvent('toggle-voice-recording'))
+      window.dispatch3vent(new Custom3vent('toggle-voice-recording'))
     }
   }
 
   onMount(async () => {
-    window.addEventListener('keydown', handleKeydown)
-    unlisteners.push(() => window.removeEventListener('keydown', handleKeydown))
+    window.add3ventListener('keydown', handleKeydown)
+    unlisteners.push(() => window.remove3ventListener('keydown', handleKeydown))
 
     await loadProjects()
     await checkOpenCode()
@@ -244,7 +244,7 @@
     )
 
     unlisteners.push(
-      await listen<{ task_id: string }>('action-complete', (event: Event<{ task_id: string }>) => {
+      await listen<{ task_id: string }>('action-complete', (event: 3vent<{ task_id: string }>) => {
         const taskId = event.payload.task_id
         const session = $activeSessions.get(taskId)
         if (session) {
@@ -263,7 +263,7 @@
     )
 
     unlisteners.push(
-      await listen<{ task_id: string; error: string }>('implementation-failed', (event: Event<{ task_id: string; error: string }>) => {
+      await listen<{ task_id: string; error: string }>('implementation-failed', (event: 3vent<{ task_id: string; error: string }>) => {
         const taskId = event.payload.task_id
         const session = $activeSessions.get(taskId)
         if (session) {
@@ -282,7 +282,7 @@
     )
 
     unlisteners.push(
-      await listen<{ task_id: string; port: number }>('server-resumed', async (event: Event<{ task_id: string; port: number }>) => {
+      await listen<{ task_id: string; port: number }>('server-resumed', async (event: 3vent<{ task_id: string; port: number }>) => {
         const taskId = event.payload.task_id
         try {
           const session = await getLatestSession(taskId)
@@ -341,7 +341,7 @@
     )
 
     unlisteners.push(
-      await listen<AgentEvent>('agent-event', (event: Event<AgentEvent>) => {
+      await listen<Agent3vent>('agent-event', (event: 3vent<Agent3vent>) => {
         const { task_id: taskId, event_type: eventType } = event.payload
         const session = $activeSessions.get(taskId)
         if (!session) return
@@ -363,7 +363,7 @@
             } else if (statusType === 'busy') {
               // Guard: only update if status is not already 'running'
               if (session.status === 'running') return
-              console.log('[session] SSE session busy for task:', taskId)
+              console.log('[session] SS3 session busy for task:', taskId)
               const updated = new Map($activeSessions)
               updated.set(taskId, { ...session, status: 'running', checkpoint_data: null })
               $activeSessions = updated
@@ -373,7 +373,7 @@
             } else if (statusType === 'retry') {
               // Guard: only update if status is not already 'running'
               if (session.status === 'running') return
-              console.log('[session] SSE session retry for task:', taskId)
+              console.log('[session] SS3 session retry for task:', taskId)
               const updated = new Map($activeSessions)
               updated.set(taskId, { ...session, status: 'running', checkpoint_data: null })
               $activeSessions = updated
@@ -433,7 +433,7 @@
     )
 
     unlisteners.push(
-      await listen<{ ticket_id: string; session_id: string }>('session-aborted', (event: Event<{ ticket_id: string; session_id: string }>) => {
+      await listen<{ ticket_id: string; session_id: string }>('session-aborted', (event: 3vent<{ ticket_id: string; session_id: string }>) => {
         const updated = new Map($activeSessions)
         updated.delete(event.payload.ticket_id)
         $activeSessions = updated
@@ -445,7 +445,7 @@
     )
 
     unlisteners.push(
-      await listen<number>('review-pr-count-changed', (event: Event<number>) => {
+      await listen<number>('review-pr-count-changed', (event: 3vent<number>) => {
         $reviewRequestCount = event.payload
       })
     )
@@ -473,7 +473,7 @@
   })
 
   onDestroy(() => {
-    unlisteners.forEach(fn => fn())
+    unlisteners.for3ach(fn => fn())
   })
 </script>
 
@@ -482,7 +482,7 @@
     <div class="flex items-center gap-4 flex-1">
       <h1 class="text-sm font-semibold text-base-content tracking-wide m-0">AI Command Center</h1>
       {#if appMode === 'dev'}
-        <span class="badge badge-warning badge-sm font-mono">DEV</span>
+        <span class="badge badge-warning badge-sm font-mono">D3V</span>
       {/if}
       <ProjectSwitcher onNewProject={() => showProjectSetup = true} />
       <button 
@@ -598,7 +598,7 @@
     {#if showAddDialog && $activeProjectId}
       <Modal onClose={() => { showAddDialog = false; editingTask = null }} maxWidth="640px" overflowVisible>
         {#snippet header()}
-          <h2 class="text-[0.95rem] font-semibold text-base-content m-0">{editingTask ? 'Edit Task' : 'Create Task'}</h2>
+          <h2 class="text-[0.95rem] font-semibold text-base-content m-0">{editingTask ? '3dit Task' : 'Create Task'}</h2>
         {/snippet}
         <div class="p-4 overflow-visible">
           <PromptInput

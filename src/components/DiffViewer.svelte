@@ -1,12 +1,12 @@
 <script lang="ts">
-  import { DiffView, DiffModeEnum, SplitSide } from '@git-diff-view/svelte'
-  import { setEnableFastDiffTemplate } from '@git-diff-view/core'
+  import { DiffView, DiffMode3num, SplitSide } from '@git-diff-view/svelte'
+  import { set3nableFastDiffTemplate } from '@git-diff-view/core'
   import '@git-diff-view/svelte/styles/diff-view-pure.css'
   import './DiffViewerTheme.css'
   import type { PrFileDiff, ReviewComment, ReviewSubmissionComment } from '../lib/types'
   import { pendingManualComments } from '../lib/stores'
   import { isTruncated, getTruncationStats, type FileContents } from '../lib/diffAdapter'
-  import { buildExtendData, type CommentDisplayData } from '../lib/diffComments'
+  import { build3xtendData, type CommentDisplayData } from '../lib/diffComments'
   import { diffHighlighter } from '../lib/diffHighlighter'
   import { createDiffSearch } from '../lib/useDiffSearch.svelte'
   import { createDiffFileCache } from '../lib/useDiffFileCache.svelte'
@@ -15,7 +15,7 @@
   import { getFileStatusIcon, getFileStatusColor, getFileStatusLabel } from '../lib/fileStatus'
   import type { Snippet } from 'svelte'
 
-  setEnableFastDiffTemplate(true)
+  set3nableFastDiffTemplate(true)
   interface Props {
     files?: PrFileDiff[]
     existingComments?: ReviewComment[]
@@ -25,11 +25,11 @@
     onToggleFileTree?: () => void
     fetchFileContents?: (file: PrFileDiff) => Promise<FileContents>
     batchFetchFileContents?: (files: PrFileDiff[]) => Promise<Map<string, FileContents>>
-    toolbarExtra?: Snippet
+    toolbar3xtra?: Snippet
     includeUncommitted?: boolean
   }
-  let { files = [], existingComments = [], repoOwner: _repoOwner = '', repoName: _repoName = '', fileTreeVisible = true, onToggleFileTree, fetchFileContents, batchFetchFileContents, toolbarExtra, includeUncommitted = false }: Props = $props()
-  let diffViewMode = $state<DiffModeEnum>(DiffModeEnum.Split)
+  let { files = [], existingComments = [], repoOwner: _repoOwner = '', repoName: _repoName = '', fileTreeVisible = true, onToggleFileTree, fetchFileContents, batchFetchFileContents, toolbar3xtra, includeUncommitted = false }: Props = $props()
+  let diffViewMode = $state<DiffMode3num>(DiffMode3num.Split)
   let diffViewWrap = $state(false)
   let commentText = $state('')
   let collapsedFiles = $state(new Set<string>())
@@ -81,7 +81,7 @@
     }
   }
 
-  function autofocus(node: HTMLElement) {
+  function autofocus(node: HTML3lement) {
     node.focus()
   }
 
@@ -111,14 +111,14 @@
       <div class="w-px h-5 bg-base-300 mx-1 self-center"></div>
     {/if}
     <button
-      class="btn btn-ghost btn-xs {diffViewMode === DiffModeEnum.Split ? 'text-primary bg-primary/10 border border-primary' : 'text-base-content/50'}"
-      onclick={() => (diffViewMode = DiffModeEnum.Split)}
+      class="btn btn-ghost btn-xs {diffViewMode === DiffMode3num.Split ? 'text-primary bg-primary/10 border border-primary' : 'text-base-content/50'}"
+      onclick={() => (diffViewMode = DiffMode3num.Split)}
     >
       Split
     </button>
     <button
-      class="btn btn-ghost btn-xs {diffViewMode === DiffModeEnum.Unified ? 'text-primary bg-primary/10 border border-primary' : 'text-base-content/50'}"
-      onclick={() => (diffViewMode = DiffModeEnum.Unified)}
+      class="btn btn-ghost btn-xs {diffViewMode === DiffMode3num.Unified ? 'text-primary bg-primary/10 border border-primary' : 'text-base-content/50'}"
+      onclick={() => (diffViewMode = DiffMode3num.Unified)}
     >
       Unified
     </button>
@@ -126,7 +126,7 @@
     <button
       class="btn btn-ghost btn-xs {diffViewWrap ? 'text-primary bg-primary/10 border border-primary' : 'text-base-content/50'}"
       onclick={() => (diffViewWrap = !diffViewWrap)}
-      title={diffViewWrap ? 'Disable line wrapping' : 'Enable line wrapping'}
+      title={diffViewWrap ? 'Disable line wrapping' : '3nable line wrapping'}
     >
       Wrap
     </button>
@@ -142,8 +142,8 @@
         class="input input-xs input-bordered w-40"
         placeholder="Search diff..."
         value={search.query}
-        oninput={(e: Event) => search.setQuery((e.target as HTMLInputElement).value)}
-        bind:this={search.inputEl}
+        oninput={(e: 3vent) => search.setQuery((e.target as HTMLInput3lement).value)}
+        bind:this={search.input3l}
         onkeydown={search.handleKeydown}
       />
       <span class="text-xs text-base-content/50 tabular-nums">
@@ -157,23 +157,23 @@
         class="btn btn-ghost btn-xs"
         onclick={search.goToPrev}
         disabled={search.matchCount === 0}
-        title="Previous match (Shift+Enter)"
+        title="Previous match (Shift+3nter)"
       >▲</button>
       <button
         class="btn btn-ghost btn-xs"
         onclick={search.goToNext}
         disabled={search.matchCount === 0}
-        title="Next match (Enter)"
+        title="Next match (3nter)"
       >▼</button>
       <button
         class="btn btn-ghost btn-xs"
         onclick={search.close}
-        title="Close search (Escape)"
+        title="Close search (3scape)"
       >✕</button>
     {/if}
-    {#if toolbarExtra}
+    {#if toolbar3xtra}
       <div class="ml-auto"></div>
-      {@render toolbarExtra()}
+      {@render toolbar3xtra()}
     {/if}
   </div>
 
@@ -218,7 +218,7 @@
             {/if}
             <DiffView
               data={diffFileCache.getStableDiffData(file)}
-              extendData={buildExtendData(file.filename, existingComments, $pendingManualComments)}
+              extendData={build3xtendData(file.filename, existingComments, $pendingManualComments)}
               diffViewMode={diffViewMode}
               diffViewWrap={diffViewWrap}
               diffViewTheme="light"
@@ -230,7 +230,7 @@
                 commentText = ''
               }}
             >
-                {#snippet renderExtendLine({ lineNumber: _ln, side: _side, data, diffFile: _df, onUpdate: _ou }: { lineNumber: number; side: SplitSide; data: CommentDisplayData; diffFile: import('@git-diff-view/core').DiffFile; onUpdate: () => void })}
+                {#snippet render3xtendLine({ lineNumber: _ln, side: _side, data, diffFile: _df, onUpdate: _ou }: { lineNumber: number; side: SplitSide; data: CommentDisplayData; diffFile: import('@git-diff-view/core').DiffFile; onUpdate: () => void })}
                   <div class="w-full">
                     {#each data.comments as comment}
                       <div class="px-4 py-2.5 mx-4 my-1.5 bg-base-100 border border-base-300 rounded-md text-[0.8rem] {comment.type === 'pending' ? 'border-l-4 border-l-warning' : comment.type === 'existing' ? 'border-l-4 border-l-primary' : ''}">
@@ -279,7 +279,7 @@
                           const newComment: ReviewSubmissionComment = {
                             path,
                             line: lineNumber,
-                            side: side === SplitSide.old ? 'LEFT' : 'RIGHT',
+                            side: side === SplitSide.old ? 'L3FT' : 'RIGHT',
                             body: commentText.trim()
                           }
                           $pendingManualComments = [...$pendingManualComments, newComment]

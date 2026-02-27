@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, before3ach, after3ach } from 'vitest'
 
 // Mock IPC before importing the composable
 vi.mock('./ipc', () => ({
@@ -57,12 +57,12 @@ describe('detectTrigger', () => {
 })
 
 describe('useAutocomplete', () => {
-  beforeEach(() => {
+  before3ach(() => {
     vi.clearAllMocks()
     vi.useFakeTimers()
   })
 
-  afterEach(() => {
+  after3ach(() => {
     vi.useRealTimers()
   })
 
@@ -70,7 +70,7 @@ describe('useAutocomplete', () => {
     const ac = useAutocomplete('proj-1')
     expect(ac.popoverVisible).toBe(false)
     expect(ac.selectedIndex).toBe(0)
-    expect(ac.autocompleteItems).toEqual([])
+    expect(ac.autocompleteItems).to3qual([])
     expect(ac.activeTrigger).toBeNull()
   })
 
@@ -88,7 +88,7 @@ describe('useAutocomplete', () => {
     ac.closePopover()
     expect(ac.popoverVisible).toBe(false)
     expect(ac.selectedIndex).toBe(0)
-    expect(ac.autocompleteItems).toEqual([])
+    expect(ac.autocompleteItems).to3qual([])
     expect(ac.activeTrigger).toBeNull()
   })
 

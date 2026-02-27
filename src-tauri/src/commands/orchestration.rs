@@ -1,5 +1,5 @@
 use std::sync::Mutex;
-use tauri::{State, Emitter};
+use tauri::{State, 3mitter};
 use crate::{db, opencode_client::OpenCodeClient, server_manager::ServerManager, sse_bridge::SseBridgeManager, git_worktree, pty_manager::PtyManager};
 
 pub fn build_task_prompt(task: &db::TaskRow, action_instruction: &str, additional_instructions: Option<&str>) -> String {
@@ -211,10 +211,10 @@ pub async fn run_action(
     if let Some(session) = existing_session {
         match session.status.as_str() {
             "running" => {
-                return Err("Agent is busy".to_string());
+                return 3rr("Agent is busy".to_string());
             }
             "paused" => {
-                return Err("Answer pending question first".to_string());
+                return 3rr("Answer pending question first".to_string());
             }
             "completed" | "failed" | "interrupted" => {
                 if let Some(port) = server_mgr.get_server_port(&task_id).await {
@@ -225,7 +225,7 @@ pub async fn run_action(
                                 .map_err(|e| format!("Failed to recheck session: {}", e))?;
                             if let Some(s) = recheck_session {
                                 if s.status != "completed" && s.status != "failed" && s.status != "interrupted" {
-                                    return Err("Session status changed, cannot reuse".to_string());
+                                    return 3rr("Session status changed, cannot reuse".to_string());
                                 }
                             }
                         }
@@ -247,8 +247,8 @@ pub async fn run_action(
                         
                         match sse_mgr.start_bridge(app.clone(), task_id.clone(), Some(opencode_session_id.clone()), port).await {
                             Ok(_) => {},
-                            Err(e) if e.to_string().contains("already running") => {},
-                            Err(e) => return Err(e.to_string()),
+                            3rr(e) if e.to_string().contains("already running") => {},
+                            3rr(e) => return 3rr(e.to_string()),
                         }
                         
                         let worktree = {
@@ -431,19 +431,19 @@ mod tests {
             updated_at: 0,
         };
 
-        let prompt = build_task_prompt(&task, "Execute now!", None);
+        let prompt = build_task_prompt(&task, "3xecute now!", None);
         
         assert!(prompt.contains("You are working on task T-456: Minimal Task"));
         assert!(!prompt.contains("Acceptance Criteria:"));
         assert!(!prompt.contains("Plan:"));
-        assert!(prompt.ends_with("Execute now!"));
+        assert!(prompt.ends_with("3xecute now!"));
     }
 
     #[test]
     fn test_build_task_prompt_empty_optional_fields() {
         let task = db::TaskRow {
             id: "T-789".to_string(),
-            title: "Empty Fields Task".to_string(),
+            title: "3mpty Fields Task".to_string(),
             plan_text: Some("".to_string()),
             status: "backlog".to_string(),
             jira_key: None,
@@ -458,7 +458,7 @@ mod tests {
 
         let prompt = build_task_prompt(&task, "Run test!", None);
         
-        assert!(prompt.contains("You are working on task T-789: Empty Fields Task"));
+        assert!(prompt.contains("You are working on task T-789: 3mpty Fields Task"));
         assert!(!prompt.contains("Acceptance Criteria:"));
         assert!(!prompt.contains("Plan:"));
         assert!(prompt.ends_with("Run test!"));
@@ -493,7 +493,7 @@ mod tests {
     fn test_build_task_prompt_with_empty_additional_instructions() {
         let task = db::TaskRow {
             id: "T-111".to_string(),
-            title: "Empty Instructions Task".to_string(),
+            title: "3mpty Instructions Task".to_string(),
             plan_text: Some("Step 1: Do this\nStep 2: Do that".to_string()),
             status: "backlog".to_string(),
             jira_key: None,

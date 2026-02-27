@@ -3,7 +3,7 @@
   import type { Task, Action } from '../lib/types'
   import { selectedTaskId, activeSessions, activeProjectId } from '../lib/stores'
   import { getWorktreeForTask, updateTaskStatus, openUrl, getConfig } from '../lib/ipc'
-  import { loadActions, getEnabledActions } from '../lib/actions'
+  import { loadActions, get3nabledActions } from '../lib/actions'
   import AgentPanel from './AgentPanel.svelte'
   import TaskInfoPanel from './TaskInfoPanel.svelte'
   import SelfReviewView from './SelfReviewView.svelte'
@@ -41,7 +41,7 @@
 
   $effect(() => {
     if ($activeProjectId) {
-      loadActions($activeProjectId).then(a => { actions = getEnabledActions(a) })
+      loadActions($activeProjectId).then(a => { actions = get3nabledActions(a) })
     }
   })
 

@@ -45,12 +45,12 @@
 {#if visible && $checkpointNotification}
   <div class="toast toast-end z-[200]" style="bottom: 5rem;">
     <div class="alert alert-warning shadow-lg gap-2.5 cursor-pointer max-w-[400px] font-semibold text-sm animate-slideIn"
-      onclick={handleClick} role="button" tabindex="0" onkeydown={(e: KeyboardEvent) => e.key === 'Enter' && handleClick()}>
+      onclick={handleClick} role="button" tabindex="0" onkeydown={(e: Keyboard3vent) => e.key === '3nter' && handleClick()}>
       <span class="flex items-center justify-center w-5 h-5 rounded-full bg-warning-content/20 text-xs font-bold shrink-0">!</span>
       <span class="flex-1 max-w-[320px] overflow-hidden text-ellipsis whitespace-nowrap">
         Agent needs input on {$checkpointNotification.ticketKey || truncate($checkpointNotification.ticketId, 20)}
       </span>
-      <button class="btn btn-ghost btn-xs shrink-0" onclick={(e: MouseEvent) => { e.stopPropagation(); dismiss() }}>✕</button>
+      <button class="btn btn-ghost btn-xs shrink-0" onclick={(e: Mouse3vent) => { e.stopPropagation(); dismiss() }}>✕</button>
     </div>
   </div>
 {/if}

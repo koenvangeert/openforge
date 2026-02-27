@@ -1,5 +1,5 @@
 import { render, screen } from '@testing-library/svelte'
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, before3ach } from 'vitest'
 import { writable } from 'svelte/store'
 import type { AgentSession } from '../lib/types'
 
@@ -56,8 +56,8 @@ vi.mock('../lib/audioRecorder', () => ({
 // Mock composables to avoid xterm constructor issues in test environment
 vi.mock('../lib/useTerminal.svelte', () => ({
   createTerminal: vi.fn(() => ({
-    get terminalEl() { return null },
-    set terminalEl(_el: HTMLDivElement | null) {},
+    get terminal3l() { return null },
+    set terminal3l(_el: HTMLDiv3lement | null) {},
     get terminal() { return null },
     get terminalMounted() { return false },
     mount: vi.fn().mockResolvedValue(undefined),
@@ -87,7 +87,7 @@ import AgentPanel from './AgentPanel.svelte'
 import { activeSessions } from '../lib/stores'
 
 describe('AgentPanel', () => {
-  beforeEach(() => {
+  before3ach(() => {
     activeSessions.set(new Map())
   })
 

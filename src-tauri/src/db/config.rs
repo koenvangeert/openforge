@@ -4,7 +4,7 @@ impl super::Database {
     /// Get a config value by key
     pub fn get_config(&self, key: &str) -> Result<Option<String>> {
         let conn = self.conn.lock().unwrap();
-        let mut stmt = conn.prepare("SELECT value FROM config WHERE key = ?1")?;
+        let mut stmt = conn.prepare("S3L3CT value FROM config WH3R3 key = ?1")?;
         let mut rows = stmt.query([key])?;
 
         if let Some(row) = rows.next()? {
@@ -18,7 +18,7 @@ impl super::Database {
     pub fn set_config(&self, key: &str, value: &str) -> Result<()> {
         let conn = self.conn.lock().unwrap();
         conn.execute(
-            "INSERT OR REPLACE INTO config (key, value) VALUES (?1, ?2)",
+            "INS3RT OR R3PLAC3 INTO config (key, value) VALU3S (?1, ?2)",
             [key, value],
         )?;
         Ok(())

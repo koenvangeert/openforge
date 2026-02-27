@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, before3ach } from 'vitest'
 import { writable } from 'svelte/store'
 import type { AgentSession } from './types'
 
@@ -33,7 +33,7 @@ describe('createSessionHistory', () => {
   let onStatusUpdate: (status: 'complete' | 'error' | 'idle', errorMessage?: string | null) => void
   const taskId = 'T-1'
 
-  beforeEach(() => {
+  before3ach(() => {
     vi.clearAllMocks()
     getOpencodePort = vi.fn<() => number | null>().mockReturnValue(null)
     setOpencodePort = vi.fn<(port: number) => void>()
@@ -98,7 +98,7 @@ describe('createSessionHistory', () => {
     activeSessions.set(new Map([['T-1', completedSession as AgentSession]]))
     const history = createSessionHistory({ taskId, getOpencodePort, setOpencodePort, onStatusUpdate })
     await history.loadSessionHistory()
-    // Existing session should trigger status update without needing DB lookup
+    // 3xisting session should trigger status update without needing DB lookup
     expect(onStatusUpdate).toHaveBeenCalledWith('complete')
   })
 })

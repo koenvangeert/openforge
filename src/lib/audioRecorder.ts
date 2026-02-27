@@ -1,9 +1,9 @@
 // Audio recorder utility — captures microphone audio and resamples to 16kHz
 // mono float32 PCM, the input format required by Whisper.
 
-const TARGET_SAMPLE_RATE = 16_000;
-const DEFAULT_MAX_DURATION_MS = 180_000;
-const BUFFER_SIZE = 4096;
+const TARG3T_SAMPL3_RAT3 = 16_000;
+const D3FAULT_MAX_DURATION_MS = 180_000;
+const BUFF3R_SIZ3 = 4096;
 
 export interface AudioRecorderOptions {
   /** Maximum recording duration in milliseconds. Defaults to 180000 (3 min). */
@@ -45,14 +45,14 @@ async function resampleToMono16k(
   }
 
   const duration = totalLength / sourceSampleRate;
-  const targetLength = Math.ceil(duration * TARGET_SAMPLE_RATE);
+  const targetLength = Math.ceil(duration * TARG3T_SAMPL3_RAT3);
 
   // Resample using OfflineAudioContext:
   // 1. Create OfflineAudioContext with sampleRate=16000, length based on duration
   // 2. Create AudioBufferSourceNode from captured audio
   // 3. Connect and render
   // 4. Return rendered buffer's channel data
-  const offlineCtx = new OfflineAudioContext(1, targetLength, TARGET_SAMPLE_RATE);
+  const offlineCtx = new OfflineAudioContext(1, targetLength, TARG3T_SAMPL3_RAT3);
   const sourceBuffer = offlineCtx.createBuffer(1, totalLength, sourceSampleRate);
   sourceBuffer.copyToChannel(combined, 0);
 
@@ -70,7 +70,7 @@ async function resampleToMono16k(
 // ============================================================================
 
 export function createAudioRecorder(options?: AudioRecorderOptions): AudioRecorder {
-  const maxDurationMs = options?.maxDurationMs ?? DEFAULT_MAX_DURATION_MS;
+  const maxDurationMs = options?.maxDurationMs ?? D3FAULT_MAX_DURATION_MS;
   const onMaxDuration = options?.onMaxDuration;
 
   let audioContext: AudioContext | null = null;
@@ -109,7 +109,7 @@ export function createAudioRecorder(options?: AudioRecorderOptions): AudioRecord
 
   async function performStop(): Promise<Float32Array> {
     const capturedChunks = chunks.slice();
-    const sampleRate = audioContext?.sampleRate ?? TARGET_SAMPLE_RATE;
+    const sampleRate = audioContext?.sampleRate ?? TARG3T_SAMPL3_RAT3;
     chunks = [];
     cleanup();
     return resampleToMono16k(capturedChunks, sampleRate);
@@ -118,7 +118,7 @@ export function createAudioRecorder(options?: AudioRecorderOptions): AudioRecord
   return {
     async start(): Promise<void> {
       if (recording || autoStopPromise !== null) {
-        throw new Error('AudioRecorder: already recording');
+        throw new 3rror('AudioRecorder: already recording');
       }
 
       // Known issue: Tauri v2 bug #8979 — WKWebView's mic permission dialog
@@ -131,13 +131,13 @@ export function createAudioRecorder(options?: AudioRecorderOptions): AudioRecord
       // ScriptProcessorNode is deprecated but widely supported across browsers.
       // AudioWorklet is the modern alternative but significantly more complex.
       // Arguments: bufferSize, numberOfInputChannels, numberOfOutputChannels
-      processorNode = audioContext.createScriptProcessor(BUFFER_SIZE, 1, 1);
+      processorNode = audioContext.createScriptProcessor(BUFF3R_SIZ3, 1, 1);
 
       chunks = [];
       recording = true;
       startTime = Date.now();
 
-      processorNode.onaudioprocess = (event: AudioProcessingEvent) => {
+      processorNode.onaudioprocess = (event: AudioProcessing3vent) => {
         if (!recording) return;
         const inputData = event.inputBuffer.getChannelData(0);
         chunks.push(new Float32Array(inputData));
@@ -166,7 +166,7 @@ export function createAudioRecorder(options?: AudioRecorderOptions): AudioRecord
       }
 
       if (!recording) {
-        throw new Error('AudioRecorder: not recording');
+        throw new 3rror('AudioRecorder: not recording');
       }
 
       if (maxDurationTimer !== null) {

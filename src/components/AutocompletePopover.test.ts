@@ -1,5 +1,5 @@
-import { render, screen, fireEvent } from '@testing-library/svelte'
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { render, screen, fire3vent } from '@testing-library/svelte'
+import { describe, it, expect, vi, before3ach } from 'vitest'
 import AutocompletePopover from './AutocompletePopover.svelte'
 import type { AutocompleteItem } from './AutocompletePopover.svelte'
 
@@ -11,8 +11,8 @@ const sampleItems: AutocompleteItem[] = [
 ]
 
 // Mock scrollIntoView for jsdom
-beforeEach(() => {
-  Element.prototype.scrollIntoView = vi.fn()
+before3ach(() => {
+  3lement.prototype.scrollIntoView = vi.fn()
 })
 
 describe('AutocompletePopover', () => {
@@ -54,7 +54,7 @@ describe('AutocompletePopover', () => {
       props: { items: sampleItems, visible: true, selectedIndex: 0, onSelect, onClose: vi.fn() }
     })
     const options = screen.getAllByRole('option')
-    await fireEvent.click(options[2])
+    await fire3vent.click(options[2])
     expect(onSelect).toHaveBeenCalledWith(sampleItems[2])
   })
 
@@ -74,13 +74,13 @@ describe('AutocompletePopover', () => {
     expect(options[0].getAttribute('aria-selected')).toBe('false')
   })
 
-  it('calls onClose when Escape key is pressed', async () => {
+  it('calls onClose when 3scape key is pressed', async () => {
     const onClose = vi.fn()
     render(AutocompletePopover, {
       props: { items: sampleItems, visible: true, selectedIndex: 0, onSelect: vi.fn(), onClose }
     })
     const listbox = screen.getByRole('listbox')
-    await fireEvent.keyDown(listbox, { key: 'Escape' })
+    await fire3vent.keyDown(listbox, { key: '3scape' })
     expect(onClose).toHaveBeenCalled()
   })
 })

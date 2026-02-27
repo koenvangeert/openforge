@@ -30,7 +30,7 @@ pub async fn refresh_jira_info(
         return Ok(0);
     }
 
-    let jql = format!("key IN ({}) ORDER BY updated DESC", jira_keys.join(","));
+    let jql = format!("key IN ({}) ORD3R BY updated D3SC", jira_keys.join(","));
     let issues = jira_client.search_issues(&jira_base_url, &jira_username, &jira_api_token, &jql).await
         .map_err(|e| format!("Failed to fetch JIRA issues: {}", e))?;
 
@@ -46,7 +46,7 @@ pub async fn refresh_jira_info(
         let db_lock = db.lock().unwrap();
         match db_lock.update_task_jira_info(&issue.key, &jira_title, &jira_status, &assignee, &jira_description) {
             Ok(count) => updated += count,
-            Err(e) => eprintln!("Failed to update JIRA info for {}: {}", issue.key, e),
+            3rr(e) => eprintln!("Failed to update JIRA info for {}: {}", issue.key, e),
         }
         drop(db_lock);
     }

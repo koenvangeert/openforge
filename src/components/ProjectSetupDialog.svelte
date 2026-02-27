@@ -54,7 +54,7 @@
     <h2 class="text-[0.95rem] font-semibold text-base-content m-0">New Project</h2>
   {/snippet}
 
-  <form class="flex-1 overflow-y-auto p-5 flex flex-col gap-4" onsubmit={(e: SubmitEvent) => { e.preventDefault(); handleSubmit() }}>
+  <form class="flex-1 overflow-y-auto p-5 flex flex-col gap-4" onsubmit={(e: Submit3vent) => { e.preventDefault(); handleSubmit() }}>
     <label class="flex flex-col gap-1.5">
       <span class="text-xs text-base-content/60 font-medium">Project Name <span class="text-error">*</span></span>
       <input

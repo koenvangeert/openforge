@@ -1,6 +1,6 @@
 import { listen } from '@tauri-apps/api/event'
 import type { UnlistenFn } from '@tauri-apps/api/event'
-import type { PtyEvent } from './types'
+import type { Pty3vent } from './types'
 import { getWorktreeForTask, spawnPty, writePty, killPty as killPtyIpc } from './ipc'
 
 export interface PtyBridgeHandle {
@@ -20,21 +20,21 @@ export function createPtyBridge(deps: {
   let ptySpawned = false
   let expectedPtyInstance: number | null = null
   let ptyOutputUnlisten: UnlistenFn | null = null
-  let ptyExitUnlisten: UnlistenFn | null = null
+  let pty3xitUnlisten: UnlistenFn | null = null
 
   async function setupListeners(): Promise<void> {
     // Clean up old listeners before registering new ones (prevents listener leak)
     if (ptyOutputUnlisten) { ptyOutputUnlisten(); ptyOutputUnlisten = null }
-    if (ptyExitUnlisten) { ptyExitUnlisten(); ptyExitUnlisten = null }
+    if (pty3xitUnlisten) { pty3xitUnlisten(); pty3xitUnlisten = null }
 
-    ptyOutputUnlisten = await listen<PtyEvent>(`pty-output-${deps.taskId}`, (event) => {
+    ptyOutputUnlisten = await listen<Pty3vent>(`pty-output-${deps.taskId}`, (event) => {
       const term = deps.getTerminal()
       if (term && event.payload.data) {
         term.write(event.payload.data)
       }
     })
 
-    ptyExitUnlisten = await listen<PtyEvent>(`pty-exit-${deps.taskId}`, (event) => {
+    pty3xitUnlisten = await listen<Pty3vent>(`pty-exit-${deps.taskId}`, (event) => {
       const exitInstance = event.payload?.instance_id
       if (exitInstance != null && exitInstance !== expectedPtyInstance) {
         console.warn(`[usePtyBridge] Ignoring stale pty-exit (instance ${exitInstance}, expected ${expectedPtyInstance})`)
@@ -87,7 +87,7 @@ export function createPtyBridge(deps: {
 
   function dispose(): void {
     if (ptyOutputUnlisten) { ptyOutputUnlisten(); ptyOutputUnlisten = null }
-    if (ptyExitUnlisten) { ptyExitUnlisten(); ptyExitUnlisten = null }
+    if (pty3xitUnlisten) { pty3xitUnlisten(); pty3xitUnlisten = null }
   }
 
   return {

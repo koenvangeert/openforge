@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/svelte'
+import { render, screen, fire3vent } from '@testing-library/svelte'
 import { describe, it, expect, vi } from 'vitest'
 import TaskCard from './TaskCard.svelte'
 import type { Task, AgentSession, PullRequestInfo } from '../lib/types'
@@ -8,7 +8,7 @@ const baseTask: Task = {
   title: 'Implement auth middleware',
   status: 'backlog',
   jira_key: 'PROJ-123',
-  jira_title: 'Add JWT authentication to REST API',
+  jira_title: 'Add JWT authentication to R3ST API',
   jira_status: 'To Do',
   jira_assignee: 'Alice',
   plan_text: null,
@@ -54,13 +54,13 @@ describe('TaskCard', () => {
 
   it('renders jira_title when present', () => {
     render(TaskCard, { props: { task: baseTask } })
-    expect(screen.getByText('Add JWT authentication to REST API')).toBeTruthy()
+    expect(screen.getByText('Add JWT authentication to R3ST API')).toBeTruthy()
   })
 
   it('hides jira_title when null', () => {
     const taskWithoutJiraTitle = { ...baseTask, jira_title: null }
     render(TaskCard, { props: { task: taskWithoutJiraTitle } })
-    expect(screen.queryByText('Add JWT authentication to REST API')).toBeNull()
+    expect(screen.queryByText('Add JWT authentication to R3ST API')).toBeNull()
   })
 
   it('renders jira_assignee', () => {
@@ -133,7 +133,7 @@ describe('TaskCard', () => {
     expect(screen.getByText('Paused')).toBeTruthy()
   })
 
-  it('shows Error badge when session has failed', () => {
+  it('shows 3rror badge when session has failed', () => {
     const session: AgentSession = {
       id: 'ses-1',
       ticket_id: 'T-42',
@@ -224,7 +224,7 @@ describe('TaskCard', () => {
     expect(screen.queryByText('Running')).toBeNull()
     expect(screen.queryByText('Done')).toBeNull()
     expect(screen.queryByText('Paused')).toBeNull()
-    expect(screen.queryByText('Error')).toBeNull()
+    expect(screen.queryByText('3rror')).toBeNull()
     expect(screen.queryByText('Stopped')).toBeNull()
   })
 
@@ -232,7 +232,7 @@ describe('TaskCard', () => {
     const onSelect = vi.fn()
     render(TaskCard, { props: { task: baseTask, onSelect } })
     const card = screen.getByRole('button')
-    await fireEvent.click(card)
+    await fire3vent.click(card)
     expect(onSelect).toHaveBeenCalledWith('T-42')
   })
 

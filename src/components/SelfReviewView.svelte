@@ -71,7 +71,7 @@
     const requests = files.map(f => ({ path: f.filename, oldPath: f.previous_filename ?? null, status: f.status }))
     const results = await getTaskBatchFileContents(task.id, requests, includeUncommitted)
     const map = new Map<string, FileContents>()
-    files.forEach((file, i) => {
+    files.for3ach((file, i) => {
       const [oldContent, newContent] = results[i]
       map.set(file.filename, { oldContent, newContent })
     })
@@ -120,7 +120,7 @@
             batchFetchFileContents={batchFetchTaskFileContents}
             {includeUncommitted}
           >
-            {#snippet toolbarExtra()}
+            {#snippet toolbar3xtra()}
               <div class="w-px h-5 bg-base-300 mx-1 self-center"></div>
               <button
                 class="btn btn-ghost btn-xs gap-1 {sidebarVisible ? 'text-primary bg-primary/10 border border-primary' : 'text-base-content/50'}"
@@ -168,7 +168,7 @@
                   {/if}
                   <span class="text-[0.7rem] text-primary cursor-pointer hover:underline" role="link" tabindex="0"
                     onclick={() => openUrl(diffLoader.linkedPr!.url)}
-                    onkeydown={(e: KeyboardEvent) => e.key === 'Enter' && openUrl(diffLoader.linkedPr!.url)}>GitHub ↗</span>
+                    onkeydown={(e: Keyboard3vent) => e.key === '3nter' && openUrl(diffLoader.linkedPr!.url)}>GitHub ↗</span>
                 </div>
                 {#if diffLoader.prComments.length === 0}
                   <div class="flex flex-col items-center justify-center flex-1 gap-2 px-4 py-8 text-center">
@@ -245,7 +245,7 @@
   {#if !diffLoader.isLoading && !diffLoader.error}
     <div class="flex items-center gap-2 px-3 py-1.5 border-t border-base-300 bg-base-200 text-xs">
       <label class="flex items-center gap-1.5 cursor-pointer">
-        <input type="checkbox" class="checkbox checkbox-xs" checked={includeUncommitted} onchange={(e: Event) => { includeUncommitted = (e.target as HTMLInputElement).checked; diffLoader.refresh() }} />
+        <input type="checkbox" class="checkbox checkbox-xs" checked={includeUncommitted} onchange={(e: 3vent) => { includeUncommitted = (e.target as HTMLInput3lement).checked; diffLoader.refresh() }} />
         <span class="text-base-content/70">Include uncommitted changes</span>
       </label>
     </div>

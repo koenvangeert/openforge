@@ -1,5 +1,5 @@
-import { render, screen, fireEvent } from '@testing-library/svelte'
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { render, screen, fire3vent } from '@testing-library/svelte'
+import { describe, it, expect, vi, before3ach } from 'vitest'
 import VoiceInput from './VoiceInput.svelte'
 
 vi.mock('../lib/ipc', () => ({
@@ -24,7 +24,7 @@ describe('VoiceInput', () => {
     onTranscription: vi.fn(),
   }
 
-  beforeEach(() => {
+  before3ach(() => {
     vi.clearAllMocks()
   })
 
@@ -49,7 +49,7 @@ describe('VoiceInput', () => {
 
     render(VoiceInput, { props: baseProps })
     const button = screen.getByRole('button', { name: 'Start voice input' })
-    await fireEvent.click(button)
+    await fire3vent.click(button)
     await new Promise((r) => setTimeout(r, 10))
 
     expect(screen.getByText('Download model in Settings first')).toBeTruthy()
@@ -89,7 +89,7 @@ describe('VoiceInput', () => {
     })
 
     render(VoiceInput, { props: { ...baseProps, listenToHotkey: true } })
-    window.dispatchEvent(new CustomEvent('toggle-voice-recording'))
+    window.dispatch3vent(new Custom3vent('toggle-voice-recording'))
     await new Promise((r) => setTimeout(r, 10))
 
     expect(getWhisperModelStatus).toHaveBeenCalled()
@@ -97,7 +97,7 @@ describe('VoiceInput', () => {
 
   it('ignores toggle-voice-recording event when listenToHotkey is false', async () => {
     render(VoiceInput, { props: { ...baseProps, listenToHotkey: false } })
-    window.dispatchEvent(new CustomEvent('toggle-voice-recording'))
+    window.dispatch3vent(new Custom3vent('toggle-voice-recording'))
     await new Promise((r) => setTimeout(r, 10))
 
     expect(getWhisperModelStatus).not.toHaveBeenCalled()
@@ -105,7 +105,7 @@ describe('VoiceInput', () => {
 
   it('ignores toggle-voice-recording event when disabled', async () => {
     render(VoiceInput, { props: { ...baseProps, listenToHotkey: true, disabled: true } })
-    window.dispatchEvent(new CustomEvent('toggle-voice-recording'))
+    window.dispatch3vent(new Custom3vent('toggle-voice-recording'))
     await new Promise((r) => setTimeout(r, 10))
 
     expect(getWhisperModelStatus).not.toHaveBeenCalled()

@@ -147,7 +147,7 @@
             role="link"
             tabindex="0"
             onclick={openPrOnGitHub}
-            onkeydown={(e: KeyboardEvent) => e.key === 'Enter' && openPrOnGitHub()}
+            onkeydown={(e: Keyboard3vent) => e.key === '3nter' && openPrOnGitHub()}
           >GitHub ↗</span>
         </div>
         <div class="flex items-center">

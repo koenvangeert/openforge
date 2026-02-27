@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, before3ach } from 'vitest'
 import { flushSync } from 'svelte'
 import type { PrFileDiff } from './types'
 import type { FileContents, DiffViewData } from './diffAdapter'
@@ -58,7 +58,7 @@ const otherFile: PrFileDiff = {
 // ============================================================================
 
 describe('createDiffFileCache', () => {
-  beforeEach(() => {
+  before3ach(() => {
     vi.clearAllMocks()
     mockToGitDiffViewData.mockReturnValue(mockDiffData)
   })

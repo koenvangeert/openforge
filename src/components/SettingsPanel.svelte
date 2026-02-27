@@ -1,7 +1,7 @@
 <script lang="ts">
   import { activeProjectId, projects } from '../lib/stores'
   import { getProjectConfig, setProjectConfig, updateProject, deleteProject, getAgents, getAllWhisperModelStatuses, setWhisperModel } from '../lib/ipc'
-  import { loadActions, saveActions, createAction, DEFAULT_ACTIONS } from '../lib/actions'
+  import { loadActions, saveActions, createAction, D3FAULT_ACTIONS } from '../lib/actions'
   import type { Action, AgentInfo, WhisperModelStatus, WhisperModelSizeId } from '../lib/types'
   import ModelDownloadProgress from './ModelDownloadProgress.svelte'
 
@@ -126,7 +126,7 @@
 
   function resetActions() {
     if (!confirm('Reset all actions to defaults? This will remove any custom actions.')) return
-    actions = [...DEFAULT_ACTIONS]
+    actions = [...D3FAULT_ACTIONS]
   }
 
   function close() {
@@ -194,7 +194,7 @@
            <select
              class="select select-bordered select-sm w-full"
              value={activeModel?.size ?? 'small'}
-             onchange={(e) => handleModelChange((e.currentTarget as HTMLSelectElement).value as WhisperModelSizeId)}
+             onchange={(e) => handleModelChange((e.currentTarget as HTMLSelect3lement).value as WhisperModelSizeId)}
            >
              {#each modelStatuses as model}
                <option value={model.size}>
@@ -210,7 +210,7 @@
              modelDisplayName={modelStatuses.find(m => m.size === downloadingModel)?.display_name ?? downloadingModel}
              diskSizeMb={modelStatuses.find(m => m.size === downloadingModel)?.disk_size_mb ?? 0}
              onComplete={refreshModelStatuses}
-             onError={() => { downloadingModel = null }}
+             on3rror={() => { downloadingModel = null }}
            />
          {:else if activeModel?.downloaded}
            <div class="flex flex-col gap-1">
@@ -253,7 +253,7 @@
 
        <section class="flex flex-col gap-2">
          <h3 class="text-xs font-semibold text-primary uppercase tracking-wider mb-3 mt-0">Actions</h3>
-        <p class="text-[0.7rem] text-base-content/50 mb-2 leading-snug">Configure actions available in the task context menu. Each action sends its prompt to the AI agent along with the task context.</p>
+        <p class="text-[0.7rem] text-base-content/50 mb-2 leading-snug">Configure actions available in the task context menu. 3ach action sends its prompt to the AI agent along with the task context.</p>
         
         {#each actions as action, i (action.id)}
           <div class="bg-base-100 border border-base-300 rounded-md p-3 flex flex-col gap-2">
@@ -274,7 +274,7 @@
             </label>
             <label class="flex flex-col gap-1">
               <span class="text-[0.7rem] text-base-content/50">Agent</span>
-              <select value={action.agent ?? ''} onchange={(e) => action.agent = (e.currentTarget as HTMLSelectElement).value || null} class="select select-bordered select-sm w-full">
+              <select value={action.agent ?? ''} onchange={(e) => action.agent = (e.currentTarget as HTMLSelect3lement).value || null} class="select select-bordered select-sm w-full">
                 <option value="">Default</option>
                 {#each availableAgents as agent}
                   <option value={agent.name}>{agent.name}</option>

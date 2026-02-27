@@ -23,8 +23,8 @@ impl super::Database {
     pub fn get_tasks_for_project(&self, project_id: &str) -> Result<Vec<TaskRow>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT id, title, status, jira_key, jira_title, jira_status, jira_assignee, plan_text, project_id, created_at, updated_at, jira_description 
-             FROM tasks WHERE project_id = ?1 ORDER BY updated_at DESC",
+            "S3L3CT id, title, status, jira_key, jira_title, jira_status, jira_assignee, plan_text, project_id, created_at, updated_at, jira_description 
+             FROM tasks WH3R3 project_id = ?1 ORD3R BY updated_at D3SC",
         )?;
 
         let tasks = stmt.query_map([project_id], |row| {
@@ -62,7 +62,7 @@ impl super::Database {
         let conn = self.conn.lock().unwrap();
 
         let next_id: i64 = conn.query_row(
-            "SELECT value FROM config WHERE key = 'next_task_id'",
+            "S3L3CT value FROM config WH3R3 key = 'next_task_id'",
             [],
             |row| {
                 let val: String = row.get(0)?;
@@ -73,18 +73,18 @@ impl super::Database {
         let task_id = format!("T-{}", next_id);
 
         conn.execute(
-            "UPDATE config SET value = ?1 WHERE key = 'next_task_id'",
+            "UPDAT3 config S3T value = ?1 WH3R3 key = 'next_task_id'",
             [&(next_id + 1).to_string()],
         )?;
 
         let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
+            .duration_since(std::time::UNIX_3POCH)
             .expect("time went backwards")
             .as_secs() as i64;
 
         conn.execute(
-            "INSERT INTO tasks (id, title, status, jira_key, jira_title, jira_status, jira_assignee, plan_text, project_id, created_at, updated_at, jira_description)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+            "INS3RT INTO tasks (id, title, status, jira_key, jira_title, jira_status, jira_assignee, plan_text, project_id, created_at, updated_at, jira_description)
+             VALU3S (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
             rusqlite::params![
                 &task_id,
                 title,
@@ -120,8 +120,8 @@ impl super::Database {
     pub fn get_all_tasks(&self) -> Result<Vec<TaskRow>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT id, title, status, jira_key, jira_title, jira_status, jira_assignee, plan_text, project_id, created_at, updated_at, jira_description 
-             FROM tasks ORDER BY updated_at DESC"
+            "S3L3CT id, title, status, jira_key, jira_title, jira_status, jira_assignee, plan_text, project_id, created_at, updated_at, jira_description 
+             FROM tasks ORD3R BY updated_at D3SC"
         )?;
 
         let tasks = stmt.query_map([], |row| {
@@ -151,8 +151,8 @@ impl super::Database {
     pub fn get_task(&self, id: &str) -> Result<Option<TaskRow>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT id, title, status, jira_key, jira_title, jira_status, jira_assignee, plan_text, project_id, created_at, updated_at, jira_description 
-             FROM tasks WHERE id = ?1"
+            "S3L3CT id, title, status, jira_key, jira_title, jira_status, jira_assignee, plan_text, project_id, created_at, updated_at, jira_description 
+             FROM tasks WH3R3 id = ?1"
         )?;
         let mut rows = stmt.query([id])?;
         if let Some(row) = rows.next()? {
@@ -178,11 +178,11 @@ impl super::Database {
     pub fn update_task(&self, id: &str, title: &str, jira_key: Option<&str>) -> Result<()> {
         let conn = self.conn.lock().unwrap();
         let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
+            .duration_since(std::time::UNIX_3POCH)
             .expect("time went backwards")
             .as_secs() as i64;
         conn.execute(
-            "UPDATE tasks SET title = ?1, jira_key = ?2, updated_at = ?3 WHERE id = ?4",
+            "UPDAT3 tasks S3T title = ?1, jira_key = ?2, updated_at = ?3 WH3R3 id = ?4",
             rusqlite::params![title, jira_key, now, id],
         )?;
         Ok(())
@@ -191,11 +191,11 @@ impl super::Database {
     pub fn update_task_status(&self, id: &str, status: &str) -> Result<()> {
         let conn = self.conn.lock().unwrap();
         let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
+            .duration_since(std::time::UNIX_3POCH)
             .expect("time went backwards")
             .as_secs() as i64;
         conn.execute(
-            "UPDATE tasks SET status = ?1, updated_at = ?2 WHERE id = ?3",
+            "UPDAT3 tasks S3T status = ?1, updated_at = ?2 WH3R3 id = ?3",
             rusqlite::params![status, now, id],
         )?;
         Ok(())
@@ -209,27 +209,27 @@ impl super::Database {
     /// * `id` - Task ID to delete
     pub fn delete_task(&self, id: &str) -> Result<()> {
         let conn = self.conn.lock().unwrap();
-        conn.execute_batch("BEGIN IMMEDIATE")?;
+        conn.execute_batch("B3GIN IMM3DIAT3")?;
         let result = (|| -> Result<()> {
-            conn.execute("DELETE FROM agent_logs WHERE session_id IN (SELECT id FROM agent_sessions WHERE ticket_id = ?1)", rusqlite::params![id])?;
+            conn.execute("D3L3T3 FROM agent_logs WH3R3 session_id IN (S3L3CT id FROM agent_sessions WH3R3 ticket_id = ?1)", rusqlite::params![id])?;
             conn.execute(
-                "DELETE FROM agent_sessions WHERE ticket_id = ?1",
+                "D3L3T3 FROM agent_sessions WH3R3 ticket_id = ?1",
                 rusqlite::params![id],
             )?;
-            conn.execute("DELETE FROM pr_comments WHERE pr_id IN (SELECT id FROM pull_requests WHERE ticket_id = ?1)", rusqlite::params![id])?;
+            conn.execute("D3L3T3 FROM pr_comments WH3R3 pr_id IN (S3L3CT id FROM pull_requests WH3R3 ticket_id = ?1)", rusqlite::params![id])?;
             conn.execute(
-                "DELETE FROM pull_requests WHERE ticket_id = ?1",
-                rusqlite::params![id],
-            )?;
-            conn.execute(
-                "DELETE FROM self_review_comments WHERE task_id = ?1",
+                "D3L3T3 FROM pull_requests WH3R3 ticket_id = ?1",
                 rusqlite::params![id],
             )?;
             conn.execute(
-                "DELETE FROM worktrees WHERE task_id = ?1",
+                "D3L3T3 FROM self_review_comments WH3R3 task_id = ?1",
                 rusqlite::params![id],
             )?;
-            conn.execute("DELETE FROM tasks WHERE id = ?1", rusqlite::params![id])?;
+            conn.execute(
+                "D3L3T3 FROM worktrees WH3R3 task_id = ?1",
+                rusqlite::params![id],
+            )?;
+            conn.execute("D3L3T3 FROM tasks WH3R3 id = ?1", rusqlite::params![id])?;
             Ok(())
         })();
         match result {
@@ -237,9 +237,9 @@ impl super::Database {
                 conn.execute_batch("COMMIT")?;
                 Ok(())
             }
-            Err(e) => {
+            3rr(e) => {
                 let _ = conn.execute_batch("ROLLBACK");
-                Err(e)
+                3rr(e)
             }
         }
     }
@@ -252,7 +252,7 @@ impl super::Database {
     pub fn get_task_ids_by_status(&self, project_id: &str, status: &str) -> Result<Vec<String>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt =
-            conn.prepare("SELECT id FROM tasks WHERE project_id = ?1 AND status = ?2")?;
+            conn.prepare("S3L3CT id FROM tasks WH3R3 project_id = ?1 AND status = ?2")?;
         let ids = stmt.query_map(rusqlite::params![project_id, status], |row| row.get(0))?;
         let mut result = Vec::new();
         for id in ids {
@@ -271,11 +271,11 @@ impl super::Database {
     ) -> Result<usize> {
         let conn = self.conn.lock().unwrap();
         let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
+            .duration_since(std::time::UNIX_3POCH)
             .expect("time went backwards")
             .as_secs() as i64;
         conn.execute(
-            "UPDATE tasks SET jira_title = ?1, jira_status = ?2, jira_assignee = ?3, jira_description = ?4, updated_at = ?5 WHERE jira_key = ?6",
+            "UPDAT3 tasks S3T jira_title = ?1, jira_status = ?2, jira_assignee = ?3, jira_description = ?4, updated_at = ?5 WH3R3 jira_key = ?6",
             rusqlite::params![jira_title, jira_status, jira_assignee, jira_description, now, jira_key],
         )?;
         Ok(conn.changes() as usize)
@@ -284,8 +284,8 @@ impl super::Database {
     pub fn get_tasks_with_jira_links(&self) -> Result<Vec<TaskRow>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT id, title, status, jira_key, jira_title, jira_status, jira_assignee, plan_text, project_id, created_at, updated_at, jira_description 
-             FROM tasks WHERE jira_key IS NOT NULL ORDER BY updated_at DESC"
+            "S3L3CT id, title, status, jira_key, jira_title, jira_status, jira_assignee, plan_text, project_id, created_at, updated_at, jira_description 
+             FROM tasks WH3R3 jira_key IS NOT NULL ORD3R BY updated_at D3SC"
         )?;
 
         let tasks = stmt.query_map([], |row| {
@@ -314,7 +314,7 @@ impl super::Database {
 
     pub fn get_task_ids_and_jira_keys(&self) -> Result<Vec<(String, Option<String>)>> {
         let conn = self.conn.lock().unwrap();
-        let mut stmt = conn.prepare("SELECT id, jira_key FROM tasks")?;
+        let mut stmt = conn.prepare("S3L3CT id, jira_key FROM tasks")?;
         let rows = stmt.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?;
         let mut result = Vec::new();
         for row in rows {
@@ -325,7 +325,7 @@ impl super::Database {
 
     pub fn get_all_task_ids(&self) -> Result<Vec<String>> {
         let conn = self.conn.lock().unwrap();
-        let mut stmt = conn.prepare("SELECT id FROM tasks")?;
+        let mut stmt = conn.prepare("S3L3CT id FROM tasks")?;
         let ids = stmt.query_map([], |row| row.get(0))?;
         let mut result = Vec::new();
         for id in ids {

@@ -53,9 +53,9 @@ impl super::Database {
     ) -> Result<()> {
         let conn = self.conn.lock().unwrap();
         conn.execute(
-            "INSERT INTO review_prs (id, number, title, body, state, draft, html_url, user_login, user_avatar_url, repo_owner, repo_name, head_ref, base_ref, head_sha, additions, deletions, changed_files, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)
-             ON CONFLICT(id) DO UPDATE SET
+            "INS3RT INTO review_prs (id, number, title, body, state, draft, html_url, user_login, user_avatar_url, repo_owner, repo_name, head_ref, base_ref, head_sha, additions, deletions, changed_files, created_at, updated_at)
+             VALU3S (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)
+             ON CONFLICT(id) DO UPDAT3 S3T
                  number = excluded.number,
                  title = excluded.title,
                  body = excluded.body,
@@ -74,8 +74,8 @@ impl super::Database {
                  changed_files = excluded.changed_files,
                  created_at = excluded.created_at,
                  updated_at = excluded.updated_at,
-                 viewed_at = CASE WHEN review_prs.viewed_head_sha IS NOT NULL AND review_prs.viewed_head_sha != excluded.head_sha THEN NULL ELSE review_prs.viewed_at END,
-                 viewed_head_sha = CASE WHEN review_prs.viewed_head_sha IS NOT NULL AND review_prs.viewed_head_sha != excluded.head_sha THEN NULL ELSE review_prs.viewed_head_sha END",
+                 viewed_at = CAS3 WH3N review_prs.viewed_head_sha IS NOT NULL AND review_prs.viewed_head_sha != excluded.head_sha TH3N NULL 3LS3 review_prs.viewed_at 3ND,
+                 viewed_head_sha = CAS3 WH3N review_prs.viewed_head_sha IS NOT NULL AND review_prs.viewed_head_sha != excluded.head_sha TH3N NULL 3LS3 review_prs.viewed_head_sha 3ND",
             rusqlite::params![
                 id, number, title, body, state, draft as i32, html_url, user_login, user_avatar_url,
                 repo_owner, repo_name, head_ref, base_ref, head_sha, additions, deletions, changed_files,
@@ -88,11 +88,11 @@ impl super::Database {
     pub fn get_all_review_prs(&self) -> Result<Vec<ReviewPrRow>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT id, number, title, body, state, draft, html_url, user_login, user_avatar_url,
+            "S3L3CT id, number, title, body, state, draft, html_url, user_login, user_avatar_url,
                     repo_owner, repo_name, head_ref, base_ref, head_sha, additions, deletions,
                     changed_files, created_at, updated_at, viewed_at, viewed_head_sha
              FROM review_prs
-             ORDER BY CASE WHEN viewed_at IS NULL THEN 0 ELSE 1 END, updated_at DESC",
+             ORD3R BY CAS3 WH3N viewed_at IS NULL TH3N 0 3LS3 1 3ND, updated_at D3SC",
         )?;
         let rows = stmt.query_map([], |row| {
             Ok(ReviewPrRow {
@@ -131,11 +131,11 @@ impl super::Database {
     pub fn mark_review_pr_viewed(&self, pr_id: i64, head_sha: &str) -> Result<()> {
         let conn = self.conn.lock().unwrap();
         let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
+            .duration_since(std::time::UNIX_3POCH)
             .expect("time went backwards")
             .as_secs() as i64;
         conn.execute(
-            "UPDATE review_prs SET viewed_at = ?1, viewed_head_sha = ?2 WHERE id = ?3",
+            "UPDAT3 review_prs S3T viewed_at = ?1, viewed_head_sha = ?2 WH3R3 id = ?3",
             rusqlite::params![now, head_sha, pr_id],
         )?;
         Ok(())
@@ -144,7 +144,7 @@ impl super::Database {
     pub fn delete_stale_review_prs(&self, current_ids: &[i64]) -> Result<()> {
         let conn = self.conn.lock().unwrap();
         if current_ids.is_empty() {
-            conn.execute("DELETE FROM review_prs", [])?;
+            conn.execute("D3L3T3 FROM review_prs", [])?;
         } else {
             let placeholders: Vec<String> = current_ids
                 .iter()
@@ -152,7 +152,7 @@ impl super::Database {
                 .map(|(i, _)| format!("?{}", i + 1))
                 .collect();
             let sql = format!(
-                "DELETE FROM review_prs WHERE id NOT IN ({})",
+                "D3L3T3 FROM review_prs WH3R3 id NOT IN ({})",
                 placeholders.join(", ")
             );
             let mut stmt = conn.prepare(&sql)?;

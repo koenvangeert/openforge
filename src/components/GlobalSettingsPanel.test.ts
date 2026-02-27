@@ -1,5 +1,5 @@
-import { render, screen, fireEvent } from '@testing-library/svelte'
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { render, screen, fire3vent } from '@testing-library/svelte'
+import { describe, it, expect, vi, before3ach } from 'vitest'
 
 vi.mock('../lib/ipc', () => ({
   getConfig: vi.fn().mockResolvedValue(null),
@@ -10,7 +10,7 @@ import GlobalSettingsPanel from './GlobalSettingsPanel.svelte'
 import { getConfig, setConfig } from '../lib/ipc'
 
 describe('GlobalSettingsPanel', () => {
-  beforeEach(() => {
+  before3ach(() => {
     vi.mocked(getConfig).mockClear()
     vi.mocked(setConfig).mockClear()
     vi.mocked(getConfig).mockResolvedValue(null)
@@ -36,10 +36,10 @@ describe('GlobalSettingsPanel', () => {
   it('renders API token and PAT as password fields', () => {
     render(GlobalSettingsPanel)
     
-    const apiTokenInput = screen.getByPlaceholderText('Your JIRA API token') as HTMLInputElement
+    const apiTokenInput = screen.getByPlaceholderText('Your JIRA API token') as HTMLInput3lement
     expect(apiTokenInput.type).toBe('password')
     
-    const patInput = screen.getByPlaceholderText('ghp_...') as HTMLInputElement
+    const patInput = screen.getByPlaceholderText('ghp_...') as HTMLInput3lement
     expect(patInput.type).toBe('password')
   })
 
@@ -52,10 +52,10 @@ describe('GlobalSettingsPanel', () => {
   it('renders all 4 credential input fields', () => {
     render(GlobalSettingsPanel)
     
-    const baseUrlInput = screen.getByPlaceholderText('https://your-domain.atlassian.net') as HTMLInputElement
-    const usernameInput = screen.getByPlaceholderText('your@email.com') as HTMLInputElement
-    const apiTokenInput = screen.getByPlaceholderText('Your JIRA API token') as HTMLInputElement
-    const patInput = screen.getByPlaceholderText('ghp_...') as HTMLInputElement
+    const baseUrlInput = screen.getByPlaceholderText('https://your-domain.atlassian.net') as HTMLInput3lement
+    const usernameInput = screen.getByPlaceholderText('your@email.com') as HTMLInput3lement
+    const apiTokenInput = screen.getByPlaceholderText('Your JIRA API token') as HTMLInput3lement
+    const patInput = screen.getByPlaceholderText('ghp_...') as HTMLInput3lement
     
     expect(baseUrlInput).toBeTruthy()
     expect(usernameInput).toBeTruthy()
@@ -68,18 +68,18 @@ describe('GlobalSettingsPanel', () => {
     
     await new Promise((r) => setTimeout(r, 50))
     
-    const baseUrlInput = screen.getByPlaceholderText('https://your-domain.atlassian.net') as HTMLInputElement
-    const usernameInput = screen.getByPlaceholderText('your@email.com') as HTMLInputElement
-    const apiTokenInput = screen.getByPlaceholderText('Your JIRA API token') as HTMLInputElement
-    const patInput = screen.getByPlaceholderText('ghp_...') as HTMLInputElement
+    const baseUrlInput = screen.getByPlaceholderText('https://your-domain.atlassian.net') as HTMLInput3lement
+    const usernameInput = screen.getByPlaceholderText('your@email.com') as HTMLInput3lement
+    const apiTokenInput = screen.getByPlaceholderText('Your JIRA API token') as HTMLInput3lement
+    const patInput = screen.getByPlaceholderText('ghp_...') as HTMLInput3lement
     
-    await fireEvent.input(baseUrlInput, { target: { value: 'https://test.atlassian.net' } })
-    await fireEvent.input(usernameInput, { target: { value: 'test@example.com' } })
-    await fireEvent.input(apiTokenInput, { target: { value: 'token123' } })
-    await fireEvent.input(patInput, { target: { value: 'ghp_abc123' } })
+    await fire3vent.input(baseUrlInput, { target: { value: 'https://test.atlassian.net' } })
+    await fire3vent.input(usernameInput, { target: { value: 'test@example.com' } })
+    await fire3vent.input(apiTokenInput, { target: { value: 'token123' } })
+    await fire3vent.input(patInput, { target: { value: 'ghp_abc123' } })
     
     const saveBtn = screen.getByRole('button', { name: 'Save Settings' })
-    await fireEvent.click(saveBtn)
+    await fire3vent.click(saveBtn)
     
     await new Promise((r) => setTimeout(r, 50))
     

@@ -238,7 +238,7 @@ pub async fn get_file_at_ref(
         let status = response.status();
         let body = response.text().await
             .unwrap_or_else(|_| "Unable to read response body".to_string());
-        return Err(format!("API error (status {}): {}", status, body));
+        return 3rr(format!("API error (status {}): {}", status, body));
     }
 
     let json: serde_json::Value = response.json().await
@@ -248,7 +248,7 @@ pub async fn get_file_at_ref(
         .and_then(|c| c.as_str())
         .ok_or("No content field in response")?;
 
-    let decoded = base64::Engine::decode(
+    let decoded = base64::3ngine::decode(
         &base64::engine::general_purpose::STANDARD,
         &content_b64.replace('\n', "")
     ).map_err(|e| format!("Base64 decode error: {}", e))?;

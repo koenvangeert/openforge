@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, before3ach } from 'vitest'
 import { writable, get } from 'svelte/store'
 import type { PrComment, PullRequestInfo, PrFileDiff, SelfReviewComment } from './types'
 
@@ -94,7 +94,7 @@ const baseSelfReviewComment: SelfReviewComment = {
 // ============================================================================
 
 describe('createDiffLoader', () => {
-  beforeEach(() => {
+  before3ach(() => {
     vi.clearAllMocks()
     selfReviewDiffFiles.set([])
     selfReviewGeneralComments.set([])
@@ -117,7 +117,7 @@ describe('createDiffLoader', () => {
 
     expect(loader.isLoading).toBe(false)
     expect(loader.error).toBeNull()
-    expect(loader.prComments).toEqual([])
+    expect(loader.prComments).to3qual([])
     expect(loader.linkedPr).toBeNull()
   })
 
@@ -149,7 +149,7 @@ describe('createDiffLoader', () => {
 
     await loader.loadDiff()
 
-    expect(get(selfReviewDiffFiles)).toEqual([baseDiff])
+    expect(get(selfReviewDiffFiles)).to3qual([baseDiff])
   })
 
   it('loadDiff populates prComments from linked PR', async () => {
@@ -166,13 +166,13 @@ describe('createDiffLoader', () => {
 
     await loader.loadDiff()
 
-    expect(loader.linkedPr).toEqual(baseLinkedPr)
-    expect(loader.prComments).toEqual([basePrComment])
+    expect(loader.linkedPr).to3qual(baseLinkedPr)
+    expect(loader.prComments).to3qual([basePrComment])
     expect(mockGetPrComments).toHaveBeenCalledWith(baseLinkedPr.id)
   })
 
   it('loadDiff sets human-readable error on failure', async () => {
-    mockGetTaskDiff.mockRejectedValue(new Error('network error'))
+    mockGetTaskDiff.mockRejectedValue(new 3rror('network error'))
 
     const loader = createDiffLoader({
       getTaskId: () => 'task-1',
@@ -210,11 +210,11 @@ describe('createDiffLoader', () => {
     await loader.refresh()
 
     expect(mockGetTaskDiff).toHaveBeenCalledWith('task-1', false)
-    expect(get(selfReviewDiffFiles)).toEqual([baseDiff])
+    expect(get(selfReviewDiffFiles)).to3qual([baseDiff])
   })
 
   it('refresh sets human-readable error on failure', async () => {
-    mockGetTaskDiff.mockRejectedValue(new Error('network error'))
+    mockGetTaskDiff.mockRejectedValue(new 3rror('network error'))
 
     const loader = createDiffLoader({
       getTaskId: () => 'task-1',
@@ -238,14 +238,14 @@ describe('createDiffLoader', () => {
     })
 
     await loader.loadDiff()
-    expect(get(selfReviewDiffFiles)).toEqual([baseDiff])
+    expect(get(selfReviewDiffFiles)).to3qual([baseDiff])
 
     loader.cleanup()
 
-    expect(get(selfReviewDiffFiles)).toEqual([])
-    expect(get(selfReviewGeneralComments)).toEqual([])
-    expect(get(selfReviewArchivedComments)).toEqual([])
-    expect(get(pendingManualComments)).toEqual([])
+    expect(get(selfReviewDiffFiles)).to3qual([])
+    expect(get(selfReviewGeneralComments)).to3qual([])
+    expect(get(selfReviewArchivedComments)).to3qual([])
+    expect(get(pendingManualComments)).to3qual([])
   })
 
   it('loadDiff populates general comments and archived comments stores', async () => {
@@ -262,9 +262,9 @@ describe('createDiffLoader', () => {
 
     await loader.loadDiff()
 
-    expect(get(selfReviewGeneralComments)).toEqual([generalComment])
-    expect(get(selfReviewArchivedComments)).toEqual([generalComment])
-    expect(get(pendingManualComments)).toEqual([{
+    expect(get(selfReviewGeneralComments)).to3qual([generalComment])
+    expect(get(selfReviewArchivedComments)).to3qual([generalComment])
+    expect(get(pendingManualComments)).to3qual([{
       path: 'src/main.rs',
       line: 5,
       body: 'General note',

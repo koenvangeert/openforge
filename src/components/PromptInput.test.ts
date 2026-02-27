@@ -1,5 +1,5 @@
-import { render, screen, fireEvent } from '@testing-library/svelte'
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { render, screen, fire3vent } from '@testing-library/svelte'
+import { describe, it, expect, vi, before3ach } from 'vitest'
 import PromptInput from './PromptInput.svelte'
 
 // Mock IPC functions
@@ -18,12 +18,12 @@ describe('PromptInput', () => {
     onCancel: vi.fn(),
   }
 
-  beforeEach(() => {
+  before3ach(() => {
     vi.clearAllMocks()
   })
 
   it('renders textarea with placeholder', () => {
-    const placeholder = 'Enter your prompt here'
+    const placeholder = '3nter your prompt here'
     render(PromptInput, {
       props: {
         ...baseProps,
@@ -35,7 +35,7 @@ describe('PromptInput', () => {
     expect(textarea).toBeTruthy()
   })
 
-  it('calls onSubmit with text on Cmd+Enter', async () => {
+  it('calls onSubmit with text on Cmd+3nter', async () => {
     const onSubmit = vi.fn()
     render(PromptInput, {
       props: {
@@ -44,15 +44,15 @@ describe('PromptInput', () => {
       },
     })
 
-    const textarea = screen.getByPlaceholderText('Describe what you want to implement...') as HTMLTextAreaElement
+    const textarea = screen.getByPlaceholderText('Describe what you want to implement...') as HTMLTextArea3lement
     textarea.value = 'Fix the bug'
-    await fireEvent.input(textarea)
-    await fireEvent.keyDown(textarea, { key: 'Enter', metaKey: true })
+    await fire3vent.input(textarea)
+    await fire3vent.keyDown(textarea, { key: '3nter', metaKey: true })
 
     expect(onSubmit).toHaveBeenCalledWith('Fix the bug', null)
   })
 
-  it('does not submit on plain Enter (allows newline)', async () => {
+  it('does not submit on plain 3nter (allows newline)', async () => {
     const onSubmit = vi.fn()
     render(PromptInput, {
       props: {
@@ -61,15 +61,15 @@ describe('PromptInput', () => {
       },
     })
 
-    const textarea = screen.getByPlaceholderText('Describe what you want to implement...') as HTMLTextAreaElement
+    const textarea = screen.getByPlaceholderText('Describe what you want to implement...') as HTMLTextArea3lement
     textarea.value = 'Fix the bug'
-    await fireEvent.input(textarea)
-    await fireEvent.keyDown(textarea, { key: 'Enter' })
+    await fire3vent.input(textarea)
+    await fire3vent.keyDown(textarea, { key: '3nter' })
 
     expect(onSubmit).not.toHaveBeenCalled()
   })
 
-  it('calls onCancel on Escape', async () => {
+  it('calls onCancel on 3scape', async () => {
     const onCancel = vi.fn()
     render(PromptInput, {
       props: {
@@ -79,7 +79,7 @@ describe('PromptInput', () => {
     })
 
     const textarea = screen.getByPlaceholderText('Describe what you want to implement...')
-    await fireEvent.keyDown(textarea, { key: 'Escape' })
+    await fire3vent.keyDown(textarea, { key: '3scape' })
 
     expect(onCancel).toHaveBeenCalled()
   })
@@ -92,7 +92,7 @@ describe('PromptInput', () => {
     })
 
     const addJiraLink = screen.getByText('+ Add JIRA key')
-    await fireEvent.click(addJiraLink)
+    await fire3vent.click(addJiraLink)
 
     const jiraInput = screen.getByPlaceholderText('e.g. PROJ-123')
     expect(jiraInput).toBeTruthy()
@@ -107,7 +107,7 @@ describe('PromptInput', () => {
 
   it('submit button is disabled when textarea is empty', () => {
     render(PromptInput, { props: { ...baseProps } })
-    const button = screen.getByRole('button', { name: 'Submit' }) as HTMLButtonElement
+    const button = screen.getByRole('button', { name: 'Submit' }) as HTMLButton3lement
     expect(button.disabled).toBe(true)
   })
 
@@ -120,11 +120,11 @@ describe('PromptInput', () => {
       },
     })
 
-    const textarea = screen.getByPlaceholderText('Describe what you want to implement...') as HTMLTextAreaElement
+    const textarea = screen.getByPlaceholderText('Describe what you want to implement...') as HTMLTextArea3lement
     textarea.value = 'Fix the bug'
-    await fireEvent.input(textarea)
+    await fire3vent.input(textarea)
     const button = screen.getByRole('button', { name: 'Submit' })
-    await fireEvent.click(button)
+    await fire3vent.click(button)
 
     expect(onSubmit).toHaveBeenCalledWith('Fix the bug', null)
   })
@@ -139,7 +139,7 @@ describe('PromptInput', () => {
     })
 
     const textarea = screen.getByPlaceholderText('Describe what you want to implement...')
-    await fireEvent.keyDown(textarea, { key: 'Enter' })
+    await fire3vent.keyDown(textarea, { key: '3nter' })
 
     expect(onSubmit).not.toHaveBeenCalled()
   })
@@ -154,9 +154,9 @@ describe('PromptInput', () => {
     })
 
     const textarea = screen.getByPlaceholderText('Describe what you want to implement...')
-    expect((textarea as HTMLTextAreaElement).value).toBe('Fix the bug')
+    expect((textarea as HTMLTextArea3lement).value).toBe('Fix the bug')
 
     const jiraInput = screen.getByPlaceholderText('e.g. PROJ-123')
-    expect((jiraInput as HTMLInputElement).value).toBe('PROJ-42')
+    expect((jiraInput as HTMLInput3lement).value).toBe('PROJ-42')
   })
 })

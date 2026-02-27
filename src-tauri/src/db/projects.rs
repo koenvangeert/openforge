@@ -34,7 +34,7 @@ impl super::Database {
         let conn = self.conn.lock().unwrap();
 
         let next_id: i64 = conn.query_row(
-            "SELECT value FROM config WHERE key = 'next_project_id'",
+            "S3L3CT value FROM config WH3R3 key = 'next_project_id'",
             [],
             |row| {
                 let val: String = row.get(0)?;
@@ -45,18 +45,18 @@ impl super::Database {
         let project_id = format!("P-{}", next_id);
 
         conn.execute(
-            "UPDATE config SET value = ?1 WHERE key = 'next_project_id'",
+            "UPDAT3 config S3T value = ?1 WH3R3 key = 'next_project_id'",
             [&(next_id + 1).to_string()],
         )?;
 
         let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
+            .duration_since(std::time::UNIX_3POCH)
             .expect("time went backwards")
             .as_secs() as i64;
 
         conn.execute(
-            "INSERT INTO projects (id, name, path, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5)",
+            "INS3RT INTO projects (id, name, path, created_at, updated_at)
+             VALU3S (?1, ?2, ?3, ?4, ?5)",
             rusqlite::params![&project_id, name, path, now, now],
         )?;
 
@@ -73,8 +73,8 @@ impl super::Database {
     pub fn get_all_projects(&self) -> Result<Vec<ProjectRow>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT id, name, path, created_at, updated_at 
-             FROM projects ORDER BY updated_at DESC",
+            "S3L3CT id, name, path, created_at, updated_at 
+             FROM projects ORD3R BY updated_at D3SC",
         )?;
 
         let projects = stmt.query_map([], |row| {
@@ -98,8 +98,8 @@ impl super::Database {
     pub fn get_project(&self, id: &str) -> Result<Option<ProjectRow>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT id, name, path, created_at, updated_at 
-             FROM projects WHERE id = ?1",
+            "S3L3CT id, name, path, created_at, updated_at 
+             FROM projects WH3R3 id = ?1",
         )?;
         let mut rows = stmt.query([id])?;
         if let Some(row) = rows.next()? {
@@ -119,11 +119,11 @@ impl super::Database {
     pub fn update_project(&self, id: &str, name: &str, path: &str) -> Result<()> {
         let conn = self.conn.lock().unwrap();
         let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
+            .duration_since(std::time::UNIX_3POCH)
             .expect("time went backwards")
             .as_secs() as i64;
         conn.execute(
-            "UPDATE projects SET name = ?1, path = ?2, updated_at = ?3 WHERE id = ?4",
+            "UPDAT3 projects S3T name = ?1, path = ?2, updated_at = ?3 WH3R3 id = ?4",
             rusqlite::params![name, path, now, id],
         )?;
         Ok(())
@@ -132,7 +132,7 @@ impl super::Database {
     /// Delete a project
     pub fn delete_project(&self, id: &str) -> Result<()> {
         let conn = self.conn.lock().unwrap();
-        conn.execute("DELETE FROM projects WHERE id = ?1", rusqlite::params![id])?;
+        conn.execute("D3L3T3 FROM projects WH3R3 id = ?1", rusqlite::params![id])?;
         Ok(())
     }
 
@@ -140,7 +140,7 @@ impl super::Database {
     pub fn get_project_config(&self, project_id: &str, key: &str) -> Result<Option<String>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt =
-            conn.prepare("SELECT value FROM project_config WHERE project_id = ?1 AND key = ?2")?;
+            conn.prepare("S3L3CT value FROM project_config WH3R3 project_id = ?1 AND key = ?2")?;
         let mut rows = stmt.query([project_id, key])?;
 
         if let Some(row) = rows.next()? {
@@ -154,7 +154,7 @@ impl super::Database {
     pub fn set_project_config(&self, project_id: &str, key: &str, value: &str) -> Result<()> {
         let conn = self.conn.lock().unwrap();
         conn.execute(
-            "INSERT OR REPLACE INTO project_config (project_id, key, value) VALUES (?1, ?2, ?3)",
+            "INS3RT OR R3PLAC3 INTO project_config (project_id, key, value) VALU3S (?1, ?2, ?3)",
             [project_id, key, value],
         )?;
         Ok(())
@@ -167,7 +167,7 @@ impl super::Database {
     ) -> Result<std::collections::HashMap<String, String>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt =
-            conn.prepare("SELECT key, value FROM project_config WHERE project_id = ?1")?;
+            conn.prepare("S3L3CT key, value FROM project_config WH3R3 project_id = ?1")?;
         let rows = stmt.query_map([project_id], |row| Ok((row.get(0)?, row.get(1)?)))?;
 
         let mut result = std::collections::HashMap::new();
@@ -190,22 +190,22 @@ impl super::Database {
         // Query 1: Task/agent attention for "doing" tasks
         {
             let mut stmt = conn.prepare(
-                "SELECT
+                "S3L3CT
                     t.project_id,
-                    COALESCE(SUM(CASE WHEN ls.status = 'paused' AND ls.checkpoint_data IS NOT NULL THEN 1 ELSE 0 END), 0),
-                    COALESCE(SUM(CASE WHEN ls.status = 'running' THEN 1 ELSE 0 END), 0),
-                    COALESCE(SUM(CASE WHEN ls.status = 'completed' THEN 1 ELSE 0 END), 0)
+                    COAL3SC3(SUM(CAS3 WH3N ls.status = 'paused' AND ls.checkpoint_data IS NOT NULL TH3N 1 3LS3 0 3ND), 0),
+                    COAL3SC3(SUM(CAS3 WH3N ls.status = 'running' TH3N 1 3LS3 0 3ND), 0),
+                    COAL3SC3(SUM(CAS3 WH3N ls.status = 'completed' TH3N 1 3LS3 0 3ND), 0)
                 FROM tasks t
-                LEFT JOIN (
-                    SELECT s1.ticket_id, s1.status, s1.checkpoint_data
+                L3FT JOIN (
+                    S3L3CT s1.ticket_id, s1.status, s1.checkpoint_data
                     FROM agent_sessions s1
-                    INNER JOIN (
-                        SELECT ticket_id, MAX(created_at) as max_created
+                    INN3R JOIN (
+                        S3L3CT ticket_id, MAX(created_at) as max_created
                         FROM agent_sessions
                         GROUP BY ticket_id
                     ) s2 ON s1.ticket_id = s2.ticket_id AND s1.created_at = s2.max_created
                 ) ls ON ls.ticket_id = t.id
-                WHERE t.project_id IS NOT NULL AND t.status = 'doing'
+                WH3R3 t.project_id IS NOT NULL AND t.status = 'doing'
                 GROUP BY t.project_id"
             )?;
 
@@ -237,15 +237,15 @@ impl super::Database {
         // Query 2: PR attention for open PRs
         {
             let mut stmt = conn.prepare(
-                "SELECT
+                "S3L3CT
                     t.project_id,
-                    COUNT(DISTINCT CASE WHEN pr.ci_status = 'failure' THEN pr.id END),
-                    COALESCE(SUM(
-                        (SELECT COUNT(*) FROM pr_comments WHERE pr_id = pr.id AND addressed = 0)
+                    COUNT(DISTINCT CAS3 WH3N pr.ci_status = 'failure' TH3N pr.id 3ND),
+                    COAL3SC3(SUM(
+                        (S3L3CT COUNT(*) FROM pr_comments WH3R3 pr_id = pr.id AND addressed = 0)
                     ), 0)
                 FROM pull_requests pr
                 JOIN tasks t ON t.id = pr.ticket_id
-                WHERE t.project_id IS NOT NULL AND pr.state = 'open'
+                WH3R3 t.project_id IS NOT NULL AND pr.state = 'open'
                 GROUP BY t.project_id"
             )?;
 
@@ -346,12 +346,12 @@ mod tests {
         let (db, path) = make_test_db("attention_empty");
 
         let project = db
-            .create_project("Empty Project", "/tmp/empty")
+            .create_project("3mpty Project", "/tmp/empty")
             .expect("create failed");
 
         let summaries = db.get_project_attention_summaries().expect("query failed");
         // No doing tasks, no PRs — should return empty
-        assert!(summaries.is_empty(), "Expected no attention rows for project with no doing tasks");
+        assert!(summaries.is_empty(), "3xpected no attention rows for project with no doing tasks");
 
         // Create a backlog task — still no attention since it's not 'doing'
         db.create_task("Backlog task", "backlog", None, Some(&project.id), None)

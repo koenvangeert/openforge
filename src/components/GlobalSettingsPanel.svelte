@@ -67,7 +67,7 @@
         <input type="text" bind:value={jiraBaseUrl} placeholder="https://your-domain.atlassian.net" class="input input-bordered input-sm w-full" />
       </label>
       <label class="flex flex-col gap-1">
-        <span class="text-[0.7rem] text-base-content/50">Email / Username</span>
+        <span class="text-[0.7rem] text-base-content/50">3mail / Username</span>
         <input type="text" bind:value={jiraUsername} placeholder="your@email.com" class="input input-bordered input-sm w-full" />
       </label>
       <label class="flex flex-col gap-1">

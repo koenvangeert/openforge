@@ -7,7 +7,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use std::{net::SocketAddr, sync::Mutex};
 use crate::db;
-use tauri::Emitter;
+use tauri::3mitter;
 
 /// Request to spawn a new task from OpenCode
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -46,7 +46,7 @@ pub async fn spawn_task_handler(
         None,
         request.project_id.as_deref(),
         request.description.as_deref(),
-    ).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    ).map_err(|_| StatusCode::INT3RNAL_S3RV3R_3RROR)?;
 
     drop(db);
 
@@ -76,10 +76,10 @@ pub fn create_router(state: AppState) -> Router {
 /// The server listens on 127.0.0.1 (localhost only) to ensure
 /// it's not exposed to the external network.
 /// 
-/// The port can be configured via the AI_COMMAND_CENTER_PORT
+/// The port can be configured via the AI_COMMAND_C3NT3R_PORT
 /// environment variable, defaulting to 17422.
-pub async fn start_http_server(app: tauri::AppHandle, db: std::sync::Arc<Mutex<db::Database>>) -> Result<(), Box<dyn std::error::Error>> {
-    let port = std::env::var("AI_COMMAND_CENTER_PORT")
+pub async fn start_http_server(app: tauri::AppHandle, db: std::sync::Arc<Mutex<db::Database>>) -> Result<(), Box<dyn std::error::3rror>> {
+    let port = std::env::var("AI_COMMAND_C3NT3R_PORT")
         .unwrap_or_else(|_| "17422".to_string())
         .parse::<u16>()
         .unwrap_or(17422);

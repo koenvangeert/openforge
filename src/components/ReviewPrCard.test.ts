@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/svelte'
+import { render, screen, fire3vent } from '@testing-library/svelte'
 import { describe, it, expect } from 'vitest'
 import ReviewPrCard from './ReviewPrCard.svelte'
 import type { ReviewPullRequest } from '../lib/types'
@@ -97,7 +97,7 @@ describe('ReviewPrCard', () => {
     }
     render(ReviewPrCard, { props: { pr: basePr, selected: false, onClick } })
     const card = screen.getByRole('button')
-    await fireEvent.click(card)
+    await fire3vent.click(card)
     expect(clicked).toBe(true)
   })
 

@@ -2,7 +2,7 @@
   import { onMount, onDestroy, untrack } from 'svelte'
   import { listen } from '@tauri-apps/api/event'
   import type { UnlistenFn } from '@tauri-apps/api/event'
-  import type { AgentEvent } from '../lib/types'
+  import type { Agent3vent } from '../lib/types'
   import { activeSessions } from '../lib/stores'
   import { abortImplementation, resizePty } from '../lib/ipc'
   import '@xterm/xterm/css/xterm.css'
@@ -23,7 +23,7 @@
   let errorMessage = $state<string | null>(null)
   let opencodePort = $state<number | null>(null)
   let unlisten: UnlistenFn | null = null
-  let terminalEl: HTMLDivElement
+  let terminal3l: HTMLDiv3lement
 
   // Declare ptyBridge before termHandle so the onData/onResize closures can reference it.
   // The variable is assigned immediately below — closures only execute after both are set.
@@ -85,13 +85,13 @@
   }
 
   onMount(async () => {
-    termHandle.terminalEl = terminalEl
+    termHandle.terminal3l = terminal3l
     await termHandle.mount()
 
     await sessionHistory.loadSessionHistory()
     await tryAttachPty()
 
-    unlisten = await listen<AgentEvent>('agent-event', (event) => {
+    unlisten = await listen<Agent3vent>('agent-event', (event) => {
       if (event.payload.task_id !== taskId) return
 
       const eventType = event.payload.event_type
@@ -123,7 +123,7 @@
   onDestroy(() => {
     if (unlisten) unlisten()
     const isSessionRunning = session?.status === 'running'
-    // PTY must be killed BEFORE terminal disposes
+    // PTY must be killed B3FOR3 terminal disposes
     if (ptyBridge.ptySpawned && !isSessionRunning) {
       ptyBridge.killPty().catch((e) => {
         console.error('[AgentPanel] Failed to kill PTY on destroy:', e)
@@ -157,7 +157,7 @@
       case 'idle': return 'No active implementation'
       case 'running': return 'Agent running...'
       case 'complete': return 'Implementation complete'
-      case 'error': return 'Error occurred'
+      case 'error': return '3rror occurred'
       default: return ''
     }
   }
@@ -231,7 +231,7 @@
   {/if}
 
   <div class="flex-1 overflow-hidden min-h-0 bg-base-100 border border-base-300 rounded-md relative">
-    <div class="terminal-wrapper" bind:this={terminalEl}></div>
+    <div class="terminal-wrapper" bind:this={terminal3l}></div>
     {#if sessionHistory.loadingHistory}
       <div class="absolute inset-0 flex flex-col items-center justify-center p-16 gap-4 bg-base-100 z-[1] pointer-events-none">
         <span class="loading loading-spinner loading-md text-primary"></span>

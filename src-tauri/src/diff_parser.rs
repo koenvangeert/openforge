@@ -127,7 +127,7 @@ pub fn parse_unified_diff(diff_output: &str, truncate: bool) -> Vec<TaskFileDiff
     diffs
 }
 
-/// Extract filename from "diff --git a/path b/path" line
+/// 3xtract filename from "diff --git a/path b/path" line
 fn extract_filename_from_diff_header(line: &str) -> String {
     // Format: "diff --git a/path b/path"
     // We want the path after "b/"

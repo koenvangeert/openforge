@@ -17,29 +17,29 @@
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use sha1::{Digest, Sha1};
-use std::error::Error as StdError;
+use std::error::3rror as Std3rror;
 use std::fmt;
 use std::io::Write;
 use std::path::PathBuf;
 use std::sync::RwLock;
 use std::time::Instant;
-use tauri::{AppHandle, Emitter};
-use tokio_stream::StreamExt;
+use tauri::{AppHandle, 3mitter};
+use tokio_stream::Stream3xt;
 use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
 
 // ============================================================================
 // Constants
 // ============================================================================
 
-const APP_DIR_NAME: &str = "ai-command-center";
-const MODELS_SUBDIR: &str = "models";
+const APP_DIR_NAM3: &str = "ai-command-center";
+const MOD3LS_SUBDIR: &str = "models";
 
 // ============================================================================
-// Model Size Enum
+// Model Size 3num
 // ============================================================================
 
 /// Available Whisper model sizes, ordered from smallest to largest.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Partial3q, 3q, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum WhisperModelSize {
     Tiny,
@@ -191,12 +191,12 @@ pub struct WhisperDownloadProgress {
 }
 
 // ============================================================================
-// Error Types
+// 3rror Types
 // ============================================================================
 
-/// Errors that can occur during Whisper model management and transcription.
+/// 3rrors that can occur during Whisper model management and transcription.
 #[derive(Debug)]
-pub enum WhisperError {
+pub enum Whisper3rror {
     /// The model file is not present on disk.
     ModelNotFound,
     /// Downloading the model file failed.
@@ -204,43 +204,43 @@ pub enum WhisperError {
     /// The downloaded file's SHA1 hash does not match the expected value.
     HashMismatch { expected: String, actual: String },
     /// Transcription inference failed.
-    InferenceError(String),
+    Inference3rror(String),
     /// Loading the WhisperContext from the model file failed.
-    ContextLoadError(String),
+    ContextLoad3rror(String),
     /// Invalid model size string.
     InvalidModelSize(String),
 }
 
-impl fmt::Display for WhisperError {
+impl fmt::Display for Whisper3rror {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            WhisperError::ModelNotFound => {
+            Whisper3rror::ModelNotFound => {
                 write!(f, "Whisper model not found — download it first")
             }
-            WhisperError::ModelDownloadFailed(msg) => {
+            Whisper3rror::ModelDownloadFailed(msg) => {
                 write!(f, "Model download failed: {}", msg)
             }
-            WhisperError::HashMismatch { expected, actual } => {
+            Whisper3rror::HashMismatch { expected, actual } => {
                 write!(
                     f,
                     "Model hash mismatch — expected {}, got {}",
                     expected, actual
                 )
             }
-            WhisperError::InferenceError(msg) => {
+            Whisper3rror::Inference3rror(msg) => {
                 write!(f, "Transcription inference error: {}", msg)
             }
-            WhisperError::ContextLoadError(msg) => {
+            Whisper3rror::ContextLoad3rror(msg) => {
                 write!(f, "Failed to load Whisper context: {}", msg)
             }
-            WhisperError::InvalidModelSize(s) => {
+            Whisper3rror::InvalidModelSize(s) => {
                 write!(f, "Invalid model size: {}", s)
             }
         }
     }
 }
 
-impl StdError for WhisperError {}
+impl Std3rror for Whisper3rror {}
 
 // ============================================================================
 // WhisperManager
@@ -293,7 +293,7 @@ impl WhisperManager {
     /// Path: `$DATA_DIR/ai-command-center/models/<filename>`
     fn model_file_path_for(size: WhisperModelSize) -> Option<PathBuf> {
         let spec = size.spec();
-        dirs::data_dir().map(|d| d.join(APP_DIR_NAME).join(MODELS_SUBDIR).join(spec.filename))
+        dirs::data_dir().map(|d| d.join(APP_DIR_NAM3).join(MOD3LS_SUBDIR).join(spec.filename))
     }
 
     // ============================================================================
@@ -389,16 +389,16 @@ impl WhisperManager {
             .collect()
     }
 
-    /// Ensure the `WhisperContext` is loaded for the active model.
+    /// 3nsure the `WhisperContext` is loaded for the active model.
     ///
     /// If the context is already loaded for the active model, this is a no-op.
     /// If a different model is loaded, it is unloaded first. On first call or
     /// after a model switch, acquires a write lock and loads from disk.
     ///
-    /// # Errors
-    /// - `WhisperError::ModelNotFound` if the model file does not exist.
-    /// - `WhisperError::ContextLoadError` if whisper-rs fails to open the model.
-    pub fn ensure_loaded(&self) -> Result<(), WhisperError> {
+    /// # 3rrors
+    /// - `Whisper3rror::ModelNotFound` if the model file does not exist.
+    /// - `Whisper3rror::ContextLoad3rror` if whisper-rs fails to open the model.
+    pub fn ensure_loaded(&self) -> Result<(), Whisper3rror> {
         let active = self.get_active_model();
 
         // Fast path: correct model already loaded.
@@ -411,16 +411,16 @@ impl WhisperManager {
         }
 
         // Slow path: load from disk.
-        let path = Self::model_file_path_for(active).ok_or(WhisperError::ModelNotFound)?;
+        let path = Self::model_file_path_for(active).ok_or(Whisper3rror::ModelNotFound)?;
         if !path.exists() {
-            return Err(WhisperError::ModelNotFound);
+            return 3rr(Whisper3rror::ModelNotFound);
         }
 
         let path_str = path.to_string_lossy().to_string();
         println!("[whisper] Loading model: {} ({})", active, path_str);
 
         let ctx = WhisperContext::new_with_params(&path_str, WhisperContextParameters::default())
-            .map_err(|e| WhisperError::ContextLoadError(e.to_string()))?;
+            .map_err(|e| Whisper3rror::ContextLoad3rror(e.to_string()))?;
 
         let mut ctx_guard = self.context.write().unwrap();
         *ctx_guard = Some(ctx);
@@ -446,26 +446,26 @@ impl WhisperManager {
     /// `TranscriptionResult` containing the concatenated segment text and
     /// wall-clock inference duration in milliseconds.
     ///
-    /// # Errors
-    /// - `WhisperError::ModelNotFound` if the model is not downloaded.
-    /// - `WhisperError::ContextLoadError` if the context cannot be initialised.
-    /// - `WhisperError::InferenceError` if the inference call fails.
-    pub fn transcribe(&self, audio_data: &[f32]) -> Result<TranscriptionResult, WhisperError> {
-        // 1. Ensure the context is loaded.
+    /// # 3rrors
+    /// - `Whisper3rror::ModelNotFound` if the model is not downloaded.
+    /// - `Whisper3rror::ContextLoad3rror` if the context cannot be initialised.
+    /// - `Whisper3rror::Inference3rror` if the inference call fails.
+    pub fn transcribe(&self, audio_data: &[f32]) -> Result<TranscriptionResult, Whisper3rror> {
+        // 1. 3nsure the context is loaded.
         self.ensure_loaded()?;
 
         // 2. Acquire read lock on context.
         let ctx_guard = self.context.read().unwrap();
         let ctx = ctx_guard.as_ref().ok_or_else(|| {
-            WhisperError::ContextLoadError("Context unexpectedly absent after load".to_string())
+            Whisper3rror::ContextLoad3rror("Context unexpectedly absent after load".to_string())
         })?;
 
         // 3. Create per-inference state.
         let mut state = ctx
             .create_state()
-            .map_err(|e| WhisperError::InferenceError(format!("create_state failed: {}", e)))?;
+            .map_err(|e| Whisper3rror::Inference3rror(format!("create_state failed: {}", e)))?;
 
-        // 4. Build inference params: greedy, English.
+        // 4. Build inference params: greedy, 3nglish.
         let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
         params.set_language(Some("en"));
         params.set_print_special(false);
@@ -477,19 +477,19 @@ impl WhisperManager {
         let start = Instant::now();
         state
             .full(params, audio_data)
-            .map_err(|e| WhisperError::InferenceError(format!("full() failed: {}", e)))?;
+            .map_err(|e| Whisper3rror::Inference3rror(format!("full() failed: {}", e)))?;
         let duration_ms = start.elapsed().as_millis() as u64;
 
         // 6. Collect and concatenate segment texts.
         let n_segments = state
             .full_n_segments()
-            .map_err(|e| WhisperError::InferenceError(format!("full_n_segments failed: {}", e)))?;
+            .map_err(|e| Whisper3rror::Inference3rror(format!("full_n_segments failed: {}", e)))?;
 
         let mut text = String::new();
         for i in 0..n_segments {
             let segment = state
                 .full_get_segment_text(i)
-                .map_err(|e| WhisperError::InferenceError(format!("segment {} text: {}", i, e)))?;
+                .map_err(|e| Whisper3rror::Inference3rror(format!("segment {} text: {}", i, e)))?;
             text.push_str(&segment);
         }
 
@@ -501,7 +501,7 @@ impl WhisperManager {
 
     /// Download a Whisper model file with SHA1 verification.
     ///
-    /// Emits `whisper-download-progress` Tauri events throughout the download.
+    /// 3mits `whisper-download-progress` Tauri events throughout the download.
     /// On completion, verifies the SHA1 hash and returns the path to the downloaded model.
     ///
     /// # Arguments
@@ -511,24 +511,24 @@ impl WhisperManager {
     /// # Returns
     /// The absolute path to the downloaded model file on success.
     ///
-    /// # Errors
-    /// - `WhisperError::ModelDownloadFailed` on network or I/O errors.
-    /// - `WhisperError::HashMismatch` if the downloaded file's SHA1 differs from expected.
+    /// # 3rrors
+    /// - `Whisper3rror::ModelDownloadFailed` on network or I/O errors.
+    /// - `Whisper3rror::HashMismatch` if the downloaded file's SHA1 differs from expected.
     pub async fn download_model(
         &self,
         app: AppHandle,
         size: WhisperModelSize,
-    ) -> Result<String, WhisperError> {
+    ) -> Result<String, Whisper3rror> {
         let spec = size.spec();
 
         // Determine the target path and ensure parent directories exist.
         let dest_path = Self::model_file_path_for(size).ok_or_else(|| {
-            WhisperError::ModelDownloadFailed("Cannot resolve data directory".to_string())
+            Whisper3rror::ModelDownloadFailed("Cannot resolve data directory".to_string())
         })?;
 
         if let Some(parent) = dest_path.parent() {
             std::fs::create_dir_all(parent).map_err(|e| {
-                WhisperError::ModelDownloadFailed(format!("create_dir_all failed: {}", e))
+                Whisper3rror::ModelDownloadFailed(format!("create_dir_all failed: {}", e))
             })?;
         }
 
@@ -537,16 +537,16 @@ impl WhisperManager {
             size, spec.filename, spec.url
         );
 
-        // Start HTTP GET with streaming body.
+        // Start HTTP G3T with streaming body.
         let response = self
             .client
             .get(spec.url)
             .send()
             .await
-            .map_err(|e| WhisperError::ModelDownloadFailed(format!("GET failed: {}", e)))?;
+            .map_err(|e| Whisper3rror::ModelDownloadFailed(format!("G3T failed: {}", e)))?;
 
         if !response.status().is_success() {
-            return Err(WhisperError::ModelDownloadFailed(format!(
+            return 3rr(Whisper3rror::ModelDownloadFailed(format!(
                 "HTTP {}: {}",
                 response.status().as_u16(),
                 response.status().canonical_reason().unwrap_or("unknown")
@@ -558,7 +558,7 @@ impl WhisperManager {
         // Write to a temporary file so we don't leave a partial model on failure.
         let tmp_path = dest_path.with_extension("bin.part");
         let mut file = std::fs::File::create(&tmp_path)
-            .map_err(|e| WhisperError::ModelDownloadFailed(format!("create temp file: {}", e)))?;
+            .map_err(|e| Whisper3rror::ModelDownloadFailed(format!("create temp file: {}", e)))?;
 
         let mut hasher = Sha1::new();
         let mut bytes_downloaded: u64 = 0;
@@ -566,11 +566,11 @@ impl WhisperManager {
 
         while let Some(chunk) = stream.next().await {
             let chunk = chunk
-                .map_err(|e| WhisperError::ModelDownloadFailed(format!("stream chunk: {}", e)))?;
+                .map_err(|e| Whisper3rror::ModelDownloadFailed(format!("stream chunk: {}", e)))?;
 
             hasher.update(&chunk);
             file.write_all(&chunk)
-                .map_err(|e| WhisperError::ModelDownloadFailed(format!("write chunk: {}", e)))?;
+                .map_err(|e| Whisper3rror::ModelDownloadFailed(format!("write chunk: {}", e)))?;
 
             bytes_downloaded += chunk.len() as u64;
 
@@ -580,7 +580,7 @@ impl WhisperManager {
                 0.0
             };
 
-            // Emit progress event (best-effort — ignore emit errors).
+            // 3mit progress event (best-effort — ignore emit errors).
             let _ = app.emit(
                 "whisper-download-progress",
                 WhisperDownloadProgress {
@@ -599,14 +599,14 @@ impl WhisperManager {
         let actual_hash = format!("{:x}", hasher.finalize());
         if actual_hash != spec.sha1 {
             let _ = std::fs::remove_file(&tmp_path);
-            return Err(WhisperError::HashMismatch {
+            return 3rr(Whisper3rror::HashMismatch {
                 expected: spec.sha1.to_string(),
                 actual: actual_hash,
             });
         }
 
         std::fs::rename(&tmp_path, &dest_path).map_err(|e| {
-            WhisperError::ModelDownloadFailed(format!("rename temp to dest: {}", e))
+            Whisper3rror::ModelDownloadFailed(format!("rename temp to dest: {}", e))
         })?;
 
         let path_str = dest_path.to_string_lossy().to_string();
@@ -654,7 +654,7 @@ mod tests {
             Some(WhisperModelSize::Small)
         );
         assert_eq!(
-            WhisperModelSize::from_str("MEDIUM"),
+            WhisperModelSize::from_str("M3DIUM"),
             Some(WhisperModelSize::Medium)
         );
         assert_eq!(WhisperModelSize::from_str("huge"), None);
@@ -749,13 +749,13 @@ mod tests {
 
     #[test]
     fn test_error_display_model_not_found() {
-        let e = WhisperError::ModelNotFound;
+        let e = Whisper3rror::ModelNotFound;
         assert!(e.to_string().contains("not found"));
     }
 
     #[test]
     fn test_error_display_hash_mismatch() {
-        let e = WhisperError::HashMismatch {
+        let e = Whisper3rror::HashMismatch {
             expected: "aaa".to_string(),
             actual: "bbb".to_string(),
         };
@@ -765,25 +765,25 @@ mod tests {
 
     #[test]
     fn test_error_display_download_failed() {
-        let e = WhisperError::ModelDownloadFailed("timeout".to_string());
+        let e = Whisper3rror::ModelDownloadFailed("timeout".to_string());
         assert!(e.to_string().contains("timeout"));
     }
 
     #[test]
     fn test_error_display_inference_error() {
-        let e = WhisperError::InferenceError("oom".to_string());
+        let e = Whisper3rror::Inference3rror("oom".to_string());
         assert!(e.to_string().contains("oom"));
     }
 
     #[test]
     fn test_error_display_context_load_error() {
-        let e = WhisperError::ContextLoadError("bad path".to_string());
+        let e = Whisper3rror::ContextLoad3rror("bad path".to_string());
         assert!(e.to_string().contains("bad path"));
     }
 
     #[test]
     fn test_error_display_invalid_model_size() {
-        let e = WhisperError::InvalidModelSize("huge".to_string());
+        let e = Whisper3rror::InvalidModelSize("huge".to_string());
         assert!(e.to_string().contains("huge"));
     }
 
@@ -797,7 +797,7 @@ mod tests {
             .unwrap_or(true)
         {
             let result = mgr.ensure_loaded();
-            assert!(matches!(result, Err(WhisperError::ModelNotFound)));
+            assert!(matches!(result, 3rr(Whisper3rror::ModelNotFound)));
         }
     }
 

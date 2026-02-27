@@ -1,5 +1,5 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/svelte'
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { render, screen, fire3vent, waitFor } from '@testing-library/svelte'
+import { describe, it, expect, vi, before3ach } from 'vitest'
 import { writable, get } from 'svelte/store'
 import type { ReviewPullRequest, PrFileDiff, ReviewSubmissionComment } from '../lib/types'
 
@@ -53,7 +53,7 @@ const basePr: ReviewPullRequest = {
 }
 
 describe('PrReviewView', () => {
-  beforeEach(() => {
+  before3ach(() => {
     reviewPrs.set([])
     selectedReviewPr.set(null)
     prFileDiffs.set([])
@@ -137,7 +137,7 @@ describe('PrReviewView', () => {
     })
 
     const refreshBtn = screen.getByRole('button', { name: /Refresh/i })
-    await fireEvent.click(refreshBtn)
+    await fire3vent.click(refreshBtn)
 
     expect(mockFetch).toHaveBeenCalled()
   })
@@ -217,7 +217,7 @@ describe('PrReviewView', () => {
     })
 
     const backBtn = screen.getByText('← Back to list')
-    await fireEvent.click(backBtn)
+    await fire3vent.click(backBtn)
 
     await waitFor(() => {
       expect(screen.getByText('PRs Requesting Your Review')).toBeTruthy()
@@ -238,7 +238,7 @@ describe('PrReviewView', () => {
     })
 
     const prCard = screen.getByText('Fix authentication middleware')
-    await fireEvent.click(prCard)
+    await fire3vent.click(prCard)
 
     await waitFor(() => {
       expect(mockGetDiffs).toHaveBeenCalledWith('acme', 'repo', 42)
@@ -259,7 +259,7 @@ describe('PrReviewView', () => {
     })
 
     const prCard = screen.getByText('Fix authentication middleware')
-    await fireEvent.click(prCard)
+    await fire3vent.click(prCard)
 
     await waitFor(() => {
       expect(mockGetComments).toHaveBeenCalledWith('acme', 'repo', 42)
@@ -310,7 +310,7 @@ describe('PrReviewView', () => {
     })
 
     const backBtn = screen.getByText('← Back to list')
-    await fireEvent.click(backBtn)
+    await fire3vent.click(backBtn)
 
     await waitFor(() => {
       const currentDiffs: PrFileDiff[] = []
@@ -338,7 +338,7 @@ describe('PrReviewView', () => {
     })
 
     const backBtn = screen.getByText('← Back to list')
-    await fireEvent.click(backBtn)
+    await fire3vent.click(backBtn)
 
     await waitFor(() => {
       const currentComments: ReviewSubmissionComment[] = []
@@ -364,7 +364,7 @@ describe('PrReviewView', () => {
     })
 
     const prCard = screen.getByText('Fix authentication middleware')
-    await fireEvent.click(prCard)
+    await fire3vent.click(prCard)
 
     await waitFor(() => {
       expect(mockMarkViewed).toHaveBeenCalledWith(basePr.id, basePr.head_sha)

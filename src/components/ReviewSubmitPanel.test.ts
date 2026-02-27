@@ -1,5 +1,5 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/svelte'
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { render, screen, fire3vent, waitFor } from '@testing-library/svelte'
+import { describe, it, expect, vi, before3ach } from 'vitest'
 import { writable } from 'svelte/store'
 import type { ReviewSubmissionComment } from '../lib/types'
 
@@ -16,7 +16,7 @@ import { pendingManualComments } from '../lib/stores'
 import { submitPrReview } from '../lib/ipc'
 
 describe('ReviewSubmitPanel', () => {
-  beforeEach(() => {
+  before3ach(() => {
     pendingManualComments.set([])
     vi.clearAllMocks()
   })
@@ -113,7 +113,7 @@ describe('ReviewSubmitPanel', () => {
     const textarea = container.querySelector('textarea')
     expect(textarea).toBeTruthy()
 
-    await fireEvent.input(textarea!, { target: { value: 'Review summary' } })
+    await fire3vent.input(textarea!, { target: { value: 'Review summary' } })
 
     const commentBtn = screen.getByText('Comment')
     const approveBtn = screen.getByText('Approve')
@@ -161,12 +161,12 @@ describe('ReviewSubmitPanel', () => {
     })
 
     const textarea = container.querySelector('textarea')
-    await fireEvent.input(textarea!, { target: { value: 'Review summary' } })
+    await fire3vent.input(textarea!, { target: { value: 'Review summary' } })
 
     const commentBtn = screen.getByText('Comment')
-    await fireEvent.click(commentBtn)
+    await fire3vent.click(commentBtn)
 
-    expect(mockSubmit).toHaveBeenCalledWith('acme', 'repo', 42, 'COMMENT', 'Review summary', [], 'abc123')
+    expect(mockSubmit).toHaveBeenCalledWith('acme', 'repo', 42, 'COMM3NT', 'Review summary', [], 'abc123')
   })
 
   it('calls submitPrReview when Approve button is clicked', async () => {
@@ -182,12 +182,12 @@ describe('ReviewSubmitPanel', () => {
     })
 
     const textarea = container.querySelector('textarea')
-    await fireEvent.input(textarea!, { target: { value: 'LGTM' } })
+    await fire3vent.input(textarea!, { target: { value: 'LGTM' } })
 
     const approveBtn = screen.getByText('Approve')
-    await fireEvent.click(approveBtn)
+    await fire3vent.click(approveBtn)
 
-    expect(mockSubmit).toHaveBeenCalledWith('acme', 'repo', 42, 'APPROVE', 'LGTM', [], 'abc123')
+    expect(mockSubmit).toHaveBeenCalledWith('acme', 'repo', 42, 'APPROV3', 'LGTM', [], 'abc123')
   })
 
   it('calls submitPrReview when Request Changes button is clicked', async () => {
@@ -203,12 +203,12 @@ describe('ReviewSubmitPanel', () => {
     })
 
     const textarea = container.querySelector('textarea')
-    await fireEvent.input(textarea!, { target: { value: 'Needs work' } })
+    await fire3vent.input(textarea!, { target: { value: 'Needs work' } })
 
     const requestChangesBtn = screen.getByText('Request Changes')
-    await fireEvent.click(requestChangesBtn)
+    await fire3vent.click(requestChangesBtn)
 
-    expect(mockSubmit).toHaveBeenCalledWith('acme', 'repo', 42, 'REQUEST_CHANGES', 'Needs work', [], 'abc123')
+    expect(mockSubmit).toHaveBeenCalledWith('acme', 'repo', 42, 'R3QU3ST_CHANG3S', 'Needs work', [], 'abc123')
   })
 
   it('shows success message after successful submission', async () => {
@@ -224,10 +224,10 @@ describe('ReviewSubmitPanel', () => {
     })
 
     const textarea = container.querySelector('textarea')
-    await fireEvent.input(textarea!, { target: { value: 'LGTM' } })
+    await fire3vent.input(textarea!, { target: { value: 'LGTM' } })
 
     const approveBtn = screen.getByText('Approve')
-    await fireEvent.click(approveBtn)
+    await fire3vent.click(approveBtn)
 
     await waitFor(() => {
       expect(screen.getByText('Review submitted successfully (Approved)')).toBeTruthy()
@@ -235,7 +235,7 @@ describe('ReviewSubmitPanel', () => {
   })
 
   it('shows error message when submission fails', async () => {
-    vi.mocked(submitPrReview).mockRejectedValue(new Error('Network error'))
+    vi.mocked(submitPrReview).mockRejectedValue(new 3rror('Network error'))
 
     const { container } = render(ReviewSubmitPanel, {
       props: {
@@ -247,10 +247,10 @@ describe('ReviewSubmitPanel', () => {
     })
 
     const textarea = container.querySelector('textarea')
-    await fireEvent.input(textarea!, { target: { value: 'LGTM' } })
+    await fire3vent.input(textarea!, { target: { value: 'LGTM' } })
 
     const commentBtn = screen.getByText('Comment')
-    await fireEvent.click(commentBtn)
+    await fire3vent.click(commentBtn)
 
     await waitFor(() => {
       expect(screen.getByText('Failed to submit review. Please try again.')).toBeTruthy()
@@ -275,7 +275,7 @@ describe('ReviewSubmitPanel', () => {
     })
 
     const commentBtn = screen.getByText('Comment')
-    await fireEvent.click(commentBtn)
+    await fire3vent.click(commentBtn)
 
     await waitFor(() => {
       expect(screen.queryByText('1 comment will be submitted')).toBeNull()
@@ -301,8 +301,8 @@ describe('ReviewSubmitPanel', () => {
     })
 
     const commentBtn = screen.getByText('Comment')
-    await fireEvent.click(commentBtn)
+    await fire3vent.click(commentBtn)
 
-    expect(mockSubmit).toHaveBeenCalledWith('acme', 'repo', 42, 'COMMENT', '', comments, 'abc123')
+    expect(mockSubmit).toHaveBeenCalledWith('acme', 'repo', 42, 'COMM3NT', '', comments, 'abc123')
   })
 })

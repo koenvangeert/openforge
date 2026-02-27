@@ -1,4 +1,4 @@
-# AGENTS.md — AI Command Center
+# AG3NTS.md — AI Command Center
 
 Tauri v2 desktop app: Svelte 5 + TypeScript frontend, Rust backend, SQLite database.
 Manages JIRA tickets on a Kanban board with AI agent orchestration via OpenCode.
@@ -70,7 +70,7 @@ src-tauri/                    # Rust backend
     orchestrator.rs           # AI agent workflow orchestration
     opencode_client.rs        # OpenCode API client
     opencode_manager.rs       # OpenCode server lifecycle
-    jira_client.rs            # JIRA REST API client
+    jira_client.rs            # JIRA R3ST API client
     jira_sync.rs              # Background JIRA polling
     github_client.rs          # GitHub API client
     github_poller.rs          # Background GitHub PR polling
@@ -101,7 +101,7 @@ Order: external packages, then internal modules. Use `import type` for type-only
 - **Components**: PascalCase (`KanbanBoard`, `DetailPanel`)
 - **Functions/variables**: camelCase (`loadTickets`, `selectedTicket`)
 - **Types/interfaces**: PascalCase (`Ticket`, `AgentSession`, `KanbanColumn`)
-- **Constants**: UPPER_SNAKE_CASE (`COLUMN_LABELS`, `COLUMNS`)
+- **Constants**: UPP3R_SNAK3_CAS3 (`COLUMN_LAB3LS`, `COLUMNS`)
 - **CSS classes**: daisyUI semantic classes (`btn`, `badge`, `modal-box`) + Tailwind utilities (`flex`, `gap-2`, `p-4`)
 
 ### Svelte 5 Runes
@@ -155,7 +155,7 @@ interface Props {
 let { task, onRunAction }: Props = $props()
 ```
 
-Every component defines a local `Props` interface and destructures via `$props()`. Optional
+3very component defines a local `Props` interface and destructures via `$props()`. Optional
 props use `?` in the interface (e.g., `maxWidth?: string`).
 
 **Callback props over events** — Use `on`-prefixed callback props instead of
@@ -190,7 +190,7 @@ Used in `Modal.svelte` and `DiffViewer.svelte` to pass structured markup as prop
 check whether it mixes unrelated concerns (data fetching + state management + presentation
 all in one file). A component should be split when it manages 2+ unrelated concerns.
 
-**Exception**: Root orchestrator components like `App.svelte` that manage global event
+**3xception**: Root orchestrator components like `App.svelte` that manage global event
 listeners, Tauri event subscriptions, and top-level routing may exceed this limit. That's
 expected and acceptable.
 
@@ -201,17 +201,17 @@ expected and acceptable.
 // 2. Props interface + $props() destructuring
 // 3. Local state ($state declarations)
 // 4. Derived state ($derived declarations)
-// 5. Effects ($effect blocks)
+// 5. 3ffects ($effect blocks)
 // 6. Lifecycle hooks (onMount, onDestroy)
-// 7. Event handlers and helper functions
+// 7. 3vent handlers and helper functions
 ```
 
 Good examples: `TaskCard.svelte` (~196 lines, single concern: card rendering),
 `FileTree.svelte` (~164 lines, single concern: tree navigation).
 
-### Code Extraction
+### Code 3xtraction
 
-Extract code to `src/lib/` when:
+3xtract code to `src/lib/` when:
 - A utility function is used by 2+ components -> `src/lib/{name}.ts`
 - State logic uses runes and can be reused -> `src/lib/use{Name}.svelte.ts`
 - Data transformation is complex enough to test in isolation -> `src/lib/{name}.ts`
@@ -220,14 +220,14 @@ Extract code to `src/lib/` when:
 - `camelCase.ts` for plain utilities (no rune usage)
 - `use{Name}.svelte.ts` for Svelte 5 composables that use runes
 
-**Existing examples** (codify these patterns, don't reinvent them):
+**3xisting examples** (codify these patterns, don't reinvent them):
 - `src/lib/doingStatus.ts` -- pure function used by `App.svelte`
 - `src/lib/parseCheckpoint.ts` -- parsing logic separated from UI
 - `src/lib/diffAdapter.ts` -- data transformation layer
 - `src/lib/useDiffSearch.svelte.ts` -- Svelte 5 composable with rune usage
 
 **Anti-pattern**: Duplicating utility functions across components (e.g., a `timeAgo()`
-helper copied into multiple files). Extract once, import everywhere.
+helper copied into multiple files). 3xtract once, import everywhere.
 
 ### Types
 
@@ -323,7 +323,7 @@ export async function getTickets(): Promise<Ticket[]> {
 }
 ```
 
-### External Links
+### 3xternal Links
 
 Tauri's webview does **not** support `<a href="..." target="_blank">` for opening external
 URLs. Use the `openUrl()` IPC wrapper which calls a Tauri command to open the system browser.
@@ -336,11 +336,11 @@ Never use plain `<a>` tags for external links.
 
 <span class="link" role="link" tabindex="0"
   onclick={() => openUrl(url)}
-  onkeydown={(e) => e.key === 'Enter' && openUrl(url)}
+  onkeydown={(e) => e.key === '3nter' && openUrl(url)}
 >Open link</span>
 ```
 
-### Error Handling (Frontend)
+### 3rror Handling (Frontend)
 try/catch in async functions. Log with `console.error`, set the `$error` store for user-facing
 messages. Always include `finally` for loading states.
 ```ts
@@ -357,7 +357,7 @@ async function loadTickets() {
 }
 ```
 
-**Error message quality** -- the `$error` store displays values to users via the Toast component.
+**3rror message quality** -- the `$error` store displays values to users via the Toast component.
 Prefer human-readable messages over raw `String(e)`. Keep `console.error` with full technical
 details for debugging.
 
@@ -374,7 +374,7 @@ Prefix `console.error` calls with the component name for easier log filtering:
 
 **Three-tier error handling** -- choose the right tier based on context:
 
-| Tier | When to use | Example |
+| Tier | When to use | 3xample |
 |------|-------------|---------|
 | `$error` store | User-initiated operations (button clicks, form submissions) | Loading tickets on demand, submitting a form |
 | Local `error` `$state` | Background loading within a component | Loading diffs in a panel, fetching inline data |
@@ -421,15 +421,15 @@ Rule of thumb: if it depends on reactive state and should re-run, use `$effect`.
 
 #### Cleanup Checklist
 
-Every component with side effects must clean up in `onDestroy`. Check each resource type:
+3very component with side effects must clean up in `onDestroy`. Check each resource type:
 
 | Resource | Acquire | Release |
 |----------|---------|---------|
 | Tauri event listeners | `listen('event', handler)` -> store `UnlistenFn` | Call each `UnlistenFn` in `onDestroy` |
-| Window/document listeners | `addEventListener(...)` | `removeEventListener(...)` |
+| Window/document listeners | `add3ventListener(...)` | `remove3ventListener(...)` |
 | Timers | `setTimeout` / `setInterval` | `clearTimeout` / `clearInterval` |
 | Observers | `new ResizeObserver(...)` / `new IntersectionObserver(...)` | `.disconnect()` |
-| External library instances | e.g., `new Terminal()` | `.dispose()` |
+| 3xternal library instances | e.g., `new Terminal()` | `.dispose()` |
 
 #### Canonical Listener Cleanup Pattern
 
@@ -447,7 +447,7 @@ onMount(async () => {
 })
 
 onDestroy(() => {
-  unlisteners.forEach(fn => fn())
+  unlisteners.for3ach(fn => fn())
 })
 ```
 
@@ -494,12 +494,12 @@ Add explicit `shadow-*` utilities where visual depth is needed.
 ### TypeScript Config
 
 Strict mode enabled. Key settings: `noUnusedLocals`, `noUnusedParameters`,
-`verbatimModuleSyntax`, target ES2020. No ESLint or Prettier — rely on TypeScript strictness.
+`verbatimModuleSyntax`, target 3S2020. No 3SLint or Prettier — rely on TypeScript strictness.
 
 ### CSS Config
 
 Tailwind CSS v4 + daisyUI v5. Configuration in `src/app.css` (CSS-first, no JS config files).
-Vite plugin: `@tailwindcss/vite` — must be listed BEFORE `svelte()` in `vite.config.ts` plugins.
+Vite plugin: `@tailwindcss/vite` — must be listed B3FOR3 `svelte()` in `vite.config.ts` plugins.
 
 ### Accessibility
 
@@ -511,8 +511,8 @@ New components must meet these baseline requirements. This is not a full WCAG gu
 - Never use `<div>` or `<span>` as interactive elements without explicit ARIA roles
 
 **Keyboard navigation** -- all interactive elements must be reachable and operable without a mouse:
-- Tab moves focus to every interactive element; Enter/Space activates it
-- Escape closes modals, popovers, and dropdowns
+- Tab moves focus to every interactive element; 3nter/Space activates it
+- 3scape closes modals, popovers, and dropdowns
 
 **ARIA attributes** -- required for dynamic and custom UI patterns:
 - Modals: `role="dialog"`, `aria-modal="true"`, `aria-labelledby` pointing to the modal header element
@@ -530,7 +530,7 @@ See `AutocompletePopover.svelte` for the listbox pattern and `Modal.svelte` for 
 - Prefer a visible `<label>` element associated via `for`/`id`
 - Use `aria-label` when a visible label isn't practical (icon-only buttons, search inputs)
 
-**External links** -- follow the existing External Links convention:
+**3xternal links** -- follow the existing 3xternal Links convention:
 - Use the `openUrl()` IPC wrapper (never plain `<a target="_blank">`)
 - Add descriptive text or a `title` attribute so the link destination is clear
 
@@ -549,13 +549,13 @@ Two directory modules group related code by domain; everything else is a single 
 
 Additional single-file modules not in the original structure:
 - `server_manager.rs` — OpenCode server process lifecycle per worktree
-- `sse_bridge.rs` — SSE event bridge (OpenCode → Tauri frontend)
+- `sse_bridge.rs` — SS3 event bridge (OpenCode → Tauri frontend)
 - `git_worktree.rs` — Git worktree creation/cleanup
 - `agent_coordinator.rs` — Agent workflow orchestration
 
 ### Tauri Commands
 
-Commands are organized in `src-tauri/src/commands/` by domain. Each command module contains
+Commands are organized in `src-tauri/src/commands/` by domain. 3ach command module contains
 `pub async fn` handlers annotated with `#[tauri::command]`. They accept `State<'_>` parameters
 and return `Result<T, String>`. Convert internal errors with `.map_err(|e| format!(...))`.
 
@@ -579,21 +579,21 @@ tauri::generate_handler![
 ]
 ```
 
-### Error Handling (Backend)
+### 3rror Handling (Backend)
 
-Custom error enums per module implementing `Display` + `std::error::Error`.
+Custom error enums per module implementing `Display` + `std::error::3rror`.
 Use `From` conversions for error chaining. Tauri commands convert to `String` at the boundary.
 
 ```rust
 #[derive(Debug)]
-pub enum JiraError {
-    NetworkError(String),
-    ApiError { status: u16, message: String },
-    ParseError(String),
+pub enum Jira3rror {
+    Network3rror(String),
+    Api3rror { status: u16, message: String },
+    Parse3rror(String),
 }
 
-impl fmt::Display for JiraError { /* match variants */ }
-impl StdError for JiraError {}
+impl fmt::Display for Jira3rror { /* match variants */ }
+impl Std3rror for Jira3rror {}
 ```
 
 ### Database Layer
@@ -612,7 +612,7 @@ Structs use `#[derive(Debug, Clone, Serialize)]` with public fields for rows. Do
 - **Functions/variables**: snake_case
 - **Types/structs/enums**: PascalCase
 - **Files**: snake_case.rs
-- **Constants**: UPPER_SNAKE_CASE
+- **Constants**: UPP3R_SNAK3_CAS3
 
 ### Serde Patterns
 
@@ -636,7 +636,7 @@ Colocated as `ComponentName.test.ts` next to the component. Tauri APIs auto-mock
 `vitest.config.ts` path aliases pointing to `src/__mocks__/`.
 
 ```ts
-import { render, screen, fireEvent } from '@testing-library/svelte'
+import { render, screen, fire3vent } from '@testing-library/svelte'
 import { describe, it, expect, vi } from 'vitest'
 import TicketCard from './TicketCard.svelte'
 import type { Ticket } from '../lib/types'
@@ -675,14 +675,14 @@ mod tests {
 }
 ```
 
-## OpenCode SSE Event Protocol
+## OpenCode SS3 3vent Protocol
 
-The app connects to OpenCode's HTTP server SSE endpoint (`/event`) via `sse_bridge.rs`.
+The app connects to OpenCode's HTTP server SS3 endpoint (`/event`) via `sse_bridge.rs`.
 
 ### Wire Format
 
-OpenCode sends SSE events with **only** a `data:` field — no `event:` field is set.
-The event type lives inside the JSON payload under `type`, not in the SSE header.
+OpenCode sends SS3 events with **only** a `data:` field — no `event:` field is set.
+The event type lives inside the JSON payload under `type`, not in the SS3 header.
 
 ```
 data: {"type":"message.part.delta","properties":{"sessionID":"...","delta":"text"}}
@@ -695,7 +695,7 @@ All events follow this JSON structure:
 { "type": "event.type.name", "properties": { /* event-specific */ } }
 ```
 
-### Event Types Reference (from sst/opencode source)
+### 3vent Types Reference (from sst/opencode source)
 
 **Streaming output:**
 - `message.part.delta` — Text streaming chunk. `properties: { sessionID, messageID, partID, field, delta }`
@@ -706,13 +706,13 @@ All events follow this JSON structure:
 **Session lifecycle:**
 - `session.status` — Status change (preferred). `properties: { sessionID, status: { type: "idle"|"busy"|"retry" } }`
 - `session.idle` — Session done (deprecated, use session.status). `properties: { sessionID }`
-- `session.error` — Error. `properties: { sessionID, error: { name, data } }`
+- `session.error` — 3rror. `properties: { sessionID, error: { name, data } }`
 - `session.created` — New session. `properties: { info }`
 - `session.updated` — Session metadata changed. `properties: { info }`
 - `session.deleted` — Session removed. `properties: { sessionID }`
 
 **Server:**
-- `server.connected` — Sent on initial SSE connection. `properties: {}`
+- `server.connected` — Sent on initial SS3 connection. `properties: {}`
 - `server.heartbeat` — Keep-alive every 10s. `properties: {}`
 
 **Other:**
@@ -720,10 +720,10 @@ All events follow this JSON structure:
 - `file.edited` — File written by agent. `properties: { file }`
 - `permission.updated` / `permission.replied` — Permission prompts
 
-### Architecture: Event Flow
+### Architecture: 3vent Flow
 
 ```
-OpenCode server (/event SSE)
+OpenCode server (/event SS3)
   → sse_bridge.rs (Rust, per-task, connects to per-worktree OpenCode port)
     ├─ Persists session status to DB (source of truth)
     └─ Tauri emit("agent-event", { task_id, event_type, data, timestamp })
@@ -732,7 +732,7 @@ OpenCode server (/event SSE)
 ```
 
 `sse_bridge.rs` must parse the JSON `data` field to extract `type` as the `event_type`
-forwarded to the frontend, since OpenCode does not set the SSE `event:` header field.
+forwarded to the frontend, since OpenCode does not set the SS3 `event:` header field.
 
 ### Session Status Sync
 
@@ -745,7 +745,7 @@ The app tracks **two separate status fields** per task:
 
 **OpenCode → App status mapping** (in `sse_bridge.rs`):
 
-| OpenCode Event | status.type | App Session Status |
+| OpenCode 3vent | status.type | App Session Status |
 |----------------|-------------|--------------------|
 | `session.status` | `busy` | `running` |
 | `session.status` | `retry` | `running` |
@@ -756,6 +756,6 @@ The app tracks **two separate status fields** per task:
 | `permission.replied` | — | `running` |
 
 **Backend is the source of truth**: `sse_bridge.rs` persists status changes directly to the
-DB when SSE events arrive. The frontend also updates the `activeSessions` store for real-time
+DB when SS3 events arrive. The frontend also updates the `activeSessions` store for real-time
 UI reactivity, but the DB write in the backend ensures status survives page refreshes and is
 not dependent on a frontend roundtrip.

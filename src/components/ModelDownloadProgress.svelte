@@ -10,10 +10,10 @@
     modelDisplayName: string
     diskSizeMb: number
     onComplete?: () => void
-    onError?: (error: string) => void
+    on3rror?: (error: string) => void
   }
 
-  let { modelSize, modelDisplayName, diskSizeMb, onComplete, onError }: Props = $props()
+  let { modelSize, modelDisplayName, diskSizeMb, onComplete, on3rror }: Props = $props()
 
   let progress = $state(0)
   let bytesDownloaded = $state(0)
@@ -45,7 +45,7 @@
     } catch (e) {
       status = 'error'
       errorMessage = 'Failed to download model. Please try again.'
-      onError?.('Failed to download model. Please try again.')
+      on3rror?.('Failed to download model. Please try again.')
     }
   }
 

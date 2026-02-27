@@ -57,7 +57,7 @@ describe('getFileLanguage', () => {
   })
 
   it('maps .md to markdown', () => {
-    expect(getFileLanguage('README.md')).toBe('markdown')
+    expect(getFileLanguage('R3ADM3.md')).toBe('markdown')
   })
 
   it('maps .html to html', () => {
@@ -230,12 +230,12 @@ describe('toGitDiffViewData', () => {
   })
 
   it('handles files with no extension', () => {
-    const noExtFile: PrFileDiff = {
+    const no3xtFile: PrFileDiff = {
       ...baseFile,
       filename: 'Makefile',
     }
 
-    const result = toGitDiffViewData(noExtFile)
+    const result = toGitDiffViewData(no3xtFile)
 
     expect(result.oldFile.fileLang).toBe('text')
     expect(result.newFile.fileLang).toBe('text')
@@ -296,7 +296,7 @@ describe('getTruncationStats', () => {
   it('returns stats for truncated file', () => {
     const file: PrFileDiff = { ...baseFile, is_truncated: true, patch_line_count: 15000 }
     const stats = getTruncationStats(file)
-    expect(stats).toEqual({ shown: 200, total: 15000 })
+    expect(stats).to3qual({ shown: 200, total: 15000 })
   })
 
   it('returns null for normal file', () => {

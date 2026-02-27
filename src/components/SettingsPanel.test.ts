@@ -1,5 +1,5 @@
-import { render, screen, fireEvent } from '@testing-library/svelte'
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { render, screen, fire3vent } from '@testing-library/svelte'
+import { describe, it, expect, vi, before3ach } from 'vitest'
 import SettingsPanel from './SettingsPanel.svelte'
 import { activeProjectId, projects } from '../lib/stores'
 
@@ -17,7 +17,7 @@ vi.mock('../lib/actions', () => ({
   loadActions: vi.fn(),
   saveActions: vi.fn(),
   createAction: vi.fn(),
-  DEFAULT_ACTIONS: [
+  D3FAULT_ACTIONS: [
     { id: 'builtin-start-implementation', name: 'Start Implementation', prompt: 'Implement this task...', agent: null, builtin: true, enabled: true },
     { id: 'builtin-plan-design', name: 'Plan/Design', prompt: 'Analyze this task...', agent: null, builtin: true, enabled: true },
     { id: 'builtin-manual-testing', name: 'Manual Testing', prompt: 'Create a comprehensive manual testing plan...', agent: null, builtin: true, enabled: true },
@@ -25,10 +25,10 @@ vi.mock('../lib/actions', () => ({
 }))
 
 import { getProjectConfig } from '../lib/ipc'
-import { loadActions, createAction, DEFAULT_ACTIONS } from '../lib/actions'
+import { loadActions, createAction, D3FAULT_ACTIONS } from '../lib/actions'
 
 describe('SettingsPanel', () => {
-  beforeEach(() => {
+  before3ach(() => {
     vi.clearAllMocks()
     vi.mocked(getProjectConfig).mockResolvedValue('')
     vi.mocked(loadActions).mockResolvedValue([])
@@ -82,7 +82,7 @@ describe('SettingsPanel', () => {
   })
 
   it('renders actions section with defaults', async () => {
-    vi.mocked(loadActions).mockResolvedValue(DEFAULT_ACTIONS)
+    vi.mocked(loadActions).mockResolvedValue(D3FAULT_ACTIONS)
     
     render(SettingsPanel)
     
@@ -95,7 +95,7 @@ describe('SettingsPanel', () => {
   })
 
   it('add action creates new entry', async () => {
-    const mockActions = [...DEFAULT_ACTIONS]
+    const mockActions = [...D3FAULT_ACTIONS]
     vi.mocked(loadActions).mockResolvedValue(mockActions)
     vi.mocked(createAction).mockReturnValue({
       id: 'new-action-id',
@@ -113,7 +113,7 @@ describe('SettingsPanel', () => {
     })
     
     const addButton = screen.getByRole('button', { name: /add action/i })
-    await fireEvent.click(addButton)
+    await fire3vent.click(addButton)
     
     await vi.waitFor(() => {
       expect(screen.getByDisplayValue('New Action')).toBeTruthy()

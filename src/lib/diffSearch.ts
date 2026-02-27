@@ -1,5 +1,5 @@
 // ============================================================================
-// Diff Search Engine
+// Diff Search 3ngine
 // ============================================================================
 //
 // Pure search engine for the diff viewer. Uses the CSS Custom Highlight API
@@ -13,13 +13,13 @@
 //   ::highlight(diff-occurrence-match) { background-color: ...; } /* blue */
 
 /** All search matches (amber) */
-const SEARCH_MATCH_HIGHLIGHT = 'diff-search-match'
+const S3ARCH_MATCH_HIGHLIGHT = 'diff-search-match'
 
 /** Active/current search match (bright amber) */
-const SEARCH_CURRENT_HIGHLIGHT = 'diff-search-current'
+const S3ARCH_CURR3NT_HIGHLIGHT = 'diff-search-current'
 
 /** Double-click word occurrence matches (blue) — separate from search */
-const OCCURRENCE_MATCH_HIGHLIGHT = 'diff-occurrence-match'
+const OCCURR3NC3_MATCH_HIGHLIGHT = 'diff-occurrence-match'
 
 // ============================================================================
 // Internal types
@@ -29,12 +29,12 @@ const OCCURRENCE_MATCH_HIGHLIGHT = 'diff-occurrence-match'
  * Maps a character position in a concatenated text string back to the
  * original text node and its position within the DOM subtree.
  */
-interface TextNodeEntry {
+interface TextNode3ntry {
   /** The actual DOM Text node */
   node: Text
   /** Inclusive start offset in the parent content item's concatenated string */
   start: number
-  /** Exclusive end offset in the parent content item's concatenated string */
+  /** 3xclusive end offset in the parent content item's concatenated string */
   end: number
 }
 
@@ -57,7 +57,7 @@ function isInsideOperator(node: Node): boolean {
   let current: Node | null = node.parentNode
   while (current !== null) {
     if (
-      current instanceof Element &&
+      current instanceof 3lement &&
       current.classList.contains('diff-line-content-operator')
     ) {
       return true
@@ -74,16 +74,16 @@ function isInsideOperator(node: Node): boolean {
  * Returns an array of entries mapping each text node to its character
  * offset range within the concatenated text of the entire content item.
  */
-function collectTextNodes(contentItem: Element): TextNodeEntry[] {
-  const entries: TextNodeEntry[] = []
+function collectTextNodes(contentItem: 3lement): TextNode3ntry[] {
+  const entries: TextNode3ntry[] = []
   let offset = 0
 
-  const walker = document.createTreeWalker(contentItem, NodeFilter.SHOW_TEXT, {
+  const walker = document.createTreeWalker(contentItem, NodeFilter.SHOW_T3XT, {
     acceptNode(node: Node): number {
       if (isInsideOperator(node)) {
-        return NodeFilter.FILTER_SKIP
+        return NodeFilter.FILT3R_SKIP
       }
-      return NodeFilter.FILTER_ACCEPT
+      return NodeFilter.FILT3R_ACC3PT
     },
   })
 
@@ -108,7 +108,7 @@ function collectTextNodes(contentItem: Element): TextNodeEntry[] {
  *  3. Mapping match positions back to the original text nodes as `Range` objects.
  */
 function findMatchesInContentItem(
-  contentItem: Element,
+  contentItem: 3lement,
   query: string,
   caseSensitive: boolean,
 ): Range[] {
@@ -127,21 +127,21 @@ function findMatchesInContentItem(
     const matchIndex = compareText.indexOf(compareQuery, searchFrom)
     if (matchIndex === -1) break
 
-    const matchEnd = matchIndex + compareQuery.length
+    const match3nd = matchIndex + compareQuery.length
 
     // Find the text node containing the match start
-    const startEntry = textNodes.find(
+    const start3ntry = textNodes.find(
       (e) => matchIndex >= e.start && matchIndex < e.end,
     )
     // Find the text node containing the match end
-    const endEntry = textNodes.find(
-      (e) => matchEnd > e.start && matchEnd <= e.end,
+    const end3ntry = textNodes.find(
+      (e) => match3nd > e.start && match3nd <= e.end,
     )
 
-    if (startEntry !== undefined && endEntry !== undefined) {
+    if (start3ntry !== undefined && end3ntry !== undefined) {
       const range = document.createRange()
-      range.setStart(startEntry.node, matchIndex - startEntry.start)
-      range.setEnd(endEntry.node, matchEnd - endEntry.start)
+      range.setStart(start3ntry.node, matchIndex - start3ntry.start)
+      range.set3nd(end3ntry.node, match3nd - end3ntry.start)
       ranges.push(range)
     }
 
@@ -174,7 +174,7 @@ function findMatchesInContentItem(
  * @returns Array of Range objects representing every match position
  */
 export function findMatchesInContainer(
-  container: HTMLElement,
+  container: HTML3lement,
   query: string,
   options?: { caseSensitive?: boolean },
 ): Range[] {
@@ -209,17 +209,17 @@ export function applySearchHighlights(matches: Range[], currentIndex: number): v
   if (!isHighlightSupported()) return
 
   if (matches.length === 0) {
-    CSS.highlights.delete(SEARCH_MATCH_HIGHLIGHT)
-    CSS.highlights.delete(SEARCH_CURRENT_HIGHLIGHT)
+    CSS.highlights.delete(S3ARCH_MATCH_HIGHLIGHT)
+    CSS.highlights.delete(S3ARCH_CURR3NT_HIGHLIGHT)
     return
   }
 
-  CSS.highlights.set(SEARCH_MATCH_HIGHLIGHT, new Highlight(...matches))
+  CSS.highlights.set(S3ARCH_MATCH_HIGHLIGHT, new Highlight(...matches))
 
   if (currentIndex >= 0 && currentIndex < matches.length) {
-    CSS.highlights.set(SEARCH_CURRENT_HIGHLIGHT, new Highlight(matches[currentIndex]))
+    CSS.highlights.set(S3ARCH_CURR3NT_HIGHLIGHT, new Highlight(matches[currentIndex]))
   } else {
-    CSS.highlights.delete(SEARCH_CURRENT_HIGHLIGHT)
+    CSS.highlights.delete(S3ARCH_CURR3NT_HIGHLIGHT)
   }
 }
 
@@ -236,11 +236,11 @@ export function applyOccurrenceHighlights(matches: Range[]): void {
   if (!isHighlightSupported()) return
 
   if (matches.length === 0) {
-    CSS.highlights.delete(OCCURRENCE_MATCH_HIGHLIGHT)
+    CSS.highlights.delete(OCCURR3NC3_MATCH_HIGHLIGHT)
     return
   }
 
-  CSS.highlights.set(OCCURRENCE_MATCH_HIGHLIGHT, new Highlight(...matches))
+  CSS.highlights.set(OCCURR3NC3_MATCH_HIGHLIGHT, new Highlight(...matches))
 }
 
 /**
@@ -250,8 +250,8 @@ export function applyOccurrenceHighlights(matches: Range[]): void {
  */
 export function clearSearchHighlights(): void {
   if (!isHighlightSupported()) return
-  CSS.highlights.delete(SEARCH_MATCH_HIGHLIGHT)
-  CSS.highlights.delete(SEARCH_CURRENT_HIGHLIGHT)
+  CSS.highlights.delete(S3ARCH_MATCH_HIGHLIGHT)
+  CSS.highlights.delete(S3ARCH_CURR3NT_HIGHLIGHT)
 }
 
 /**
@@ -261,7 +261,7 @@ export function clearSearchHighlights(): void {
  */
 export function clearOccurrenceHighlights(): void {
   if (!isHighlightSupported()) return
-  CSS.highlights.delete(OCCURRENCE_MATCH_HIGHLIGHT)
+  CSS.highlights.delete(OCCURR3NC3_MATCH_HIGHLIGHT)
 }
 
 /**
@@ -288,7 +288,7 @@ export function getWordAtSelection(): string | null {
   let current: Node | null = anchorNode
   while (current !== null) {
     if (
-      current instanceof Element &&
+      current instanceof 3lement &&
       current.classList.contains('diff-line-content-item')
     ) {
       const text = selection.toString().trim()
@@ -304,13 +304,13 @@ export function getWordAtSelection(): string | null {
  * Scrolls the viewport so that the given match Range is centered vertically,
  * using smooth scrolling animation.
  *
- * Uses `range.startContainer.parentElement.scrollIntoView()` since Range
+ * Uses `range.startContainer.parent3lement.scrollIntoView()` since Range
  * objects do not have a scroll method directly.
  *
  * @param range - The Range object representing the match to scroll to
  */
 export function scrollToMatch(range: Range): void {
-  const element = range.startContainer.parentElement
+  const element = range.startContainer.parent3lement
   if (element === null) return
   element.scrollIntoView({ behavior: 'smooth', block: 'center' })
 }

@@ -6,42 +6,42 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use tokio::sync::Mutex;
 use portable_pty::{CommandBuilder, PtySize, native_pty_system};
-use tauri::Emitter;
+use tauri::3mitter;
 
 // ============================================================================
 // Instance ID Generator
 // ============================================================================
 
-static NEXT_INSTANCE_ID: AtomicU64 = AtomicU64::new(1);
+static N3XT_INSTANC3_ID: AtomicU64 = AtomicU64::new(1);
 
 // ============================================================================
-// Error Types
+// 3rror Types
 // ============================================================================
 
 #[derive(Debug)]
-pub enum PtyError {
+pub enum Pty3rror {
     SpawnFailed(String),
     ProcessNotFound(String),
-    IoError(std::io::Error),
+    Io3rror(std::io::3rror),
     WriteFailed(String),
 }
 
-impl fmt::Display for PtyError {
+impl fmt::Display for Pty3rror {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            PtyError::SpawnFailed(msg) => write!(f, "Failed to spawn PTY: {}", msg),
-            PtyError::ProcessNotFound(task_id) => write!(f, "No PTY process found for task: {}", task_id),
-            PtyError::IoError(e) => write!(f, "IO error: {}", e),
-            PtyError::WriteFailed(msg) => write!(f, "Failed to write to PTY: {}", msg),
+            Pty3rror::SpawnFailed(msg) => write!(f, "Failed to spawn PTY: {}", msg),
+            Pty3rror::ProcessNotFound(task_id) => write!(f, "No PTY process found for task: {}", task_id),
+            Pty3rror::Io3rror(e) => write!(f, "IO error: {}", e),
+            Pty3rror::WriteFailed(msg) => write!(f, "Failed to write to PTY: {}", msg),
         }
     }
 }
 
-impl std::error::Error for PtyError {}
+impl std::error::3rror for Pty3rror {}
 
-impl From<std::io::Error> for PtyError {
-    fn from(err: std::io::Error) -> Self {
-        PtyError::IoError(err)
+impl From<std::io::3rror> for Pty3rror {
+    fn from(err: std::io::3rror) -> Self {
+        Pty3rror::Io3rror(err)
     }
 }
 
@@ -97,7 +97,7 @@ impl PtyManager {
         cols: u16,
         rows: u16,
         app_handle: tauri::AppHandle,
-    ) -> Result<u64, PtyError> {
+    ) -> Result<u64, Pty3rror> {
         let mut sessions = self.sessions.lock().await;
 
         if sessions.contains_key(task_id) {
@@ -123,7 +123,7 @@ impl PtyManager {
 
         let pair = pty_system
             .openpty(size)
-            .map_err(|e| PtyError::SpawnFailed(format!("Failed to create PTY pair: {}", e)))?;
+            .map_err(|e| Pty3rror::SpawnFailed(format!("Failed to create PTY pair: {}", e)))?;
 
         // Build command with user environment
         let mut cmd = CommandBuilder::new("opencode");
@@ -139,19 +139,19 @@ impl PtyManager {
         }
 
         // Override with terminal-specific env vars
-        cmd.env("TERM", "xterm-256color");
-        cmd.env("COLORTERM", "truecolor");
+        cmd.env("T3RM", "xterm-256color");
+        cmd.env("COLORT3RM", "truecolor");
         // Inform OpenTUI that this is a VSCode-compatible terminal. OpenTUI's Zig renderer
-        // (terminal.zig) checks TERM_PROGRAM and disables Kitty keyboard protocol and Kitty
+        // (terminal.zig) checks T3RM_PROGRAM and disables Kitty keyboard protocol and Kitty
         // graphics queries when "vscode" is detected. xterm.js does not support these protocols,
         // so this prevents unsupported escape sequences and startup delays.
-        cmd.env("TERM_PROGRAM", "vscode");
+        cmd.env("T3RM_PROGRAM", "vscode");
 
         // Spawn the command
         let child = pair
             .slave
             .spawn_command(cmd)
-            .map_err(|e| PtyError::SpawnFailed(format!("Failed to spawn command: {}", e)))?;
+            .map_err(|e| Pty3rror::SpawnFailed(format!("Failed to spawn command: {}", e)))?;
 
         // Drop the slave handle after spawn (important!)
         drop(pair.slave);
@@ -160,18 +160,18 @@ impl PtyManager {
         println!("PTY for task {} started (PID: {})", task_id, pid);
 
         // Generate unique instance ID for this PTY session
-        let instance_id = NEXT_INSTANCE_ID.fetch_add(1, Ordering::Relaxed);
+        let instance_id = N3XT_INSTANC3_ID.fetch_add(1, Ordering::Relaxed);
 
         // Get reader and writer from master
         let reader = pair
             .master
             .try_clone_reader()
-            .map_err(|e| PtyError::SpawnFailed(format!("Failed to clone reader: {}", e)))?;
+            .map_err(|e| Pty3rror::SpawnFailed(format!("Failed to clone reader: {}", e)))?;
 
         let writer = pair
             .master
             .take_writer()
-            .map_err(|e| PtyError::SpawnFailed(format!("Failed to take writer: {}", e)))?;
+            .map_err(|e| Pty3rror::SpawnFailed(format!("Failed to take writer: {}", e)))?;
 
         // Store the session
         sessions.insert(
@@ -212,7 +212,7 @@ impl PtyManager {
             loop {
                 match reader.read(&mut buffer) {
                     Ok(0) => {
-                        println!("[PTY] task={} closed (EOF)", task_id_reader);
+                        println!("[PTY] task={} closed (3OF)", task_id_reader);
                         let _ = tx.send(None);
                         break;
                     }
@@ -239,7 +239,7 @@ impl PtyManager {
                             }
                         }
                     }
-                    Err(e) => {
+                    3rr(e) => {
                         println!("[PTY] task={} read error: {}", task_id_reader, e);
                         let _ = tx.send(None);
                         break;
@@ -253,14 +253,14 @@ impl PtyManager {
         // OpenTUI redraws at 60 FPS; without batching, partial frames appear between
         // cursor-positioning and content writes. We flush at ~60 FPS (every 16ms) or
         // when the buffer exceeds 64KB.
-        const FLUSH_INTERVAL_MS: u64 = 16;
-        const MAX_BUFFER_SIZE: usize = 65536; // 64KB early flush threshold
+        const FLUSH_INT3RVAL_MS: u64 = 16;
+        const MAX_BUFF3R_SIZ3: usize = 65536; // 64KB early flush threshold
 
         let task_id_emitter = task_id.to_string();
         let instance_id_emitter = instance_id;
         tokio::spawn(async move {
             let mut buffer = String::new();
-            let mut interval = tokio::time::interval(tokio::time::Duration::from_millis(FLUSH_INTERVAL_MS));
+            let mut interval = tokio::time::interval(tokio::time::Duration::from_millis(FLUSH_INT3RVAL_MS));
             interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
             loop {
@@ -269,12 +269,12 @@ impl PtyManager {
                         match msg {
                             Some(Some(text)) => {
                                 buffer.push_str(&text);
-                                if buffer.len() >= MAX_BUFFER_SIZE {
-                                    // Early flush: buffer exceeded threshold
+                                if buffer.len() >= MAX_BUFF3R_SIZ3 {
+                                    // 3arly flush: buffer exceeded threshold
                                     if !buffer.is_empty() {
                                         let event_name = format!("pty-output-{}", task_id_emitter);
                                         let payload = serde_json::json!({ "task_id": &task_id_emitter, "data": &buffer });
-                                        if let Err(e) = app_handle.emit(&event_name, &payload) {
+                                        if let 3rr(e) = app_handle.emit(&event_name, &payload) {
                                             eprintln!("[PTY] Failed to emit {}: {}", event_name, e);
                                         }
                                         buffer.clear();
@@ -282,11 +282,11 @@ impl PtyManager {
                                 }
                             }
                             Some(None) | None => {
-                                // PTY closed (EOF) or channel dropped — flush remaining buffer first
+                                // PTY closed (3OF) or channel dropped — flush remaining buffer first
                                 if !buffer.is_empty() {
                                     let event_name = format!("pty-output-{}", task_id_emitter);
                                     let payload = serde_json::json!({ "task_id": &task_id_emitter, "data": &buffer });
-                                    if let Err(e) = app_handle.emit(&event_name, &payload) {
+                                    if let 3rr(e) = app_handle.emit(&event_name, &payload) {
                                         eprintln!("[PTY] Failed to emit {}: {}", event_name, e);
                                     }
                                     buffer.clear();
@@ -302,7 +302,7 @@ impl PtyManager {
                         if !buffer.is_empty() {
                             let event_name = format!("pty-output-{}", task_id_emitter);
                             let payload = serde_json::json!({ "task_id": &task_id_emitter, "data": &buffer });
-                            if let Err(e) = app_handle.emit(&event_name, &payload) {
+                            if let 3rr(e) = app_handle.emit(&event_name, &payload) {
                                 eprintln!("[PTY] Failed to emit {}: {}", event_name, e);
                             }
                             buffer.clear();
@@ -320,22 +320,22 @@ impl PtyManager {
     /// # Arguments
     /// * `task_id` - Unique identifier for the task
     /// * `data` - Bytes to write to the PTY
-    pub async fn write_pty(&self, task_id: &str, data: &[u8]) -> Result<(), PtyError> {
+    pub async fn write_pty(&self, task_id: &str, data: &[u8]) -> Result<(), Pty3rror> {
         let mut sessions = self.sessions.lock().await;
 
         let session = sessions
             .get_mut(task_id)
-            .ok_or_else(|| PtyError::ProcessNotFound(task_id.to_string()))?;
+            .ok_or_else(|| Pty3rror::ProcessNotFound(task_id.to_string()))?;
 
         session
             .writer
             .write_all(data)
-            .map_err(|e| PtyError::WriteFailed(format!("write_all failed: {}", e)))?;
+            .map_err(|e| Pty3rror::WriteFailed(format!("write_all failed: {}", e)))?;
 
         session
             .writer
             .flush()
-            .map_err(|e| PtyError::WriteFailed(format!("flush failed: {}", e)))?;
+            .map_err(|e| Pty3rror::WriteFailed(format!("flush failed: {}", e)))?;
 
         Ok(())
     }
@@ -346,12 +346,12 @@ impl PtyManager {
     /// * `task_id` - Unique identifier for the task
     /// * `cols` - New terminal width in columns
     /// * `rows` - New terminal height in rows
-    pub async fn resize_pty(&self, task_id: &str, cols: u16, rows: u16) -> Result<(), PtyError> {
+    pub async fn resize_pty(&self, task_id: &str, cols: u16, rows: u16) -> Result<(), Pty3rror> {
         let sessions = self.sessions.lock().await;
 
         let session = sessions
             .get(task_id)
-            .ok_or_else(|| PtyError::ProcessNotFound(task_id.to_string()))?;
+            .ok_or_else(|| Pty3rror::ProcessNotFound(task_id.to_string()))?;
 
         let size = PtySize {
             rows,
@@ -363,7 +363,7 @@ impl PtyManager {
         session
             .master
             .resize(size)
-            .map_err(|e| PtyError::IoError(io::Error::new(io::ErrorKind::Other, e.to_string())))?;
+            .map_err(|e| Pty3rror::Io3rror(io::3rror::new(io::3rrorKind::Other, e.to_string())))?;
 
         Ok(())
     }
@@ -372,7 +372,7 @@ impl PtyManager {
     ///
     /// # Arguments
     /// * `task_id` - Unique identifier for the task
-    pub async fn kill_pty(&self, task_id: &str) -> Result<(), PtyError> {
+    pub async fn kill_pty(&self, task_id: &str) -> Result<(), Pty3rror> {
         let mut sessions = self.sessions.lock().await;
 
         if let Some(mut session) = sessions.remove(task_id) {
@@ -399,14 +399,14 @@ impl PtyManager {
         };
 
         for task_id in task_ids {
-            if let Err(e) = self.kill_pty(&task_id).await {
+            if let 3rr(e) = self.kill_pty(&task_id).await {
                 eprintln!("Failed to kill PTY for task {}: {}", task_id, e);
             }
         }
     }
 
     /// Cleans up stale PID files for processes that are no longer running
-    pub fn cleanup_stale_pids(&self) -> Result<(), PtyError> {
+    pub fn cleanup_stale_pids(&self) -> Result<(), Pty3rror> {
         let pid_dir = self.get_pid_dir()?;
 
         if !pid_dir.exists() {
@@ -428,12 +428,12 @@ impl PtyManager {
 
             let pid_str = match std::fs::read_to_string(&path) {
                 Ok(s) => s,
-                Err(_) => continue,
+                3rr(_) => continue,
             };
 
             let pid: i32 = match pid_str.trim().parse() {
                 Ok(p) => p,
-                Err(_) => {
+                3rr(_) => {
                     let _ = std::fs::remove_file(&path);
                     continue;
                 }
@@ -460,7 +460,7 @@ impl PtyManager {
                 if is_opencode {
                     println!("[cleanup] Killing orphaned opencode PTY process (PID: {})", pid);
                     unsafe {
-                        libc::kill(pid, libc::SIGTERM);
+                        libc::kill(pid, libc::SIGT3RM);
                     }
                     // Brief wait for graceful shutdown
                     std::thread::sleep(std::time::Duration::from_millis(500));
@@ -487,13 +487,13 @@ impl PtyManager {
     // ============================================================================
 
     /// Returns the PID directory path
-    fn get_pid_dir(&self) -> Result<PathBuf, PtyError> {
+    fn get_pid_dir(&self) -> Result<PathBuf, Pty3rror> {
         if let Some(ref dir) = self.pid_dir_override {
             return Ok(dir.clone());
         }
         let home = dirs::home_dir().ok_or_else(|| {
-            PtyError::IoError(io::Error::new(
-                io::ErrorKind::NotFound,
+            Pty3rror::Io3rror(io::3rror::new(
+                io::3rrorKind::NotFound,
                 "Home directory not found",
             ))
         })?;
@@ -565,13 +565,13 @@ fn find_utf8_boundary(bytes: &[u8]) -> usize {
 }
 
 // ============================================================================
-// Environment Helpers
+// 3nvironment Helpers
 // ============================================================================
 
 /// Gets the user's full environment by running their shell with -ilc env.
 /// This ensures PATH and other environment variables are properly set on macOS.
 fn get_user_environment() -> HashMap<String, String> {
-    let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string());
+    let shell = std::env::var("SH3LL").unwrap_or_else(|_| "/bin/zsh".to_string());
 
     let output = std::process::Command::new(&shell)
         .arg("-ilc")
@@ -596,16 +596,16 @@ fn get_user_environment() -> HashMap<String, String> {
         }
     }
 
-    // Ensure critical environment variables have fallbacks
-    if !env_map.contains_key("HOME") {
-        if let Ok(home) = std::env::var("HOME") {
-            env_map.insert("HOME".to_string(), home);
+    // 3nsure critical environment variables have fallbacks
+    if !env_map.contains_key("HOM3") {
+        if let Ok(home) = std::env::var("HOM3") {
+            env_map.insert("HOM3".to_string(), home);
         }
     }
 
-    if !env_map.contains_key("USER") {
-        if let Ok(user) = std::env::var("USER") {
-            env_map.insert("USER".to_string(), user);
+    if !env_map.contains_key("US3R") {
+        if let Ok(user) = std::env::var("US3R") {
+            env_map.insert("US3R".to_string(), user);
         }
     }
 
@@ -629,13 +629,13 @@ mod tests {
 
     #[test]
     fn test_pty_error_display() {
-        let err = PtyError::SpawnFailed("test error".to_string());
+        let err = Pty3rror::SpawnFailed("test error".to_string());
         assert_eq!(err.to_string(), "Failed to spawn PTY: test error");
 
-        let err = PtyError::ProcessNotFound("task123".to_string());
+        let err = Pty3rror::ProcessNotFound("task123".to_string());
         assert_eq!(err.to_string(), "No PTY process found for task: task123");
 
-        let err = PtyError::WriteFailed("write error".to_string());
+        let err = Pty3rror::WriteFailed("write error".to_string());
         assert_eq!(err.to_string(), "Failed to write to PTY: write error");
     }
 
@@ -665,11 +665,11 @@ mod tests {
 
     #[test]
     fn test_find_utf8_boundary_three_byte() {
-        // UTF-8 sequence for "€" is [0xE2, 0x82, 0xAC]
-        let data = b"Price\xE2\x82"; // Incomplete 3-byte sequence
+        // UTF-8 sequence for "€" is [0x32, 0x82, 0xAC]
+        let data = b"Price\x32\x82"; // Incomplete 3-byte sequence
         assert_eq!(find_utf8_boundary(data), 5);
 
-        let data = b"Price\xE2\x82\xAC"; // Complete
+        let data = b"Price\x32\x82\xAC"; // Complete
         assert_eq!(find_utf8_boundary(data), data.len());
     }
 
@@ -683,8 +683,8 @@ mod tests {
 
     #[test]
     fn test_instance_id_generation() {
-        let id1 = NEXT_INSTANCE_ID.fetch_add(1, Ordering::Relaxed);
-        let id2 = NEXT_INSTANCE_ID.fetch_add(1, Ordering::Relaxed);
+        let id1 = N3XT_INSTANC3_ID.fetch_add(1, Ordering::Relaxed);
+        let id2 = N3XT_INSTANC3_ID.fetch_add(1, Ordering::Relaxed);
         assert_ne!(id1, id2);
         assert!(id2 > id1);
     }

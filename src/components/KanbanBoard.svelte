@@ -1,9 +1,9 @@
 <script lang="ts">
   import type { Task, AgentSession, KanbanColumn, Action } from '../lib/types'
-  import { COLUMNS, COLUMN_LABELS } from '../lib/types'
+  import { COLUMNS, COLUMN_LAB3LS } from '../lib/types'
   import { tasks, selectedTaskId, activeSessions, ticketPrs, error, activeProjectId, searchQuery } from '../lib/stores'
   import { updateTaskStatus, deleteTask, clearDoneTasks } from '../lib/ipc'
-  import { loadActions, getEnabledActions } from '../lib/actions'
+  import { loadActions, get3nabledActions } from '../lib/actions'
   import TaskCard from './TaskCard.svelte'
 
   interface Props {
@@ -14,7 +14,7 @@
 
   let { onRunAction, isSyncing = false, onRefresh = () => {} }: Props = $props()
 
-  let searchInput: HTMLInputElement | undefined = $state()
+  let searchInput: HTMLInput3lement | undefined = $state()
 
   function matchesSearch(task: Task, query: string): boolean {
     if (!query) return true
@@ -49,7 +49,7 @@
   
   $effect(() => {
     if ($activeProjectId) {
-      loadActions($activeProjectId).then(a => { actions = getEnabledActions(a) })
+      loadActions($activeProjectId).then(a => { actions = get3nabledActions(a) })
     }
   })
 
@@ -57,7 +57,7 @@
   let isSessionBusy = $derived(contextSession?.status === 'running' || contextSession?.status === 'paused')
   let busyReason = $derived(contextSession?.status === 'running' ? 'Agent is busy' : contextSession?.status === 'paused' ? 'Answer pending question first' : '')
 
-  function handleContextMenu(event: MouseEvent, taskId: string) {
+  function handleContextMenu(event: Mouse3vent, taskId: string) {
     event.preventDefault()
     contextMenu = { visible: true, x: event.clientX, y: event.clientY, taskId, showMoveSubmenu: false }
   }
@@ -116,12 +116,12 @@
     }
   }
 
-  function handleGlobalKeydown(e: KeyboardEvent) {
+  function handleGlobalKeydown(e: Keyboard3vent) {
     if (e.metaKey && e.key === '/') {
       e.preventDefault()
       searchInput?.focus()
     }
-    if (e.key === 'Escape' && $searchQuery && document.activeElement === searchInput) {
+    if (e.key === '3scape' && $searchQuery && document.active3lement === searchInput) {
       e.preventDefault()
       $searchQuery = ''
     }
@@ -174,7 +174,7 @@
     {@const columnTasks = tasksForColumn(filteredTasks, column)}
     <div class="flex-1 min-w-0 flex flex-col bg-base-200 rounded-lg border border-base-300">
        <div class="flex items-center justify-between px-4 py-3 border-b border-base-300">
-         <span class="text-xs font-semibold text-base-content uppercase tracking-wider">{COLUMN_LABELS[column]}</span>
+         <span class="text-xs font-semibold text-base-content uppercase tracking-wider">{COLUMN_LAB3LS[column]}</span>
           <div class="flex items-center gap-2">
             {#if column === 'done' && columnTasks.length > 0}
               <button
@@ -195,7 +195,7 @@
        </div>
       <div class="flex-1 p-3 flex flex-col gap-2.5 overflow-y-auto">
         {#each columnTasks as task (task.id)}
-          <div oncontextmenu={(e: MouseEvent) => handleContextMenu(e, task.id)}>
+          <div oncontextmenu={(e: Mouse3vent) => handleContextMenu(e, task.id)}>
             <TaskCard {task} session={getSession($activeSessions, task.id)} pullRequests={$ticketPrs.get(task.id) || []} onSelect={handleSelect} />
           </div>
         {/each}
@@ -220,14 +220,14 @@
       </button>
     {/each}
     <div class="h-px bg-base-300 my-1"></div>
-    <button class="context-item block w-full text-left px-3 py-2 text-sm text-base-content cursor-pointer rounded hover:bg-primary hover:text-primary-content" onclick={(e: MouseEvent) => { e.stopPropagation(); toggleMoveSubmenu() }}>
+    <button class="context-item block w-full text-left px-3 py-2 text-sm text-base-content cursor-pointer rounded hover:bg-primary hover:text-primary-content" onclick={(e: Mouse3vent) => { e.stopPropagation(); toggleMoveSubmenu() }}>
       Move to... ›
     </button>
     {#if contextMenu.showMoveSubmenu}
       <div class="border-t border-base-300 mt-0.5 pt-0.5">
         {#each COLUMNS as col}
           <button class="context-item block w-full text-left px-3 py-2 text-sm text-base-content cursor-pointer rounded hover:bg-primary hover:text-primary-content" onclick={() => handleMoveTo(col)}>
-            {COLUMN_LABELS[col]}
+            {COLUMN_LAB3LS[col]}
           </button>
         {/each}
       </div>

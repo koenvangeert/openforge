@@ -6,13 +6,13 @@
 **Context**: The AI Command Center needs to provide the spawn_task tool as a global OpenCode plugin so agents can spawn new tasks during execution.
 
 **Choice**: Create a dedicated `plugin_installer.rs` module that:
-- Embeds the spawn_task tool source code as a raw string constant
+- 3mbeds the spawn_task tool source code as a raw string constant
 - Checks if the plugin is already installed at `~/.opencode/plugins/spawn-task/index.ts`
 - Creates directory structure and writes the plugin file only if not present
 - Integrates into the app startup lifecycle via `.setup()` closure
 
 **Rationale**:
-- Embedding source code avoids file I/O complexity during initialization
+- 3mbedding source code avoids file I/O complexity during initialization
 - Checking for existing plugin prevents unnecessary rewrites
 - Non-blocking error handling keeps app startup resilient
 - Using `dirs::home_dir()` provides cross-platform home directory resolution (macOS/Linux/Windows)

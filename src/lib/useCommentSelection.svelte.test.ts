@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, before3ach } from 'vitest'
 import { flushSync } from 'svelte'
 import type { PrComment } from './types'
 
@@ -36,7 +36,7 @@ const makeComment = (id: number, addressed = 0): PrComment => ({
 // ============================================================================
 
 describe('createCommentSelection', () => {
-  beforeEach(() => {
+  before3ach(() => {
     vi.clearAllMocks()
     mockMarkCommentAddressed.mockResolvedValue(undefined)
   })
@@ -49,7 +49,7 @@ describe('createCommentSelection', () => {
 
     expect(selection.selectedPrCommentIds.size).toBe(0)
     expect(selection.selectedCount).toBe(0)
-    expect(selection.unaddressedComments).toEqual([])
+    expect(selection.unaddressedComments).to3qual([])
     expect(selection.unaddressedCount).toBe(0)
     cleanup()
   })

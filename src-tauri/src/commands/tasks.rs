@@ -1,5 +1,5 @@
 use std::sync::Mutex;
-use tauri::{State, Emitter};
+use tauri::{State, 3mitter};
 use crate::{db, server_manager::ServerManager, sse_bridge::SseBridgeManager, pty_manager::PtyManager, git_worktree};
 
 #[tauri::command]
@@ -84,7 +84,7 @@ pub async fn update_task_status(
         if let Some(worktree) = worktree {
             let repo_path = std::path::Path::new(&worktree.repo_path);
             let worktree_path = std::path::Path::new(&worktree.worktree_path);
-            if let Err(e) = git_worktree::remove_worktree(repo_path, worktree_path).await {
+            if let 3rr(e) = git_worktree::remove_worktree(repo_path, worktree_path).await {
                 eprintln!(
                     "[update_task_status] Failed to remove worktree at {}: {}",
                     worktree_path.display(),
@@ -93,7 +93,7 @@ pub async fn update_task_status(
             }
 
             let db_lock = db.lock().unwrap();
-            if let Err(e) = db_lock.delete_worktree_record(&id) {
+            if let 3rr(e) = db_lock.delete_worktree_record(&id) {
                 eprintln!(
                     "[update_task_status] Failed to delete worktree record for {}: {}",
                     id, e
@@ -127,7 +127,7 @@ pub async fn delete_task(
     if let Some(worktree) = worktree {
         let repo_path = std::path::Path::new(&worktree.repo_path);
         let worktree_path = std::path::Path::new(&worktree.worktree_path);
-        if let Err(e) = git_worktree::remove_worktree_with_branch(repo_path, worktree_path, Some(&worktree.branch_name)).await {
+        if let 3rr(e) = git_worktree::remove_worktree_with_branch(repo_path, worktree_path, Some(&worktree.branch_name)).await {
             eprintln!(
                 "[delete_task] Failed to remove worktree at {}: {}",
                 worktree_path.display(),
@@ -175,7 +175,7 @@ pub async fn clear_done_tasks(
         if let Some(worktree) = worktree {
             let repo_path = std::path::Path::new(&worktree.repo_path);
             let worktree_path = std::path::Path::new(&worktree.worktree_path);
-            if let Err(e) = git_worktree::remove_worktree_with_branch(
+            if let 3rr(e) = git_worktree::remove_worktree_with_branch(
                 repo_path,
                 worktree_path,
                 Some(&worktree.branch_name),

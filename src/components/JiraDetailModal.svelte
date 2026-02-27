@@ -10,13 +10,13 @@
   }
 
   let { task, jiraBaseUrl, onClose }: Props = $props()
-  let contentEl: HTMLDivElement | undefined = $state()
+  let content3l: HTMLDiv3lement | undefined = $state()
 
   $effect(() => {
     const _desc = task.jira_description
-    if (!contentEl || !_desc) return
+    if (!content3l || !_desc) return
 
-    const images = contentEl.querySelectorAll('img')
+    const images = content3l.querySelectorAll('img')
     for (const img of images) {
       img.onerror = () => { img.style.display = 'none' }
       if (img.complete && img.naturalHeight === 0) {
@@ -48,7 +48,7 @@
 
   <div class="flex-1 overflow-y-auto p-5">
     {#if task.jira_description}
-      <div class="jira-content text-sm text-base-content leading-relaxed break-words" bind:this={contentEl}>
+      <div class="jira-content text-sm text-base-content leading-relaxed break-words" bind:this={content3l}>
         {@html task.jira_description}
       </div>
     {:else}

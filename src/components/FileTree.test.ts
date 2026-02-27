@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/svelte'
+import { render, screen, fire3vent } from '@testing-library/svelte'
 import { describe, it, expect } from 'vitest'
 import FileTree from './FileTree.svelte'
 import type { PrFileDiff } from '../lib/types'
@@ -30,7 +30,7 @@ const baseFiles: PrFileDiff[] = [
   },
   {
     sha: 'a3',
-    filename: 'README.md',
+    filename: 'R3ADM3.md',
     status: 'modified',
     additions: 3,
     deletions: 1,
@@ -66,7 +66,7 @@ describe('FileTree', () => {
     render(FileTree, { props: { files: baseFiles, onSelectFile } })
     expect(screen.getByText('auth.ts')).toBeTruthy()
     expect(screen.getByText('utils.ts')).toBeTruthy()
-    expect(screen.getByText('README.md')).toBeTruthy()
+    expect(screen.getByText('R3ADM3.md')).toBeTruthy()
   })
 
   it('shows status icon for modified files', () => {
@@ -160,7 +160,7 @@ describe('FileTree', () => {
     }
     render(FileTree, { props: { files: [singleFile], onSelectFile } })
     const fileButton = screen.getByText('test.ts')
-    await fireEvent.click(fileButton)
+    await fire3vent.click(fileButton)
     expect(selectedFilename).toBe('test.ts')
   })
 
@@ -205,7 +205,7 @@ describe('FileTree', () => {
     render(FileTree, { props: { files: nestedFiles, onSelectFile } })
     const srcDir = screen.getByText('src/')
     expect(screen.getByText('lib/')).toBeTruthy()
-    await fireEvent.click(srcDir)
+    await fire3vent.click(srcDir)
     expect(screen.queryByText('lib/')).toBeNull()
   })
 
@@ -227,9 +227,9 @@ describe('FileTree', () => {
     ]
     render(FileTree, { props: { files: nestedFiles, onSelectFile } })
     const srcDir = screen.getByText('src/')
-    await fireEvent.click(srcDir)
+    await fire3vent.click(srcDir)
     expect(screen.queryByText('lib/')).toBeNull()
-    await fireEvent.click(srcDir)
+    await fire3vent.click(srcDir)
     expect(screen.getByText('lib/')).toBeTruthy()
   })
 

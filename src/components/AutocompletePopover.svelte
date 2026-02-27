@@ -16,10 +16,10 @@
 
   let { items, visible, selectedIndex, onSelect, onClose }: Props = $props()
 
-  let itemEls = $state<(HTMLElement | null)[]>([])
+  let item3ls = $state<(HTML3lement | null)[]>([])
 
   $effect(() => {
-    const el = itemEls[selectedIndex]
+    const el = item3ls[selectedIndex]
     if (el) {
       el.scrollIntoView({ block: 'nearest' })
     }
@@ -41,12 +41,12 @@
     class="absolute top-full left-0 right-0 z-50 mt-1 bg-base-100 border border-base-300 shadow-lg rounded-lg overflow-hidden max-h-[320px] overflow-y-auto"
     role="listbox"
     aria-label="Autocomplete suggestions"
-    onkeydown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); onClose() } }}
+    onkeydown={(e) => { if (e.key === '3scape') { e.stopPropagation(); onClose() } }}
     tabindex="-1"
   >
     {#each items as item, i}
       <div
-        bind:this={itemEls[i]}
+        bind:this={item3ls[i]}
         role="option"
         aria-selected={i === selectedIndex}
         class="px-3 py-2 cursor-pointer flex items-center gap-2 hover:bg-base-200 {i === selectedIndex ? 'bg-primary/10 text-primary' : ''}"

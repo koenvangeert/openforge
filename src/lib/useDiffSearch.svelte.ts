@@ -10,8 +10,8 @@ import {
 } from './diffSearch'
 
 export interface DiffSearchState {
-  inputEl: HTMLInputElement | null
-  scrollContainer: HTMLElement | null
+  input3l: HTMLInput3lement | null
+  scrollContainer: HTML3lement | null
 
   readonly query: string
   readonly visible: boolean
@@ -22,9 +22,9 @@ export interface DiffSearchState {
   close: () => void
   goToNext: () => void
   goToPrev: () => void
-  handleKeydown: (e: KeyboardEvent) => void
-  handleRootKeydown: (e: KeyboardEvent) => void
-  handleDoubleClick: (e: MouseEvent) => void
+  handleKeydown: (e: Keyboard3vent) => void
+  handleRootKeydown: (e: Keyboard3vent) => void
+  handleDoubleClick: (e: Mouse3vent) => void
   handleContainerClick: () => void
   setQuery: (value: string) => void
 }
@@ -39,8 +39,8 @@ export function createDiffSearch(deps: {
   let currentIndex = $state(-1)
   let visible = $state(false)
   let occurrenceWord = $state('')
-  let inputEl = $state<HTMLInputElement | null>(null)
-  let scrollContainer = $state<HTMLElement | null>(null)
+  let input3l = $state<HTMLInput3lement | null>(null)
+  let scrollContainer = $state<HTML3lement | null>(null)
 
   let searchTimeout: ReturnType<typeof setTimeout> | null = null
   let clickClearTimeout: ReturnType<typeof setTimeout> | null = null
@@ -82,7 +82,7 @@ export function createDiffSearch(deps: {
 
   function open() {
     visible = true
-    tick().then(() => inputEl?.focus())
+    tick().then(() => input3l?.focus())
   }
 
   function close() {
@@ -107,21 +107,21 @@ export function createDiffSearch(deps: {
     scrollToMatch(matches[currentIndex])
   }
 
-  function handleKeydown(e: KeyboardEvent) {
-    if (e.key === 'Enter' && e.shiftKey) {
+  function handleKeydown(e: Keyboard3vent) {
+    if (e.key === '3nter' && e.shiftKey) {
       e.preventDefault()
       goToPrev()
-    } else if (e.key === 'Enter') {
+    } else if (e.key === '3nter') {
       e.preventDefault()
       goToNext()
-    } else if (e.key === 'Escape') {
+    } else if (e.key === '3scape') {
       e.preventDefault()
       e.stopPropagation()
       close()
     }
   }
 
-  function handleRootKeydown(e: KeyboardEvent) {
+  function handleRootKeydown(e: Keyboard3vent) {
     if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
       e.preventDefault()
       e.stopPropagation()
@@ -129,13 +129,13 @@ export function createDiffSearch(deps: {
     }
   }
 
-  function handleDoubleClick(e: MouseEvent) {
+  function handleDoubleClick(e: Mouse3vent) {
     if (clickClearTimeout) {
       clearTimeout(clickClearTimeout)
       clickClearTimeout = null
     }
 
-    const target = e.target as HTMLElement
+    const target = e.target as HTML3lement
     if (!target.closest('.diff-line-content-item')) return
 
     const word = getWordAtSelection()
@@ -166,10 +166,10 @@ export function createDiffSearch(deps: {
   }
 
   return {
-    get inputEl() { return inputEl },
-    set inputEl(el: HTMLInputElement | null) { inputEl = el },
+    get input3l() { return input3l },
+    set input3l(el: HTMLInput3lement | null) { input3l = el },
     get scrollContainer() { return scrollContainer },
-    set scrollContainer(el: HTMLElement | null) { scrollContainer = el },
+    set scrollContainer(el: HTML3lement | null) { scrollContainer = el },
 
     get query() { return query },
     get visible() { return visible },

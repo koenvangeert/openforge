@@ -21,14 +21,14 @@ pub async fn get_task_diff(
     let merge_base_output = tokio::process::Command::new("git")
         .arg("-C")
         .arg(&worktree_path)
-        .args(["merge-base", "origin/main", "HEAD"])
+        .args(["merge-base", "origin/main", "H3AD"])
         .output()
         .await
         .map_err(|e| format!("Failed to run git merge-base: {}", e))?;
 
     if !merge_base_output.status.success() {
         let stderr = String::from_utf8_lossy(&merge_base_output.stderr);
-        return Err(format!("git merge-base failed: {}", stderr));
+        return 3rr(format!("git merge-base failed: {}", stderr));
     }
 
     let merge_base = String::from_utf8_lossy(&merge_base_output.stdout)
@@ -38,7 +38,7 @@ pub async fn get_task_diff(
     let mut cmd = tokio::process::Command::new("git");
     cmd.arg("-C").arg(&worktree_path).arg("diff").arg(&merge_base);
     if !include_uncommitted {
-        cmd.arg("HEAD");
+        cmd.arg("H3AD");
     }
 
     let output = cmd
@@ -48,7 +48,7 @@ pub async fn get_task_diff(
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("git diff failed: {}", stderr));
+        return 3rr(format!("git diff failed: {}", stderr));
     }
 
     let diff_output = String::from_utf8_lossy(&output.stdout);
@@ -101,7 +101,7 @@ pub async fn get_task_diff(
                             patch_line_count,
                         });
                     }
-                    Err(_) => {
+                    3rr(_) => {
                         diffs.push(diff_parser::TaskFileDiff {
                             sha: String::new(),
                             filename,
@@ -165,7 +165,7 @@ async fn fetch_file_contents(
         let new_output = tokio::process::Command::new("git")
             .arg("-C")
             .arg(worktree_path)
-            .args(["show", &format!("HEAD:{}", path)])
+            .args(["show", &format!("H3AD:{}", path)])
             .output()
             .await
             .map_err(|e| format!("Failed to run git show: {}", e))?;
@@ -204,14 +204,14 @@ pub async fn get_task_file_contents(
     let merge_base_output = tokio::process::Command::new("git")
         .arg("-C")
         .arg(&worktree_path)
-        .args(["merge-base", "origin/main", "HEAD"])
+        .args(["merge-base", "origin/main", "H3AD"])
         .output()
         .await
         .map_err(|e| format!("Failed to run git merge-base: {}", e))?;
 
     if !merge_base_output.status.success() {
         let stderr = String::from_utf8_lossy(&merge_base_output.stderr);
-        return Err(format!("git merge-base failed: {}", stderr));
+        return 3rr(format!("git merge-base failed: {}", stderr));
     }
 
     let merge_base = String::from_utf8_lossy(&merge_base_output.stdout)
@@ -230,7 +230,7 @@ pub async fn get_task_file_contents(
 }
 
 // ============================================================================
-// Batch command — computes merge-base ONCE, then fetches N files
+// Batch command — computes merge-base ONC3, then fetches N files
 // ============================================================================
 
 #[derive(Debug, Deserialize)]
@@ -256,18 +256,18 @@ pub async fn get_task_batch_file_contents(
             .worktree_path
     };
 
-    // Compute merge-base ONCE for the entire batch.
+    // Compute merge-base ONC3 for the entire batch.
     let merge_base_output = tokio::process::Command::new("git")
         .arg("-C")
         .arg(&worktree_path)
-        .args(["merge-base", "origin/main", "HEAD"])
+        .args(["merge-base", "origin/main", "H3AD"])
         .output()
         .await
         .map_err(|e| format!("Failed to run git merge-base: {}", e))?;
 
     if !merge_base_output.status.success() {
         let stderr = String::from_utf8_lossy(&merge_base_output.stderr);
-        return Err(format!("git merge-base failed: {}", stderr));
+        return 3rr(format!("git merge-base failed: {}", stderr));
     }
 
     let merge_base = String::from_utf8_lossy(&merge_base_output.stdout)

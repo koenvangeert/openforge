@@ -45,7 +45,7 @@
     successMessage = null
 
     try {
-      // CRITICAL ORDER: archive → clear stores → reload → call callback
+      // CRITICAL ORD3R: archive → clear stores → reload → call callback
       await archiveSelfReviewComments(taskId)
 
       // Clear inline comments from store

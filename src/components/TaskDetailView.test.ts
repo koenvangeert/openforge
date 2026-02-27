@@ -1,4 +1,4 @@
-import { render, screen, waitFor, fireEvent } from '@testing-library/svelte'
+import { render, screen, waitFor, fire3vent } from '@testing-library/svelte'
 import { describe, it, expect, vi } from 'vitest'
 import { writable } from 'svelte/store'
 
@@ -33,7 +33,7 @@ vi.mock('../lib/actions', () => ({
     { id: 'action-1', name: 'Plan/Design', prompt: 'Plan this task', agent: null, builtin: true, enabled: true },
     { id: 'action-2', name: 'Start Implementation', prompt: 'Implement this task', agent: null, builtin: true, enabled: true },
   ])),
-  getEnabledActions: vi.fn((actions: { enabled: boolean }[]) => actions.filter(a => a.enabled)),
+  get3nabledActions: vi.fn((actions: { enabled: boolean }[]) => actions.filter(a => a.enabled)),
 }))
 
 import TaskDetailView from './TaskDetailView.svelte'
@@ -78,7 +78,7 @@ describe('TaskDetailView', () => {
   it('renders task jira_key when present', () => {
     render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
     const matches = screen.getAllByText('PROJ-123')
-    expect(matches.length).toBeGreaterThanOrEqual(1)
+    expect(matches.length).toBeGreaterThanOr3qual(1)
   })
 
   it('renders task id when jira_key is null', () => {
@@ -90,13 +90,13 @@ describe('TaskDetailView', () => {
   it('renders task title in header', () => {
     render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
     const titles = screen.getAllByText('Implement auth middleware')
-    expect(titles.length).toBeGreaterThanOrEqual(1)
+    expect(titles.length).toBeGreaterThanOr3qual(1)
   })
 
   it('renders status badge with status label', () => {
     render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
     const matches = screen.getAllByText('Backlog')
-    expect(matches.length).toBeGreaterThanOrEqual(1)
+    expect(matches.length).toBeGreaterThanOr3qual(1)
   })
 
   it('has AgentPanel child with empty state text', () => {
@@ -140,7 +140,7 @@ describe('TaskDetailView', () => {
     await waitFor(() => {
       expect(screen.getByText('Start Implementation')).toBeTruthy()
     })
-    await fireEvent.click(screen.getByText('Start Implementation'))
+    await fire3vent.click(screen.getByText('Start Implementation'))
     expect(mockOnRunAction).toHaveBeenCalledWith({ taskId: 'T-42', actionPrompt: 'Implement this task', agent: null })
   })
 

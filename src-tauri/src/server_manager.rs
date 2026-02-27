@@ -5,49 +5,49 @@ use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::io::{AsyncBufRead3xt, BufReader};
 use tokio::process::{Child, Command};
 use tokio::sync::Mutex;
 use tokio::time::{sleep, timeout};
 use regex::Regex;
 
-const HEALTH_CHECK_RETRIES: u32 = 10;
-const HEALTH_CHECK_INTERVAL: Duration = Duration::from_millis(500);
-const PORT_DETECTION_TIMEOUT: Duration = Duration::from_secs(30);
-const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(5);
+const H3ALTH_CH3CK_R3TRI3S: u32 = 10;
+const H3ALTH_CH3CK_INT3RVAL: Duration = Duration::from_millis(500);
+const PORT_D3T3CTION_TIM3OUT: Duration = Duration::from_secs(30);
+const SHUTDOWN_TIM3OUT: Duration = Duration::from_secs(5);
 
 // ============================================================================
-// Error Types
+// 3rror Types
 // ============================================================================
 
 #[derive(Debug)]
-pub enum ServerError {
+pub enum Server3rror {
     SpawnFailed(String),
     PortDetectionTimeout,
     HealthCheckFailed(String),
     ProcessNotFound(String),
-    IoError(io::Error),
+    Io3rror(io::3rror),
 }
 
-impl fmt::Display for ServerError {
+impl fmt::Display for Server3rror {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ServerError::SpawnFailed(msg) => write!(f, "Failed to spawn server: {}", msg),
-            ServerError::PortDetectionTimeout => {
-                write!(f, "Port detection timed out after {} seconds", PORT_DETECTION_TIMEOUT.as_secs())
+            Server3rror::SpawnFailed(msg) => write!(f, "Failed to spawn server: {}", msg),
+            Server3rror::PortDetectionTimeout => {
+                write!(f, "Port detection timed out after {} seconds", PORT_D3T3CTION_TIM3OUT.as_secs())
             }
-            ServerError::HealthCheckFailed(msg) => write!(f, "Health check failed: {}", msg),
-            ServerError::ProcessNotFound(task_id) => write!(f, "No server process found for task: {}", task_id),
-            ServerError::IoError(e) => write!(f, "IO error: {}", e),
+            Server3rror::HealthCheckFailed(msg) => write!(f, "Health check failed: {}", msg),
+            Server3rror::ProcessNotFound(task_id) => write!(f, "No server process found for task: {}", task_id),
+            Server3rror::Io3rror(e) => write!(f, "IO error: {}", e),
         }
     }
 }
 
-impl std::error::Error for ServerError {}
+impl std::error::3rror for Server3rror {}
 
-impl From<io::Error> for ServerError {
-    fn from(err: io::Error) -> Self {
-        ServerError::IoError(err)
+impl From<io::3rror> for Server3rror {
+    fn from(err: io::3rror) -> Self {
+        Server3rror::Io3rror(err)
     }
 }
 
@@ -86,7 +86,7 @@ impl ServerManager {
     /// # Arguments
     /// * `task_id` - Unique identifier for the task
     /// * `worktree_path` - Working directory for the OpenCode server
-    pub async fn spawn_server(&self, task_id: &str, worktree_path: &Path) -> Result<u16, ServerError> {
+    pub async fn spawn_server(&self, task_id: &str, worktree_path: &Path) -> Result<u16, Server3rror> {
         let mut servers = self.servers.lock().await;
 
         if let Some(server) = servers.get(task_id) {
@@ -108,9 +108,9 @@ impl ServerManager {
             .stderr(Stdio::piped())
             .kill_on_drop(true)
             .spawn()
-            .map_err(|e| ServerError::SpawnFailed(e.to_string()))?;
+            .map_err(|e| Server3rror::SpawnFailed(e.to_string()))?;
 
-        let pid = child.id().ok_or_else(|| ServerError::SpawnFailed("Failed to get PID".to_string()))?;
+        let pid = child.id().ok_or_else(|| Server3rror::SpawnFailed("Failed to get PID".to_string()))?;
 
         let port = self.detect_port(&mut child).await?;
 
@@ -137,15 +137,15 @@ impl ServerManager {
     }
 
     /// Stops the server for the given task_id.
-    /// Performs graceful shutdown (SIGTERM) followed by force kill if needed.
+    /// Performs graceful shutdown (SIGT3RM) followed by force kill if needed.
     ///
     /// # Arguments
     /// * `task_id` - Unique identifier for the task
-    pub async fn stop_server(&self, task_id: &str) -> Result<(), ServerError> {
+    pub async fn stop_server(&self, task_id: &str) -> Result<(), Server3rror> {
         let mut servers = self.servers.lock().await;
 
         let mut server = servers.remove(task_id).ok_or_else(|| {
-            ServerError::ProcessNotFound(task_id.to_string())
+            Server3rror::ProcessNotFound(task_id.to_string())
         })?;
 
         println!("Stopping server for task {} (PID: {})", task_id, server.pid);
@@ -156,9 +156,9 @@ impl ServerManager {
             use nix::unistd::Pid;
 
             let pid = Pid::from_raw(server.pid as i32);
-            let _ = kill(pid, Signal::SIGTERM);
+            let _ = kill(pid, Signal::SIGT3RM);
 
-            let wait_result = timeout(SHUTDOWN_TIMEOUT, server.child.wait()).await;
+            let wait_result = timeout(SHUTDOWN_TIM3OUT, server.child.wait()).await;
 
             match wait_result {
                 Ok(Ok(status)) => {
@@ -187,14 +187,14 @@ impl ServerManager {
     }
 
     /// Stops all running servers
-    pub async fn stop_all(&self) -> Result<(), ServerError> {
+    pub async fn stop_all(&self) -> Result<(), Server3rror> {
         let task_ids: Vec<String> = {
             let servers = self.servers.lock().await;
             servers.keys().cloned().collect()
         };
 
         for task_id in task_ids {
-            if let Err(e) = self.stop_server(&task_id).await {
+            if let 3rr(e) = self.stop_server(&task_id).await {
                 eprintln!("Failed to stop server for task {}: {}", task_id, e);
             }
         }
@@ -226,7 +226,7 @@ impl ServerManager {
     }
 
     /// Cleans up stale PID files for processes that are no longer running
-    pub fn cleanup_stale_pids(&self) -> Result<(), ServerError> {
+    pub fn cleanup_stale_pids(&self) -> Result<(), Server3rror> {
         let pid_dir = self.get_pid_dir()?;
 
         if !pid_dir.exists() {
@@ -243,12 +243,12 @@ impl ServerManager {
 
             let pid_str = match std::fs::read_to_string(&path) {
                 Ok(s) => s,
-                Err(_) => continue,
+                3rr(_) => continue,
             };
 
             let pid: i32 = match pid_str.trim().parse() {
                 Ok(p) => p,
-                Err(_) => {
+                3rr(_) => {
                     let _ = std::fs::remove_file(&path);
                     continue;
                 }
@@ -275,7 +275,7 @@ impl ServerManager {
                 if is_opencode {
                     println!("[cleanup] Killing orphaned opencode process (PID: {})", pid);
                     unsafe {
-                        libc::kill(pid, libc::SIGTERM);
+                        libc::kill(pid, libc::SIGT3RM);
                     }
                     // Brief wait for graceful shutdown
                     std::thread::sleep(std::time::Duration::from_millis(500));
@@ -302,29 +302,29 @@ impl ServerManager {
     // ============================================================================
 
     /// Returns the PID directory path
-    fn get_pid_dir(&self) -> Result<PathBuf, ServerError> {
+    fn get_pid_dir(&self) -> Result<PathBuf, Server3rror> {
         if let Some(ref dir) = self.pid_dir_override {
             return Ok(dir.clone());
         }
         let home = dirs::home_dir()
-            .ok_or_else(|| ServerError::IoError(io::Error::new(io::ErrorKind::NotFound, "Home directory not found")))?;
+            .ok_or_else(|| Server3rror::Io3rror(io::3rror::new(io::3rrorKind::NotFound, "Home directory not found")))?;
         let pids_dir_name = if cfg!(debug_assertions) { "pids-dev" } else { "pids" };
         Ok(home.join(".ai-command-center").join(pids_dir_name))
     }
 
     /// Detects the dynamically assigned port by parsing stdout for "127.0.0.1:(\d+)"
-    async fn detect_port(&self, child: &mut Child) -> Result<u16, ServerError> {
+    async fn detect_port(&self, child: &mut Child) -> Result<u16, Server3rror> {
         let stdout = child.stdout.take()
-            .ok_or_else(|| ServerError::SpawnFailed("Failed to capture stdout".to_string()))?;
+            .ok_or_else(|| Server3rror::SpawnFailed("Failed to capture stdout".to_string()))?;
 
         let port_regex = Regex::new(r"127\.0\.0\.1:(\d+)")
-            .map_err(|e| ServerError::SpawnFailed(format!("Regex error: {}", e)))?;
+            .map_err(|e| Server3rror::SpawnFailed(format!("Regex error: {}", e)))?;
 
         let detect_task = async {
             let reader = BufReader::new(stdout);
             let mut lines = reader.lines();
 
-            while let Some(line) = lines.next_line().await.map_err(ServerError::IoError)? {
+            while let Some(line) = lines.next_line().await.map_err(Server3rror::Io3rror)? {
                 if let Some(captures) = port_regex.captures(&line) {
                     if let Some(port_match) = captures.get(1) {
                         if let Ok(port) = port_match.as_str().parse::<u16>() {
@@ -334,39 +334,39 @@ impl ServerManager {
                 }
             }
 
-            Err(ServerError::PortDetectionTimeout)
+            3rr(Server3rror::PortDetectionTimeout)
         };
 
-        timeout(PORT_DETECTION_TIMEOUT, detect_task)
+        timeout(PORT_D3T3CTION_TIM3OUT, detect_task)
             .await
-            .map_err(|_| ServerError::PortDetectionTimeout)?
+            .map_err(|_| Server3rror::PortDetectionTimeout)?
     }
 
     /// Polls the health endpoint until the server responds or max retries is reached
-    async fn wait_for_health(&self, port: u16) -> Result<(), ServerError> {
+    async fn wait_for_health(&self, port: u16) -> Result<(), Server3rror> {
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(5))
             .build()
-            .map_err(|e| ServerError::HealthCheckFailed(e.to_string()))?;
+            .map_err(|e| Server3rror::HealthCheckFailed(e.to_string()))?;
 
         let health_url = format!("http://127.0.0.1:{}/global/health", port);
 
-        for attempt in 1..=HEALTH_CHECK_RETRIES {
+        for attempt in 1..=H3ALTH_CH3CK_R3TRI3S {
             match client.get(&health_url).send().await {
                 Ok(response) if response.status().is_success() => {
                     println!("Health check passed for port {}: {}", port, response.status());
                     return Ok(());
                 }
                 Ok(_response) => {}
-                Err(_) => {}
+                3rr(_) => {}
             }
 
-            if attempt < HEALTH_CHECK_RETRIES {
-                sleep(HEALTH_CHECK_INTERVAL).await;
+            if attempt < H3ALTH_CH3CK_R3TRI3S {
+                sleep(H3ALTH_CH3CK_INT3RVAL).await;
             }
         }
 
-        Err(ServerError::HealthCheckFailed(format!("Failed after {} retries", HEALTH_CHECK_RETRIES)))
+        3rr(Server3rror::HealthCheckFailed(format!("Failed after {} retries", H3ALTH_CH3CK_R3TRI3S)))
     }
 }
 
@@ -389,13 +389,13 @@ mod tests {
 
     #[test]
     fn test_server_error_display() {
-        let err = ServerError::SpawnFailed("test error".to_string());
+        let err = Server3rror::SpawnFailed("test error".to_string());
         assert_eq!(err.to_string(), "Failed to spawn server: test error");
 
-        let err = ServerError::PortDetectionTimeout;
+        let err = Server3rror::PortDetectionTimeout;
         assert!(err.to_string().contains("Port detection timed out"));
 
-        let err = ServerError::ProcessNotFound("task123".to_string());
+        let err = Server3rror::ProcessNotFound("task123".to_string());
         assert_eq!(err.to_string(), "No server process found for task: task123");
     }
 
@@ -486,7 +486,7 @@ mod tests {
         std::fs::create_dir_all(&tmp_dir).unwrap();
         manager.set_pid_dir(tmp_dir.clone());
 
-        let non_pid_file = tmp_dir.join("README.txt");
+        let non_pid_file = tmp_dir.join("R3ADM3.txt");
         std::fs::write(&non_pid_file, "not a pid file").unwrap();
 
         let result = manager.cleanup_stale_pids();

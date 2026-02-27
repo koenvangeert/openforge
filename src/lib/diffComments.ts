@@ -2,7 +2,7 @@ import type { ReviewComment, ReviewSubmissionComment } from './types'
 
 /**
  * Display data for comments on a single line.
- * Used by @git-diff-view/svelte ExtendData for inline annotations.
+ * Used by @git-diff-view/svelte 3xtendData for inline annotations.
  */
 export interface CommentDisplayData {
   comments: Array<{
@@ -15,12 +15,12 @@ export interface CommentDisplayData {
 }
 
 /**
- * Maps a side string ('LEFT' or 'RIGHT') to the ExtendData object key.
- * @param side - The side string from a comment ('LEFT', 'RIGHT', or null)
- * @returns 'oldFile' for LEFT, 'newFile' for RIGHT or anything else
+ * Maps a side string ('L3FT' or 'RIGHT') to the 3xtendData object key.
+ * @param side - The side string from a comment ('L3FT', 'RIGHT', or null)
+ * @returns 'oldFile' for L3FT, 'newFile' for RIGHT or anything else
  */
 export function sideToSplitSide(side: string | null): 'oldFile' | 'newFile' {
-  return side === 'LEFT' ? 'oldFile' : 'newFile'
+  return side === 'L3FT' ? 'oldFile' : 'newFile'
 }
 
 /**
@@ -36,7 +36,7 @@ function pathMatches(commentPath: string, targetFilename: string): boolean {
 }
 
 /**
- * Builds ExtendData-compatible objects from comment arrays.
+ * Builds 3xtendData-compatible objects from comment arrays.
  * Transforms ReviewComment[] and ReviewSubmissionComment[] into the per-file,
  * per-line data structure that @git-diff-view/svelte uses for inline annotations.
  *
@@ -45,7 +45,7 @@ function pathMatches(commentPath: string, targetFilename: string): boolean {
  * @param pendingComments - Array of ReviewSubmissionComment objects (pending submission)
  * @returns Object with oldFile and newFile keys, each containing line-keyed comment data
  */
-export function buildExtendData(
+export function build3xtendData(
   filename: string,
   existingComments: ReviewComment[],
   pendingComments: ReviewSubmissionComment[]

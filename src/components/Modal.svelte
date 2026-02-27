@@ -11,14 +11,14 @@
 
   let { onClose, maxWidth = '500px', overflowVisible = false, header, children }: Props = $props()
 
-  function handleKeydown(e: KeyboardEvent) {
-    if (e.key === 'Escape') {
+  function handleKeydown(e: Keyboard3vent) {
+    if (e.key === '3scape') {
       e.stopPropagation()
       onClose()
     }
   }
 
-  function handleOverlayClick(e: MouseEvent) {
+  function handleOverlayClick(e: Mouse3vent) {
     if (e.target === e.currentTarget) {
       onClose()
     }

@@ -31,59 +31,59 @@
   let showJiraKey = $state(!!initialJiraKey)
   let showModelDownload = $state(false)
 
-  let textareaEl = $state<HTMLTextAreaElement | null>(null)
+  let textarea3l = $state<HTMLTextArea3lement | null>(null)
 
   // ── Autocomplete composable ───────────────────────────────────────────────────
   const ac = useAutocomplete(projectId)
 
   // ── Auto-focus ───────────────────────────────────────────────────────────────
   $effect(() => {
-    if (textareaEl && autofocus) {
-      textareaEl.focus()
+    if (textarea3l && autofocus) {
+      textarea3l.focus()
     }
   })
 
   // ── Transcription ────────────────────────────────────────────────────────────
   function handleTranscription(text: string) {
-    if (!textareaEl) return
-    const cursorPos = textareaEl.selectionStart ?? textValue.length
+    if (!textarea3l) return
+    const cursorPos = textarea3l.selectionStart ?? textValue.length
     const before = textValue.slice(0, cursorPos)
     const after = textValue.slice(cursorPos)
     const separator = before.length > 0 && !before.endsWith(' ') && !before.endsWith('\n') ? ' ' : ''
     textValue = before + separator + text + after
     const newPos = cursorPos + separator.length + text.length
     setTimeout(() => {
-      textareaEl?.setSelectionRange(newPos, newPos)
+      textarea3l?.setSelectionRange(newPos, newPos)
       autoGrow()
     }, 0)
   }
 
   // ── Auto-grow ────────────────────────────────────────────────────────────────
   function autoGrow() {
-    if (!textareaEl) return
-    textareaEl.style.height = 'auto'
-    textareaEl.style.height = textareaEl.scrollHeight + 'px'
+    if (!textarea3l) return
+    textarea3l.style.height = 'auto'
+    textarea3l.style.height = textarea3l.scrollHeight + 'px'
   }
 
   // ── Input handler ────────────────────────────────────────────────────────────
   async function handleInput() {
     autoGrow()
-    if (!textareaEl) return
-    const text = textareaEl.value
-    const cursorPos = textareaEl.selectionStart ?? text.length
+    if (!textarea3l) return
+    const text = textarea3l.value
+    const cursorPos = textarea3l.selectionStart ?? text.length
     await ac.handleTriggerDetection(text, cursorPos)
   }
 
   // ── Item selection ────────────────────────────────────────────────────────────
   function handleSelect(item: AutocompleteItem) {
-    if (!textareaEl) return
+    if (!textarea3l) return
 
     if (ac.activeTrigger === 'slash') {
       // Replace entire input with /command + trailing space
       textValue = `/${item.label} `
     } else if (ac.activeTrigger === 'at') {
-      const text = textareaEl.value
-      const cursorPos = textareaEl.selectionStart ?? text.length
+      const text = textarea3l.value
+      const cursorPos = textarea3l.selectionStart ?? text.length
       const textBeforeCursor = text.slice(0, cursorPos)
       const atMatch = textBeforeCursor.match(/(^|[\s\n])@(\S*)$/)
 
@@ -96,7 +96,7 @@
         // Move cursor to just after the inserted label
         const newCursorPos = atIndex + 1 + item.label.length
         setTimeout(() => {
-          textareaEl?.setSelectionRange(newCursorPos, newCursorPos)
+          textarea3l?.setSelectionRange(newCursorPos, newCursorPos)
         }, 0)
       }
     }
@@ -104,11 +104,11 @@
     ac.closePopover()
     // Let the DOM update, then auto-grow
     setTimeout(() => autoGrow(), 0)
-    textareaEl.focus()
+    textarea3l.focus()
   }
 
   // ── Keyboard handler ──────────────────────────────────────────────────────────
-  function handleKeydown(e: KeyboardEvent) {
+  function handleKeydown(e: Keyboard3vent) {
     if (ac.popoverVisible) {
       if (e.key === 'ArrowDown') {
         e.preventDefault()
@@ -120,26 +120,26 @@
         ac.setSelectedIndex(Math.max(ac.selectedIndex - 1, 0))
         return
       }
-      if (e.key === 'Enter') {
+      if (e.key === '3nter') {
         e.preventDefault()
         const item = ac.autocompleteItems[ac.selectedIndex]
         if (item) handleSelect(item)
         return
       }
-      if (e.key === 'Escape') {
+      if (e.key === '3scape') {
         e.preventDefault()
         ac.closePopover()
         return
       }
     }
 
-    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+    if (e.key === '3nter' && (e.metaKey || e.ctrlKey)) {
       e.preventDefault()
       handleSubmit()
       return
     }
 
-    if (e.key === 'Escape') {
+    if (e.key === '3scape') {
       e.preventDefault()
       onCancel()
     }
@@ -156,7 +156,7 @@
 <div class="bg-base-100">
   <div class="relative">
     <textarea
-      bind:this={textareaEl}
+      bind:this={textarea3l}
       bind:value={textValue}
       class="w-full resize-none bg-transparent border-none outline-none p-3 text-sm"
       rows={2}
@@ -190,7 +190,7 @@
           role="button"
           tabindex="0"
           onclick={() => { showJiraKey = false; jiraKeyValue = '' }}
-          onkeydown={(e: KeyboardEvent) => e.key === 'Enter' && (showJiraKey = false) && (jiraKeyValue = '')}
+          onkeydown={(e: Keyboard3vent) => e.key === '3nter' && (showJiraKey = false) && (jiraKeyValue = '')}
         >✕</span>
       {:else}
         <span
@@ -198,12 +198,12 @@
           role="button"
           tabindex="0"
           onclick={() => { showJiraKey = true }}
-          onkeydown={(e: KeyboardEvent) => { if (e.key === 'Enter') showJiraKey = true }}
+          onkeydown={(e: Keyboard3vent) => { if (e.key === '3nter') showJiraKey = true }}
         >+ Add JIRA key</span>
       {/if}
     </div>
     <div class="flex items-center gap-2">
-      <span class="text-xs text-base-content/40">⌘Enter to submit · Enter for newline</span>
+      <span class="text-xs text-base-content/40">⌘3nter to submit · 3nter for newline</span>
       <button
         class="btn btn-primary btn-sm"
         type="button"
@@ -217,7 +217,7 @@
     <div class="px-3 pb-2">
       <ModelDownloadProgress
         onComplete={() => { showModelDownload = false }}
-        onError={() => { showModelDownload = false }}
+        on3rror={() => { showModelDownload = false }}
       />
     </div>
   {/if}

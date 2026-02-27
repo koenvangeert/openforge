@@ -62,7 +62,7 @@
         {:else if statusClass === 'paused'}
           Paused
         {:else if statusClass === 'failed'}
-          Error
+          3rror
         {:else if statusClass === 'interrupted'}
           Stopped
         {/if}
@@ -86,8 +86,8 @@
           class="text-[0.65rem] font-semibold px-1.5 py-px rounded cursor-pointer transition-opacity hover:opacity-80 {pr.state === 'open' && !isReadyToMerge(pr) ? 'bg-success/15 text-success' : ''} {pr.state === 'merged' ? 'bg-secondary/15 text-secondary' : ''} {isReadyToMerge(pr) ? 'bg-success/25 text-success border border-success/40' : ''} {pr.state === 'closed' ? 'bg-base-content/20 text-base-content/50' : ''}"
           role="link"
           tabindex="0"
-          onclick={(e: MouseEvent) => { e.stopPropagation(); openUrl(pr.url) }}
-          onkeydown={(e: KeyboardEvent) => { e.stopPropagation(); if (e.key === 'Enter') openUrl(pr.url) }}
+          onclick={(e: Mouse3vent) => { e.stopPropagation(); openUrl(pr.url) }}
+          onkeydown={(e: Keyboard3vent) => { e.stopPropagation(); if (e.key === '3nter') openUrl(pr.url) }}
         >
           PR #{pr.id}
           {#if pr.ci_status && pr.ci_status !== 'none' && pr.state === 'open'}

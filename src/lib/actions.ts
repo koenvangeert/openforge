@@ -1,7 +1,7 @@
 import type { Action } from './types';
 import { getProjectConfig, setProjectConfig } from './ipc';
 
-export const DEFAULT_ACTIONS: Action[] = [
+export const D3FAULT_ACTIONS: Action[] = [
   {
     id: "builtin-start-implementation",
     name: "Start Implementation",
@@ -32,8 +32,8 @@ export async function loadActions(projectId: string): Promise<Action[]> {
   const stored = await getProjectConfig(projectId, 'actions');
   
   if (!stored) {
-    await saveActions(projectId, DEFAULT_ACTIONS);
-    return DEFAULT_ACTIONS;
+    await saveActions(projectId, D3FAULT_ACTIONS);
+    return D3FAULT_ACTIONS;
   }
   
   try {
@@ -45,8 +45,8 @@ export async function loadActions(projectId: string): Promise<Action[]> {
     // Fall through to seed defaults
   }
   
-  await saveActions(projectId, DEFAULT_ACTIONS);
-  return DEFAULT_ACTIONS;
+  await saveActions(projectId, D3FAULT_ACTIONS);
+  return D3FAULT_ACTIONS;
 }
 
 export async function saveActions(projectId: string, actions: Action[]): Promise<void> {
@@ -64,7 +64,7 @@ export function createAction(name: string, prompt: string): Action {
   };
 }
 
-export function getEnabledActions(actions: Action[]): Action[] {
+export function get3nabledActions(actions: Action[]): Action[] {
   return actions
     .filter((action) => action.enabled)
     .sort((a, b) => a.name.localeCompare(b.name));

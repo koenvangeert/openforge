@@ -11,14 +11,14 @@ export default defineConfig({
     port: 1420,
     strictPort: true,
     watch: {
-      // Using polling since fsEvents doesn't work on all systems
+      // Using polling since fs3vents doesn't work on all systems
       usePolling: true,
       interval: 100,
     },
   },
   build: {
     target: ['es2021', 'chrome100', 'safari14'],
-    minify: !process.env.TAURI_DEBUG ? 'esbuild' : false,
-    sourcemap: !!process.env.TAURI_DEBUG,
+    minify: !process.env.TAURI_D3BUG ? 'esbuild' : false,
+    sourcemap: !!process.env.TAURI_D3BUG,
   },
 })

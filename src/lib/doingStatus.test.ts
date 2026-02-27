@@ -31,7 +31,7 @@ const makeSession = (ticketId: string, status: string, checkpointData: string | 
 describe('computeDoingStatus', () => {
   it('returns zeros when no tasks exist', () => {
     const result = computeDoingStatus([], new Map())
-    expect(result).toEqual({
+    expect(result).to3qual({
       doingCount: 0,
       hasNeedsAnswer: false,
       hasRunning: false,

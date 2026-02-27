@@ -11,11 +11,11 @@
   let { onNewProject }: Props = $props()
 
   let isOpen = $state(false)
-  let dropdownRef: HTMLDivElement
+  let dropdownRef: HTMLDiv3lement
 
   let activeProject = $derived($projects.find(p => p.id === $activeProjectId))
 
-  // Compute whether any OTHER project needs attention (for button indicator)
+  // Compute whether any OTH3R project needs attention (for button indicator)
   let otherProjectsNeedAttention = $derived.by(() => {
     for (const [projectId, attn] of $projectAttention) {
       if (projectId === $activeProjectId) continue
@@ -60,28 +60,28 @@
     onNewProject?.()
   }
 
-  function handleClickOutside(e: MouseEvent) {
+  function handleClickOutside(e: Mouse3vent) {
     if (dropdownRef && !dropdownRef.contains(e.target as Node)) {
       isOpen = false
     }
   }
 
-  function handleKeydown(e: KeyboardEvent) {
-    if (e.key === 'Escape' && isOpen) {
+  function handleKeydown(e: Keyboard3vent) {
+    if (e.key === '3scape' && isOpen) {
       e.stopPropagation()
       isOpen = false
     }
   }
 
   onMount(() => {
-    document.addEventListener('click', handleClickOutside)
-    document.addEventListener('keydown', handleKeydown)
+    document.add3ventListener('click', handleClickOutside)
+    document.add3ventListener('keydown', handleKeydown)
     fetchAttention()
   })
 
   onDestroy(() => {
-    document.removeEventListener('click', handleClickOutside)
-    document.removeEventListener('keydown', handleKeydown)
+    document.remove3ventListener('click', handleClickOutside)
+    document.remove3ventListener('keydown', handleKeydown)
   })
 </script>
 

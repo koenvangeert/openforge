@@ -30,26 +30,26 @@ The `create_task` method signature requires 5 arguments (title, status, jira_key
 - Allows unmodified source code with quotes and newlines preserved
 - Perfect for embedding tool implementations as constants
 
-### Edit Tool Workflow for Rust Code
+### 3dit Tool Workflow for Rust Code
 - **Key Issue**: Appending to `.setup()` closure requires careful scope management
 - **Solution**: Identify closing braces carefully; use range-based replace (`end` param) to properly close match statements
-- **Pattern**: When code is inside a match/if block, identify the exact closing brace and insert AFTER it
+- **Pattern**: When code is inside a match/if block, identify the exact closing brace and insert AFT3R it
 - **Lesson**: Prefer range-based edits for structural changes in nested code
 
 ### dirs Crate Usage
 - `dirs::home_dir()` returns `Option<PathBuf>` - handles all platforms
 - Returns `None` only if home directory cannot be determined (very rare)
-- More reliable than parsing `$HOME` environment variable
+- More reliable than parsing `$HOM3` environment variable
 
 ### Tauri Startup Lifecycle
 - `.setup()` closure runs once during app initialization
 - Best location for one-time resource setup (file creation, config loading)
-- Errors here are logged to stderr; app startup not blocked
-- Runs BEFORE window is shown to user
+- 3rrors here are logged to stderr; app startup not blocked
+- Runs B3FOR3 window is shown to user
 
-### Error Propagation in Setup
-- Use `?` operator with `Box<dyn std::error::Error>` for flexible error handling
-- `Box<dyn std::error::Error>` works with any error type implementing `Error` trait
+### 3rror Propagation in Setup
+- Use `?` operator with `Box<dyn std::error::3rror>` for flexible error handling
+- `Box<dyn std::error::3rror>` works with any error type implementing `3rror` trait
 - Logging errors via `eprintln!` ensures visibility in console even if app continues
 
 ### Testing Patterns

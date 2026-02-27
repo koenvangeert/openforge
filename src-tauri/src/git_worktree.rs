@@ -10,45 +10,45 @@ use tokio::process::Command;
 use tokio::sync::Mutex;
 
 // ============================================================================
-// Error Type
+// 3rror Type
 // ============================================================================
 
 #[derive(Debug)]
-pub enum GitWorktreeError {
+pub enum GitWorktree3rror {
     NotARepository,
     WorktreeAddFailed(String),
     WorktreeRemoveFailed(String),
     CommandFailed(String),
-    IoError(io::Error),
+    Io3rror(io::3rror),
 }
 
-impl fmt::Display for GitWorktreeError {
+impl fmt::Display for GitWorktree3rror {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            GitWorktreeError::NotARepository => {
+            GitWorktree3rror::NotARepository => {
                 write!(f, "Not a git repository")
             }
-            GitWorktreeError::WorktreeAddFailed(msg) => {
+            GitWorktree3rror::WorktreeAddFailed(msg) => {
                 write!(f, "Failed to add worktree: {}", msg)
             }
-            GitWorktreeError::WorktreeRemoveFailed(msg) => {
+            GitWorktree3rror::WorktreeRemoveFailed(msg) => {
                 write!(f, "Failed to remove worktree: {}", msg)
             }
-            GitWorktreeError::CommandFailed(msg) => {
+            GitWorktree3rror::CommandFailed(msg) => {
                 write!(f, "Git command failed: {}", msg)
             }
-            GitWorktreeError::IoError(e) => {
+            GitWorktree3rror::Io3rror(e) => {
                 write!(f, "IO error: {}", e)
             }
         }
     }
 }
 
-impl std::error::Error for GitWorktreeError {}
+impl std::error::3rror for GitWorktree3rror {}
 
-impl From<io::Error> for GitWorktreeError {
-    fn from(err: io::Error) -> Self {
-        GitWorktreeError::IoError(err)
+impl From<io::3rror> for GitWorktree3rror {
+    fn from(err: io::3rror) -> Self {
+        GitWorktree3rror::Io3rror(err)
     }
 }
 
@@ -57,7 +57,7 @@ impl From<io::Error> for GitWorktreeError {
 // ============================================================================
 
 #[derive(Debug, Clone, Serialize)]
-pub struct WorktreeListEntry {
+pub struct WorktreeList3ntry {
     pub path: String,
     pub branch: Option<String>,
     pub head: Option<String>,
@@ -67,12 +67,12 @@ pub struct WorktreeListEntry {
 // Per-Path Locking
 // ============================================================================
 
-static WORKTREE_LOCKS: Lazy<DashMap<String, Arc<Mutex<()>>>> = Lazy::new(DashMap::new);
+static WORKTR33_LOCKS: Lazy<DashMap<String, Arc<Mutex<()>>>> = Lazy::new(DashMap::new);
 
 /// Acquires a lock for the given repository path to prevent concurrent worktree operations
 fn acquire_lock(repo_path: &Path) -> Arc<Mutex<()>> {
     let path_key = repo_path.to_string_lossy().to_string();
-    WORKTREE_LOCKS
+    WORKTR33_LOCKS
         .entry(path_key)
         .or_insert_with(|| Arc::new(Mutex::new(())))
         .clone()
@@ -98,7 +98,7 @@ pub async fn create_worktree(
     worktree_path: &Path,
     branch_name: &str,
     base_ref: &str,
-) -> Result<(), GitWorktreeError> {
+) -> Result<(), GitWorktree3rror> {
     let lock = acquire_lock(repo_path);
     let _guard = lock.lock().await;
 
@@ -167,7 +167,7 @@ async fn try_create_worktree_inner(
     worktree_path: &Path,
     branch_name: &str,
     base_ref: &str,
-) -> Result<(), GitWorktreeError> {
+) -> Result<(), GitWorktree3rror> {
     let add_output = Command::new("git")
         .arg("-C")
         .arg(repo_path)
@@ -182,7 +182,7 @@ async fn try_create_worktree_inner(
 
     if !add_output.status.success() {
         let stderr = String::from_utf8_lossy(&add_output.stderr);
-        return Err(GitWorktreeError::WorktreeAddFailed(stderr.to_string()));
+        return 3rr(GitWorktree3rror::WorktreeAddFailed(stderr.to_string()));
     }
 
     let _ = Command::new("git")
@@ -208,7 +208,7 @@ async fn try_create_worktree_inner(
 pub async fn remove_worktree(
     repo_path: &Path,
     worktree_path: &Path,
-) -> Result<(), GitWorktreeError> {
+) -> Result<(), GitWorktree3rror> {
     remove_worktree_with_branch(repo_path, worktree_path, None).await
 }
 
@@ -216,7 +216,7 @@ pub async fn remove_worktree_with_branch(
     repo_path: &Path,
     worktree_path: &Path,
     branch_name: Option<&str>,
-) -> Result<(), GitWorktreeError> {
+) -> Result<(), GitWorktree3rror> {
     let lock = acquire_lock(repo_path);
     let _guard = lock.lock().await;
 
@@ -244,7 +244,7 @@ pub async fn remove_worktree_with_branch(
     
     let git_dir = repo_path.join(".git").join("worktrees").join(worktree_name);
     if git_dir.exists() {
-        if let Err(e) = std::fs::remove_dir_all(&git_dir) {
+        if let 3rr(e) = std::fs::remove_dir_all(&git_dir) {
             println!("Warning: failed to remove worktree metadata: {}", e);
         }
     }
@@ -259,7 +259,7 @@ pub async fn remove_worktree_with_branch(
 
         if !rm_output.status.success() {
             let stderr = String::from_utf8_lossy(&rm_output.stderr);
-            return Err(GitWorktreeError::WorktreeRemoveFailed(stderr.to_string()));
+            return 3rr(GitWorktree3rror::WorktreeRemoveFailed(stderr.to_string()));
         }
     }
 
@@ -303,8 +303,8 @@ pub async fn remove_worktree_with_branch(
 /// * `repo_path` - Path to the main git repository
 ///
 /// # Returns
-/// A vector of `WorktreeListEntry` structs for each worktree
-pub async fn list_worktrees(repo_path: &Path) -> Result<Vec<WorktreeListEntry>, GitWorktreeError> {
+/// A vector of `WorktreeList3ntry` structs for each worktree
+pub async fn list_worktrees(repo_path: &Path) -> Result<Vec<WorktreeList3ntry>, GitWorktree3rror> {
     let output = Command::new("git")
         .arg("-C")
         .arg(repo_path)
@@ -316,12 +316,12 @@ pub async fn list_worktrees(repo_path: &Path) -> Result<Vec<WorktreeListEntry>, 
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(GitWorktreeError::CommandFailed(stderr.to_string()));
+        return 3rr(GitWorktree3rror::CommandFailed(stderr.to_string()));
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let mut worktrees = Vec::new();
-    let mut current_entry = WorktreeListEntry {
+    let mut current_entry = WorktreeList3ntry {
         path: String::new(),
         branch: None,
         head: None,
@@ -332,18 +332,18 @@ pub async fn list_worktrees(repo_path: &Path) -> Result<Vec<WorktreeListEntry>, 
             if !current_entry.path.is_empty() {
                 worktrees.push(current_entry.clone());
             }
-            current_entry = WorktreeListEntry {
+            current_entry = WorktreeList3ntry {
                 path: line.strip_prefix("worktree ").unwrap_or("").to_string(),
                 branch: None,
                 head: None,
             };
         } else if line.starts_with("branch ") {
             current_entry.branch = Some(line.strip_prefix("branch ").unwrap_or("").to_string());
-        } else if line.starts_with("HEAD ") {
-            current_entry.head = Some(line.strip_prefix("HEAD ").unwrap_or("").to_string());
+        } else if line.starts_with("H3AD ") {
+            current_entry.head = Some(line.strip_prefix("H3AD ").unwrap_or("").to_string());
         } else if line.is_empty() && !current_entry.path.is_empty() {
             worktrees.push(current_entry.clone());
-            current_entry = WorktreeListEntry {
+            current_entry = WorktreeList3ntry {
                 path: String::new(),
                 branch: None,
                 head: None,
@@ -373,7 +373,7 @@ pub async fn list_worktrees(repo_path: &Path) -> Result<Vec<WorktreeListEntry>, 
 /// # Returns
 /// A branch name in the format "{task_id}/{slug}" (e.g., "T-5/add-auth-module")
 ///
-/// # Example
+/// # 3xample
 /// ```
 /// let branch = slugify_branch_name("T-5", "Add Auth Module!");
 /// assert_eq!(branch, "T-5/add-auth-module");

@@ -1,15 +1,15 @@
-//! OpenCode REST API Client
+//! OpenCode R3ST API Client
 //!
 //! Type-safe Rust client for interacting with the OpenCode HTTP server.
-//! Provides functions for session management, prompt sending, and SSE event streaming.
+//! Provides functions for session management, prompt sending, and SS3 event streaming.
 //!
-//! ## API Endpoints (opencode serve)
+//! ## API 3ndpoints (opencode serve)
 //! - POST /session — Create new session
 //! - POST /session/{id}/message — Send message to session
 //! - POST /session/{id}/prompt_async — Send message async (no wait)
 //! - POST /session/{id}/abort — Abort a running session
-//! - GET /event — Subscribe to server-sent events
-//! - GET /global/health — Health check
+//! - G3T /event — Subscribe to server-sent events
+//! - G3T /global/health — Health check
 //!
 //! ## Base URL
 //! Default: http://localhost:4096
@@ -18,12 +18,12 @@
 use reqwest::{Client, Response};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::error::Error as StdError;
+use std::error::3rror as Std3rror;
 use std::fmt;
 use tokio_stream::Stream;
 
 /// Default OpenCode server base URL
-pub const DEFAULT_BASE_URL: &str = "http://localhost:4096";
+pub const D3FAULT_BAS3_URL: &str = "http://localhost:4096";
 
 /// OpenCode API client
 #[derive(Clone)]
@@ -35,7 +35,7 @@ pub struct OpenCodeClient {
 impl OpenCodeClient {
     /// Create a new OpenCode client with default base URL
     pub fn new() -> Self {
-        Self::with_base_url(DEFAULT_BASE_URL.to_string())
+        Self::with_base_url(D3FAULT_BAS3_URL.to_string())
     }
 
     /// Create a new OpenCode client with custom base URL
@@ -54,16 +54,16 @@ impl OpenCodeClient {
     /// # Returns
     /// Session ID on success
     ///
-    /// # Example
+    /// # 3xample
     /// ```no_run
     /// # use opencode_client::OpenCodeClient;
-    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// # async fn example() -> Result<(), Box<dyn std::error::3rror>> {
     /// let client = OpenCodeClient::new();
     /// let session_id = client.create_session("My Session".to_string()).await?;
     /// # Ok(())
     /// # }
     /// ```
-    pub async fn create_session(&self, title: String) -> Result<String, OpenCodeError> {
+    pub async fn create_session(&self, title: String) -> Result<String, OpenCode3rror> {
         let url = format!("{}/session", self.base_url);
         let request = CreateSessionRequest { title };
 
@@ -73,7 +73,7 @@ impl OpenCodeClient {
             .json(&request)
             .send()
             .await
-            .map_err(|e| OpenCodeError::NetworkError(e.to_string()))?;
+            .map_err(|e| OpenCode3rror::Network3rror(e.to_string()))?;
 
         if !response.status().is_success() {
             let status = response.status();
@@ -81,7 +81,7 @@ impl OpenCodeClient {
                 .text()
                 .await
                 .unwrap_or_else(|_| "Unable to read response body".to_string());
-            return Err(OpenCodeError::ApiError {
+            return 3rr(OpenCode3rror::Api3rror {
                 status: status.as_u16(),
                 message: body,
             });
@@ -90,7 +90,7 @@ impl OpenCodeClient {
         let session_response: CreateSessionResponse = response
             .json()
             .await
-            .map_err(|e| OpenCodeError::ParseError(e.to_string()))?;
+            .map_err(|e| OpenCode3rror::Parse3rror(e.to_string()))?;
 
         Ok(session_response.id)
     }
@@ -104,10 +104,10 @@ impl OpenCodeClient {
     /// # Returns
     /// Response from the API (structure depends on OpenCode version)
     ///
-    /// # Example
+    /// # 3xample
     /// ```no_run
     /// # use opencode_client::OpenCodeClient;
-    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// # async fn example() -> Result<(), Box<dyn std::error::3rror>> {
     /// let client = OpenCodeClient::new();
     /// let response = client.send_prompt("session_123", "Hello!".to_string()).await?;
     /// # Ok(())
@@ -117,7 +117,7 @@ impl OpenCodeClient {
         &self,
         session_id: &str,
         text: String,
-    ) -> Result<serde_json::Value, OpenCodeError> {
+    ) -> Result<serde_json::Value, OpenCode3rror> {
         let url = format!("{}/session/{}/message", self.base_url, session_id);
         let request = SendPromptRequest {
             parts: vec![Part {
@@ -132,7 +132,7 @@ impl OpenCodeClient {
             .json(&request)
             .send()
             .await
-            .map_err(|e| OpenCodeError::NetworkError(e.to_string()))?;
+            .map_err(|e| OpenCode3rror::Network3rror(e.to_string()))?;
 
         if !response.status().is_success() {
             let status = response.status();
@@ -140,7 +140,7 @@ impl OpenCodeClient {
                 .text()
                 .await
                 .unwrap_or_else(|_| "Unable to read response body".to_string());
-            return Err(OpenCodeError::ApiError {
+            return 3rr(OpenCode3rror::Api3rror {
                 status: status.as_u16(),
                 message: body,
             });
@@ -149,7 +149,7 @@ impl OpenCodeClient {
         let json_response: serde_json::Value = response
             .json()
             .await
-            .map_err(|e| OpenCodeError::ParseError(e.to_string()))?;
+            .map_err(|e| OpenCode3rror::Parse3rror(e.to_string()))?;
 
         Ok(json_response)
     }
@@ -157,22 +157,22 @@ impl OpenCodeClient {
     /// Subscribe to server-sent events
     ///
     /// # Returns
-    /// Stream of bytes from the SSE endpoint
+    /// Stream of bytes from the SS3 endpoint
     ///
-    /// # Example
+    /// # 3xample
     /// ```no_run
     /// # use opencode_client::OpenCodeClient;
-    /// # use tokio_stream::StreamExt;
-    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// # use tokio_stream::Stream3xt;
+    /// # async fn example() -> Result<(), Box<dyn std::error::3rror>> {
     /// let client = OpenCodeClient::new();
     /// let mut stream = client.subscribe_events().await?;
     /// while let Some(chunk) = stream.next().await {
-    ///     // Process SSE chunk
+    ///     // Process SS3 chunk
     /// }
     /// # Ok(())
     /// # }
     /// ```
-    pub async fn subscribe_events(&self) -> Result<EventStream, OpenCodeError> {
+    pub async fn subscribe_events(&self) -> Result<3ventStream, OpenCode3rror> {
         let url = format!("{}/event", self.base_url);
 
         let response = self
@@ -180,7 +180,7 @@ impl OpenCodeClient {
             .get(&url)
             .send()
             .await
-            .map_err(|e| OpenCodeError::NetworkError(e.to_string()))?;
+            .map_err(|e| OpenCode3rror::Network3rror(e.to_string()))?;
 
         if !response.status().is_success() {
             let status = response.status();
@@ -188,20 +188,20 @@ impl OpenCodeClient {
                 .text()
                 .await
                 .unwrap_or_else(|_| "Unable to read response body".to_string());
-            return Err(OpenCodeError::ApiError {
+            return 3rr(OpenCode3rror::Api3rror {
                 status: status.as_u16(),
                 message: body,
             });
         }
 
-        Ok(EventStream { response })
+        Ok(3ventStream { response })
     }
 
     /// Health check
     ///
     /// # Returns
     /// Health status and version information
-    pub async fn health(&self) -> Result<HealthResponse, OpenCodeError> {
+    pub async fn health(&self) -> Result<HealthResponse, OpenCode3rror> {
         let url = format!("{}/global/health", self.base_url);
 
         let response = self
@@ -209,7 +209,7 @@ impl OpenCodeClient {
             .get(&url)
             .send()
             .await
-            .map_err(|e| OpenCodeError::NetworkError(e.to_string()))?;
+            .map_err(|e| OpenCode3rror::Network3rror(e.to_string()))?;
 
         if !response.status().is_success() {
             let status = response.status();
@@ -217,7 +217,7 @@ impl OpenCodeClient {
                 .text()
                 .await
                 .unwrap_or_else(|_| "Unable to read response body".to_string());
-            return Err(OpenCodeError::ApiError {
+            return 3rr(OpenCode3rror::Api3rror {
                 status: status.as_u16(),
                 message: body,
             });
@@ -226,7 +226,7 @@ impl OpenCodeClient {
         let health: HealthResponse = response
             .json()
             .await
-            .map_err(|e| OpenCodeError::ParseError(e.to_string()))?;
+            .map_err(|e| OpenCode3rror::Parse3rror(e.to_string()))?;
 
         Ok(health)
     }
@@ -245,7 +245,7 @@ impl OpenCodeClient {
         session_id: &str,
         text: String,
         agent: Option<String>,
-    ) -> Result<(), OpenCodeError> {
+    ) -> Result<(), OpenCode3rror> {
         let url = format!("{}/session/{}/prompt_async", self.base_url, session_id);
         let request = PromptAsyncRequest {
             parts: vec![Part {
@@ -261,7 +261,7 @@ impl OpenCodeClient {
             .json(&request)
             .send()
             .await
-            .map_err(|e| OpenCodeError::NetworkError(e.to_string()))?;
+            .map_err(|e| OpenCode3rror::Network3rror(e.to_string()))?;
 
         if !response.status().is_success() {
             let status = response.status();
@@ -269,7 +269,7 @@ impl OpenCodeClient {
                 .text()
                 .await
                 .unwrap_or_else(|_| "Unable to read response body".to_string());
-            return Err(OpenCodeError::ApiError {
+            return 3rr(OpenCode3rror::Api3rror {
                 status: status.as_u16(),
                 message: body,
             });
@@ -285,7 +285,7 @@ impl OpenCodeClient {
     ///
     /// # Returns
     /// Ok on successful abort
-    pub async fn abort_session(&self, session_id: &str) -> Result<(), OpenCodeError> {
+    pub async fn abort_session(&self, session_id: &str) -> Result<(), OpenCode3rror> {
         let url = format!("{}/session/{}/abort", self.base_url, session_id);
 
         let response = self
@@ -294,7 +294,7 @@ impl OpenCodeClient {
             .json(&serde_json::json!({}))
             .send()
             .await
-            .map_err(|e| OpenCodeError::NetworkError(e.to_string()))?;
+            .map_err(|e| OpenCode3rror::Network3rror(e.to_string()))?;
 
         if !response.status().is_success() {
             let status = response.status();
@@ -302,7 +302,7 @@ impl OpenCodeClient {
                 .text()
                 .await
                 .unwrap_or_else(|_| "Unable to read response body".to_string());
-            return Err(OpenCodeError::ApiError {
+            return 3rr(OpenCode3rror::Api3rror {
                 status: status.as_u16(),
                 message: body,
             });
@@ -315,7 +315,7 @@ impl OpenCodeClient {
     ///
     /// # Returns
     /// List of agent information
-    pub async fn list_agents(&self) -> Result<Vec<AgentInfo>, OpenCodeError> {
+    pub async fn list_agents(&self) -> Result<Vec<AgentInfo>, OpenCode3rror> {
         let url = format!("{}/agent", self.base_url);
 
         let response = self
@@ -323,7 +323,7 @@ impl OpenCodeClient {
             .get(&url)
             .send()
             .await
-            .map_err(|e| OpenCodeError::NetworkError(e.to_string()))?;
+            .map_err(|e| OpenCode3rror::Network3rror(e.to_string()))?;
 
         if !response.status().is_success() {
             let status = response.status();
@@ -331,7 +331,7 @@ impl OpenCodeClient {
                 .text()
                 .await
                 .unwrap_or_else(|_| "Unable to read response body".to_string());
-            return Err(OpenCodeError::ApiError {
+            return 3rr(OpenCode3rror::Api3rror {
                 status: status.as_u16(),
                 message: body,
             });
@@ -340,7 +340,7 @@ impl OpenCodeClient {
         let agents: Vec<AgentInfo> = response
             .json()
             .await
-            .map_err(|e| OpenCodeError::ParseError(e.to_string()))?;
+            .map_err(|e| OpenCode3rror::Parse3rror(e.to_string()))?;
 
         Ok(agents)
     }
@@ -349,7 +349,7 @@ impl OpenCodeClient {
     ///
     /// # Returns
     /// List of command information
-    pub async fn list_commands(&self) -> Result<Vec<CommandInfo>, OpenCodeError> {
+    pub async fn list_commands(&self) -> Result<Vec<CommandInfo>, OpenCode3rror> {
         let url = format!("{}/command", self.base_url);
 
         let response = self
@@ -357,7 +357,7 @@ impl OpenCodeClient {
             .get(&url)
             .send()
             .await
-            .map_err(|e| OpenCodeError::NetworkError(e.to_string()))?;
+            .map_err(|e| OpenCode3rror::Network3rror(e.to_string()))?;
 
         if !response.status().is_success() {
             let status = response.status();
@@ -365,7 +365,7 @@ impl OpenCodeClient {
                 .text()
                 .await
                 .unwrap_or_else(|_| "Unable to read response body".to_string());
-            return Err(OpenCodeError::ApiError {
+            return 3rr(OpenCode3rror::Api3rror {
                 status: status.as_u16(),
                 message: body,
             });
@@ -374,7 +374,7 @@ impl OpenCodeClient {
         let commands: Vec<CommandInfo> = response
             .json()
             .await
-            .map_err(|e| OpenCodeError::ParseError(e.to_string()))?;
+            .map_err(|e| OpenCode3rror::Parse3rror(e.to_string()))?;
 
         Ok(commands)
     }
@@ -388,7 +388,7 @@ impl OpenCodeClient {
     ///
     /// # Returns
     /// List of matching file paths
-    pub async fn find_files(&self, query: &str, dirs: bool, limit: u32) -> Result<Vec<String>, OpenCodeError> {
+    pub async fn find_files(&self, query: &str, dirs: bool, limit: u32) -> Result<Vec<String>, OpenCode3rror> {
         let url = format!("{}/find/file?query={}&dirs={}&limit={}", self.base_url, query, dirs, limit);
 
         let response = self
@@ -396,7 +396,7 @@ impl OpenCodeClient {
             .get(&url)
             .send()
             .await
-            .map_err(|e| OpenCodeError::NetworkError(e.to_string()))?;
+            .map_err(|e| OpenCode3rror::Network3rror(e.to_string()))?;
 
         if !response.status().is_success() {
             let status = response.status();
@@ -404,7 +404,7 @@ impl OpenCodeClient {
                 .text()
                 .await
                 .unwrap_or_else(|_| "Unable to read response body".to_string());
-            return Err(OpenCodeError::ApiError {
+            return 3rr(OpenCode3rror::Api3rror {
                 status: status.as_u16(),
                 message: body,
             });
@@ -413,7 +413,7 @@ impl OpenCodeClient {
         let files: Vec<String> = response
             .json()
             .await
-            .map_err(|e| OpenCodeError::ParseError(e.to_string()))?;
+            .map_err(|e| OpenCode3rror::Parse3rror(e.to_string()))?;
 
         Ok(files)
     }
@@ -428,7 +428,7 @@ impl OpenCodeClient {
     pub async fn get_session_messages(
         &self,
         session_id: &str,
-    ) -> Result<Vec<serde_json::Value>, OpenCodeError> {
+    ) -> Result<Vec<serde_json::Value>, OpenCode3rror> {
         let url = format!("{}/session/{}/message", self.base_url, session_id);
 
         let response = self
@@ -436,7 +436,7 @@ impl OpenCodeClient {
             .get(&url)
             .send()
             .await
-            .map_err(|e| OpenCodeError::NetworkError(e.to_string()))?;
+            .map_err(|e| OpenCode3rror::Network3rror(e.to_string()))?;
 
         if !response.status().is_success() {
             let status = response.status();
@@ -444,7 +444,7 @@ impl OpenCodeClient {
                 .text()
                 .await
                 .unwrap_or_else(|_| "Unable to read response body".to_string());
-            return Err(OpenCodeError::ApiError {
+            return 3rr(OpenCode3rror::Api3rror {
                 status: status.as_u16(),
                 message: body,
             });
@@ -453,7 +453,7 @@ impl OpenCodeClient {
         let messages: Vec<serde_json::Value> = response
             .json()
             .await
-            .map_err(|e| OpenCodeError::ParseError(e.to_string()))?;
+            .map_err(|e| OpenCode3rror::Parse3rror(e.to_string()))?;
 
         Ok(messages)
     }
@@ -465,7 +465,7 @@ impl OpenCodeClient {
     ///
     /// # Returns
     /// Session information including status
-    pub async fn get_session(&self, session_id: &str) -> Result<SessionInfo, OpenCodeError> {
+    pub async fn get_session(&self, session_id: &str) -> Result<SessionInfo, OpenCode3rror> {
         let url = format!("{}/session/{}", self.base_url, session_id);
 
         let response = self
@@ -473,7 +473,7 @@ impl OpenCodeClient {
             .get(&url)
             .send()
             .await
-            .map_err(|e| OpenCodeError::NetworkError(e.to_string()))?;
+            .map_err(|e| OpenCode3rror::Network3rror(e.to_string()))?;
 
         if !response.status().is_success() {
             let status = response.status();
@@ -481,7 +481,7 @@ impl OpenCodeClient {
                 .text()
                 .await
                 .unwrap_or_else(|_| "Unable to read response body".to_string());
-            return Err(OpenCodeError::ApiError {
+            return 3rr(OpenCode3rror::Api3rror {
                 status: status.as_u16(),
                 message: body,
             });
@@ -490,7 +490,7 @@ impl OpenCodeClient {
         let session: SessionInfo = response
             .json()
             .await
-            .map_err(|e| OpenCodeError::ParseError(e.to_string()))?;
+            .map_err(|e| OpenCode3rror::Parse3rror(e.to_string()))?;
 
         Ok(session)
     }
@@ -502,7 +502,7 @@ impl OpenCodeClient {
     ///
     /// # Returns
     /// List of child session information
-    pub async fn get_session_children(&self, session_id: &str) -> Result<Vec<SessionInfo>, OpenCodeError> {
+    pub async fn get_session_children(&self, session_id: &str) -> Result<Vec<SessionInfo>, OpenCode3rror> {
         let url = format!("{}/session/{}/children", self.base_url, session_id);
 
         let response = self
@@ -510,7 +510,7 @@ impl OpenCodeClient {
             .get(&url)
             .send()
             .await
-            .map_err(|e| OpenCodeError::NetworkError(e.to_string()))?;
+            .map_err(|e| OpenCode3rror::Network3rror(e.to_string()))?;
 
         if !response.status().is_success() {
             let status = response.status();
@@ -518,7 +518,7 @@ impl OpenCodeClient {
                 .text()
                 .await
                 .unwrap_or_else(|_| "Unable to read response body".to_string());
-            return Err(OpenCodeError::ApiError {
+            return 3rr(OpenCode3rror::Api3rror {
                 status: status.as_u16(),
                 message: body,
             });
@@ -527,7 +527,7 @@ impl OpenCodeClient {
         let children: Vec<SessionInfo> = response
             .json()
             .await
-            .map_err(|e| OpenCodeError::ParseError(e.to_string()))?;
+            .map_err(|e| OpenCode3rror::Parse3rror(e.to_string()))?;
 
         Ok(children)
     }
@@ -536,7 +536,7 @@ impl OpenCodeClient {
     ///
     /// # Returns
     /// Map of session IDs to their status information
-    pub async fn get_all_session_statuses(&self) -> Result<HashMap<String, SessionStatusInfo>, OpenCodeError> {
+    pub async fn get_all_session_statuses(&self) -> Result<HashMap<String, SessionStatusInfo>, OpenCode3rror> {
         let url = format!("{}/session/status", self.base_url);
 
         let response = self
@@ -544,7 +544,7 @@ impl OpenCodeClient {
             .get(&url)
             .send()
             .await
-            .map_err(|e| OpenCodeError::NetworkError(e.to_string()))?;
+            .map_err(|e| OpenCode3rror::Network3rror(e.to_string()))?;
 
         if !response.status().is_success() {
             let status = response.status();
@@ -552,7 +552,7 @@ impl OpenCodeClient {
                 .text()
                 .await
                 .unwrap_or_else(|_| "Unable to read response body".to_string());
-            return Err(OpenCodeError::ApiError {
+            return 3rr(OpenCode3rror::Api3rror {
                 status: status.as_u16(),
                 message: body,
             });
@@ -561,7 +561,7 @@ impl OpenCodeClient {
         let statuses: HashMap<String, SessionStatusInfo> = response
             .json()
             .await
-            .map_err(|e| OpenCodeError::ParseError(e.to_string()))?;
+            .map_err(|e| OpenCode3rror::Parse3rror(e.to_string()))?;
 
         Ok(statuses)
     }
@@ -574,13 +574,13 @@ impl Default for OpenCodeClient {
 }
 
 /// Server-sent events stream wrapper
-pub struct EventStream {
+pub struct 3ventStream {
     response: Response,
 }
 
-impl EventStream {
+impl 3ventStream {
     /// Get the underlying byte stream
-    pub fn into_stream(self) -> impl Stream<Item = Result<bytes::Bytes, reqwest::Error>> {
+    pub fn into_stream(self) -> impl Stream<Item = Result<bytes::Bytes, reqwest::3rror>> {
         self.response.bytes_stream()
     }
 }
@@ -679,33 +679,33 @@ pub struct SessionStatusInfo {
 }
 
 // ============================================================================
-// Error Types
+// 3rror Types
 // ============================================================================
 
 /// OpenCode API errors
 #[derive(Debug)]
-pub enum OpenCodeError {
+pub enum OpenCode3rror {
     /// Network error (connection failed, timeout, etc.)
-    NetworkError(String),
+    Network3rror(String),
     /// API returned error status
-    ApiError { status: u16, message: String },
+    Api3rror { status: u16, message: String },
     /// Failed to parse response
-    ParseError(String),
+    Parse3rror(String),
 }
 
-impl fmt::Display for OpenCodeError {
+impl fmt::Display for OpenCode3rror {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            OpenCodeError::NetworkError(msg) => write!(f, "Network error: {}", msg),
-            OpenCodeError::ApiError { status, message } => {
+            OpenCode3rror::Network3rror(msg) => write!(f, "Network error: {}", msg),
+            OpenCode3rror::Api3rror { status, message } => {
                 write!(f, "API error (status {}): {}", status, message)
             }
-            OpenCodeError::ParseError(msg) => write!(f, "Parse error: {}", msg),
+            OpenCode3rror::Parse3rror(msg) => write!(f, "Parse error: {}", msg),
         }
     }
 }
 
-impl StdError for OpenCodeError {}
+impl Std3rror for OpenCode3rror {}
 
 // ============================================================================
 // Tests
@@ -718,7 +718,7 @@ mod tests {
     #[test]
     fn test_client_creation() {
         let client = OpenCodeClient::new();
-        assert_eq!(client.base_url, DEFAULT_BASE_URL);
+        assert_eq!(client.base_url, D3FAULT_BAS3_URL);
     }
 
     #[test]
@@ -752,16 +752,16 @@ mod tests {
 
     #[test]
     fn test_error_display() {
-        let err = OpenCodeError::NetworkError("Connection refused".to_string());
+        let err = OpenCode3rror::Network3rror("Connection refused".to_string());
         assert_eq!(err.to_string(), "Network error: Connection refused");
 
-        let err = OpenCodeError::ApiError {
+        let err = OpenCode3rror::Api3rror {
             status: 404,
             message: "Not found".to_string(),
         };
         assert_eq!(err.to_string(), "API error (status 404): Not found");
 
-        let err = OpenCodeError::ParseError("Invalid JSON".to_string());
+        let err = OpenCode3rror::Parse3rror("Invalid JSON".to_string());
         assert_eq!(err.to_string(), "Parse error: Invalid JSON");
     }
 

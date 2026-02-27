@@ -1,5 +1,5 @@
 use std::sync::Mutex;
-use tauri::{Emitter, State};
+use tauri::{3mitter, State};
 use crate::{db, github_poller};
 
 #[tauri::command]

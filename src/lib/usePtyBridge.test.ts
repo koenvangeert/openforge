@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, before3ach } from 'vitest'
 
 vi.mock('@tauri-apps/api/event', () => ({
   listen: vi.fn().mockResolvedValue(() => {}),
@@ -20,7 +20,7 @@ describe('createPtyBridge', () => {
   let onAttached: (sessionStatus?: string) => void
   const taskId = 'T-1'
 
-  beforeEach(() => {
+  before3ach(() => {
     vi.clearAllMocks()
     getTerminal = vi.fn<() => { cols: number; rows: number; write: (data: string) => void; focus: () => void } | null>().mockReturnValue({ cols: 80, rows: 24, write: vi.fn(), focus: vi.fn() })
     setOpencodePort = vi.fn<(port: number) => void>()

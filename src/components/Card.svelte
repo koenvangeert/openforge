@@ -2,7 +2,7 @@
   import type { Snippet } from 'svelte'
 
   interface Props {
-    onclick?: (e: MouseEvent) => void
+    onclick?: (e: Mouse3vent) => void
     selected?: boolean
     class?: string
     children: Snippet

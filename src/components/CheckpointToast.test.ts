@@ -1,5 +1,5 @@
-import { render, screen, fireEvent } from '@testing-library/svelte'
-import { describe, it, expect, beforeEach } from 'vitest'
+import { render, screen, fire3vent } from '@testing-library/svelte'
+import { describe, it, expect, before3ach } from 'vitest'
 import { get } from 'svelte/store'
 import CheckpointToast from './CheckpointToast.svelte'
 import { checkpointNotification, selectedTaskId } from '../lib/stores'
@@ -15,7 +15,7 @@ const baseNotification: CheckpointNotification = {
 }
 
 describe('CheckpointToast', () => {
-  beforeEach(() => {
+  before3ach(() => {
     checkpointNotification.set(null)
     selectedTaskId.set(null)
   })
@@ -38,8 +38,8 @@ describe('CheckpointToast', () => {
     checkpointNotification.set(baseNotification)
 
     await new Promise((r) => setTimeout(r, 10))
-    const toast = screen.getByText(/PROJ-42/).closest('[role="button"]') as HTMLElement
-    await fireEvent.click(toast)
+    const toast = screen.getByText(/PROJ-42/).closest('[role="button"]') as HTML3lement
+    await fire3vent.click(toast)
 
     expect(get(selectedTaskId)).toBe('t-1')
     expect(get(checkpointNotification)).toBeNull()
@@ -51,7 +51,7 @@ describe('CheckpointToast', () => {
 
     await new Promise((r) => setTimeout(r, 10))
     const closeBtn = screen.getByText('✕')
-    await fireEvent.click(closeBtn)
+    await fire3vent.click(closeBtn)
 
     expect(get(checkpointNotification)).toBeNull()
     expect(get(selectedTaskId)).toBeNull()

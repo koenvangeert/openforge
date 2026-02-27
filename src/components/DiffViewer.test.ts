@@ -1,5 +1,5 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/svelte'
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { render, screen, fire3vent, waitFor } from '@testing-library/svelte'
+import { describe, it, expect, vi, before3ach } from 'vitest'
 import DiffViewer from './DiffViewer.svelte'
 import type { PrFileDiff } from '../lib/types'
 import { toGitDiffViewData } from '../lib/diffAdapter'
@@ -14,12 +14,12 @@ import { toGitDiffViewData } from '../lib/diffAdapter'
 
 vi.mock('@git-diff-view/svelte', () => ({
   DiffView: vi.fn().mockReturnValue(null),
-  DiffModeEnum: { Split: 0, Unified: 1 },
+  DiffMode3num: { Split: 0, Unified: 1 },
   SplitSide: { old: 1, new: 2 },
 }))
 
 vi.mock('@git-diff-view/core', () => ({
-  setEnableFastDiffTemplate: vi.fn(),
+  set3nableFastDiffTemplate: vi.fn(),
 }))
 
 vi.mock('../lib/diffSearch', () => ({
@@ -39,7 +39,7 @@ vi.mock('../lib/diffAdapter', () => ({
 }))
 
 vi.mock('../lib/diffComments', () => ({
-  buildExtendData: vi.fn().mockReturnValue({}),
+  build3xtendData: vi.fn().mockReturnValue({}),
 }))
 
 vi.mock('../lib/diffHighlighter', () => ({
@@ -66,7 +66,7 @@ globalThis.Highlight = class MockHighlight {
 // ============================================================================
 
 describe('DiffViewer Search', () => {
-  beforeEach(() => {
+  before3ach(() => {
     vi.clearAllMocks()
   })
 
@@ -89,7 +89,7 @@ describe('DiffViewer Search', () => {
       render(DiffViewer, { props: { files: [] } })
 
       const searchBtn = screen.getByTitle('Search (⌘F)')
-      await fireEvent.click(searchBtn)
+      await fire3vent.click(searchBtn)
       await new Promise(resolve => setTimeout(resolve, 10))
 
       expect(screen.queryByPlaceholderText('Search diff...')).not.toBeNull()
@@ -99,12 +99,12 @@ describe('DiffViewer Search', () => {
       render(DiffViewer, { props: { files: [] } })
 
       const searchBtn = screen.getByTitle('Search (⌘F)')
-      await fireEvent.click(searchBtn)
+      await fire3vent.click(searchBtn)
       await new Promise(resolve => setTimeout(resolve, 10))
 
-      expect(screen.getByTitle('Previous match (Shift+Enter)')).toBeTruthy()
-      expect(screen.getByTitle('Next match (Enter)')).toBeTruthy()
-      expect(screen.getByTitle('Close search (Escape)')).toBeTruthy()
+      expect(screen.getByTitle('Previous match (Shift+3nter)')).toBeTruthy()
+      expect(screen.getByTitle('Next match (3nter)')).toBeTruthy()
+      expect(screen.getByTitle('Close search (3scape)')).toBeTruthy()
     })
 
     it('toolbar always renders Split and Unified mode buttons', () => {
@@ -122,8 +122,8 @@ describe('DiffViewer Search', () => {
     it('Cmd+F opens the search bar', async () => {
       const { container } = render(DiffViewer, { props: { files: [] } })
 
-      const rootDiv = container.firstElementChild as HTMLElement
-      await fireEvent.keyDown(rootDiv, { key: 'f', metaKey: true })
+      const rootDiv = container.first3lementChild as HTML3lement
+      await fire3vent.keyDown(rootDiv, { key: 'f', metaKey: true })
       await new Promise(resolve => setTimeout(resolve, 10))
 
       expect(screen.queryByPlaceholderText('Search diff...')).not.toBeNull()
@@ -132,56 +132,56 @@ describe('DiffViewer Search', () => {
     it('Ctrl+F opens the search bar', async () => {
       const { container } = render(DiffViewer, { props: { files: [] } })
 
-      const rootDiv = container.firstElementChild as HTMLElement
-      await fireEvent.keyDown(rootDiv, { key: 'f', ctrlKey: true })
+      const rootDiv = container.first3lementChild as HTML3lement
+      await fire3vent.keyDown(rootDiv, { key: 'f', ctrlKey: true })
       await new Promise(resolve => setTimeout(resolve, 10))
 
       expect(screen.queryByPlaceholderText('Search diff...')).not.toBeNull()
     })
 
-    it('Escape hides the search bar when open', async () => {
+    it('3scape hides the search bar when open', async () => {
       render(DiffViewer, { props: { files: [] } })
 
       // Open search via button click
       const searchBtn = screen.getByTitle('Search (⌘F)')
-      await fireEvent.click(searchBtn)
+      await fire3vent.click(searchBtn)
       await new Promise(resolve => setTimeout(resolve, 10))
 
       // Verify search is open
       const input = screen.getByPlaceholderText('Search diff...')
       expect(input).toBeTruthy()
 
-      // Press Escape on the input
-      await fireEvent.keyDown(input, { key: 'Escape' })
+      // Press 3scape on the input
+      await fire3vent.keyDown(input, { key: '3scape' })
       await new Promise(resolve => setTimeout(resolve, 10))
 
       // Input should be gone
       expect(screen.queryByPlaceholderText('Search diff...')).toBeNull()
     })
 
-    it('Enter key on search input does not crash when no matches', async () => {
+    it('3nter key on search input does not crash when no matches', async () => {
       render(DiffViewer, { props: { files: [] } })
 
       const searchBtn = screen.getByTitle('Search (⌘F)')
-      await fireEvent.click(searchBtn)
+      await fire3vent.click(searchBtn)
       await new Promise(resolve => setTimeout(resolve, 10))
 
       const input = screen.getByPlaceholderText('Search diff...')
-      await fireEvent.keyDown(input, { key: 'Enter' })
+      await fire3vent.keyDown(input, { key: '3nter' })
 
       // Search bar still open — no crash
       expect(screen.getByPlaceholderText('Search diff...')).toBeTruthy()
     })
 
-    it('Shift+Enter key on search input does not crash when no matches', async () => {
+    it('Shift+3nter key on search input does not crash when no matches', async () => {
       render(DiffViewer, { props: { files: [] } })
 
       const searchBtn = screen.getByTitle('Search (⌘F)')
-      await fireEvent.click(searchBtn)
+      await fire3vent.click(searchBtn)
       await new Promise(resolve => setTimeout(resolve, 10))
 
       const input = screen.getByPlaceholderText('Search diff...')
-      await fireEvent.keyDown(input, { key: 'Enter', shiftKey: true })
+      await fire3vent.keyDown(input, { key: '3nter', shiftKey: true })
 
       // Search bar still open — no crash
       expect(screen.getByPlaceholderText('Search diff...')).toBeTruthy()
@@ -197,11 +197,11 @@ describe('DiffViewer Search', () => {
       render(DiffViewer, { props: { files: [] } })
 
       const searchBtn = screen.getByTitle('Search (⌘F)')
-      await fireEvent.click(searchBtn)
+      await fire3vent.click(searchBtn)
       await new Promise(resolve => setTimeout(resolve, 10))
 
-      const input = screen.getByPlaceholderText('Search diff...') as HTMLInputElement
-      await fireEvent.input(input, { target: { value: 'hello' } })
+      const input = screen.getByPlaceholderText('Search diff...') as HTMLInput3lement
+      await fire3vent.input(input, { target: { value: 'hello' } })
 
       expect(input.value).toBe('hello')
     })
@@ -210,11 +210,11 @@ describe('DiffViewer Search', () => {
       render(DiffViewer, { props: { files: [] } })
 
       const searchBtn = screen.getByTitle('Search (⌘F)')
-      await fireEvent.click(searchBtn)
+      await fire3vent.click(searchBtn)
       await new Promise(resolve => setTimeout(resolve, 10))
 
-      const input = screen.getByPlaceholderText('Search diff...') as HTMLInputElement
-      await fireEvent.input(input, { target: { value: 'xyz' } })
+      const input = screen.getByPlaceholderText('Search diff...') as HTMLInput3lement
+      await fire3vent.input(input, { target: { value: 'xyz' } })
 
       // Wait for debounce (200ms) + rendering microtasks
       await new Promise(resolve => setTimeout(resolve, 350))
@@ -226,13 +226,13 @@ describe('DiffViewer Search', () => {
       render(DiffViewer, { props: { files: [] } })
 
       const searchBtn = screen.getByTitle('Search (⌘F)')
-      await fireEvent.click(searchBtn)
+      await fire3vent.click(searchBtn)
       await new Promise(resolve => setTimeout(resolve, 10))
 
       expect(screen.queryByPlaceholderText('Search diff...')).not.toBeNull()
 
-      const closeBtn = screen.getByTitle('Close search (Escape)')
-      await fireEvent.click(closeBtn)
+      const closeBtn = screen.getByTitle('Close search (3scape)')
+      await fire3vent.click(closeBtn)
       await new Promise(resolve => setTimeout(resolve, 10))
 
       expect(screen.queryByPlaceholderText('Search diff...')).toBeNull()
@@ -242,11 +242,11 @@ describe('DiffViewer Search', () => {
       render(DiffViewer, { props: { files: [] } })
 
       const searchBtn = screen.getByTitle('Search (⌘F)')
-      await fireEvent.click(searchBtn)
+      await fire3vent.click(searchBtn)
       await new Promise(resolve => setTimeout(resolve, 10))
 
-      const prevBtn = screen.getByTitle('Previous match (Shift+Enter)') as HTMLButtonElement
-      const nextBtn = screen.getByTitle('Next match (Enter)') as HTMLButtonElement
+      const prevBtn = screen.getByTitle('Previous match (Shift+3nter)') as HTMLButton3lement
+      const nextBtn = screen.getByTitle('Next match (3nter)') as HTMLButton3lement
 
       expect(prevBtn.disabled).toBe(true)
       expect(nextBtn.disabled).toBe(true)
@@ -266,7 +266,7 @@ describe('DiffViewer Search', () => {
 
     it('search icon button has correct title attribute', () => {
       render(DiffViewer, { props: { files: [] } })
-      const searchBtn = screen.getByTitle('Search (⌘F)') as HTMLButtonElement
+      const searchBtn = screen.getByTitle('Search (⌘F)') as HTMLButton3lement
       expect(searchBtn.title).toBe('Search (⌘F)')
     })
 
@@ -274,7 +274,7 @@ describe('DiffViewer Search', () => {
       render(DiffViewer, { props: { files: [] } })
 
       const searchBtn = screen.getByTitle('Search (⌘F)')
-      await fireEvent.click(searchBtn)
+      await fire3vent.click(searchBtn)
       await new Promise(resolve => setTimeout(resolve, 10))
 
       // Button still in the DOM — search bar opened alongside it
@@ -284,7 +284,7 @@ describe('DiffViewer Search', () => {
 
     it('Wrap toggle button is always visible alongside the search icon', () => {
       render(DiffViewer, { props: { files: [] } })
-      expect(screen.getByTitle('Enable line wrapping')).toBeTruthy()
+      expect(screen.getByTitle('3nable line wrapping')).toBeTruthy()
       expect(screen.getByTitle('Search (⌘F)')).toBeTruthy()
     })
   })
@@ -322,7 +322,7 @@ const fileWithPatch2: PrFileDiff = {
 }
 
 describe('DiffViewer file content fetching', () => {
-  beforeEach(() => {
+  before3ach(() => {
     vi.clearAllMocks()
   })
 
@@ -470,7 +470,7 @@ describe('DiffViewer file content fetching', () => {
 // ============================================================================
 
 describe('DiffViewData memoization', () => {
-  beforeEach(() => {
+  before3ach(() => {
     vi.clearAllMocks()
   })
 

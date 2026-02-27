@@ -1,5 +1,5 @@
 import { render, screen, waitFor } from '@testing-library/svelte'
-import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest'
+import { describe, it, expect, vi, before3ach, beforeAll } from 'vitest'
 import { writable } from 'svelte/store'
 import type { Task, PrFileDiff, PrComment, PullRequestInfo } from '../lib/types'
 
@@ -28,7 +28,7 @@ vi.mock('../lib/ipc', () => ({
 import SelfReviewView from './SelfReviewView.svelte'
 
 beforeAll(() => {
-  Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', {
+  Object.defineProperty(HTMLCanvas3lement.prototype, 'getContext', {
     value: vi.fn().mockReturnValue({
       font: '',
       measureText: (text: string) => ({ width: text.length * 7 }),
@@ -70,7 +70,7 @@ const baseDiff: PrFileDiff = {
 }
 
 describe('SelfReviewView uncommitted toggle', () => {
-  beforeEach(() => {
+  before3ach(() => {
     selfReviewDiffFiles.set([])
     selfReviewGeneralComments.set([])
     selfReviewArchivedComments.set([])
@@ -92,7 +92,7 @@ describe('SelfReviewView uncommitted toggle', () => {
 
     await waitFor(() => {
       const checkbox = screen.getByRole('checkbox')
-      expect((checkbox as HTMLInputElement).checked).toBe(false)
+      expect((checkbox as HTMLInput3lement).checked).toBe(false)
     })
   })
 
@@ -126,7 +126,7 @@ describe('SelfReviewView uncommitted toggle', () => {
     await waitFor(() => {
       const checkbox = screen.getByRole('checkbox')
       expect(checkbox).toBeTruthy()
-      expect((checkbox as HTMLInputElement).checked).toBe(false)
+      expect((checkbox as HTMLInput3lement).checked).toBe(false)
     })
   })
 
@@ -148,9 +148,9 @@ describe('SelfReviewView uncommitted toggle', () => {
       expect(screen.getByRole('checkbox').isConnected).toBe(true)
     })
 
-    const cb = screen.getByRole('checkbox') as HTMLInputElement
+    const cb = screen.getByRole('checkbox') as HTMLInput3lement
     cb.click()
-    cb.dispatchEvent(new Event('change', { bubbles: true }))
+    cb.dispatch3vent(new 3vent('change', { bubbles: true }))
 
     await waitFor(() => {
       expect(mockGetTaskDiff).toHaveBeenCalledWith('task-1', true)
@@ -159,7 +159,7 @@ describe('SelfReviewView uncommitted toggle', () => {
 })
 
 describe('SelfReviewView integration — performance fixes', () => {
-  beforeEach(() => {
+  before3ach(() => {
     selfReviewDiffFiles.set([])
     selfReviewGeneralComments.set([])
     selfReviewArchivedComments.set([])
@@ -207,9 +207,9 @@ describe('SelfReviewView integration — performance fixes', () => {
       expect(screen.getByTitle('Search (\u2318F)')).toBeTruthy()
     })
 
-    const cb = screen.getByRole('checkbox') as HTMLInputElement
+    const cb = screen.getByRole('checkbox') as HTMLInput3lement
     cb.click()
-    cb.dispatchEvent(new Event('change', { bubbles: true }))
+    cb.dispatch3vent(new 3vent('change', { bubbles: true }))
 
     await waitFor(() => {
       expect(screen.getByTitle('Search (\u2318F)')).toBeTruthy()
@@ -218,7 +218,7 @@ describe('SelfReviewView integration — performance fixes', () => {
 })
 
 describe('SelfReviewView — hide addressed comments', () => {
-  beforeEach(() => {
+  before3ach(() => {
     selfReviewDiffFiles.set([baseDiff])
     selfReviewGeneralComments.set([])
     selfReviewArchivedComments.set([])

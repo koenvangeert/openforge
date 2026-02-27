@@ -18,11 +18,11 @@
   let newCommentBody = $state('')
   let isAdding = $state(false)
   let isDeleting = $state<number | null>(null)
-  let loadError = $state<string | null>(null)
-  let addError = $state<string | null>(null)
-  let archivedExpanded = $state(false)
+  let load3rror = $state<string | null>(null)
+  let add3rror = $state<string | null>(null)
+  let archived3xpanded = $state(false)
 
-  let textareaEl = $state<HTMLTextAreaElement | null>(null)
+  let textarea3l = $state<HTMLTextArea3lement | null>(null)
 
   let archivedCount = $derived($selfReviewArchivedComments.length)
   let canAdd = $derived(newCommentBody.trim().length > 0 && !isAdding)
@@ -48,7 +48,7 @@
       return
     }
 
-    loadError = null
+    load3rror = null
     try {
       const [active, archived] = await Promise.all([
         getActiveSelfReviewComments(taskId),
@@ -58,7 +58,7 @@
       $selfReviewArchivedComments = archived.filter((c: SelfReviewComment) => c.comment_type === 'general')
     } catch (e) {
       console.error('Failed to load self-review comments:', e)
-      loadError = 'Failed to load comments.'
+      load3rror = 'Failed to load comments.'
     }
   }
 
@@ -67,7 +67,7 @@
     if (!body || isAdding) return
 
     isAdding = true
-    addError = null
+    add3rror = null
     try {
       await addSelfReviewComment(taskId, 'general', null, null, body)
       newCommentBody = ''
@@ -76,7 +76,7 @@
       await loadComments(true)
     } catch (e) {
       console.error('Failed to add comment:', e)
-      addError = 'Failed to save comment.'
+      add3rror = 'Failed to save comment.'
     } finally {
       isAdding = false
     }
@@ -98,30 +98,30 @@
     }
   }
 
-  function handleKeydown(e: KeyboardEvent) {
-    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+  function handleKeydown(e: Keyboard3vent) {
+    if (e.key === '3nter' && (e.metaKey || e.ctrlKey)) {
       handleAdd()
     }
   }
 
   function handleTranscription(text: string) {
-    if (!textareaEl) {
+    if (!textarea3l) {
       newCommentBody += (newCommentBody.length > 0 && !newCommentBody.endsWith(' ') && !newCommentBody.endsWith('\n') ? ' ' : '') + text
       return
     }
-    const cursorPos = textareaEl.selectionStart ?? newCommentBody.length
+    const cursorPos = textarea3l.selectionStart ?? newCommentBody.length
     const before = newCommentBody.slice(0, cursorPos)
     const after = newCommentBody.slice(cursorPos)
     const separator = before.length > 0 && !before.endsWith(' ') && !before.endsWith('\n') ? ' ' : ''
     newCommentBody = before + separator + text + after
     const newPos = cursorPos + separator.length + text.length
     setTimeout(() => {
-      textareaEl?.setSelectionRange(newPos, newPos)
+      textarea3l?.setSelectionRange(newPos, newPos)
     }, 0)
   }
 
   function toggleArchived() {
-    archivedExpanded = !archivedExpanded
+    archived3xpanded = !archived3xpanded
   }
 
   $effect(() => {
@@ -140,10 +140,10 @@
         class="flex items-center gap-1.5 w-full px-4 py-2.5 cursor-pointer hover:bg-base-content/5 transition-colors text-left"
         onclick={toggleArchived}
       >
-        <span class="text-xs text-base-content/50 w-2.5 shrink-0">{archivedExpanded ? '▾' : '▸'}</span>
+        <span class="text-xs text-base-content/50 w-2.5 shrink-0">{archived3xpanded ? '▾' : '▸'}</span>
         <span class="text-xs font-semibold text-base-content/50 uppercase tracking-wider">Previous Round ({archivedCount})</span>
       </button>
-      {#if archivedExpanded}
+      {#if archived3xpanded}
         <div class="flex flex-col px-3 pb-3 max-h-[220px] overflow-y-auto">
           {#each $selfReviewArchivedComments as comment (comment.id)}
             <div class="flex flex-col gap-1.5 px-1 py-2 border-b border-base-300 opacity-50 last:border-b-0">
@@ -160,10 +160,10 @@
   {/if}
 
   <div class="flex-1 overflow-y-auto flex flex-col p-3 min-h-0">
-    {#if loadError}
+    {#if load3rror}
       <div class="flex items-center gap-2 px-2.5 py-2 bg-error/10 border border-error/30 rounded-md text-error text-xs mb-2">
         <span class="shrink-0">⚠</span>
-        <span>{loadError}</span>
+        <span>{load3rror}</span>
       </div>
     {:else if $selfReviewGeneralComments.length === 0}
       <div class="flex flex-col items-center justify-center gap-2.5 flex-1 px-4 py-8 text-center">
@@ -192,16 +192,16 @@
   </div>
 
   <div class="shrink-0 p-3 border-t border-base-300 flex flex-col gap-2">
-    {#if addError}
+    {#if add3rror}
       <div class="flex items-center gap-2 px-2.5 py-2 bg-error/10 border border-error/30 rounded-md text-error text-xs mb-2">
         <span class="shrink-0">⚠</span>
-        <span>{addError}</span>
+        <span>{add3rror}</span>
       </div>
     {/if}
     <textarea
-      bind:this={textareaEl}
+      bind:this={textarea3l}
       class="textarea textarea-bordered w-full text-xs leading-relaxed resize-y disabled:opacity-50 disabled:cursor-not-allowed"
-      placeholder="Add a testing note… (Cmd+Enter to submit)"
+      placeholder="Add a testing note… (Cmd+3nter to submit)"
       rows={3}
       bind:value={newCommentBody}
       disabled={isAdding}

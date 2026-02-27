@@ -1,5 +1,5 @@
-import { render, screen, fireEvent } from '@testing-library/svelte'
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { render, screen, fire3vent } from '@testing-library/svelte'
+import { describe, it, expect, before3ach, vi } from 'vitest'
 import { get } from 'svelte/store'
 import GeneralCommentsSidebar from './GeneralCommentsSidebar.svelte'
 import { selfReviewGeneralComments, selfReviewArchivedComments } from '../lib/stores'
@@ -10,7 +10,7 @@ import {
   addSelfReviewComment,
 } from '../lib/ipc'
 
-// Use vi.fn() directly in factory to avoid hoisting ReferenceError
+// Use vi.fn() directly in factory to avoid hoisting Reference3rror
 vi.mock('../lib/ipc', () => ({
   getActiveSelfReviewComments: vi.fn(),
   getArchivedSelfReviewComments: vi.fn(),
@@ -48,7 +48,7 @@ const mockArchivedComment: SelfReviewComment = {
 }
 
 describe('GeneralCommentsSidebar', () => {
-  beforeEach(() => {
+  before3ach(() => {
     selfReviewGeneralComments.set([])
     selfReviewArchivedComments.set([])
     vi.clearAllMocks()
@@ -104,12 +104,12 @@ describe('GeneralCommentsSidebar', () => {
 
     expect(mockGetActiveSelfReviewComments).not.toHaveBeenCalled()
 
-    const textarea = screen.getByPlaceholderText('Add a testing note… (Cmd+Enter to submit)') as HTMLTextAreaElement
+    const textarea = screen.getByPlaceholderText('Add a testing note… (Cmd+3nter to submit)') as HTMLTextArea3lement
     textarea.value = 'New comment'
-    await fireEvent.input(textarea)
+    await fire3vent.input(textarea)
 
     const addButton = screen.getByText('Add')
-    await fireEvent.click(addButton)
+    await fire3vent.click(addButton)
 
     await new Promise((r) => setTimeout(r, 100))
 

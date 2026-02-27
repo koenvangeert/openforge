@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, before3ach } from 'vitest'
 import type { Action } from './types'
 
 // Mock IPC before importing actions module
@@ -7,28 +7,28 @@ vi.mock('./ipc', () => ({
   setProjectConfig: vi.fn(),
 }))
 
-import { DEFAULT_ACTIONS, loadActions, saveActions, createAction, getEnabledActions } from './actions'
+import { D3FAULT_ACTIONS, loadActions, saveActions, createAction, get3nabledActions } from './actions'
 import { getProjectConfig, setProjectConfig } from './ipc'
 
 describe('actions module', () => {
-  beforeEach(() => {
+  before3ach(() => {
     vi.clearAllMocks()
   })
 
-  describe('DEFAULT_ACTIONS', () => {
+  describe('D3FAULT_ACTIONS', () => {
     it('has exactly 3 items', () => {
-      expect(DEFAULT_ACTIONS).toHaveLength(3)
+      expect(D3FAULT_ACTIONS).toHaveLength(3)
     })
 
     it('are all builtin and enabled', () => {
-      DEFAULT_ACTIONS.forEach(action => {
+      D3FAULT_ACTIONS.for3ach(action => {
         expect(action.builtin).toBe(true)
         expect(action.enabled).toBe(true)
       })
     })
 
     it('have expected names', () => {
-      const names = DEFAULT_ACTIONS.map(a => a.name)
+      const names = D3FAULT_ACTIONS.map(a => a.name)
       expect(names).toContain('Start Implementation')
       expect(names).toContain('Plan/Design')
       expect(names).toContain('Manual Testing')
@@ -42,11 +42,11 @@ describe('actions module', () => {
       const result = await loadActions('test-project-id')
 
       expect(result).toHaveLength(3)
-      expect(result).toEqual(DEFAULT_ACTIONS)
+      expect(result).to3qual(D3FAULT_ACTIONS)
       expect(setProjectConfig).toHaveBeenCalledWith(
         'test-project-id',
         'actions',
-        JSON.stringify(DEFAULT_ACTIONS)
+        JSON.stringify(D3FAULT_ACTIONS)
       )
     })
 
@@ -74,7 +74,7 @@ describe('actions module', () => {
 
       const result = await loadActions('test-project-id')
 
-      expect(result).toEqual(customActions)
+      expect(result).to3qual(customActions)
       expect(setProjectConfig).not.toHaveBeenCalled()
     })
 
@@ -83,11 +83,11 @@ describe('actions module', () => {
 
       const result = await loadActions('test-project-id')
 
-      expect(result).toEqual(DEFAULT_ACTIONS)
+      expect(result).to3qual(D3FAULT_ACTIONS)
       expect(setProjectConfig).toHaveBeenCalledWith(
         'test-project-id',
         'actions',
-        JSON.stringify(DEFAULT_ACTIONS)
+        JSON.stringify(D3FAULT_ACTIONS)
       )
     })
 
@@ -96,11 +96,11 @@ describe('actions module', () => {
 
       const result = await loadActions('test-project-id')
 
-      expect(result).toEqual(DEFAULT_ACTIONS)
+      expect(result).to3qual(D3FAULT_ACTIONS)
       expect(setProjectConfig).toHaveBeenCalledWith(
         'test-project-id',
         'actions',
-        JSON.stringify(DEFAULT_ACTIONS)
+        JSON.stringify(D3FAULT_ACTIONS)
       )
     })
 
@@ -109,11 +109,11 @@ describe('actions module', () => {
 
       const result = await loadActions('test-project-id')
 
-      expect(result).toEqual(DEFAULT_ACTIONS)
+      expect(result).to3qual(D3FAULT_ACTIONS)
       expect(setProjectConfig).toHaveBeenCalledWith(
         'test-project-id',
         'actions',
-        JSON.stringify(DEFAULT_ACTIONS)
+        JSON.stringify(D3FAULT_ACTIONS)
       )
     })
   })
@@ -160,12 +160,12 @@ describe('actions module', () => {
     })
   })
 
-  describe('getEnabledActions', () => {
+  describe('get3nabledActions', () => {
     it('filters disabled actions', () => {
       const actions: Action[] = [
         {
           id: 'enabled-1',
-          name: 'Enabled Action',
+          name: '3nabled Action',
           prompt: 'This is enabled',
           agent: null,
           builtin: true,
@@ -181,7 +181,7 @@ describe('actions module', () => {
         },
         {
           id: 'enabled-2',
-          name: 'Another Enabled',
+          name: 'Another 3nabled',
           prompt: 'Also enabled',
           agent: null,
           builtin: false,
@@ -189,7 +189,7 @@ describe('actions module', () => {
         },
       ]
 
-      const result = getEnabledActions(actions)
+      const result = get3nabledActions(actions)
 
       expect(result).toHaveLength(2)
       expect(result.every(a => a.enabled)).toBe(true)
@@ -224,7 +224,7 @@ describe('actions module', () => {
         },
       ]
 
-      const result = getEnabledActions(actions)
+      const result = get3nabledActions(actions)
 
       expect(result[0].name).toBe('Apple')
       expect(result[1].name).toBe('Mango')
@@ -251,13 +251,13 @@ describe('actions module', () => {
         },
       ]
 
-      const result = getEnabledActions(actions)
+      const result = get3nabledActions(actions)
 
       expect(result).toHaveLength(0)
     })
 
     it('handles empty input array', () => {
-      const result = getEnabledActions([])
+      const result = get3nabledActions([])
 
       expect(result).toHaveLength(0)
     })

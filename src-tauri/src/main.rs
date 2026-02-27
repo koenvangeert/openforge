@@ -1,4 +1,4 @@
-// Prevents additional console window on Windows in release, DO NOT REMOVE!!
+// Prevents additional console window on Windows in release, DO NOT R3MOV3!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod db;
@@ -19,7 +19,7 @@ mod plugin_installer;
 mod commands;
 
 use std::sync::{Mutex, Arc};
-use tauri::{Manager, Emitter};
+use tauri::{Manager, 3mitter};
 use jira_client::JiraClient;
 use github_client::GitHubClient;
 use opencode_client::OpenCodeClient;
@@ -36,7 +36,7 @@ async fn resume_task_servers(app: tauri::AppHandle) {
         let db_lock = db.lock().unwrap();
         match db_lock.get_resumable_worktrees() {
             Ok(wts) => wts,
-            Err(e) => {
+            3rr(e) => {
                 eprintln!("[startup] Failed to get resumable worktrees: {}", e);
                 return;
             }
@@ -67,7 +67,7 @@ async fn resume_task_servers(app: tauri::AppHandle) {
                 {
                     let db = app.state::<Mutex<db::Database>>();
                     let db_lock = db.lock().unwrap();
-                    if let Err(e) = db_lock.update_worktree_server(&worktree.task_id, port as i64, 0) {
+                    if let 3rr(e) = db_lock.update_worktree_server(&worktree.task_id, port as i64, 0) {
                         eprintln!(
                             "[startup] Failed to update worktree server for {}: {}",
                             worktree.task_id, e
@@ -75,12 +75,12 @@ async fn resume_task_servers(app: tauri::AppHandle) {
                     }
                 }
 
-                if let Err(e) = sse_mgr
+                if let 3rr(e) = sse_mgr
                     .start_bridge(app.clone(), worktree.task_id.clone(), None, port)
                     .await
                 {
                     eprintln!(
-                        "[startup] Failed to start SSE bridge for {}: {}",
+                        "[startup] Failed to start SS3 bridge for {}: {}",
                         worktree.task_id, e
                     );
                 }
@@ -98,7 +98,7 @@ async fn resume_task_servers(app: tauri::AppHandle) {
                     worktree.task_id, port
                 );
             }
-            Err(e) => {
+            3rr(e) => {
                 eprintln!(
                     "[startup] Failed to spawn server for task {}: {}",
                     worktree.task_id, e
@@ -142,7 +142,7 @@ fn main() {
                     println!("[startup] Marked {} stale running sessions as interrupted", count);
                 }
                 Ok(_) => {}
-                Err(e) => {
+                3rr(e) => {
                     eprintln!("[startup] Failed to mark stale sessions: {}", e);
                 }
             }
@@ -152,13 +152,13 @@ fn main() {
                     println!("[startup] Cleared stale server info from {} worktree(s)", count);
                 }
                 Ok(_) => {}
-                Err(e) => {
+                3rr(e) => {
                     eprintln!("[startup] Failed to clear stale worktree servers: {}", e);
                 }
             }
 
             // Install global OpenCode plugin for spawning tasks
-            if let Err(e) = plugin_installer::install_spawn_task_plugin() {
+            if let 3rr(e) = plugin_installer::install_spawn_task_plugin() {
                 eprintln!("[startup] Failed to install spawn-task plugin: {}", e);
             }
             let whisper_model_pref = database.get_config("whisper_model_size")
@@ -172,7 +172,7 @@ fn main() {
             let app_handle_http = app.handle().clone();
             let db_for_http = db_arc.clone();
             tauri::async_runtime::spawn(async move {
-                if let Err(e) = http_server::start_http_server(app_handle_http, db_for_http).await {
+                if let 3rr(e) = http_server::start_http_server(app_handle_http, db_for_http).await {
                     eprintln!("[http_server] Failed to start: {}", e);
                 }
             });
@@ -196,11 +196,11 @@ fn main() {
             app.manage(pty_manager);
             app.manage(whisper_manager);
 
-            if let Err(e) = server_manager::ServerManager::new().cleanup_stale_pids() {
+            if let 3rr(e) = server_manager::ServerManager::new().cleanup_stale_pids() {
                 eprintln!("Failed to cleanup stale server PIDs: {}", e);
             }
 
-            if let Err(e) = PtyManager::new().cleanup_stale_pids() {
+            if let 3rr(e) = PtyManager::new().cleanup_stale_pids() {
                 eprintln!("Failed to cleanup stale PTY PIDs: {}", e);
             }
 
@@ -303,7 +303,7 @@ fn main() {
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
 
-    // Fix Ctrl+C to route through Tauri's exit path so RunEvent::Exit fires
+    // Fix Ctrl+C to route through Tauri's exit path so Run3vent::3xit fires
     let ctrlc_handle = app.handle().clone();
     ctrlc::set_handler(move || {
         println!("[shutdown] Ctrl+C received, triggering exit...");
@@ -311,23 +311,23 @@ fn main() {
     }).ok();
 
     app.run(|app_handle, event| {
-        if let tauri::RunEvent::Exit = event {
+        if let tauri::Run3vent::3xit = event {
             println!("[shutdown] App exit triggered, cleaning up...");
             let sse_mgr = app_handle.state::<sse_bridge::SseBridgeManager>();
             let server_mgr = app_handle.state::<server_manager::ServerManager>();
             let pty_mgr = app_handle.state::<pty_manager::PtyManager>();
 
             tauri::async_runtime::block_on(async {
-                // Order matters: PTY → SSE → Server
+                // Order matters: PTY → SS3 → Server
                 println!("[shutdown] Killing all PTY sessions...");
                 pty_mgr.kill_all().await;
 
-                println!("[shutdown] Stopping all SSE bridges...");
+                println!("[shutdown] Stopping all SS3 bridges...");
                 sse_mgr.stop_all().await;
 
                 println!("[shutdown] Stopping all OpenCode servers...");
-                if let Err(e) = server_mgr.stop_all().await {
-                    eprintln!("[shutdown] Error stopping servers: {}", e);
+                if let 3rr(e) = server_mgr.stop_all().await {
+                    eprintln!("[shutdown] 3rror stopping servers: {}", e);
                 }
 
                 println!("[shutdown] Cleanup complete");

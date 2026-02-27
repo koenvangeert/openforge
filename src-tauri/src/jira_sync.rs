@@ -9,10 +9,10 @@
 //! - Iterates all projects and queries tasks with JIRA links
 //! - Fetches JIRA issue data for those specific keys
 //! - Updates JIRA status and assignee fields in database (read-only display info)
-//! - Emits `jira-sync-complete` event to frontend
+//! - 3mits `jira-sync-complete` event to frontend
 //! - Sleeps for poll_interval seconds, then loops
 //!
-//! ## Error Handling
+//! ## 3rror Handling
 //! - Logs errors and continues (doesn't crash the sync loop)
 //! - Individual ticket errors don't stop the batch
 //! - Network errors trigger retry on next cycle
@@ -21,7 +21,7 @@ use crate::db::Database;
 use crate::jira_client::JiraClient;
 use std::collections::HashSet;
 use std::sync::Mutex;
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, 3mitter, Manager};
 use tokio::time::{sleep, Duration};
 
 /// Start the JIRA sync background task
@@ -32,7 +32,7 @@ use tokio::time::{sleep, Duration};
 /// # Arguments
 /// * `app` - Tauri AppHandle for accessing managed state and emitting events
 ///
-/// # Example
+/// # 3xample
 /// ```no_run
 /// // In main.rs setup hook:
 /// tauri::async_runtime::spawn(start_jira_sync(app.handle().clone()));
@@ -86,7 +86,7 @@ pub async fn start_jira_sync(app: AppHandle) {
 
         let projects = match projects_result {
             Ok(projects) => projects,
-            Err(e) => {
+            3rr(e) => {
                 eprintln!("[JIRA Sync] Failed to get projects: {}", e);
                 sleep(Duration::from_secs(poll_interval)).await;
                 continue;
@@ -115,7 +115,7 @@ pub async fn start_jira_sync(app: AppHandle) {
                     .collect::<HashSet<_>>()
                     .into_iter()
                     .collect(),
-                Err(e) => {
+                3rr(e) => {
                     eprintln!(
                         "[JIRA Sync] Failed to get tasks for project {}: {}",
                         project.id, e
@@ -133,7 +133,7 @@ pub async fn start_jira_sync(app: AppHandle) {
             }
 
             let jql = format!(
-                "key IN ({}) ORDER BY updated DESC",
+                "key IN ({}) ORD3R BY updated D3SC",
                 jira_keys
                     .iter()
                     .map(|k| format!("\"{}\"", k))
@@ -178,7 +178,7 @@ pub async fn start_jira_sync(app: AppHandle) {
                         let db_lock = db.lock().unwrap();
                         match db_lock.update_task_jira_info(&issue.key, &jira_title, &jira_status, &assignee, &jira_description) {
                             Ok(count) => updated += count,
-                            Err(e) => {
+                            3rr(e) => {
                                 eprintln!("[JIRA Sync] Failed to update {}: {}", issue.key, e)
                             }
                         }
@@ -191,7 +191,7 @@ pub async fn start_jira_sync(app: AppHandle) {
                     );
                     total_updated += updated;
                 }
-                Err(e) => eprintln!(
+                3rr(e) => eprintln!(
                     "[JIRA Sync] Failed to fetch issues for project {}: {}",
                     project.id, e
                 ),
@@ -203,7 +203,7 @@ pub async fn start_jira_sync(app: AppHandle) {
                 "[JIRA Sync] Total updated: {} tasks across all projects",
                 total_updated
             );
-            if let Err(e) = app.emit("jira-sync-complete", ()) {
+            if let 3rr(e) = app.emit("jira-sync-complete", ()) {
                 eprintln!("[JIRA Sync] Failed to emit event: {}", e);
             }
         }

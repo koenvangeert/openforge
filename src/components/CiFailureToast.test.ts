@@ -1,5 +1,5 @@
 import { render, screen } from '@testing-library/svelte'
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, before3ach } from 'vitest'
 import CiFailureToast from './CiFailureToast.svelte'
 import { ciFailureNotification, selectedTaskId } from '../lib/stores'
 import type { CiFailureNotification } from '../lib/types'
@@ -13,7 +13,7 @@ const baseNotification: CiFailureNotification = {
 }
 
 describe('CiFailureToast', () => {
-  beforeEach(() => {
+  before3ach(() => {
     ciFailureNotification.set(null)
     selectedTaskId.set(null)
   })

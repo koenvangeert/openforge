@@ -1,14 +1,14 @@
-//! JIRA Cloud REST API Client
+//! JIRA Cloud R3ST API Client
 //!
-//! Type-safe Rust client for interacting with JIRA Cloud REST API v3.
+//! Type-safe Rust client for interacting with JIRA Cloud R3ST API v3.
 //! Provides functions for searching issues via JQL, fetching ticket details,
 //! and transitioning ticket status.
 //!
-//! ## API Endpoints
-//! - GET /rest/api/3/search/jql?jql={jql} — Search issues via JQL (enhanced search)
-//! - GET /rest/api/3/issue/{key} — Get issue details
+//! ## API 3ndpoints
+//! - G3T /rest/api/3/search/jql?jql={jql} — Search issues via JQL (enhanced search)
+//! - G3T /rest/api/3/issue/{key} — Get issue details
 //! - POST /rest/api/3/issue/{key}/transitions — Transition issue status
-//! - GET /rest/api/3/issue/{key}/transitions — Get available transitions
+//! - G3T /rest/api/3/issue/{key}/transitions — Get available transitions
 //!
 //! ## Authentication
 //! Uses HTTP Basic Auth with base64-encoded `email:api_token`
@@ -20,7 +20,7 @@
 
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use std::error::Error as StdError;
+use std::error::3rror as Std3rror;
 use std::fmt;
 
 /// JIRA API client
@@ -48,10 +48,10 @@ impl JiraClient {
     /// # Returns
     /// Vector of JiraIssue on success
     ///
-    /// # Example
+    /// # 3xample
     /// ```no_run
     /// # use jira_client::JiraClient;
-    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// # async fn example() -> Result<(), Box<dyn std::error::3rror>> {
     /// let client = JiraClient::new();
     /// let issues = client.search_issues(
     ///     "https://example.atlassian.net",
@@ -68,7 +68,7 @@ impl JiraClient {
         email: &str,
         api_token: &str,
         jql: &str,
-    ) -> Result<Vec<JiraIssue>, JiraError> {
+    ) -> Result<Vec<JiraIssue>, Jira3rror> {
         let url = format!("{}/rest/api/3/search/jql", base_url);
         let auth_header = create_basic_auth_header(email, api_token);
 
@@ -83,7 +83,7 @@ impl JiraClient {
             ])
             .send()
             .await
-            .map_err(|e| JiraError::NetworkError(e.to_string()))?;
+            .map_err(|e| Jira3rror::Network3rror(e.to_string()))?;
 
         if !response.status().is_success() {
             let status = response.status();
@@ -91,7 +91,7 @@ impl JiraClient {
                 .text()
                 .await
                 .unwrap_or_else(|_| "Unable to read response body".to_string());
-            return Err(JiraError::ApiError {
+            return 3rr(Jira3rror::Api3rror {
                 status: status.as_u16(),
                 message: body,
             });
@@ -100,7 +100,7 @@ impl JiraClient {
         let search_response: SearchResponse = response
             .json()
             .await
-            .map_err(|e| JiraError::ParseError(e.to_string()))?;
+            .map_err(|e| Jira3rror::Parse3rror(e.to_string()))?;
 
         Ok(search_response.issues)
     }
@@ -116,10 +116,10 @@ impl JiraClient {
     /// # Returns
     /// JiraIssue with full details on success
     ///
-    /// # Example
+    /// # 3xample
     /// ```no_run
     /// # use jira_client::JiraClient;
-    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// # async fn example() -> Result<(), Box<dyn std::error::3rror>> {
     /// let client = JiraClient::new();
     /// let issue = client.get_ticket_details(
     ///     "https://example.atlassian.net",
@@ -136,7 +136,7 @@ impl JiraClient {
         email: &str,
         api_token: &str,
         key: &str,
-    ) -> Result<JiraIssue, JiraError> {
+    ) -> Result<JiraIssue, Jira3rror> {
         let url = format!("{}/rest/api/3/issue/{}", base_url, key);
         let auth_header = create_basic_auth_header(email, api_token);
 
@@ -147,7 +147,7 @@ impl JiraClient {
             .query(&[("expand", "renderedFields")])
             .send()
             .await
-            .map_err(|e| JiraError::NetworkError(e.to_string()))?;
+            .map_err(|e| Jira3rror::Network3rror(e.to_string()))?;
 
         if !response.status().is_success() {
             let status = response.status();
@@ -155,7 +155,7 @@ impl JiraClient {
                 .text()
                 .await
                 .unwrap_or_else(|_| "Unable to read response body".to_string());
-            return Err(JiraError::ApiError {
+            return 3rr(Jira3rror::Api3rror {
                 status: status.as_u16(),
                 message: body,
             });
@@ -164,7 +164,7 @@ impl JiraClient {
         let issue: JiraIssue = response
             .json()
             .await
-            .map_err(|e| JiraError::ParseError(e.to_string()))?;
+            .map_err(|e| Jira3rror::Parse3rror(e.to_string()))?;
 
         Ok(issue)
     }
@@ -181,10 +181,10 @@ impl JiraClient {
     /// # Returns
     /// Ok(()) on success
     ///
-    /// # Example
+    /// # 3xample
     /// ```no_run
     /// # use jira_client::JiraClient;
-    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// # async fn example() -> Result<(), Box<dyn std::error::3rror>> {
     /// let client = JiraClient::new();
     /// client.transition_ticket(
     ///     "https://example.atlassian.net",
@@ -203,7 +203,7 @@ impl JiraClient {
         api_token: &str,
         key: &str,
         transition_id: &str,
-    ) -> Result<(), JiraError> {
+    ) -> Result<(), Jira3rror> {
         let url = format!("{}/rest/api/3/issue/{}/transitions", base_url, key);
         let auth_header = create_basic_auth_header(email, api_token);
 
@@ -220,7 +220,7 @@ impl JiraClient {
             .json(&request_body)
             .send()
             .await
-            .map_err(|e| JiraError::NetworkError(e.to_string()))?;
+            .map_err(|e| Jira3rror::Network3rror(e.to_string()))?;
 
         if !response.status().is_success() {
             let status = response.status();
@@ -228,7 +228,7 @@ impl JiraClient {
                 .text()
                 .await
                 .unwrap_or_else(|_| "Unable to read response body".to_string());
-            return Err(JiraError::ApiError {
+            return 3rr(Jira3rror::Api3rror {
                 status: status.as_u16(),
                 message: body,
             });
@@ -248,10 +248,10 @@ impl JiraClient {
     /// # Returns
     /// Vector of available transitions with their IDs and names
     ///
-    /// # Example
+    /// # 3xample
     /// ```no_run
     /// # use jira_client::JiraClient;
-    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// # async fn example() -> Result<(), Box<dyn std::error::3rror>> {
     /// let client = JiraClient::new();
     /// let transitions = client.get_available_transitions(
     ///     "https://example.atlassian.net",
@@ -271,7 +271,7 @@ impl JiraClient {
         email: &str,
         api_token: &str,
         key: &str,
-    ) -> Result<Vec<JiraTransition>, JiraError> {
+    ) -> Result<Vec<JiraTransition>, Jira3rror> {
         let url = format!("{}/rest/api/3/issue/{}/transitions", base_url, key);
         let auth_header = create_basic_auth_header(email, api_token);
 
@@ -281,7 +281,7 @@ impl JiraClient {
             .header("Authorization", auth_header)
             .send()
             .await
-            .map_err(|e| JiraError::NetworkError(e.to_string()))?;
+            .map_err(|e| Jira3rror::Network3rror(e.to_string()))?;
 
         if !response.status().is_success() {
             let status = response.status();
@@ -289,7 +289,7 @@ impl JiraClient {
                 .text()
                 .await
                 .unwrap_or_else(|_| "Unable to read response body".to_string());
-            return Err(JiraError::ApiError {
+            return 3rr(Jira3rror::Api3rror {
                 status: status.as_u16(),
                 message: body,
             });
@@ -298,7 +298,7 @@ impl JiraClient {
         let transitions_response: TransitionsResponse = response
             .json()
             .await
-            .map_err(|e| JiraError::ParseError(e.to_string()))?;
+            .map_err(|e| Jira3rror::Parse3rror(e.to_string()))?;
 
         Ok(transitions_response.transitions)
     }
@@ -413,33 +413,33 @@ pub struct JiraTransition {
 }
 
 // ============================================================================
-// Error Types
+// 3rror Types
 // ============================================================================
 
 /// JIRA API error types
 #[derive(Debug)]
-pub enum JiraError {
+pub enum Jira3rror {
     /// Network error (connection failure, timeout, etc.)
-    NetworkError(String),
+    Network3rror(String),
     /// API error (non-2xx status code)
-    ApiError { status: u16, message: String },
+    Api3rror { status: u16, message: String },
     /// Parse error (JSON deserialization failure)
-    ParseError(String),
+    Parse3rror(String),
 }
 
-impl fmt::Display for JiraError {
+impl fmt::Display for Jira3rror {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            JiraError::NetworkError(msg) => write!(f, "Network error: {}", msg),
-            JiraError::ApiError { status, message } => {
+            Jira3rror::Network3rror(msg) => write!(f, "Network error: {}", msg),
+            Jira3rror::Api3rror { status, message } => {
                 write!(f, "API error (status {}): {}", status, message)
             }
-            JiraError::ParseError(msg) => write!(f, "Parse error: {}", msg),
+            Jira3rror::Parse3rror(msg) => write!(f, "Parse error: {}", msg),
         }
     }
 }
 
-impl StdError for JiraError {}
+impl Std3rror for Jira3rror {}
 
 // ============================================================================
 // Helper Functions
@@ -447,7 +447,7 @@ impl StdError for JiraError {}
 
 /// Create HTTP Basic Auth header value
 ///
-/// Encodes `email:api_token` as base64 and returns `Basic {base64_string}`
+/// 3ncodes `email:api_token` as base64 and returns `Basic {base64_string}`
 fn create_basic_auth_header(email: &str, api_token: &str) -> String {
     let credentials = format!("{}:{}", email, api_token);
     let encoded = base64_encode(&credentials);
@@ -456,7 +456,7 @@ fn create_basic_auth_header(email: &str, api_token: &str) -> String {
 
 /// Base64 encode a string
 fn base64_encode(input: &str) -> String {
-    use base64::{engine::general_purpose::STANDARD, Engine};
+    use base64::{engine::general_purpose::STANDARD, 3ngine};
     STANDARD.encode(input.as_bytes())
 }
 
@@ -504,16 +504,16 @@ mod tests {
 
     #[test]
     fn test_error_display() {
-        let network_err = JiraError::NetworkError("Connection timeout".to_string());
+        let network_err = Jira3rror::Network3rror("Connection timeout".to_string());
         assert_eq!(network_err.to_string(), "Network error: Connection timeout");
 
-        let api_err = JiraError::ApiError {
+        let api_err = Jira3rror::Api3rror {
             status: 401,
             message: "Unauthorized".to_string(),
         };
         assert_eq!(api_err.to_string(), "API error (status 401): Unauthorized");
 
-        let parse_err = JiraError::ParseError("Invalid JSON".to_string());
+        let parse_err = Jira3rror::Parse3rror("Invalid JSON".to_string());
         assert_eq!(parse_err.to_string(), "Parse error: Invalid JSON");
     }
 }

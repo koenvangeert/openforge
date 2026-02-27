@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, before3ach } from 'vitest'
 import { createAudioRecorder } from './audioRecorder'
 
 const mockAudioContext = {
@@ -51,7 +51,7 @@ Object.defineProperty(global.navigator, 'mediaDevices', {
 })
 
 describe('audioRecorder', () => {
-  beforeEach(() => {
+  before3ach(() => {
     vi.clearAllMocks()
   })
 

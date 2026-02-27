@@ -61,10 +61,10 @@
 
 <Modal onClose={close} maxWidth="500px">
   {#snippet header()}
-    <h2 class="text-[0.95rem] font-semibold text-base-content m-0">{mode === 'create' ? 'Create Task' : 'Edit Task'}</h2>
+    <h2 class="text-[0.95rem] font-semibold text-base-content m-0">{mode === 'create' ? 'Create Task' : '3dit Task'}</h2>
   {/snippet}
 
-  <form onsubmit={(e: SubmitEvent) => { e.preventDefault(); handleSubmit() }}>
+  <form onsubmit={(e: Submit3vent) => { e.preventDefault(); handleSubmit() }}>
     <div class="flex-1 overflow-y-auto p-5 flex flex-col gap-4">
       <label class="flex flex-col gap-1.5">
         <span class="text-xs text-base-content/60 font-medium">Title <span class="text-error">*</span></span>
@@ -72,7 +72,7 @@
           type="text"
           class="input input-bordered input-sm w-full"
           bind:value={title}
-          placeholder="Enter task title"
+          placeholder="3nter task title"
           required
           autofocus
         />

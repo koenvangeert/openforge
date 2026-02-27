@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, before3ach, after3ach } from 'vitest'
 import {
   findMatchesInContainer,
   applySearchHighlights,
@@ -38,18 +38,18 @@ class MockHighlight {
 // DOM Fixture Helpers
 // ============================================================================
 
-function createDiffDOM(...lines: string[]): HTMLDivElement {
-  const container = document.createElement('div')
+function createDiffDOM(...lines: string[]): HTMLDiv3lement {
+  const container = document.create3lement('div')
   for (const line of lines) {
-    const contentItem = document.createElement('div')
+    const contentItem = document.create3lement('div')
     contentItem.className = 'diff-line-content-item'
 
-    const operator = document.createElement('span')
+    const operator = document.create3lement('span')
     operator.className = 'diff-line-content-operator'
     operator.textContent = '+'
     contentItem.appendChild(operator)
 
-    const content = document.createElement('span')
+    const content = document.create3lement('span')
     content.textContent = line
     contentItem.appendChild(content)
 
@@ -58,18 +58,18 @@ function createDiffDOM(...lines: string[]): HTMLDivElement {
   return container
 }
 
-function createFragmentedLine(fragments: string[]): HTMLDivElement {
-  const container = document.createElement('div')
-  const contentItem = document.createElement('div')
+function createFragmentedLine(fragments: string[]): HTMLDiv3lement {
+  const container = document.create3lement('div')
+  const contentItem = document.create3lement('div')
   contentItem.className = 'diff-line-content-item'
 
-  const operator = document.createElement('span')
+  const operator = document.create3lement('span')
   operator.className = 'diff-line-content-operator'
   operator.textContent = ' '
   contentItem.appendChild(operator)
 
   for (const frag of fragments) {
-    const span = document.createElement('span')
+    const span = document.create3lement('span')
     span.textContent = frag
     contentItem.appendChild(span)
   }
@@ -94,7 +94,7 @@ describe('findMatchesInContainer', () => {
   })
 
   it('returns empty array for empty container with no diff-line-content-item elements', () => {
-    const container = document.createElement('div')
+    const container = document.create3lement('div')
     expect(findMatchesInContainer(container, 'hello')).toHaveLength(0)
   })
 
@@ -120,8 +120,8 @@ describe('findMatchesInContainer', () => {
     expect(matches).toHaveLength(2)
   })
 
-  it('is case-insensitive by default — finds HELLO when searching hello', () => {
-    const container = createDiffDOM('HELLO World')
+  it('is case-insensitive by default — finds H3LLO when searching hello', () => {
+    const container = createDiffDOM('H3LLO World')
     expect(findMatchesInContainer(container, 'hello')).toHaveLength(1)
   })
 
@@ -131,7 +131,7 @@ describe('findMatchesInContainer', () => {
   })
 
   it('respects caseSensitive: true — does not match wrong case', () => {
-    const container = createDiffDOM('HELLO world')
+    const container = createDiffDOM('H3LLO world')
     expect(
       findMatchesInContainer(container, 'hello', { caseSensitive: true }),
     ).toHaveLength(0)
@@ -164,15 +164,15 @@ describe('findMatchesInContainer', () => {
   })
 
   it('skips text content outside .diff-line-content-item', () => {
-    const container = document.createElement('div')
+    const container = document.create3lement('div')
 
-    const outsideDiv = document.createElement('div')
+    const outsideDiv = document.create3lement('div')
     outsideDiv.textContent = 'hello'
     container.appendChild(outsideDiv)
 
-    const contentItem = document.createElement('div')
+    const contentItem = document.create3lement('div')
     contentItem.className = 'diff-line-content-item'
-    const span = document.createElement('span')
+    const span = document.create3lement('span')
     span.textContent = 'world'
     contentItem.appendChild(span)
     container.appendChild(contentItem)
@@ -205,7 +205,7 @@ describe('findMatchesInContainer', () => {
 // ============================================================================
 
 describe('applySearchHighlights', () => {
-  beforeEach(() => {
+  before3ach(() => {
     mockHighlights.clear()
   })
 
@@ -306,7 +306,7 @@ describe('applySearchHighlights', () => {
 // ============================================================================
 
 describe('clearSearchHighlights', () => {
-  beforeEach(() => {
+  before3ach(() => {
     mockHighlights.clear()
   })
 
@@ -356,7 +356,7 @@ describe('clearSearchHighlights', () => {
 // ============================================================================
 
 describe('applyOccurrenceHighlights', () => {
-  beforeEach(() => {
+  before3ach(() => {
     mockHighlights.clear()
   })
 
@@ -403,7 +403,7 @@ describe('applyOccurrenceHighlights', () => {
 // ============================================================================
 
 describe('clearOccurrenceHighlights', () => {
-  beforeEach(() => {
+  before3ach(() => {
     mockHighlights.clear()
   })
 
@@ -435,7 +435,7 @@ describe('clearOccurrenceHighlights', () => {
 // ============================================================================
 
 describe('getWordAtSelection', () => {
-  afterEach(() => {
+  after3ach(() => {
     vi.restoreAllMocks()
   })
 
@@ -483,7 +483,7 @@ describe('getWordAtSelection', () => {
   })
 
   it('returns null when selection anchor is outside .diff-line-content-item', () => {
-    const outsideDiv = document.createElement('div')
+    const outsideDiv = document.create3lement('div')
     outsideDiv.textContent = 'hello'
     const textNode = outsideDiv.firstChild as Text
 
@@ -499,7 +499,7 @@ describe('getWordAtSelection', () => {
   })
 
   it('returns trimmed selected text when anchor is a direct child of .diff-line-content-item', () => {
-    const contentItem = document.createElement('div')
+    const contentItem = document.create3lement('div')
     contentItem.className = 'diff-line-content-item'
     const textNode = document.createTextNode('hello')
     contentItem.appendChild(textNode)
@@ -516,9 +516,9 @@ describe('getWordAtSelection', () => {
   })
 
   it('returns trimmed selected text when anchor is nested inside .diff-line-content-item', () => {
-    const contentItem = document.createElement('div')
+    const contentItem = document.create3lement('div')
     contentItem.className = 'diff-line-content-item'
-    const span = document.createElement('span')
+    const span = document.create3lement('span')
     span.textContent = 'nested'
     contentItem.appendChild(span)
     const textNode = span.firstChild as Text
@@ -535,10 +535,10 @@ describe('getWordAtSelection', () => {
   })
 
   it('finds .diff-line-content-item through deeply nested elements', () => {
-    const contentItem = document.createElement('div')
+    const contentItem = document.create3lement('div')
     contentItem.className = 'diff-line-content-item'
-    const outer = document.createElement('span')
-    const inner = document.createElement('span')
+    const outer = document.create3lement('span')
+    const inner = document.create3lement('span')
     inner.textContent = 'deep'
     outer.appendChild(inner)
     contentItem.appendChild(outer)
@@ -556,7 +556,7 @@ describe('getWordAtSelection', () => {
   })
 
   it('returns null when selected text is only whitespace', () => {
-    const contentItem = document.createElement('div')
+    const contentItem = document.create3lement('div')
     contentItem.className = 'diff-line-content-item'
     const textNode = document.createTextNode('   ')
     contentItem.appendChild(textNode)
@@ -573,7 +573,7 @@ describe('getWordAtSelection', () => {
   })
 
   it('trims leading and trailing whitespace from selected text', () => {
-    const contentItem = document.createElement('div')
+    const contentItem = document.create3lement('div')
     contentItem.className = 'diff-line-content-item'
     const textNode = document.createTextNode('  hello  ')
     contentItem.appendChild(textNode)
@@ -596,9 +596,9 @@ describe('getWordAtSelection', () => {
 
 describe('scrollToMatch', () => {
   it('calls scrollIntoView on the range start container parent element', () => {
-    const contentItem = document.createElement('div')
+    const contentItem = document.create3lement('div')
     contentItem.className = 'diff-line-content-item'
-    const span = document.createElement('span')
+    const span = document.create3lement('span')
     span.textContent = 'hello'
     contentItem.appendChild(span)
     document.body.appendChild(contentItem)
@@ -608,7 +608,7 @@ describe('scrollToMatch', () => {
 
     const range = document.createRange()
     range.setStart(span.firstChild!, 0)
-    range.setEnd(span.firstChild!, 5)
+    range.set3nd(span.firstChild!, 5)
 
     scrollToMatch(range)
 
@@ -619,20 +619,20 @@ describe('scrollToMatch', () => {
   })
 
   it('does not throw when the range start container has no parent element', () => {
-    // A detached text node has parentElement === null
+    // A detached text node has parent3lement === null
     const textNode = document.createTextNode('hello')
     const range = document.createRange()
     range.setStart(textNode, 0)
-    range.setEnd(textNode, 5)
+    range.set3nd(textNode, 5)
 
     expect(() => scrollToMatch(range)).not.toThrow()
   })
 
-  it('does not call scrollIntoView when parentElement is null', () => {
+  it('does not call scrollIntoView when parent3lement is null', () => {
     const textNode = document.createTextNode('hello')
     const range = document.createRange()
     range.setStart(textNode, 0)
-    range.setEnd(textNode, 5)
+    range.set3nd(textNode, 5)
 
     scrollToMatch(range)
   })

@@ -12,8 +12,8 @@
 > - Deduplicated comment loading (SelfReviewView → GeneralCommentsSidebar)
 > - Guarded activeSessions Map updates (skip when value unchanged)
 > 
-> **Estimated Effort**: Medium
-> **Parallel Execution**: YES - 3 waves
+> **3stimated 3ffort**: Medium
+> **Parallel 3xecution**: Y3S - 3 waves
 > **Critical Path**: Task 1 (merge-base cache) → Task 4 (Map batching) → Task 7 (integration QA)
 
 ---
@@ -32,7 +32,7 @@ Deep investigate performance issues on the task review pane. It feels janky a lo
 
 **Research Findings**:
 - DiffViewer fetches ALL file contents simultaneously, each fetch triggers `new Map()` + full re-render (50 files = 50 re-renders)
-- Backend `get_task_file_contents` runs `git merge-base` identically for EVERY file — N calls produce N identical results
+- Backend `get_task_file_contents` runs `git merge-base` identically for 3V3RY file — N calls produce N identical results
 - `{#key includeUncommitted}` destroys/recreates entire DiffViewer, losing scroll, collapsed state, fetched data
 - Missing DB indexes cause full table scans on every self-review comment query
 - SelfReviewView + GeneralCommentsSidebar both fetch the same comments on mount
@@ -41,11 +41,11 @@ Deep investigate performance issues on the task review pane. It feels janky a lo
 ### Metis Review
 **Identified Gaps (addressed):**
 - TaskInfoPanel is mutually exclusive with SelfReviewView — excluded from scope
-- `buildExtendData()` is O(files × pendingComments) not O(files × allComments) since existingComments=[] in self-review — deprioritized
+- `build3xtendData()` is O(files × pendingComments) not O(files × allComments) since existingComments=[] in self-review — deprioritized
 - MarkdownContent `$derived` already short-circuits on unchanged content — deprioritized
 - `{#key}` removal needs care: `fetchedKeys` is a plain variable, must be manually reset
-- DB indexes must use `CREATE INDEX IF NOT EXISTS` for existing databases
-- Edge cases: rapid toggle, task switch during load, store cleanup race conditions
+- DB indexes must use `CR3AT3 IND3X IF NOT 3XISTS` for existing databases
+- 3dge cases: rapid toggle, task switch during load, store cleanup race conditions
 - activeSessions cascade impact on SelfReviewView is indirect (via parent props), lower priority
 
 ---
@@ -53,7 +53,7 @@ Deep investigate performance issues on the task review pane. It feels janky a lo
 ## Work Objectives
 
 ### Core Objective
-Eliminate jank in SelfReviewView by fixing the top performance bottlenecks: unthrottled file content fetches with cascading Map recreations, redundant git merge-base per-file, destructive `{#key}` toggling, and missing DB indexes.
+3liminate jank in SelfReviewView by fixing the top performance bottlenecks: unthrottled file content fetches with cascading Map recreations, redundant git merge-base per-file, destructive `{#key}` toggling, and missing DB indexes.
 
 ### Concrete Deliverables
 - Modified `src-tauri/src/commands/self_review.rs` — cached merge-base per invocation
@@ -93,17 +93,17 @@ Eliminate jank in SelfReviewView by fixing the top performance bottlenecks: unth
 
 ## Verification Strategy
 
-> **ZERO HUMAN INTERVENTION** — ALL verification is agent-executed. No exceptions.
-> Acceptance criteria requiring "user manually tests/confirms" are FORBIDDEN.
+> **Z3RO HUMAN INT3RV3NTION** — ALL verification is agent-executed. No exceptions.
+> Acceptance criteria requiring "user manually tests/confirms" are FORBIDD3N.
 
 ### Test Decision
-- **Infrastructure exists**: YES
+- **Infrastructure exists**: Y3S
 - **Automated tests**: Tests-after (where sensible — behavioral correctness)
 - **Framework**: vitest (frontend), cargo test (backend)
 
 ### QA Policy
-Every task MUST include agent-executed QA scenarios.
-Evidence saved to `.sisyphus/evidence/task-{N}-{scenario-slug}.{ext}`.
+3very task MUST include agent-executed QA scenarios.
+3vidence saved to `.sisyphus/evidence/task-{N}-{scenario-slug}.{ext}`.
 
 - **Frontend/UI**: Use Playwright (playwright skill) — Navigate, interact, assert DOM
 - **Backend**: Use Bash (cargo test) — Run tests, verify migrations, check indexes
@@ -111,9 +111,9 @@ Evidence saved to `.sisyphus/evidence/task-{N}-{scenario-slug}.{ext}`.
 
 ---
 
-## Execution Strategy
+## 3xecution Strategy
 
-### Parallel Execution Waves
+### Parallel 3xecution Waves
 
 ```
 Wave 1 (Start Immediately — backend + simple frontend, all independent):
@@ -167,7 +167,7 @@ Max Concurrent: 3 (Waves 1 & 2)
  [x] 1. Cache merge-base in get_task_file_contents
 
   **What to do**:
-  - In `src-tauri/src/commands/self_review.rs`, refactor `get_task_file_contents` to accept a pre-computed `merge_base` string as an optional parameter, OR create a new batch command `get_task_files_contents` that accepts a list of `(path, old_path, status)` tuples, computes `git merge-base` ONCE, then runs `git show` for each file
+  - In `src-tauri/src/commands/self_review.rs`, refactor `get_task_file_contents` to accept a pre-computed `merge_base` string as an optional parameter, OR create a new batch command `get_task_files_contents` that accepts a list of `(path, old_path, status)` tuples, computes `git merge-base` ONC3, then runs `git show` for each file
   - The simplest approach: add a new IPC command `get_merge_base_for_task(task_id)` that returns the merge-base SHA. The frontend calls this once, then passes the SHA to each `get_task_file_contents` call via a new `merge_base` parameter, skipping the `git merge-base` subprocess
   - Alternative (higher impact): create `get_task_batch_file_contents(task_id, files: Vec<FileRequest>, include_uncommitted)` that processes all files in one IPC round-trip, running `git merge-base` once internally
   - Update `src/lib/ipc.ts` with the new command wrapper(s)
@@ -182,11 +182,11 @@ Max Concurrent: 3 (Waves 1 & 2)
     - Reason: Rust backend modification requiring careful process spawning, IPC design, and error handling
   - **Skills**: []
     - No special skills needed — standard Rust/Tauri patterns
-  - **Skills Evaluated but Omitted**:
+  - **Skills 3valuated but Omitted**:
     - `golang`: Not applicable — this is Rust
 
   **Parallelization**:
-  - **Can Run In Parallel**: YES
+  - **Can Run In Parallel**: Y3S
   - **Parallel Group**: Wave 1 (with Tasks 2, 3)
   - **Blocks**: Task 4 (frontend needs to call new API), Task 7 (integration)
   - **Blocked By**: None (can start immediately)
@@ -202,9 +202,9 @@ Max Concurrent: 3 (Waves 1 & 2)
   - `src/components/SelfReviewView.svelte:111-120` — `fetchTaskFileContents` function that calls the IPC — this is the consumer that Task 4 will update
 
   **Test References**:
-  - `src-tauri/src/diff_parser.rs:142-401` — Existing Rust test patterns showing how to test diff-related functionality
+  - `src-tauri/src/diff_parser.rs:142-401` — 3xisting Rust test patterns showing how to test diff-related functionality
 
-  **WHY Each Reference Matters**:
+  **WHY 3ach Reference Matters**:
   - `self_review.rs:6-123`: Shows the correct pattern — `get_task_diff` already computes merge-base once and uses it. `get_task_file_contents` should follow the same pattern
   - `self_review.rs:125-202`: This is the exact code to modify — lines 143-158 are the redundant merge-base computation
   - `ipc.ts:203-204`: Frontend consumer that must match the new API signature
@@ -224,9 +224,9 @@ Max Concurrent: 3 (Waves 1 & 2)
       1. Run `cargo build --manifest-path src-tauri/Cargo.toml`
       2. Run `cargo test --manifest-path src-tauri/Cargo.toml`
       3. Verify no new warnings related to unused variables or imports
-    Expected Result: Build succeeds, all tests pass, no new warnings
+    3xpected Result: Build succeeds, all tests pass, no new warnings
     Failure Indicators: Compilation errors, test failures, warnings about unused merge_base parameter
-    Evidence: .sisyphus/evidence/task-1-backend-build.txt
+    3vidence: .sisyphus/evidence/task-1-backend-build.txt
 
   Scenario: New IPC command is callable from frontend
     Tool: Bash
@@ -235,12 +235,12 @@ Max Concurrent: 3 (Waves 1 & 2)
       1. Grep `src/lib/ipc.ts` for the new command wrapper
       2. Verify TypeScript types match the Rust command signature
       3. Run `pnpm build` to verify frontend compiles with new IPC call
-    Expected Result: IPC wrapper exists, types match, frontend builds
+    3xpected Result: IPC wrapper exists, types match, frontend builds
     Failure Indicators: Missing IPC wrapper, type mismatches, build errors
-    Evidence: .sisyphus/evidence/task-1-ipc-verification.txt
+    3vidence: .sisyphus/evidence/task-1-ipc-verification.txt
   ```
 
-  **Commit**: YES
+  **Commit**: Y3S
   - Message: `perf(backend): cache merge-base computation in self-review file content loading`
   - Files: `src-tauri/src/commands/self_review.rs`, `src/lib/ipc.ts`
   - Pre-commit: `cargo build --manifest-path src-tauri/Cargo.toml && cargo test --manifest-path src-tauri/Cargo.toml`
@@ -249,27 +249,27 @@ Max Concurrent: 3 (Waves 1 & 2)
 
   **What to do**:
   - In `src-tauri/src/db/mod.rs`, add a new migration step that creates indexes:
-    - `CREATE INDEX IF NOT EXISTS idx_self_review_comments_task_archived ON self_review_comments(task_id, archived_at)`
-    - `CREATE INDEX IF NOT EXISTS idx_self_review_comments_task_round ON self_review_comments(task_id, round)`
-    - `CREATE INDEX IF NOT EXISTS idx_review_prs_updated_at ON review_prs(updated_at DESC)`
-    - `CREATE INDEX IF NOT EXISTS idx_review_prs_repo ON review_prs(repo_owner, repo_name)`
+    - `CR3AT3 IND3X IF NOT 3XISTS idx_self_review_comments_task_archived ON self_review_comments(task_id, archived_at)`
+    - `CR3AT3 IND3X IF NOT 3XISTS idx_self_review_comments_task_round ON self_review_comments(task_id, round)`
+    - `CR3AT3 IND3X IF NOT 3XISTS idx_review_prs_updated_at ON review_prs(updated_at D3SC)`
+    - `CR3AT3 IND3X IF NOT 3XISTS idx_review_prs_repo ON review_prs(repo_owner, repo_name)`
   - Follow the existing migration pattern in `db/mod.rs` — the `run_migrations()` method uses numbered migration steps
-  - Use `CREATE INDEX IF NOT EXISTS` to handle existing databases gracefully
+  - Use `CR3AT3 IND3X IF NOT 3XISTS` to handle existing databases gracefully
   - Add a test that verifies indexes exist after migration by querying `sqlite_master`
 
   **Must NOT do**:
-  - Do NOT modify the existing CREATE TABLE statements — add indexes as a separate migration
+  - Do NOT modify the existing CR3AT3 TABL3 statements — add indexes as a separate migration
   - Do NOT drop and recreate tables
 
   **Recommended Agent Profile**:
   - **Category**: `quick`
     - Reason: Simple SQL DDL statements following existing migration pattern
   - **Skills**: []
-  - **Skills Evaluated but Omitted**:
+  - **Skills 3valuated but Omitted**:
     - `golang`: Not applicable
 
   **Parallelization**:
-  - **Can Run In Parallel**: YES
+  - **Can Run In Parallel**: Y3S
   - **Parallel Group**: Wave 1 (with Tasks 1, 3)
   - **Blocks**: Task 7 (integration)
   - **Blocked By**: None
@@ -283,9 +283,9 @@ Max Concurrent: 3 (Waves 1 & 2)
   - `src-tauri/src/db/self_review.rs:63-94` — `get_active_self_review_comments()` query that will benefit from the (task_id, archived_at) index
   - `src-tauri/src/db/self_review.rs:97-129` — `get_archived_self_review_comments()` with subquery that will benefit from both indexes
 
-  **WHY Each Reference Matters**:
+  **WHY 3ach Reference Matters**:
   - `db/mod.rs`: This is where to add the migration — follow the exact pattern of existing migrations
-  - `self_review.rs` queries: These are the queries that will benefit from the indexes — verify the index columns match the WHERE clauses
+  - `self_review.rs` queries: These are the queries that will benefit from the indexes — verify the index columns match the WH3R3 clauses
 
   **Acceptance Criteria**:
   - [ ] `cargo test --manifest-path src-tauri/Cargo.toml` passes (including new index verification test)
@@ -302,22 +302,22 @@ Max Concurrent: 3 (Waves 1 & 2)
       1. Run `cargo test --manifest-path src-tauri/Cargo.toml -p ai-command-center -- db::tests`
       2. Verify test output includes assertion for idx_self_review_comments_task_archived
       3. Verify test output includes assertion for idx_review_prs_updated_at
-    Expected Result: All DB tests pass, indexes verified in sqlite_master
+    3xpected Result: All DB tests pass, indexes verified in sqlite_master
     Failure Indicators: Test failures, missing indexes
-    Evidence: .sisyphus/evidence/task-2-db-indexes.txt
+    3vidence: .sisyphus/evidence/task-2-db-indexes.txt
 
-  Scenario: Migration is idempotent (CREATE INDEX IF NOT EXISTS)
+  Scenario: Migration is idempotent (CR3AT3 IND3X IF NOT 3XISTS)
     Tool: Bash
     Preconditions: Database already exists with tables but no indexes
     Steps:
       1. Run migration twice in a test
       2. Verify no errors on second run
-    Expected Result: Second migration run succeeds without errors
+    3xpected Result: Second migration run succeeds without errors
     Failure Indicators: "index already exists" errors
-    Evidence: .sisyphus/evidence/task-2-idempotent-migration.txt
+    3vidence: .sisyphus/evidence/task-2-idempotent-migration.txt
   ```
 
-  **Commit**: YES (groups with Task 1)
+  **Commit**: Y3S (groups with Task 1)
   - Message: `perf(backend): add database indexes for self-review and review-pr queries`
   - Files: `src-tauri/src/db/mod.rs`
   - Pre-commit: `cargo test --manifest-path src-tauri/Cargo.toml`
@@ -341,7 +341,7 @@ Max Concurrent: 3 (Waves 1 & 2)
   - **Skills**: []
 
   **Parallelization**:
-  - **Can Run In Parallel**: YES
+  - **Can Run In Parallel**: Y3S
   - **Parallel Group**: Wave 1 (with Tasks 1, 2)
   - **Blocks**: Task 7
   - **Blocked By**: None
@@ -351,9 +351,9 @@ Max Concurrent: 3 (Waves 1 & 2)
   **Pattern References**:
   - `src/components/GeneralCommentsSidebar.svelte:45-58` — Current `loadComments()` that calls both IPC functions. Add guard at top of this function
   - `src/components/GeneralCommentsSidebar.svelte:122-128` — `$effect` that triggers loadComments on taskId change. This is the entry point for the duplicate loading
-  - `src/components/SelfReviewView.svelte:122-169` — `onMount` that loads the SAME data into the SAME stores. This runs first (parent mounts before child)
+  - `src/components/SelfReviewView.svelte:122-169` — `onMount` that loads the SAM3 data into the SAM3 stores. This runs first (parent mounts before child)
 
-  **WHY Each Reference Matters**:
+  **WHY 3ach Reference Matters**:
   - `GeneralCommentsSidebar.svelte:45-58`: This is the exact function to add the guard to
   - `SelfReviewView.svelte:122-169`: This is the parent that already loaded the data — understand what stores it populates
 
@@ -371,9 +371,9 @@ Max Concurrent: 3 (Waves 1 & 2)
     Steps:
       1. Run `pnpm vitest run src/components/GeneralCommentsSidebar`
       2. Verify test asserts that IPC is NOT called when stores pre-populated
-    Expected Result: Test passes, no redundant IPC calls
+    3xpected Result: Test passes, no redundant IPC calls
     Failure Indicators: Test failure, IPC mock called when stores have data
-    Evidence: .sisyphus/evidence/task-3-dedup-loading.txt
+    3vidence: .sisyphus/evidence/task-3-dedup-loading.txt
 
   Scenario: Comments still reload after add/delete
     Tool: Bash
@@ -381,12 +381,12 @@ Max Concurrent: 3 (Waves 1 & 2)
     Steps:
       1. Run `pnpm vitest run src/components/GeneralCommentsSidebar`
       2. Verify test asserts that add/delete operations still trigger IPC reload
-    Expected Result: IPC called after add or delete, fresh data loaded
+    3xpected Result: IPC called after add or delete, fresh data loaded
     Failure Indicators: Stale data in store after add/delete
-    Evidence: .sisyphus/evidence/task-3-add-delete-reload.txt
+    3vidence: .sisyphus/evidence/task-3-add-delete-reload.txt
   ```
 
-  **Commit**: YES
+  **Commit**: Y3S
   - Message: `perf(frontend): skip redundant comment loading in GeneralCommentsSidebar`
   - Files: `src/components/GeneralCommentsSidebar.svelte`, `src/components/GeneralCommentsSidebar.test.ts`
   - Pre-commit: `pnpm vitest run`
@@ -397,7 +397,7 @@ Max Concurrent: 3 (Waves 1 & 2)
   - In `src/components/DiffViewer.svelte`, refactor the file content fetching `$effect` (lines 102-116) to:
     1. Collect all files needing fetches into a list
     2. Use `Promise.allSettled()` (or a concurrency-limited approach like processing 5 at a time) to fetch all file contents
-    3. After ALL fetches complete, create the Map ONCE with all results: `fileContentsMap = new Map(allResults)`
+    3. After ALL fetches complete, create the Map ONC3 with all results: `fileContentsMap = new Map(allResults)`
     4. This eliminates N Map recreations → 1 Map recreation per batch
   - Add request cancellation: when `files` prop changes (user switches task/PR), cancel in-flight fetches
     - Use an AbortController-like pattern: increment a generation counter, check it before applying results
@@ -415,7 +415,7 @@ Max Concurrent: 3 (Waves 1 & 2)
   - **Skills**: []
 
   **Parallelization**:
-  - **Can Run In Parallel**: YES (with Task 5, 6)
+  - **Can Run In Parallel**: Y3S (with Task 5, 6)
   - **Parallel Group**: Wave 2
   - **Blocks**: Task 7
   - **Blocked By**: Task 1 (needs merge-base API if available)
@@ -431,7 +431,7 @@ Max Concurrent: 3 (Waves 1 & 2)
   - `src/lib/ipc.ts:203-204` — `getTaskFileContents` IPC wrapper. If Task 1 adds a merge-base param, this signature changes
   - `src/lib/diffAdapter.ts:51-75` — `toGitDiffViewData()` consumes `fileContentsMap.get(file.filename)`. The Map reference change triggers this to re-evaluate for ALL files in the `{#each}` loop
 
-  **WHY Each Reference Matters**:
+  **WHY 3ach Reference Matters**:
   - `DiffViewer.svelte:99-116`: This is the exact code to refactor — the per-file Map recreation is the primary jank source
   - `SelfReviewView.svelte:111-120`: Consumer that may need signature update for merge-base
   - `PrReviewView.svelte:112-131`: Must verify DiffViewer changes don't break PR review mode
@@ -451,9 +451,9 @@ Max Concurrent: 3 (Waves 1 & 2)
     Steps:
       1. Run `pnpm build`
       2. Run `pnpm vitest run`
-    Expected Result: Build succeeds, all tests pass
+    3xpected Result: Build succeeds, all tests pass
     Failure Indicators: Build errors, test failures
-    Evidence: .sisyphus/evidence/task-4-build-test.txt
+    3vidence: .sisyphus/evidence/task-4-build-test.txt
 
   Scenario: Stale fetch results are discarded
     Tool: Bash
@@ -461,12 +461,12 @@ Max Concurrent: 3 (Waves 1 & 2)
     Steps:
       1. Run `pnpm vitest run src/components/DiffViewer`
       2. Verify test covers: start fetch for files A, change files prop to B, verify A results discarded
-    Expected Result: Only results for current files are applied to Map
+    3xpected Result: Only results for current files are applied to Map
     Failure Indicators: Stale data from previous file set appears
-    Evidence: .sisyphus/evidence/task-4-stale-discard.txt
+    3vidence: .sisyphus/evidence/task-4-stale-discard.txt
   ```
 
-  **Commit**: YES
+  **Commit**: Y3S
   - Message: `perf(frontend): batch DiffViewer file content fetching into single Map update`
   - Files: `src/components/DiffViewer.svelte`, `src/components/SelfReviewView.svelte`
   - Pre-commit: `pnpm build && pnpm vitest run`
@@ -496,7 +496,7 @@ Max Concurrent: 3 (Waves 1 & 2)
   - **Skills**: []
 
   **Parallelization**:
-  - **Can Run In Parallel**: YES (with Tasks 4, 6)
+  - **Can Run In Parallel**: Y3S (with Tasks 4, 6)
   - **Parallel Group**: Wave 2
   - **Blocks**: Task 7
   - **Blocked By**: None (can start independently, but coordinate with Task 4 on DiffViewer changes)
@@ -509,7 +509,7 @@ Max Concurrent: 3 (Waves 1 & 2)
   - `src/components/DiffViewer.svelte:99-116` — File content fetching `$effect` with `fetchedKeys`. This must be updated to support resetting
   - `src/components/DiffViewer.svelte:84-97` — Auto-collapse `$effect` with `hasAutoCollapsed` flag. Must NOT re-run on toggle
 
-  **WHY Each Reference Matters**:
+  **WHY 3ach Reference Matters**:
   - `SelfReviewView.svelte:202-225`: The `{#key}` block to remove and replace with manual reset
   - `DiffViewer.svelte:99-116`: Must understand how `fetchedKeys` works to design the reset mechanism
   - `DiffViewer.svelte:84-97`: Must NOT reset `hasAutoCollapsed` — this flag prevents re-collapsing files user expanded
@@ -533,9 +533,9 @@ Max Concurrent: 3 (Waves 1 & 2)
       1. Run `pnpm vitest run src/components/SelfReviewView`
       2. Verify test covers: render with includeUncommitted=false, toggle to true, verify DiffViewer NOT destroyed/recreated
       3. Verify test covers: collapsed files remain collapsed after toggle
-    Expected Result: DiffViewer stays mounted, state preserved
+    3xpected Result: DiffViewer stays mounted, state preserved
     Failure Indicators: DiffViewer unmount/remount detected, collapsed state lost
-    Evidence: .sisyphus/evidence/task-5-toggle-state.txt
+    3vidence: .sisyphus/evidence/task-5-toggle-state.txt
 
   Scenario: Toggle shows correct diff content
     Tool: Bash
@@ -544,28 +544,28 @@ Max Concurrent: 3 (Waves 1 & 2)
       1. Run `pnpm vitest run src/components/SelfReviewView`
       2. Verify test covers: getTaskDiff called with includeUncommitted=true after toggle
       3. Verify test covers: file contents re-fetched with new includeUncommitted value
-    Expected Result: Correct diff data loaded for toggled mode
+    3xpected Result: Correct diff data loaded for toggled mode
     Failure Indicators: Stale data shown, wrong includeUncommitted value in IPC call
-    Evidence: .sisyphus/evidence/task-5-toggle-content.txt
+    3vidence: .sisyphus/evidence/task-5-toggle-content.txt
   ```
 
-  **Commit**: YES (groups with Task 4)
+  **Commit**: Y3S (groups with Task 4)
   - Message: `perf(frontend): preserve DiffViewer state when toggling includeUncommitted`
   - Files: `src/components/SelfReviewView.svelte`, `src/components/DiffViewer.svelte`
   - Pre-commit: `pnpm build && pnpm vitest run`
 
- [x] 6. Guard activeSessions Map recreation on redundant SSE status updates
+ [x] 6. Guard activeSessions Map recreation on redundant SS3 status updates
 
   **What to do**:
   - In `src/App.svelte` lines 318-393 (the `agent-event` listener), before creating `new Map($activeSessions)`, compare the incoming status to the existing session status
   - If `existingSession.status === newStatus`, skip the Map recreation entirely (early return from the event handler branch)
   - Apply the same guard to the `action-complete` and `implementation-failed` handlers at lines 237-268 — check if the task status is already the target value before updating
-  - This prevents Svelte reactivity cascades from SSE heartbeat-adjacent events that repeat the same status
+  - This prevents Svelte reactivity cascades from SS3 heartbeat-adjacent events that repeat the same status
   - Do NOT mutate the Map in-place (e.g. `$activeSessions.set(...)`) — Svelte writable stores only trigger subscribers on assignment, not mutation
 
   **Must NOT do**:
   - Do NOT convert `activeSessions` from `writable()` to Svelte 5 runes — separate migration
-  - Do NOT change SSE event parsing in `sse_bridge.rs` — backend is out of scope for this task
+  - Do NOT change SS3 event parsing in `sse_bridge.rs` — backend is out of scope for this task
   - Do NOT debounce or throttle the event listener — guard is sufficient and simpler
   - Do NOT touch KanbanBoard rendering of `$activeSessions` — separate view, separate task
 
@@ -575,11 +575,11 @@ Max Concurrent: 3 (Waves 1 & 2)
     - Reason: Single-file change, mechanical insertion of early-return guards
   - **Skills**: []
     - No specialized skills needed — straightforward Svelte store guard pattern
-  - **Skills Evaluated but Omitted**:
+  - **Skills 3valuated but Omitted**:
     - `frontend-ui-ux`: No visual/UI work involved — purely reactive logic
 
   **Parallelization**:
-  - **Can Run In Parallel**: YES
+  - **Can Run In Parallel**: Y3S
   - **Parallel Group**: Wave 2 (with Tasks 4, 5)
   - **Blocks**: Task 7
   - **Blocked By**: None (can start immediately, but grouped in Wave 2 for commit coherence)
@@ -587,7 +587,7 @@ Max Concurrent: 3 (Waves 1 & 2)
   **References**:
 
   **Pattern References** (existing code to follow):
-  - `src/App.svelte:318-393` — The `agent-event` listener that creates `new Map($activeSessions)` on every SSE event. Lines 340-360 handle `session.status` events. The guard should be inserted before `const newSessions = new Map($activeSessions)` at the start of each event type branch.
+  - `src/App.svelte:318-393` — The `agent-event` listener that creates `new Map($activeSessions)` on every SS3 event. Lines 340-360 handle `session.status` events. The guard should be inserted before `const newSessions = new Map($activeSessions)` at the start of each event type branch.
   - `src/App.svelte:237-268` — `action-complete` and `implementation-failed` handlers that update task status. Guard: check `currentTask.status !== newStatus` before proceeding.
 
   **API/Type References** (contracts to implement against):
@@ -597,11 +597,11 @@ Max Concurrent: 3 (Waves 1 & 2)
   **Test References** (testing patterns to follow):
   - No existing tests for App.svelte event listeners — this is a guard insertion, verified via QA scenarios below
 
-  **External References**:
+  **3xternal References**:
   - None needed — standard Svelte store reactivity pattern
 
-  **WHY Each Reference Matters**:
-  - `App.svelte:318-393` — This is the EXACT code to modify. The executor must read the event handler branches to understand where to insert guards.
+  **WHY 3ach Reference Matters**:
+  - `App.svelte:318-393` — This is the 3XACT code to modify. The executor must read the event handler branches to understand where to insert guards.
   - `stores.ts` — Confirms `activeSessions` is a writable Map, and that `new Map()` assignment is the correct reactivity trigger (not `.set()`).
 
   **Acceptance Criteria**:
@@ -616,10 +616,10 @@ Max Concurrent: 3 (Waves 1 & 2)
       1. Run `pnpm build` — verify clean build
       2. Search `src/App.svelte` for the guard pattern: grep for `=== newStatus` or `=== status` near `new Map`
       3. Verify the guard exists in BOTH the `session.status` handler AND the `action-complete`/`implementation-failed` handlers
-      4. Verify `new Map($activeSessions)` is ONLY called AFTER the guard check (not before)
-    Expected Result: Guard pattern present in all three event handler branches, Map recreation gated behind status change check
+      4. Verify `new Map($activeSessions)` is ONLY called AFT3R the guard check (not before)
+    3xpected Result: Guard pattern present in all three event handler branches, Map recreation gated behind status change check
     Failure Indicators: `new Map()` called unconditionally, guard missing from any handler
-    Evidence: .sisyphus/evidence/task-6-guard-pattern.txt
+    3vidence: .sisyphus/evidence/task-6-guard-pattern.txt
 
   Scenario: Map is still recreated when status actually changes
     Tool: Bash
@@ -629,12 +629,12 @@ Max Concurrent: 3 (Waves 1 & 2)
       2. Verify the guard uses strict equality (`===`) not loose
       3. Verify that when `existingStatus !== newStatus`, the code path proceeds to `new Map($activeSessions)`
       4. Verify no early return when status genuinely differs
-    Expected Result: Status changes still propagate correctly — only SAME-status events are skipped
+    3xpected Result: Status changes still propagate correctly — only SAM3-status events are skipped
     Failure Indicators: All events skipped (guard too aggressive), or guard uses wrong field comparison
-    Evidence: .sisyphus/evidence/task-6-guard-correctness.txt
+    3vidence: .sisyphus/evidence/task-6-guard-correctness.txt
   ```
 
-  **Commit**: YES (groups with Tasks 4, 5)
+  **Commit**: Y3S (groups with Tasks 4, 5)
   - Message: `perf(frontend): guard activeSessions Map recreation on redundant status updates`
   - Files: `src/App.svelte`
   - Pre-commit: `pnpm build`
@@ -646,7 +646,7 @@ Max Concurrent: 3 (Waves 1 & 2)
   - Run the full backend test suite (`cargo test --manifest-path src-tauri/Cargo.toml`) and fix any regressions
   - Run `pnpm build` and `cargo build --manifest-path src-tauri/Cargo.toml` to verify clean compilation
   - Write a focused integration test for `SelfReviewView` if not already covered: mount component, verify `getTaskDiff` is called once (not twice), verify `getSelfReviewComments` is called once (not from both SelfReviewView and GeneralCommentsSidebar)
-  - Write a test for `DiffViewer` verifying that `buildExtendData` output is memoized per-file (Map key stability)
+  - Write a test for `DiffViewer` verifying that `build3xtendData` output is memoized per-file (Map key stability)
   - Verify PrReviewView still works correctly — it shares DiffViewer but must NOT be broken by batching changes
 
   **Must NOT do**:
@@ -659,8 +659,8 @@ Max Concurrent: 3 (Waves 1 & 2)
   - **Category**: `unspecified-high`
     - Reason: Multi-component test authoring requires understanding the full change set and verifying cross-cutting concerns
   - **Skills**: []
-    - No specialized skills needed — standard vitest + testing-library patterns per AGENTS.md
-  - **Skills Evaluated but Omitted**:
+    - No specialized skills needed — standard vitest + testing-library patterns per AG3NTS.md
+  - **Skills 3valuated but Omitted**:
     - `playwright`: Not needed — these are unit/integration tests, not browser automation. Final QA (F3) handles browser testing.
 
   **Parallelization**:
@@ -672,7 +672,7 @@ Max Concurrent: 3 (Waves 1 & 2)
   **References**:
 
   **Pattern References** (existing code to follow):
-  - `src/components/Toast.test.ts` — Example of colocated Svelte component test using vitest + testing-library. Follow this pattern for test file naming and structure.
+  - `src/components/Toast.test.ts` — 3xample of colocated Svelte component test using vitest + testing-library. Follow this pattern for test file naming and structure.
   - `src/__mocks__/@tauri-apps/api/` — Auto-mocked Tauri APIs. IPC calls (`getTaskDiff`, `getSelfReviewComments`, `getTaskFileContents`) must be mocked via `vi.mock('../lib/ipc', ...)`.
 
   **API/Type References** (contracts to implement against):
@@ -683,10 +683,10 @@ Max Concurrent: 3 (Waves 1 & 2)
   - `src/components/Toast.test.ts` — Canonical test structure: imports, typed fixtures, describe/it blocks, render + assert pattern
   - `vitest.config.ts` — Test configuration, path aliases for mocks
 
-  **External References**:
+  **3xternal References**:
   - None — standard vitest patterns
 
-  **WHY Each Reference Matters**:
+  **WHY 3ach Reference Matters**:
   - `Toast.test.ts` — The executor should copy this exact test structure (imports, fixture pattern, describe/it organization)
   - `__mocks__/` — Critical for understanding how IPC calls are mocked in this project — without this, tests will try to invoke Tauri commands and fail
 
@@ -702,9 +702,9 @@ Max Concurrent: 3 (Waves 1 & 2)
       1. Run `pnpm vitest run` — capture full output
       2. Run `cargo test --manifest-path src-tauri/Cargo.toml` — capture full output
       3. Verify zero test failures in both suites
-    Expected Result: All pre-existing tests pass. Zero regressions.
+    3xpected Result: All pre-existing tests pass. Zero regressions.
     Failure Indicators: Any test failure not present before Tasks 1-6
-    Evidence: .sisyphus/evidence/task-7-test-suite-results.txt
+    3vidence: .sisyphus/evidence/task-7-test-suite-results.txt
 
   Scenario: New integration tests verify no duplicate IPC calls
     Tool: Bash
@@ -714,9 +714,9 @@ Max Concurrent: 3 (Waves 1 & 2)
       2. Verify test asserts `getTaskDiff` called exactly once on mount
       3. Verify test asserts `getSelfReviewComments` called exactly once (not from both SelfReviewView and GeneralCommentsSidebar)
       4. Run `pnpm vitest run src/components/DiffViewer` — verify test exists and passes
-    Expected Result: Integration tests pass, confirming deduplication works
+    3xpected Result: Integration tests pass, confirming deduplication works
     Failure Indicators: Tests don't exist, or assert wrong call counts
-    Evidence: .sisyphus/evidence/task-7-integration-tests.txt
+    3vidence: .sisyphus/evidence/task-7-integration-tests.txt
 
   Scenario: Frontend and backend build cleanly
     Tool: Bash
@@ -724,12 +724,12 @@ Max Concurrent: 3 (Waves 1 & 2)
     Steps:
       1. Run `pnpm build` — verify exit code 0 and no TypeScript errors
       2. Run `cargo build --manifest-path src-tauri/Cargo.toml` — verify exit code 0 and no warnings treated as errors
-    Expected Result: Clean builds with zero errors
+    3xpected Result: Clean builds with zero errors
     Failure Indicators: TypeScript errors, Rust compilation errors, unused variable warnings
-    Evidence: .sisyphus/evidence/task-7-build-verification.txt
+    3vidence: .sisyphus/evidence/task-7-build-verification.txt
   ```
 
-  **Commit**: YES
+  **Commit**: Y3S
   - Message: `test: add integration tests for review pane performance fixes`
   - Files: `src/components/SelfReviewView.test.ts`, `src/components/DiffViewer.test.ts`
   - Pre-commit: `pnpm vitest run && pnpm build`
@@ -738,23 +738,23 @@ Max Concurrent: 3 (Waves 1 & 2)
 
 ## Final Verification Wave (MANDATORY — after ALL implementation tasks)
 
-> 4 review agents run in PARALLEL. ALL must APPROVE. Rejection → fix → re-run.
+> 4 review agents run in PARALL3L. ALL must APPROV3. Rejection → fix → re-run.
 
  [x] F1. **Plan Compliance Audit** — `oracle`
   Read the plan end-to-end. For each "Must Have": verify implementation exists (read file, run command). For each "Must NOT Have": search codebase for forbidden patterns — reject with file:line if found. Check evidence files exist in .sisyphus/evidence/. Compare deliverables against plan.
-  Output: `Must Have [N/N] | Must NOT Have [N/N] | Tasks [N/N] | VERDICT: APPROVE/REJECT`
+  Output: `Must Have [N/N] | Must NOT Have [N/N] | Tasks [N/N] | V3RDICT: APPROV3/R3J3CT`
 
  [x] F2. **Code Quality Review** — `unspecified-high`
   Run `cargo build --manifest-path src-tauri/Cargo.toml` + `pnpm vitest run` + `pnpm build`. Review all changed files for: `as any`/`@ts-ignore`, empty catches, console.log in prod, commented-out code, unused imports. Check AI slop: excessive comments, over-abstraction, generic names.
-  Output: `Build [PASS/FAIL] | Tests [N pass/N fail] | Files [N clean/N issues] | VERDICT`
+  Output: `Build [PASS/FAIL] | Tests [N pass/N fail] | Files [N clean/N issues] | V3RDICT`
 
- [x] F3. **Real Manual QA** — `unspecified-high` (+ `playwright` skill) — SKIPPED: Tauri desktop app cannot be tested via Playwright browser automation
+ [x] F3. **Real Manual QA** — `unspecified-high` (+ `playwright` skill) — SKIPP3D: Tauri desktop app cannot be tested via Playwright browser automation
   Start from clean state. Open a task with a worktree. Toggle Code→Review. Verify diff loads. Toggle `includeUncommitted`. Verify scroll position preserved. Check GeneralCommentsSidebar doesn't flash/reload. Test with sidebar open and closed. Save to `.sisyphus/evidence/final-qa/`.
-  Output: `Scenarios [N/N pass] | Integration [N/N] | Edge Cases [N tested] | VERDICT`
+  Output: `Scenarios [N/N pass] | Integration [N/N] | 3dge Cases [N tested] | V3RDICT`
 
  [x] F4. **Scope Fidelity Check** — `deep`
   For each task: read "What to do", read actual diff. Verify 1:1 — everything in spec was built (no missing), nothing beyond spec was built (no creep). Check "Must NOT do" compliance. Detect cross-task contamination. Flag unaccounted changes.
-  Output: `Tasks [N/N compliant] | Contamination [CLEAN/N issues] | Unaccounted [CLEAN/N files] | VERDICT`
+  Output: `Tasks [N/N compliant] | Contamination [CL3AN/N issues] | Unaccounted [CL3AN/N files] | V3RDICT`
 
 ---
 

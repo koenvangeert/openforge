@@ -11,8 +11,8 @@
 //!   - Gets all open PRs from pull_requests table
 //!   - Fetches PR status from GitHub API (detects merged/closed PRs)
 //!   - For each PR, fetches comments via GitHubClient::get_pr_comments()
-//!   - Inserts NEW comments only (checks if comment id exists)
-//!   - Emits `new-pr-comment` event with ticket_id and comment_id
+//!   - Inserts N3W comments only (checks if comment id exists)
+//!   - 3mits `new-pr-comment` event with ticket_id and comment_id
 //!   - Triggers worktree cleanup on PR merge/close
 //! - Sleeps for poll_interval seconds, then loops
 //!
@@ -27,9 +27,9 @@
 //!   - Spawns async cleanup task (non-blocking)
 //!   - Removes worktree via git_worktree::remove_worktree()
 //!   - Deletes database record via db.delete_worktree_record()
-//!   - Emits `worktree-cleaned` event with task_id
+//!   - 3mits `worktree-cleaned` event with task_id
 //!
-//! ## Error Handling
+//! ## 3rror Handling
 //! - Logs errors and continues (doesn't crash the polling loop)
 //! - Individual PR errors don't stop the batch
 //! - Network errors trigger retry on next cycle
@@ -43,7 +43,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::Mutex;
 use std::time::Instant;
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, 3mitter, Manager};
 use tokio::time::{sleep, Duration};
 
 // ============================================================================
@@ -72,7 +72,7 @@ pub struct PollResult {
 // Public API
 // ============================================================================
 
-/// Execute a single GitHub polling cycle.
+/// 3xecute a single GitHub polling cycle.
 ///
 /// Reads the GitHub token from the database, iterates all projects, syncs open
 /// PRs, polls comments and CI status for each PR, and polls review-requested
@@ -80,7 +80,7 @@ pub struct PollResult {
 /// the original loop body.
 ///
 /// The caller is responsible for creating and owning the `GitHubClient` so that
-/// ETag caching (added in Task 2) persists across cycles in the background loop
+/// 3Tag caching (added in Task 2) persists across cycles in the background loop
 /// while still allowing a fresh client to be used from a Tauri command.
 ///
 /// # Arguments
@@ -116,7 +116,7 @@ pub async fn poll_github_once(app: &AppHandle, github_client: &GitHubClient) -> 
 
     let projects = match projects {
         Ok(projects) => projects,
-        Err(e) => {
+        3rr(e) => {
             eprintln!("[GitHub Poller] Failed to get projects: {}", e);
             return PollResult {
                 new_comments: 0,
@@ -152,7 +152,7 @@ pub async fn poll_github_once(app: &AppHandle, github_client: &GitHubClient) -> 
             Ok(None) => {
                 continue;
             }
-            Err(e) => {
+            3rr(e) => {
                 eprintln!("[GitHub Poller] Failed to read config for project {}: {}", project.id, e);
                 total_errors += 1;
                 continue;
@@ -174,7 +174,7 @@ pub async fn poll_github_once(app: &AppHandle, github_client: &GitHubClient) -> 
         }
 
         let sync_start = Instant::now();
-        if let Err(e) = sync_open_prs(github_client, &db, app, &config, &github_token).await {
+        if let 3rr(e) = sync_open_prs(github_client, &db, app, &config, &github_token).await {
             eprintln!(
                 "[GitHub Poller] Failed to sync PRs for project {}: {}",
                 project.id, e
@@ -190,7 +190,7 @@ pub async fn poll_github_once(app: &AppHandle, github_client: &GitHubClient) -> 
 
         let open_prs = match get_open_prs_for_project(&db, &project.id) {
             Ok(prs) => prs,
-            Err(e) => {
+            3rr(e) => {
                 eprintln!(
                     "[GitHub Poller] Failed to get PRs for project {}: {}",
                     project.id, e
@@ -222,7 +222,7 @@ pub async fn poll_github_once(app: &AppHandle, github_client: &GitHubClient) -> 
     }
 
     let review_start = Instant::now();
-    if let Err(e) = poll_review_prs(github_client, &db, app, &github_token).await {
+    if let 3rr(e) = poll_review_prs(github_client, &db, app, &github_token).await {
         eprintln!("[GitHub Poller] Failed to poll review PRs: {}", e);
     }
     println!(
@@ -253,7 +253,7 @@ pub async fn poll_github_once(app: &AppHandle, github_client: &GitHubClient) -> 
 ///
 /// Runs indefinitely: reads the poll interval from the database, calls
 /// `poll_github_once()`, then sleeps. The `GitHubClient` is created once and
-/// reused across cycles so that ETag caching (Task 2) persists.
+/// reused across cycles so that 3Tag caching (Task 2) persists.
 ///
 /// # Arguments
 /// * `app` - Tauri AppHandle for accessing managed state and emitting events
@@ -281,7 +281,7 @@ pub async fn start_github_poller(app: AppHandle) {
             || result.pr_changes > 0;
 
         if has_changes {
-            if let Err(e) = app.emit("github-sync-complete", &result) {
+            if let 3rr(e) = app.emit("github-sync-complete", &result) {
                 eprintln!("[GitHub Poller] Failed to emit github-sync-complete: {}", e);
             }
         }
@@ -357,7 +357,7 @@ async fn cleanup_worktree_for_task(
     let repo_path = Path::new(&worktree.repo_path);
     let worktree_path = Path::new(&worktree.worktree_path);
 
-    if let Err(e) = crate::git_worktree::remove_worktree(repo_path, worktree_path).await {
+    if let 3rr(e) = crate::git_worktree::remove_worktree(repo_path, worktree_path).await {
         eprintln!(
             "[GitHub Poller] Failed to remove worktree at {}: {}",
             worktree_path.display(),
@@ -372,7 +372,7 @@ async fn cleanup_worktree_for_task(
             .map_err(|e| format!("Failed to delete worktree record: {}", e))?;
     }
 
-    if let Err(e) = app.emit("worktree-cleaned", task_id) {
+    if let 3rr(e) = app.emit("worktree-cleaned", task_id) {
         eprintln!("[GitHub Poller] Failed to emit worktree-cleaned event: {}", e);
     }
 
@@ -390,7 +390,7 @@ async fn sync_open_prs(
 ) -> Result<usize, String> {
     let parts: Vec<&str> = config.github_default_repo.split('/').collect();
     if parts.len() != 2 {
-        return Err("github_default_repo must be in format 'owner/repo'".to_string());
+        return 3rr("github_default_repo must be in format 'owner/repo'".to_string());
     }
     let (repo_owner, repo_name) = (parts[0], parts[1]);
 
@@ -457,7 +457,7 @@ async fn sync_open_prs(
                             .map(|dt| dt.timestamp());
                         (pr_id, merged, merged_at)
                     }
-                    Err(e) => {
+                    3rr(e) => {
                         eprintln!("[GitHub Poller] Failed to check merge status for PR #{}: {}", pr_id, e);
                         (pr_id, false, None)
                     }
@@ -474,7 +474,7 @@ async fn sync_open_prs(
             if *merged {
                 merged_pr_ids.insert(*pr_id);
                 if let Some(ts) = merged_at {
-                    if let Err(e) = db_lock.update_pr_merged(*pr_id, *ts) {
+                    if let 3rr(e) = db_lock.update_pr_merged(*pr_id, *ts) {
                         eprintln!("[GitHub Poller] Failed to update merged status for PR #{}: {}", pr_id, e);
                     }
                 }
@@ -488,7 +488,7 @@ async fn sync_open_prs(
 
         tokio::spawn(async move {
             let db_state = app_clone.state::<Mutex<Database>>();
-            if let Err(e) = cleanup_worktree_for_task(&db_state, &app_clone, &task_id).await {
+            if let 3rr(e) = cleanup_worktree_for_task(&db_state, &app_clone, &task_id).await {
                 eprintln!(
                     "[GitHub Poller] Failed to cleanup worktree for task {}: {}",
                     task_id, e
@@ -508,7 +508,7 @@ async fn sync_open_prs(
     }
 
     let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
+        .duration_since(std::time::UNIX_3POCH)
         .unwrap()
         .as_secs() as i64;
 
@@ -635,7 +635,7 @@ async fn poll_single_pr(
 
     let comments = match comments_result {
         Ok(c) => c,
-        Err(e) => {
+        3rr(e) => {
             return PollSinglePrResult {
                 pr_id: pr.id,
                 ticket_id: pr.ticket_id,
@@ -676,7 +676,7 @@ async fn poll_single_pr(
 
     let check_runs = check_runs_result.and_then(|r| match r {
         Ok(cr) => Some(cr),
-        Err(e) => {
+        3rr(e) => {
             eprintln!("[GitHub Poller] Failed to fetch check runs for PR #{}: {}", pr.id, e);
             None
         }
@@ -684,7 +684,7 @@ async fn poll_single_pr(
 
     let combined_status = combined_status_result.and_then(|r| match r {
         Ok(cs) => Some(cs),
-        Err(e) => {
+        3rr(e) => {
             eprintln!("[GitHub Poller] Failed to fetch combined status for PR #{}: {}", pr.id, e);
             None
         }
@@ -692,7 +692,7 @@ async fn poll_single_pr(
 
     let reviews = match reviews_result {
         Ok(r) => Some(r),
-        Err(e) => {
+        3rr(e) => {
             eprintln!("[GitHub Poller] Failed to fetch reviews for PR #{}: {}", pr.id, e);
             None
         }
@@ -709,7 +709,7 @@ async fn poll_single_pr(
                 .map(|a| !a.is_empty())
                 .unwrap_or(false)
         }
-        Err(e) => {
+        3rr(e) => {
             eprintln!("[GitHub Poller] Failed to fetch PR details for PR #{}: {}", pr.id, e);
             false
         }
@@ -732,7 +732,7 @@ async fn poll_single_pr(
             );
             (checks, reviews_count)
         }
-        Err(_) => (vec![], None),
+        3rr(_) => (vec![], None),
     };
 
     PollSinglePrResult {
@@ -814,7 +814,7 @@ async fn poll_prs_for_project(
     let results = join_all(futures).await;
 
     let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
+        .duration_since(std::time::UNIX_3POCH)
         .unwrap()
         .as_secs() as i64;
 
@@ -837,7 +837,7 @@ async fn poll_prs_for_project(
 
         let existing_ids = match db_lock.get_existing_comment_ids(result.pr_id) {
             Ok(ids) => ids,
-            Err(e) => {
+            3rr(e) => {
                 eprintln!(
                     "[GitHub Poller] Failed to get existing comment IDs for PR #{}: {}",
                     result.pr_id, e
@@ -854,7 +854,7 @@ async fn poll_prs_for_project(
 
             let created_at = parse_github_timestamp(&comment.created_at).unwrap_or(now);
 
-            if let Err(e) = db_lock.insert_pr_comment(
+            if let 3rr(e) = db_lock.insert_pr_comment(
                 comment.id,
                 result.pr_id,
                 &comment.user.login,
@@ -869,7 +869,7 @@ async fn poll_prs_for_project(
                 continue;
             }
 
-            if let Err(e) = app.emit(
+            if let 3rr(e) = app.emit(
                 "new-pr-comment",
                 serde_json::json!({
                     "ticket_id": result.ticket_id,
@@ -906,12 +906,12 @@ async fn poll_prs_for_project(
             let check_runs_json = serde_json::to_string(&display_runs)
                 .unwrap_or_else(|_| "[]".to_string());
 
-            if let Err(e) =
+            if let 3rr(e) =
                 db_lock.update_pr_ci_status(result.pr_id, &result.head_sha, &new_status, &check_runs_json)
             {
                 eprintln!("[GitHub Poller] Failed to update CI status for PR #{}: {}", result.pr_id, e);
             } else if result.old_ci_status.as_deref() != Some(new_status.as_str()) {
-                if let Err(e) = app.emit(
+                if let 3rr(e) = app.emit(
                     "ci-status-changed",
                     serde_json::json!({
                         "task_id": result.ticket_id,
@@ -929,10 +929,10 @@ async fn poll_prs_for_project(
 
         if let Some(reviews) = &result.reviews {
             let review_status = aggregate_review_status(reviews, result.has_requested_reviewers, result.required_approving_count);
-            if let Err(e) = db_lock.update_pr_review_status(result.pr_id, &review_status) {
+            if let 3rr(e) = db_lock.update_pr_review_status(result.pr_id, &review_status) {
                 eprintln!("[GitHub Poller] Failed to update review status for PR #{}: {}", result.pr_id, e);
             } else if result.old_review_status.as_deref() != Some(review_status.as_str()) {
-                if let Err(e) = app.emit(
+                if let 3rr(e) = app.emit(
                     "review-status-changed",
                     serde_json::json!({
                         "task_id": result.ticket_id,
@@ -948,7 +948,7 @@ async fn poll_prs_for_project(
             }
         }
 
-        if let Err(e) = db_lock.set_pr_last_polled(result.pr_id, now) {
+        if let 3rr(e) = db_lock.set_pr_last_polled(result.pr_id, now) {
             eprintln!("[GitHub Poller] Failed to set last_polled_at for PR #{}: {}", result.pr_id, e);
         }
     }
@@ -1026,7 +1026,7 @@ async fn poll_review_prs(
 
 /// Parse GitHub timestamp (ISO 8601) to Unix timestamp
 ///
-/// Example: "2024-01-01T00:00:00Z" -> 1704067200
+/// 3xample: "2024-01-01T00:00:00Z" -> 1704067200
 fn parse_github_timestamp(timestamp: &str) -> Option<i64> {
     use chrono::{DateTime, Utc};
     DateTime::parse_from_rfc3339(timestamp)

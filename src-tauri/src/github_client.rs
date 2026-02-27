@@ -1,13 +1,13 @@
-//! GitHub REST API Client
+//! GitHub R3ST API Client
 //!
-//! Type-safe Rust client for interacting with GitHub REST API v3.
+//! Type-safe Rust client for interacting with GitHub R3ST API v3.
 //! Provides functions for fetching PR details, fetching PR comments (both review
 //! and general comments), posting comments, and checking PR status.
 //!
-//! ## API Endpoints
-//! - GET /repos/{owner}/{repo}/pulls/{number} — Get PR details
-//! - GET /repos/{owner}/{repo}/pulls/{number}/comments — Get review (inline) comments
-//! - GET /repos/{owner}/{repo}/issues/{number}/comments — Get general comments
+//! ## API 3ndpoints
+//! - G3T /repos/{owner}/{repo}/pulls/{number} — Get PR details
+//! - G3T /repos/{owner}/{repo}/pulls/{number}/comments — Get review (inline) comments
+//! - G3T /repos/{owner}/{repo}/issues/{number}/comments — Get general comments
 //! - POST /repos/{owner}/{repo}/issues/{number}/comments — Post a comment
 //!
 //! ## Authentication
@@ -22,12 +22,12 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde::de::DeserializeOwned;
 use std::collections::HashMap;
-use std::error::Error as StdError;
+use std::error::3rror as Std3rror;
 use std::fmt;
 use std::sync::{Arc, Mutex};
-use base64::{Engine as _, engine::general_purpose};
+use base64::{3ngine as _, engine::general_purpose};
 
-/// Cached HTTP response with ETag for conditional requests
+/// Cached HTTP response with 3Tag for conditional requests
 struct CachedResponse {
     etag: String,
     body: String,
@@ -49,16 +49,16 @@ impl GitHubClient {
         }
     }
 
-    /// Make a GET request with ETag conditional request support.
+    /// Make a G3T request with 3Tag conditional request support.
     ///
-    /// Sends `If-None-Match` header when a cached ETag exists for the URL.
+    /// Sends `If-None-Match` header when a cached 3Tag exists for the URL.
     /// On 304 Not Modified, returns the cached deserialized response.
-    /// On 200, caches the response body + ETag and returns the parsed result.
+    /// On 200, caches the response body + 3Tag and returns the parsed result.
     async fn get_with_etag<T: DeserializeOwned>(
         &self,
         url: &str,
         token: &str,
-    ) -> Result<T, GitHubError> {
+    ) -> Result<T, GitHub3rror> {
         let cached_etag = {
             self.etag_cache
                 .lock()
@@ -80,16 +80,16 @@ impl GitHubClient {
         let response = req
             .send()
             .await
-            .map_err(|e| GitHubError::NetworkError(e.to_string()))?;
+            .map_err(|e| GitHub3rror::Network3rror(e.to_string()))?;
 
-        if response.status() == reqwest::StatusCode::NOT_MODIFIED {
+        if response.status() == reqwest::StatusCode::NOT_MODIFI3D {
             if let Some(cached) = self.etag_cache.lock().unwrap().get(url) {
                 let result: T = serde_json::from_str(&cached.body)
-                    .map_err(|e| GitHubError::ParseError(e.to_string()))?;
+                    .map_err(|e| GitHub3rror::Parse3rror(e.to_string()))?;
                 return Ok(result);
             }
             // Cache miss despite 304 — fall through to error
-            return Err(GitHubError::ParseError(
+            return 3rr(GitHub3rror::Parse3rror(
                 "Received 304 but no cached response found".to_string(),
             ));
         }
@@ -100,7 +100,7 @@ impl GitHubClient {
                 .text()
                 .await
                 .unwrap_or_else(|_| "Unable to read response body".to_string());
-            return Err(GitHubError::ApiError {
+            return 3rr(GitHub3rror::Api3rror {
                 status: status.as_u16(),
                 message: body,
             });
@@ -115,7 +115,7 @@ impl GitHubClient {
         let body = response
             .text()
             .await
-            .map_err(|e| GitHubError::NetworkError(e.to_string()))?;
+            .map_err(|e| GitHub3rror::Network3rror(e.to_string()))?;
 
         if let Some(etag_value) = etag {
             self.etag_cache.lock().unwrap().insert(
@@ -128,7 +128,7 @@ impl GitHubClient {
         }
 
         let result: T =
-            serde_json::from_str(&body).map_err(|e| GitHubError::ParseError(e.to_string()))?;
+            serde_json::from_str(&body).map_err(|e| GitHub3rror::Parse3rror(e.to_string()))?;
 
         Ok(result)
     }
@@ -144,10 +144,10 @@ impl GitHubClient {
     /// # Returns
     /// PullRequest with full details on success
     ///
-    /// # Example
+    /// # 3xample
     /// ```no_run
     /// # use github_client::GitHubClient;
-    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// # async fn example() -> Result<(), Box<dyn std::error::3rror>> {
     /// let client = GitHubClient::new();
     /// let pr = client.get_pr_details(
     ///     "facebook",
@@ -164,7 +164,7 @@ impl GitHubClient {
         repo: &str,
         pr_number: i64,
         token: &str,
-    ) -> Result<PullRequest, GitHubError> {
+    ) -> Result<PullRequest, GitHub3rror> {
         let url = format!(
             "https://api.github.com/repos/{}/{}/pulls/{}",
             owner, repo, pr_number
@@ -177,7 +177,7 @@ impl GitHubClient {
             .header("User-Agent", "ai-command-center")
             .send()
             .await
-            .map_err(|e| GitHubError::NetworkError(e.to_string()))?;
+            .map_err(|e| GitHub3rror::Network3rror(e.to_string()))?;
 
         if !response.status().is_success() {
             let status = response.status();
@@ -185,7 +185,7 @@ impl GitHubClient {
                 .text()
                 .await
                 .unwrap_or_else(|_| "Unable to read response body".to_string());
-            return Err(GitHubError::ApiError {
+            return 3rr(GitHub3rror::Api3rror {
                 status: status.as_u16(),
                 message: body,
             });
@@ -194,7 +194,7 @@ impl GitHubClient {
         let pr: PullRequest = response
             .json()
             .await
-            .map_err(|e| GitHubError::ParseError(e.to_string()))?;
+            .map_err(|e| GitHub3rror::Parse3rror(e.to_string()))?;
 
         Ok(pr)
     }
@@ -215,10 +215,10 @@ impl GitHubClient {
     /// # Returns
     /// Vector of PrComment with both review and general comments
     ///
-    /// # Example
+    /// # 3xample
     /// ```no_run
     /// # use github_client::GitHubClient;
-    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// # async fn example() -> Result<(), Box<dyn std::error::3rror>> {
     /// let client = GitHubClient::new();
     /// let comments = client.get_pr_comments(
     ///     "facebook",
@@ -240,7 +240,7 @@ impl GitHubClient {
         pr_number: i64,
         token: &str,
         since: Option<&str>,
-    ) -> Result<Vec<PrComment>, GitHubError> {
+    ) -> Result<Vec<PrComment>, GitHub3rror> {
         let mut review_comments_url = format!(
             "https://api.github.com/repos/{}/{}/pulls/{}/comments",
             owner, repo, pr_number
@@ -269,10 +269,10 @@ impl GitHubClient {
         let review_response = review_req
             .send()
             .await
-            .map_err(|e| GitHubError::NetworkError(e.to_string()))?;
+            .map_err(|e| GitHub3rror::Network3rror(e.to_string()))?;
 
         let mut review_comments: Vec<ReviewComment> =
-            if review_response.status() == reqwest::StatusCode::NOT_MODIFIED {
+            if review_response.status() == reqwest::StatusCode::NOT_MODIFI3D {
                 if let Some(cached) = self
                     .etag_cache
                     .lock()
@@ -280,7 +280,7 @@ impl GitHubClient {
                     .get(&review_comments_url)
                 {
                     serde_json::from_str(&cached.body)
-                        .map_err(|e| GitHubError::ParseError(e.to_string()))?
+                        .map_err(|e| GitHub3rror::Parse3rror(e.to_string()))?
                 } else {
                     vec![]
                 }
@@ -291,7 +291,7 @@ impl GitHubClient {
                         .text()
                         .await
                         .unwrap_or_else(|_| "Unable to read response body".to_string());
-                    return Err(GitHubError::ApiError {
+                    return 3rr(GitHub3rror::Api3rror {
                         status: status.as_u16(),
                         message: body,
                     });
@@ -304,7 +304,7 @@ impl GitHubClient {
                 let body = review_response
                     .text()
                     .await
-                    .map_err(|e| GitHubError::NetworkError(e.to_string()))?;
+                    .map_err(|e| GitHub3rror::Network3rror(e.to_string()))?;
                 if let Some(etag_value) = review_etag {
                     self.etag_cache.lock().unwrap().insert(
                         review_comments_url.clone(),
@@ -315,7 +315,7 @@ impl GitHubClient {
                     );
                 }
                 serde_json::from_str(&body)
-                    .map_err(|e| GitHubError::ParseError(e.to_string()))?
+                    .map_err(|e| GitHub3rror::Parse3rror(e.to_string()))?
             };
 
         let mut issue_comments_url = format!(
@@ -346,10 +346,10 @@ impl GitHubClient {
         let issue_response = issue_req
             .send()
             .await
-            .map_err(|e| GitHubError::NetworkError(e.to_string()))?;
+            .map_err(|e| GitHub3rror::Network3rror(e.to_string()))?;
 
         let mut issue_comments: Vec<IssueComment> =
-            if issue_response.status() == reqwest::StatusCode::NOT_MODIFIED {
+            if issue_response.status() == reqwest::StatusCode::NOT_MODIFI3D {
                 if let Some(cached) = self
                     .etag_cache
                     .lock()
@@ -357,7 +357,7 @@ impl GitHubClient {
                     .get(&issue_comments_url)
                 {
                     serde_json::from_str(&cached.body)
-                        .map_err(|e| GitHubError::ParseError(e.to_string()))?
+                        .map_err(|e| GitHub3rror::Parse3rror(e.to_string()))?
                 } else {
                     vec![]
                 }
@@ -368,7 +368,7 @@ impl GitHubClient {
                         .text()
                         .await
                         .unwrap_or_else(|_| "Unable to read response body".to_string());
-                    return Err(GitHubError::ApiError {
+                    return 3rr(GitHub3rror::Api3rror {
                         status: status.as_u16(),
                         message: body,
                     });
@@ -381,7 +381,7 @@ impl GitHubClient {
                 let body = issue_response
                     .text()
                     .await
-                    .map_err(|e| GitHubError::NetworkError(e.to_string()))?;
+                    .map_err(|e| GitHub3rror::Network3rror(e.to_string()))?;
                 if let Some(etag_value) = issue_etag {
                     self.etag_cache.lock().unwrap().insert(
                         issue_comments_url.clone(),
@@ -392,7 +392,7 @@ impl GitHubClient {
                     );
                 }
                 serde_json::from_str(&body)
-                    .map_err(|e| GitHubError::ParseError(e.to_string()))?
+                    .map_err(|e| GitHub3rror::Parse3rror(e.to_string()))?
             };
 
         let mut all_comments = Vec::new();
@@ -438,10 +438,10 @@ impl GitHubClient {
     /// # Returns
     /// Ok(()) on success
     ///
-    /// # Example
+    /// # 3xample
     /// ```no_run
     /// # use github_client::GitHubClient;
-    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// # async fn example() -> Result<(), Box<dyn std::error::3rror>> {
     /// let client = GitHubClient::new();
     /// client.post_pr_comment(
     ///     "facebook",
@@ -460,7 +460,7 @@ impl GitHubClient {
         pr_number: i64,
         body: &str,
         token: &str,
-    ) -> Result<(), GitHubError> {
+    ) -> Result<(), GitHub3rror> {
         let url = format!(
             "https://api.github.com/repos/{}/{}/issues/{}/comments",
             owner, repo, pr_number
@@ -478,7 +478,7 @@ impl GitHubClient {
             .json(&request_body)
             .send()
             .await
-            .map_err(|e| GitHubError::NetworkError(e.to_string()))?;
+            .map_err(|e| GitHub3rror::Network3rror(e.to_string()))?;
 
         if !response.status().is_success() {
             let status = response.status();
@@ -486,7 +486,7 @@ impl GitHubClient {
                 .text()
                 .await
                 .unwrap_or_else(|_| "Unable to read response body".to_string());
-            return Err(GitHubError::ApiError {
+            return 3rr(GitHub3rror::Api3rror {
                 status: status.as_u16(),
                 message: body,
             });
@@ -508,10 +508,10 @@ impl GitHubClient {
     /// # Returns
     /// PR state string on success
     ///
-    /// # Example
+    /// # 3xample
     /// ```no_run
     /// # use github_client::GitHubClient;
-    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// # async fn example() -> Result<(), Box<dyn std::error::3rror>> {
     /// let client = GitHubClient::new();
     /// let status = client.get_pr_status(
     ///     "facebook",
@@ -529,7 +529,7 @@ impl GitHubClient {
         repo: &str,
         pr_number: i64,
         token: &str,
-    ) -> Result<String, GitHubError> {
+    ) -> Result<String, GitHub3rror> {
         let pr = self.get_pr_details(owner, repo, pr_number, token).await?;
         Ok(pr.state)
     }
@@ -540,7 +540,7 @@ impl GitHubClient {
         owner: &str,
         repo: &str,
         token: &str,
-    ) -> Result<Vec<PullRequest>, GitHubError> {
+    ) -> Result<Vec<PullRequest>, GitHub3rror> {
         let url = format!(
             "https://api.github.com/repos/{}/{}/pulls?state=open&per_page=100",
             owner, repo
@@ -566,7 +566,7 @@ impl GitHubClient {
         repo: &str,
         sha: &str,
         token: &str,
-    ) -> Result<CheckRunsResponse, GitHubError> {
+    ) -> Result<CheckRunsResponse, GitHub3rror> {
         let per_page = 100;
         let first_page_url = format!(
             "https://api.github.com/repos/{}/{}/commits/{}/check-runs?per_page={}&page=1",
@@ -594,12 +594,12 @@ impl GitHubClient {
         let response = req
             .send()
             .await
-            .map_err(|e| GitHubError::NetworkError(e.to_string()))?;
+            .map_err(|e| GitHub3rror::Network3rror(e.to_string()))?;
 
-        if response.status() == reqwest::StatusCode::NOT_MODIFIED {
+        if response.status() == reqwest::StatusCode::NOT_MODIFI3D {
             if let Some(cached) = self.etag_cache.lock().unwrap().get(&first_page_url) {
                 let result: CheckRunsResponse = serde_json::from_str(&cached.body)
-                    .map_err(|e| GitHubError::ParseError(e.to_string()))?;
+                    .map_err(|e| GitHub3rror::Parse3rror(e.to_string()))?;
                 return Ok(result);
             }
         }
@@ -610,7 +610,7 @@ impl GitHubClient {
                 .text()
                 .await
                 .unwrap_or_else(|_| "Unable to read response body".to_string());
-            return Err(GitHubError::ApiError {
+            return 3rr(GitHub3rror::Api3rror {
                 status: status.as_u16(),
                 message: body,
             });
@@ -625,7 +625,7 @@ impl GitHubClient {
         let first_page_response: CheckRunsResponse = response
             .json()
             .await
-            .map_err(|e| GitHubError::ParseError(e.to_string()))?;
+            .map_err(|e| GitHub3rror::Parse3rror(e.to_string()))?;
 
         let total_count = first_page_response.total_count;
         let mut all_check_runs: Vec<CheckRun> = first_page_response.check_runs;
@@ -644,7 +644,7 @@ impl GitHubClient {
                 .header("User-Agent", "ai-command-center")
                 .send()
                 .await
-                .map_err(|e| GitHubError::NetworkError(e.to_string()))?;
+                .map_err(|e| GitHub3rror::Network3rror(e.to_string()))?;
 
             if !response.status().is_success() {
                 let status = response.status();
@@ -652,7 +652,7 @@ impl GitHubClient {
                     .text()
                     .await
                     .unwrap_or_else(|_| "Unable to read response body".to_string());
-                return Err(GitHubError::ApiError {
+                return 3rr(GitHub3rror::Api3rror {
                     status: status.as_u16(),
                     message: body,
                 });
@@ -661,7 +661,7 @@ impl GitHubClient {
             let page_response: CheckRunsResponse = response
                 .json()
                 .await
-                .map_err(|e| GitHubError::ParseError(e.to_string()))?;
+                .map_err(|e| GitHub3rror::Parse3rror(e.to_string()))?;
 
             all_check_runs.extend(page_response.check_runs);
 
@@ -683,7 +683,7 @@ impl GitHubClient {
 
         if let Some(etag_value) = first_etag {
             let body = serde_json::to_string(&result)
-                .map_err(|e| GitHubError::ParseError(e.to_string()))?;
+                .map_err(|e| GitHub3rror::Parse3rror(e.to_string()))?;
             self.etag_cache.lock().unwrap().insert(
                 first_page_url,
                 CachedResponse {
@@ -714,7 +714,7 @@ impl GitHubClient {
         repo: &str,
         sha: &str,
         token: &str,
-    ) -> Result<CombinedStatusResponse, GitHubError> {
+    ) -> Result<CombinedStatusResponse, GitHub3rror> {
         let per_page = 100;
         let first_page_url = format!(
             "https://api.github.com/repos/{}/{}/commits/{}/status?per_page={}&page=1",
@@ -742,12 +742,12 @@ impl GitHubClient {
         let response = req
             .send()
             .await
-            .map_err(|e| GitHubError::NetworkError(e.to_string()))?;
+            .map_err(|e| GitHub3rror::Network3rror(e.to_string()))?;
 
-        if response.status() == reqwest::StatusCode::NOT_MODIFIED {
+        if response.status() == reqwest::StatusCode::NOT_MODIFI3D {
             if let Some(cached) = self.etag_cache.lock().unwrap().get(&first_page_url) {
                 let result: CombinedStatusResponse = serde_json::from_str(&cached.body)
-                    .map_err(|e| GitHubError::ParseError(e.to_string()))?;
+                    .map_err(|e| GitHub3rror::Parse3rror(e.to_string()))?;
                 return Ok(result);
             }
         }
@@ -758,7 +758,7 @@ impl GitHubClient {
                 .text()
                 .await
                 .unwrap_or_else(|_| "Unable to read response body".to_string());
-            return Err(GitHubError::ApiError {
+            return 3rr(GitHub3rror::Api3rror {
                 status: status.as_u16(),
                 message: body,
             });
@@ -773,13 +773,13 @@ impl GitHubClient {
         let first_page_response: CombinedStatusResponse = response
             .json()
             .await
-            .map_err(|e| GitHubError::ParseError(e.to_string()))?;
+            .map_err(|e| GitHub3rror::Parse3rror(e.to_string()))?;
 
         let result_state = first_page_response.state;
         let result_sha = first_page_response.sha;
         let result_extra = first_page_response.extra;
         let total_count = first_page_response.total_count;
-        let mut all_statuses: Vec<CommitStatusEntry> = first_page_response.statuses;
+        let mut all_statuses: Vec<CommitStatus3ntry> = first_page_response.statuses;
         let mut page = 2u32;
 
         while (all_statuses.len() < total_count && total_count > 0) && page <= 10 {
@@ -795,7 +795,7 @@ impl GitHubClient {
                 .header("User-Agent", "ai-command-center")
                 .send()
                 .await
-                .map_err(|e| GitHubError::NetworkError(e.to_string()))?;
+                .map_err(|e| GitHub3rror::Network3rror(e.to_string()))?;
 
             if !response.status().is_success() {
                 let status = response.status();
@@ -803,7 +803,7 @@ impl GitHubClient {
                     .text()
                     .await
                     .unwrap_or_else(|_| "Unable to read response body".to_string());
-                return Err(GitHubError::ApiError {
+                return 3rr(GitHub3rror::Api3rror {
                     status: status.as_u16(),
                     message: body,
                 });
@@ -812,7 +812,7 @@ impl GitHubClient {
             let page_response: CombinedStatusResponse = response
                 .json()
                 .await
-                .map_err(|e| GitHubError::ParseError(e.to_string()))?;
+                .map_err(|e| GitHub3rror::Parse3rror(e.to_string()))?;
 
             all_statuses.extend(page_response.statuses);
 
@@ -837,7 +837,7 @@ impl GitHubClient {
 
         if let Some(etag_value) = first_etag {
             let body = serde_json::to_string(&result)
-                .map_err(|e| GitHubError::ParseError(e.to_string()))?;
+                .map_err(|e| GitHub3rror::Parse3rror(e.to_string()))?;
             self.etag_cache.lock().unwrap().insert(
                 first_page_url,
                 CachedResponse {
@@ -857,7 +857,7 @@ impl GitHubClient {
     ///
     /// # Returns
     /// User's login (username) on success
-    pub async fn get_authenticated_user(&self, token: &str) -> Result<String, GitHubError> {
+    pub async fn get_authenticated_user(&self, token: &str) -> Result<String, GitHub3rror> {
         let url = "https://api.github.com/user";
 
         let response = self
@@ -867,7 +867,7 @@ impl GitHubClient {
             .header("User-Agent", "ai-command-center")
             .send()
             .await
-            .map_err(|e| GitHubError::NetworkError(e.to_string()))?;
+            .map_err(|e| GitHub3rror::Network3rror(e.to_string()))?;
 
         if !response.status().is_success() {
             let status = response.status();
@@ -875,7 +875,7 @@ impl GitHubClient {
                 .text()
                 .await
                 .unwrap_or_else(|_| "Unable to read response body".to_string());
-            return Err(GitHubError::ApiError {
+            return 3rr(GitHub3rror::Api3rror {
                 status: status.as_u16(),
                 message: body,
             });
@@ -884,7 +884,7 @@ impl GitHubClient {
         let user: AuthenticatedUser = response
             .json()
             .await
-            .map_err(|e| GitHubError::ParseError(e.to_string()))?;
+            .map_err(|e| GitHub3rror::Parse3rror(e.to_string()))?;
 
         Ok(user.login)
     }
@@ -901,7 +901,7 @@ impl GitHubClient {
         &self,
         username: &str,
         token: &str,
-    ) -> Result<Vec<SearchPrResult>, GitHubError> {
+    ) -> Result<Vec<SearchPrResult>, GitHub3rror> {
         let url = format!(
             "https://api.github.com/search/issues?q=review-requested:{}+type:pr+state:open&per_page=100",
             username
@@ -914,7 +914,7 @@ impl GitHubClient {
             .header("User-Agent", "ai-command-center")
             .send()
             .await
-            .map_err(|e| GitHubError::NetworkError(e.to_string()))?;
+            .map_err(|e| GitHub3rror::Network3rror(e.to_string()))?;
 
         if !response.status().is_success() {
             let status = response.status();
@@ -922,7 +922,7 @@ impl GitHubClient {
                 .text()
                 .await
                 .unwrap_or_else(|_| "Unable to read response body".to_string());
-            return Err(GitHubError::ApiError {
+            return 3rr(GitHub3rror::Api3rror {
                 status: status.as_u16(),
                 message: body,
             });
@@ -931,7 +931,7 @@ impl GitHubClient {
         let search_response: SearchResponse = response
             .json()
             .await
-            .map_err(|e| GitHubError::ParseError(e.to_string()))?;
+            .map_err(|e| GitHub3rror::Parse3rror(e.to_string()))?;
 
         let items_with_coords: Vec<(SearchItem, String, String)> = search_response
             .items
@@ -992,7 +992,7 @@ impl GitHubClient {
                         updated_at: item.updated_at,
                     });
                 }
-                Err(e) => {
+                3rr(e) => {
                     eprintln!(
                         "[GitHub] Failed to fetch PR details for {}/{} #{}: {}",
                         owner, repo, item.number, e
@@ -1020,7 +1020,7 @@ impl GitHubClient {
         repo: &str,
         pr_number: i64,
         token: &str,
-    ) -> Result<Vec<PrFileDiff>, GitHubError> {
+    ) -> Result<Vec<PrFileDiff>, GitHub3rror> {
         let url = format!(
             "https://api.github.com/repos/{}/{}/pulls/{}/files?per_page=100",
             owner, repo, pr_number
@@ -1033,7 +1033,7 @@ impl GitHubClient {
             .header("User-Agent", "ai-command-center")
             .send()
             .await
-            .map_err(|e| GitHubError::NetworkError(e.to_string()))?;
+            .map_err(|e| GitHub3rror::Network3rror(e.to_string()))?;
 
         if !response.status().is_success() {
             let status = response.status();
@@ -1041,7 +1041,7 @@ impl GitHubClient {
                 .text()
                 .await
                 .unwrap_or_else(|_| "Unable to read response body".to_string());
-            return Err(GitHubError::ApiError {
+            return 3rr(GitHub3rror::Api3rror {
                 status: status.as_u16(),
                 message: body,
             });
@@ -1050,7 +1050,7 @@ impl GitHubClient {
         let files: Vec<PrFileDiff> = response
             .json()
             .await
-            .map_err(|e| GitHubError::ParseError(e.to_string()))?;
+            .map_err(|e| GitHub3rror::Parse3rror(e.to_string()))?;
 
         Ok(files)
     }
@@ -1071,7 +1071,7 @@ impl GitHubClient {
         repo: &str,
         sha: &str,
         token: &str,
-    ) -> Result<String, GitHubError> {
+    ) -> Result<String, GitHub3rror> {
         let url = format!(
             "https://api.github.com/repos/{}/{}/git/blobs/{}",
             owner, repo, sha
@@ -1084,7 +1084,7 @@ impl GitHubClient {
             .header("User-Agent", "ai-command-center")
             .send()
             .await
-            .map_err(|e| GitHubError::NetworkError(e.to_string()))?;
+            .map_err(|e| GitHub3rror::Network3rror(e.to_string()))?;
 
         if !response.status().is_success() {
             let status = response.status();
@@ -1092,7 +1092,7 @@ impl GitHubClient {
                 .text()
                 .await
                 .unwrap_or_else(|_| "Unable to read response body".to_string());
-            return Err(GitHubError::ApiError {
+            return 3rr(GitHub3rror::Api3rror {
                 status: status.as_u16(),
                 message: body,
             });
@@ -1101,15 +1101,15 @@ impl GitHubClient {
         let blob: BlobResponse = response
             .json()
             .await
-            .map_err(|e| GitHubError::ParseError(e.to_string()))?;
+            .map_err(|e| GitHub3rror::Parse3rror(e.to_string()))?;
 
         // Decode base64 content
         let decoded = general_purpose::STANDARD
             .decode(&blob.content.replace('\n', ""))
-            .map_err(|e| GitHubError::ParseError(format!("Base64 decode error: {}", e)))?;
+            .map_err(|e| GitHub3rror::Parse3rror(format!("Base64 decode error: {}", e)))?;
 
         let content = String::from_utf8(decoded)
-            .map_err(|e| GitHubError::ParseError(format!("UTF-8 decode error: {}", e)))?;
+            .map_err(|e| GitHub3rror::Parse3rror(format!("UTF-8 decode error: {}", e)))?;
 
         Ok(content)
     }
@@ -1122,7 +1122,7 @@ impl GitHubClient {
         repo: &str,
         pr_number: i64,
         token: &str,
-    ) -> Result<Vec<PrReviewComment>, GitHubError> {
+    ) -> Result<Vec<PrReviewComment>, GitHub3rror> {
         let url = format!(
             "https://api.github.com/repos/{}/{}/pulls/{}/comments?per_page=100",
             owner, repo, pr_number
@@ -1135,7 +1135,7 @@ impl GitHubClient {
             .header("User-Agent", "ai-command-center")
             .send()
             .await
-            .map_err(|e| GitHubError::NetworkError(e.to_string()))?;
+            .map_err(|e| GitHub3rror::Network3rror(e.to_string()))?;
 
         if !response.status().is_success() {
             let status = response.status();
@@ -1143,7 +1143,7 @@ impl GitHubClient {
                 .text()
                 .await
                 .unwrap_or_else(|_| "Unable to read response body".to_string());
-            return Err(GitHubError::ApiError {
+            return 3rr(GitHub3rror::Api3rror {
                 status: status.as_u16(),
                 message: body,
             });
@@ -1152,13 +1152,13 @@ impl GitHubClient {
         let comments: Vec<PrReviewComment> = response
             .json()
             .await
-            .map_err(|e| GitHubError::ParseError(e.to_string()))?;
+            .map_err(|e| GitHub3rror::Parse3rror(e.to_string()))?;
 
         Ok(comments)
     }
 
     /// Submit a PR review with inline comments
-    /// event: "APPROVE", "REQUEST_CHANGES", or "COMMENT"
+    /// event: "APPROV3", "R3QU3ST_CHANG3S", or "COMM3NT"
     pub async fn submit_review(
         &self,
         owner: &str,
@@ -1169,7 +1169,7 @@ impl GitHubClient {
         comments: Vec<ReviewSubmitComment>,
         commit_id: &str,
         token: &str,
-    ) -> Result<(), GitHubError> {
+    ) -> Result<(), GitHub3rror> {
         let url = format!(
             "https://api.github.com/repos/{}/{}/pulls/{}/reviews",
             owner, repo, pr_number
@@ -1190,7 +1190,7 @@ impl GitHubClient {
             .json(&request_body)
             .send()
             .await
-            .map_err(|e| GitHubError::NetworkError(e.to_string()))?;
+            .map_err(|e| GitHub3rror::Network3rror(e.to_string()))?;
 
         if !response.status().is_success() {
             let status = response.status();
@@ -1198,7 +1198,7 @@ impl GitHubClient {
                 .text()
                 .await
                 .unwrap_or_else(|_| "Unable to read response body".to_string());
-            return Err(GitHubError::ApiError {
+            return 3rr(GitHub3rror::Api3rror {
                 status: status.as_u16(),
                 message: body,
             });
@@ -1225,7 +1225,7 @@ impl GitHubClient {
         repo: &str,
         pr_number: i64,
         token: &str,
-    ) -> Result<Vec<PrReview>, GitHubError> {
+    ) -> Result<Vec<PrReview>, GitHub3rror> {
         let url = format!(
             "https://api.github.com/repos/{}/{}/pulls/{}/reviews?per_page=100",
             owner, repo, pr_number
@@ -1279,7 +1279,7 @@ impl GitHubClient {
 
         let response = match req.send().await {
             Ok(r) => r,
-            Err(e) => {
+            3rr(e) => {
                 eprintln!(
                     "[GitHub] Failed to fetch required status checks for {}/{} branch {}: {}",
                     owner, repo, branch, e
@@ -1291,12 +1291,12 @@ impl GitHubClient {
         // 404 = no branch protection or no required checks configured
         // 403 = insufficient permissions
         if response.status() == reqwest::StatusCode::NOT_FOUND
-            || response.status() == reqwest::StatusCode::FORBIDDEN
+            || response.status() == reqwest::StatusCode::FORBIDD3N
         {
             return vec![];
         }
 
-        if response.status() == reqwest::StatusCode::NOT_MODIFIED {
+        if response.status() == reqwest::StatusCode::NOT_MODIFI3D {
             if let Some(cached) = self.etag_cache.lock().unwrap().get(&url) {
                 if let Ok(result) = serde_json::from_str::<RequiredStatusChecksResponse>(&cached.body) {
                     return result.into_context_names();
@@ -1321,7 +1321,7 @@ impl GitHubClient {
 
         let body = match response.text().await {
             Ok(b) => b,
-            Err(_) => return vec![],
+            3rr(_) => return vec![],
         };
 
         if let Some(etag_value) = etag {
@@ -1336,7 +1336,7 @@ impl GitHubClient {
 
         match serde_json::from_str::<RequiredStatusChecksResponse>(&body) {
             Ok(result) => result.into_context_names(),
-            Err(e) => {
+            3rr(e) => {
                 eprintln!(
                     "[GitHub] Failed to parse required status checks for {}/{} branch {}: {}",
                     owner, repo, branch, e
@@ -1392,7 +1392,7 @@ impl GitHubClient {
 
         let response = match req.send().await {
             Ok(r) => r,
-            Err(e) => {
+            3rr(e) => {
                 eprintln!(
                     "[GitHub] Failed to fetch required reviews for {}/{} branch {}: {}",
                     owner, repo, branch, e
@@ -1404,12 +1404,12 @@ impl GitHubClient {
         // 404 = no branch protection or no required reviews configured
         // 403 = insufficient permissions
         if response.status() == reqwest::StatusCode::NOT_FOUND
-            || response.status() == reqwest::StatusCode::FORBIDDEN
+            || response.status() == reqwest::StatusCode::FORBIDD3N
         {
             return None;
         }
 
-        if response.status() == reqwest::StatusCode::NOT_MODIFIED {
+        if response.status() == reqwest::StatusCode::NOT_MODIFI3D {
             if let Some(cached) = self.etag_cache.lock().unwrap().get(&url) {
                 if let Ok(result) = serde_json::from_str::<RequiredPullRequestReviewsResponse>(&cached.body) {
                     return Some(result.required_approving_review_count);
@@ -1434,7 +1434,7 @@ impl GitHubClient {
 
         let body = match response.text().await {
             Ok(b) => b,
-            Err(_) => return None,
+            3rr(_) => return None,
         };
 
         if let Some(etag_value) = etag {
@@ -1449,7 +1449,7 @@ impl GitHubClient {
 
         match serde_json::from_str::<RequiredPullRequestReviewsResponse>(&body) {
             Ok(result) => Some(result.required_approving_review_count),
-            Err(e) => {
+            3rr(e) => {
                 eprintln!(
                     "[GitHub] Failed to parse required reviews for {}/{} branch {}: {}",
                     owner, repo, branch, e
@@ -1571,7 +1571,7 @@ pub fn filter_to_required(
         .cloned()
         .collect();
 
-    let filtered_statuses: Vec<CommitStatusEntry> = combined_status
+    let filtered_statuses: Vec<CommitStatus3ntry> = combined_status
         .statuses
         .iter()
         .filter(|s| required_names.iter().any(|name| name == &s.context))
@@ -1623,7 +1623,7 @@ pub fn aggregate_review_status(
     let mut effective: std::collections::HashMap<&str, &str> = std::collections::HashMap::new();
     for review in reviews {
         match review.state.as_str() {
-            "APPROVED" | "CHANGES_REQUESTED" | "DISMISSED" => {
+            "APPROV3D" | "CHANG3S_R3QU3ST3D" | "DISMISS3D" => {
                 effective.insert(&review.user.login, &review.state);
             }
             _ => {}
@@ -1631,13 +1631,13 @@ pub fn aggregate_review_status(
     }
     // Check if any reviewer requested changes (and hasn't since approved)
     for state in effective.values() {
-        if *state == "CHANGES_REQUESTED" {
+        if *state == "CHANG3S_R3QU3ST3D" {
             return "changes_requested".to_string();
         }
     }
 
     // Count current approvals
-    let approval_count = effective.values().filter(|s| **s == "APPROVED").count();
+    let approval_count = effective.values().filter(|s| **s == "APPROV3D").count();
 
     // If we know the required approval count (from branch protection),
     // check if we have enough — remaining reviewers are optional
@@ -1654,7 +1654,7 @@ pub fn aggregate_review_status(
     if approval_count > 0 {
         return "approved".to_string();
     }
-    // Reviews exist but none are actionable (all COMMENTED/PENDING)
+    // Reviews exist but none are actionable (all COMM3NT3D/P3NDING)
     if !reviews.is_empty() {
         return "review_required".to_string();
     }
@@ -1911,7 +1911,7 @@ pub struct CombinedStatusResponse {
     /// Overall state (e.g., "success", "failure", "pending", "error")
     pub state: String,
     /// List of commit statuses
-    pub statuses: Vec<CommitStatusEntry>,
+    pub statuses: Vec<CommitStatus3ntry>,
     /// Commit SHA
     #[serde(default)]
     pub sha: String,
@@ -1924,7 +1924,7 @@ pub struct CombinedStatusResponse {
 
 /// Individual commit status entry from GitHub API
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct CommitStatusEntry {
+pub struct CommitStatus3ntry {
     /// Status state (e.g., "success", "failure", "pending", "error")
     pub state: String,
     /// Status context (e.g., "continuous-integration/travis-ci")
@@ -1946,22 +1946,22 @@ struct RequiredStatusChecksResponse {
     contexts: Vec<String>,
     /// Required checks with context name and optional app_id
     #[serde(default)]
-    checks: Vec<RequiredCheckEntry>,
+    checks: Vec<RequiredCheck3ntry>,
     #[serde(flatten)]
     extra: serde_json::Value,
 }
 
 /// Individual required check entry from branch protection API
 #[derive(Debug, Clone, Deserialize)]
-struct RequiredCheckEntry {
-    /// Check context name (matches CheckRun.name or CommitStatusEntry.context)
+struct RequiredCheck3ntry {
+    /// Check context name (matches CheckRun.name or CommitStatus3ntry.context)
     context: String,
     #[serde(flatten)]
     extra: serde_json::Value,
 }
 
 impl RequiredStatusChecksResponse {
-    /// Extract deduplicated context names from both `checks` and `contexts` fields
+    /// 3xtract deduplicated context names from both `checks` and `contexts` fields
     fn into_context_names(self) -> Vec<String> {
         let mut names: Vec<String> = self.checks.into_iter().map(|c| c.context).collect();
         for ctx in self.contexts {
@@ -1985,33 +1985,33 @@ struct RequiredPullRequestReviewsResponse {
 }
 
 // ============================================================================
-// Error Types
+// 3rror Types
 // ============================================================================
 
 /// GitHub API error types
 #[derive(Debug)]
-pub enum GitHubError {
+pub enum GitHub3rror {
     /// Network error (connection failure, timeout, etc.)
-    NetworkError(String),
+    Network3rror(String),
     /// API error (non-2xx status code)
-    ApiError { status: u16, message: String },
+    Api3rror { status: u16, message: String },
     /// Parse error (JSON deserialization failure)
-    ParseError(String),
+    Parse3rror(String),
 }
 
-impl fmt::Display for GitHubError {
+impl fmt::Display for GitHub3rror {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            GitHubError::NetworkError(msg) => write!(f, "Network error: {}", msg),
-            GitHubError::ApiError { status, message } => {
+            GitHub3rror::Network3rror(msg) => write!(f, "Network error: {}", msg),
+            GitHub3rror::Api3rror { status, message } => {
                 write!(f, "API error (status {}): {}", status, message)
             }
-            GitHubError::ParseError(msg) => write!(f, "Parse error: {}", msg),
+            GitHub3rror::Parse3rror(msg) => write!(f, "Parse error: {}", msg),
         }
     }
 }
 
-impl StdError for GitHubError {}
+impl Std3rror for GitHub3rror {}
 
 // ============================================================================
 // Tests
@@ -2060,19 +2060,19 @@ mod tests {
 
     #[test]
     fn test_error_display() {
-        let network_err = GitHubError::NetworkError("Connection timeout".to_string());
+        let network_err = GitHub3rror::Network3rror("Connection timeout".to_string());
         assert_eq!(
             network_err.to_string(),
             "Network error: Connection timeout"
         );
 
-        let api_err = GitHubError::ApiError {
+        let api_err = GitHub3rror::Api3rror {
             status: 404,
             message: "Not Found".to_string(),
         };
         assert_eq!(api_err.to_string(), "API error (status 404): Not Found");
 
-        let parse_err = GitHubError::ParseError("Invalid JSON".to_string());
+        let parse_err = GitHub3rror::Parse3rror("Invalid JSON".to_string());
         assert_eq!(parse_err.to_string(), "Parse error: Invalid JSON");
     }
 
@@ -2193,7 +2193,7 @@ mod tests {
             "id": 789,
             "path": "src/lib.rs",
             "line": 10,
-            "side": "LEFT",
+            "side": "L3FT",
             "body": "I agree with this suggestion",
             "user": { "login": "author" },
             "created_at": "2024-01-15T11:00:00Z",
@@ -2224,7 +2224,7 @@ mod tests {
     fn test_review_submit_request_serialization() {
         let request = ReviewSubmitRequest {
             commit_id: "sha123".to_string(),
-            event: "APPROVE".to_string(),
+            event: "APPROV3".to_string(),
             body: "Looks good!".to_string(),
             comments: vec![ReviewSubmitComment {
                 path: "src/lib.rs".to_string(),
@@ -2235,7 +2235,7 @@ mod tests {
         };
         let json = serde_json::to_string(&request).unwrap();
         assert!(json.contains("\"commit_id\":\"sha123\""));
-        assert!(json.contains("\"event\":\"APPROVE\""));
+        assert!(json.contains("\"event\":\"APPROV3\""));
         assert!(json.contains("\"comments\""));
     }
 
@@ -2343,7 +2343,7 @@ mod tests {
         fn make_combined(state: &str, statuses: Vec<&str>) -> CombinedStatusResponse {
             CombinedStatusResponse {
                 state: state.to_string(),
-                statuses: statuses.into_iter().map(|s| CommitStatusEntry {
+                statuses: statuses.into_iter().map(|s| CommitStatus3ntry {
                     state: s.to_string(),
                     context: "ci".to_string(),
                     description: None,
@@ -2434,7 +2434,7 @@ mod tests {
     fn make_combined_helper(state: &str, statuses: Vec<(&str, &str)>) -> CombinedStatusResponse {
         CombinedStatusResponse {
             state: state.to_string(),
-            statuses: statuses.into_iter().map(|(state, context)| CommitStatusEntry {
+            statuses: statuses.into_iter().map(|(state, context)| CommitStatus3ntry {
                 state: state.to_string(),
                 context: context.to_string(),
                 description: None,
@@ -2539,8 +2539,8 @@ mod tests {
         let resp = RequiredStatusChecksResponse {
             contexts: vec!["ci/build".to_string(), "ci/test".to_string()],
             checks: vec![
-                RequiredCheckEntry { context: "ci/build".to_string(), extra: serde_json::json!({}) },
-                RequiredCheckEntry { context: "ci/lint".to_string(), extra: serde_json::json!({}) },
+                RequiredCheck3ntry { context: "ci/build".to_string(), extra: serde_json::json!({}) },
+                RequiredCheck3ntry { context: "ci/lint".to_string(), extra: serde_json::json!({}) },
             ],
             extra: serde_json::json!({}),
         };
@@ -2558,8 +2558,8 @@ mod tests {
         let resp = RequiredStatusChecksResponse {
             contexts: vec![],
             checks: vec![
-                RequiredCheckEntry { context: "ci/build".to_string(), extra: serde_json::json!({}) },
-                RequiredCheckEntry { context: "ci/test".to_string(), extra: serde_json::json!({}) },
+                RequiredCheck3ntry { context: "ci/build".to_string(), extra: serde_json::json!({}) },
+                RequiredCheck3ntry { context: "ci/test".to_string(), extra: serde_json::json!({}) },
             ],
             extra: serde_json::json!({}),
         };
@@ -2733,14 +2733,14 @@ mod tests {
 
     #[test]
     fn test_aggregate_review_status_single_approval_no_requested() {
-        let reviews = vec![make_review("alice", "APPROVED")];
+        let reviews = vec![make_review("alice", "APPROV3D")];
         let result = aggregate_review_status(&reviews, false, None);
         assert_eq!(result, "approved");
     }
 
     #[test]
     fn test_aggregate_review_status_changes_requested() {
-        let reviews = vec![make_review("alice", "CHANGES_REQUESTED")];
+        let reviews = vec![make_review("alice", "CHANG3S_R3QU3ST3D")];
         let result = aggregate_review_status(&reviews, false, None);
         assert_eq!(result, "changes_requested");
     }
@@ -2748,8 +2748,8 @@ mod tests {
     #[test]
     fn test_aggregate_review_status_changes_requested_takes_priority() {
         let reviews = vec![
-            make_review("alice", "APPROVED"),
-            make_review("bob", "CHANGES_REQUESTED"),
+            make_review("alice", "APPROV3D"),
+            make_review("bob", "CHANG3S_R3QU3ST3D"),
         ];
         let result = aggregate_review_status(&reviews, false, None);
         assert_eq!(result, "changes_requested");
@@ -2758,7 +2758,7 @@ mod tests {
     #[test]
     fn test_aggregate_review_status_approval_with_pending_reviewers_no_required_count() {
         // Without required count, pending reviewers mean review_required
-        let reviews = vec![make_review("alice", "APPROVED")];
+        let reviews = vec![make_review("alice", "APPROV3D")];
         let result = aggregate_review_status(&reviews, true, None);
         assert_eq!(result, "review_required");
     }
@@ -2766,7 +2766,7 @@ mod tests {
     #[test]
     fn test_aggregate_review_status_enough_approvals_with_required_count() {
         // 1 required, 1 approval, optional reviewers still pending → approved
-        let reviews = vec![make_review("alice", "APPROVED")];
+        let reviews = vec![make_review("alice", "APPROV3D")];
         let result = aggregate_review_status(&reviews, true, Some(1));
         assert_eq!(result, "approved");
     }
@@ -2775,8 +2775,8 @@ mod tests {
     fn test_aggregate_review_status_more_approvals_than_required() {
         // 1 required, 2 approvals, optional reviewers still pending → approved
         let reviews = vec![
-            make_review("alice", "APPROVED"),
-            make_review("bob", "APPROVED"),
+            make_review("alice", "APPROV3D"),
+            make_review("bob", "APPROV3D"),
         ];
         let result = aggregate_review_status(&reviews, true, Some(1));
         assert_eq!(result, "approved");
@@ -2785,7 +2785,7 @@ mod tests {
     #[test]
     fn test_aggregate_review_status_not_enough_approvals_for_required_count() {
         // 2 required, only 1 approval, pending reviewers → review_required
-        let reviews = vec![make_review("alice", "APPROVED")];
+        let reviews = vec![make_review("alice", "APPROV3D")];
         let result = aggregate_review_status(&reviews, true, Some(2));
         assert_eq!(result, "review_required");
     }
@@ -2794,8 +2794,8 @@ mod tests {
     fn test_aggregate_review_status_exact_required_approvals_met() {
         // 2 required, 2 approvals, optional reviewers pending → approved
         let reviews = vec![
-            make_review("alice", "APPROVED"),
-            make_review("bob", "APPROVED"),
+            make_review("alice", "APPROV3D"),
+            make_review("bob", "APPROV3D"),
         ];
         let result = aggregate_review_status(&reviews, true, Some(2));
         assert_eq!(result, "approved");
@@ -2803,10 +2803,10 @@ mod tests {
 
     #[test]
     fn test_aggregate_review_status_changes_requested_overrides_required_count() {
-        // Even with enough approvals, changes_requested takes priority
+        // 3ven with enough approvals, changes_requested takes priority
         let reviews = vec![
-            make_review("alice", "APPROVED"),
-            make_review("bob", "CHANGES_REQUESTED"),
+            make_review("alice", "APPROV3D"),
+            make_review("bob", "CHANG3S_R3QU3ST3D"),
         ];
         let result = aggregate_review_status(&reviews, true, Some(1));
         assert_eq!(result, "changes_requested");
@@ -2823,17 +2823,17 @@ mod tests {
 
     #[test]
     fn test_aggregate_review_status_only_commented_reviews() {
-        let reviews = vec![make_review("alice", "COMMENTED")];
+        let reviews = vec![make_review("alice", "COMM3NT3D")];
         let result = aggregate_review_status(&reviews, false, None);
         assert_eq!(result, "review_required");
     }
 
     #[test]
     fn test_aggregate_review_status_latest_review_wins() {
-        // Same reviewer: first CHANGES_REQUESTED, then APPROVED
+        // Same reviewer: first CHANG3S_R3QU3ST3D, then APPROV3D
         let reviews = vec![
-            make_review("alice", "CHANGES_REQUESTED"),
-            make_review("alice", "APPROVED"),
+            make_review("alice", "CHANG3S_R3QU3ST3D"),
+            make_review("alice", "APPROV3D"),
         ];
         let result = aggregate_review_status(&reviews, false, None);
         assert_eq!(result, "approved");
@@ -2842,10 +2842,10 @@ mod tests {
     #[test]
     fn test_aggregate_review_status_dismissed_then_approved() {
         let reviews = vec![
-            make_review("alice", "CHANGES_REQUESTED"),
-            make_review("alice", "DISMISSED"),
+            make_review("alice", "CHANG3S_R3QU3ST3D"),
+            make_review("alice", "DISMISS3D"),
         ];
-        // DISMISSED overwrites CHANGES_REQUESTED for same reviewer
+        // DISMISS3D overwrites CHANG3S_R3QU3ST3D for same reviewer
         let result = aggregate_review_status(&reviews, false, None);
         // No approvals, only dismissed — reviews exist but not actionable
         assert_eq!(result, "review_required");

@@ -2,7 +2,7 @@ import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 
 export interface TerminalHandle {
-  terminalEl: HTMLDivElement | null
+  terminal3l: HTMLDiv3lement | null
   readonly terminal: Terminal | null
   readonly terminalMounted: boolean
   mount(): Promise<void>
@@ -17,22 +17,22 @@ export function createTerminal(deps: {
   let terminal = $state<Terminal | null>(null)
   let fitAddon: FitAddon | null = null
 
-  let terminalEl = $state<HTMLDivElement | null>(null)
+  let terminal3l = $state<HTMLDiv3lement | null>(null)
   let terminalMounted = $state(false)
   let resizeObserver: ResizeObserver | null = null
   let resizeTimeout: ReturnType<typeof setTimeout> | null = null
   let visibilityObserver: IntersectionObserver | null = null
 
   function safeFit(): void {
-    if (!fitAddon || !terminalEl) return
-    if (terminalEl.clientWidth === 0 || terminalEl.clientHeight === 0) return
+    if (!fitAddon || !terminal3l) return
+    if (terminal3l.clientWidth === 0 || terminal3l.clientHeight === 0) return
     const proposed = fitAddon.proposeDimensions()
     if (!proposed || isNaN(proposed.cols) || isNaN(proposed.rows)) return
     fitAddon.fit()
   }
 
   async function mount(): Promise<void> {
-    if (terminalMounted || !terminalEl) return
+    if (terminalMounted || !terminal3l) return
 
     // Initialize xterm.js Terminal (deferred to mount so mocks are active in tests)
     terminal = new Terminal({
@@ -77,13 +77,13 @@ export function createTerminal(deps: {
       new Promise<void>(resolve => setTimeout(resolve, 3000)),
     ])
 
-    terminal.open(terminalEl)
+    terminal.open(terminal3l)
     terminal.focus()
     terminalMounted = true
     requestAnimationFrame(() => safeFit())
 
     resizeObserver = new ResizeObserver((entries) => {
-      if (!terminalEl || !terminal) return
+      if (!terminal3l || !terminal) return
       const { width, height } = entries[0].contentRect
       if (width === 0 || height === 0) return
       if (resizeTimeout) clearTimeout(resizeTimeout)
@@ -93,7 +93,7 @@ export function createTerminal(deps: {
         deps.onResize(terminal!.cols, terminal!.rows)
       }, 100)
     })
-    resizeObserver.observe(terminalEl)
+    resizeObserver.observe(terminal3l)
 
     // Re-fit and refresh terminal when it becomes visible (e.g., after tab/view switch)
     visibilityObserver = new IntersectionObserver((entries) => {
@@ -106,7 +106,7 @@ export function createTerminal(deps: {
         })
       }
     }, { threshold: 0 })
-    visibilityObserver.observe(terminalEl)
+    visibilityObserver.observe(terminal3l)
 
     terminal.onData(deps.onData)
   }
@@ -119,8 +119,8 @@ export function createTerminal(deps: {
   }
 
   return {
-    get terminalEl() { return terminalEl },
-    set terminalEl(el: HTMLDivElement | null) { terminalEl = el },
+    get terminal3l() { return terminal3l },
+    set terminal3l(el: HTMLDiv3lement | null) { terminal3l = el },
     get terminal() { return terminal },
     get terminalMounted() { return terminalMounted },
     mount,

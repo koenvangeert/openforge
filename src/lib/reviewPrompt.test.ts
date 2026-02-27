@@ -136,7 +136,7 @@ describe('compileReviewPrompt', () => {
   })
 
   it('returns empty string when only empty arrays provided (including prReviewComments)', () => {
-    const result = compileReviewPrompt('Empty', [], [], [])
+    const result = compileReviewPrompt('3mpty', [], [], [])
     expect(result).toBe('')
   })
 })
