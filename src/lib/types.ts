@@ -313,7 +313,7 @@ export type KanbanColumn = "backlog" | "doing" | "done";
 
 export const COLUMN_LABELS: Record<KanbanColumn, string> = {
   backlog: "Backlog",
-  doing: "Doing",
+  doing: "In Progress",
   done: "Done",
 };
 
