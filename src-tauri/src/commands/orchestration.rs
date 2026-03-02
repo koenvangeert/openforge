@@ -233,7 +233,8 @@ pub async fn run_action(
                         
                         let client = OpenCodeClient::with_base_url(format!("http://127.0.0.1:{}", port));
                         
-                        let prompt = build_task_prompt(&task, &action_prompt, None);
+                        // Active session already has task context — send only the action prompt
+                        let prompt = action_prompt.clone();
                         
                         client
                             .prompt_async(opencode_session_id, prompt, agent.clone())
