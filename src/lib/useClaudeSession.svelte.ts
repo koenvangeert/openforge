@@ -1,7 +1,7 @@
 import { listen } from '@tauri-apps/api/event'
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import type { SDKChatMessage, SDKToolCall, SDKToolApprovalRequest, ClaudeSessionState } from './types'
-import { sendClaudeInput, interruptClaudeSession, resumeClaudeSdkSession, respondToolApproval } from './ipc'
+import { sendClaudeInput, interruptClaudeSession, resumeClaudeSdkSession, respondToolApproval, runAction, getWorktreeForTask } from './ipc'
 
 // ============================================================================
 // Payload types for Tauri events
@@ -10,7 +10,7 @@ import { sendClaudeInput, interruptClaudeSession, resumeClaudeSdkSession, respon
 interface AgentEventPayload {
   task_id: string
   event_type: string
-  data: Record<string, unknown>
+  data: string | Record<string, unknown>
   timestamp: number
 }
 
@@ -53,7 +53,11 @@ export function useClaudeSession(taskId: string) {
   // ============================================================================
 
   async function sendInput(text: string): Promise<void> {
-    if (sessionState.status === 'completed' || sessionState.status === 'failed' || sessionState.status === 'idle') {
+    if (sessionState.status === 'completed' || sessionState.status === 'interrupted') {
+      await sendFollowUp(text)
+      return
+    }
+    if (sessionState.status === 'failed' || sessionState.status === 'idle') {
       console.warn('[useClaudeSession] Cannot send input — session is', sessionState.status)
       return
     }
@@ -61,6 +65,31 @@ export function useClaudeSession(taskId: string) {
       await sendClaudeInput(taskId, text)
     } catch (e) {
       console.error('[useClaudeSession] Failed to send input:', e)
+    }
+  }
+
+  async function sendFollowUp(text: string): Promise<void> {
+    try {
+      const worktree = await getWorktreeForTask(taskId)
+      if (!worktree) {
+        console.error('[useClaudeSession] No worktree found for task — cannot send follow-up')
+        return
+      }
+
+      sessionState.messages.push({
+        id: crypto.randomUUID(),
+        role: 'user',
+        content: text,
+        timestamp: Date.now() / 1000,
+        status: 'complete',
+        toolCalls: null,
+      })
+      sessionState.status = 'running'
+
+      await runAction(taskId, worktree.worktree_path, text, null)
+    } catch (e) {
+      console.error('[useClaudeSession] Failed to send follow-up:', e)
+      sessionState.status = 'failed'
     }
   }
 
@@ -110,11 +139,13 @@ export function useClaudeSession(taskId: string) {
   // ============================================================================
 
   function handleAgentEvent(payload: AgentEventPayload): void {
+    console.log(`[useClaudeSession] handleAgentEvent type=${payload.event_type} task=${payload.task_id} dataType=${typeof payload.data} msgCount=${sessionState.messages.length}`)
     sessionState.status = 'running'
     const { event_type, timestamp } = payload
     const data: Record<string, unknown> = typeof payload.data === 'string'
       ? JSON.parse(payload.data)
       : payload.data
+    console.log(`[useClaudeSession]   parsed keys=${Object.keys(data).join(',')} event_type=${event_type}`)
 
     if (event_type === 'assistant') {
       // Full assistant message with complete text + tool uses.
@@ -310,9 +341,11 @@ export function useClaudeSession(taskId: string) {
   // ============================================================================
 
   async function setup(): Promise<void> {
+    console.log(`[useClaudeSession] setup() registering listeners for task=${taskId}`)
     unlisteners.push(
       await listen('agent-event', (e) => {
         const payload = e.payload as AgentEventPayload
+        console.log(`[useClaudeSession] listen('agent-event') fired: task=${payload.task_id} type=${payload.event_type} (myTask=${taskId})`)
         if (payload.task_id !== taskId) return
         handleAgentEvent(payload)
       })
@@ -343,9 +376,15 @@ export function useClaudeSession(taskId: string) {
     )
   }
 
-  // Detach: only removes event listeners, does NOT stop the sidecar.
-  // The sidecar keeps running in the background; PID file persists.
-  // Call setup() again to reattach when the component remounts.
+  function replayEvent(eventType: string, data: string, timestamp: number): void {
+    handleAgentEvent({
+      task_id: taskId,
+      event_type: eventType,
+      data,
+      timestamp,
+    })
+  }
+
   function cleanup(): void {
     unlisteners.forEach(fn => fn())
     unlisteners = []
@@ -358,6 +397,7 @@ export function useClaudeSession(taskId: string) {
     resume,
     approveToolUse,
     denyToolUse,
+    replayEvent,
     setup,
     cleanup,
   }

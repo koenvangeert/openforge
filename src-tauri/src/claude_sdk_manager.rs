@@ -236,6 +236,8 @@ pub enum MessageAction {
     EmitAgentEvent {
         event_type: String,
         data: String,
+        /// Whether to persist this event to the `agent_logs` table for replay on remount
+        persist: bool,
     },
     /// A tool needs user approval — emit `claude-tool-approval` and register a pending approval
     RequestToolApproval {
@@ -316,13 +318,150 @@ pub fn classify_message(msg: &CLIMessage) -> MessageAction {
             }
         }
         CLIMessage::Other(value) => {
-            let event_type = value
+            let raw_type = value
                 .get("type")
                 .and_then(|v| v.as_str())
-                .unwrap_or("unknown")
-                .to_string();
-            let data = serde_json::to_string(value).unwrap_or_default();
-            MessageAction::EmitAgentEvent { event_type, data }
+                .unwrap_or("unknown");
+            let (event_type, data) = transform_cli_event(raw_type, value);
+            let persist = should_persist_event(raw_type, value);
+            MessageAction::EmitAgentEvent { event_type, data, persist }
+        }
+    }
+}
+
+pub fn should_persist_event(raw_type: &str, _value: &serde_json::Value) -> bool {
+    matches!(raw_type, "system" | "assistant" | "tool_use" | "tool_result")
+}
+
+/// Transform a raw CLI NDJSON message into the `(event_type, data_json)` pair
+/// that the frontend `useClaudeSession` composable expects.
+///
+/// The Claude CLI outputs messages in its native wire format (e.g. assistant
+/// messages nest text inside `message.content[]`, streaming deltas are wrapped
+/// in `stream_event`). This pure function bridges the CLI wire format to the
+/// simplified flat schema the frontend expects.
+///
+/// # Mapping
+///
+/// | CLI `type`       | Frontend `event_type` | Data shape                           |
+/// |------------------|-----------------------|--------------------------------------|
+/// | `system`         | `system.init`         | `{ sessionId }`                      |
+/// | `assistant`      | `assistant`           | `{ text, toolUses? }`                |
+/// | `stream_event`*  | `assistant_delta`     | `{ text }`                           |
+/// | `tool_use`       | `tool_use`            | `{ toolUseId, toolName, toolInput }` |
+/// | `tool_result`    | `tool_result`         | `{ toolUseId, content, isError }`    |
+/// | other            | (passthrough)         | raw JSON                             |
+///
+/// *Only `content_block_delta` with `text_delta` inside `stream_event` is mapped;
+///  other inner event types (message_start, content_block_stop, etc.) are ignored.
+pub fn transform_cli_event(raw_type: &str, value: &serde_json::Value) -> (String, String) {
+    match raw_type {
+        "system" => {
+            let session_id = value.get("session_id").and_then(|v| v.as_str());
+            let data = serde_json::json!({ "sessionId": session_id });
+            (
+                "system.init".to_string(),
+                serde_json::to_string(&data).unwrap_or_default(),
+            )
+        }
+        "assistant" => {
+            let content = value
+                .get("message")
+                .and_then(|m| m.get("content"))
+                .and_then(|c| c.as_array());
+
+            let mut text_parts: Vec<&str> = Vec::new();
+            let mut tool_uses: Vec<serde_json::Value> = Vec::new();
+
+            if let Some(blocks) = content {
+                for block in blocks {
+                    match block.get("type").and_then(|t| t.as_str()) {
+                        Some("text") => {
+                            if let Some(t) = block.get("text").and_then(|t| t.as_str()) {
+                                text_parts.push(t);
+                            }
+                        }
+                        Some("tool_use") => {
+                            tool_uses.push(serde_json::json!({
+                                "id": block.get("id"),
+                                "name": block.get("name"),
+                                "input": block.get("input"),
+                            }));
+                        }
+                        _ => {}
+                    }
+                }
+            }
+
+            let text = text_parts.join("\n");
+            let data = if tool_uses.is_empty() {
+                serde_json::json!({ "text": text })
+            } else {
+                serde_json::json!({ "text": text, "toolUses": tool_uses })
+            };
+            (
+                "assistant".to_string(),
+                serde_json::to_string(&data).unwrap_or_default(),
+            )
+        }
+        "stream_event" => {
+            let event = value.get("event");
+            let inner_type = event
+                .and_then(|e| e.get("type"))
+                .and_then(|t| t.as_str())
+                .unwrap_or("");
+
+            if inner_type == "content_block_delta" {
+                let delta_type = event
+                    .and_then(|e| e.get("delta"))
+                    .and_then(|d| d.get("type"))
+                    .and_then(|t| t.as_str())
+                    .unwrap_or("");
+
+                if delta_type == "text_delta" {
+                    let text = event
+                        .and_then(|e| e.get("delta"))
+                        .and_then(|d| d.get("text"))
+                        .and_then(|t| t.as_str())
+                        .unwrap_or("");
+                    let data = serde_json::json!({ "text": text });
+                    return (
+                        "assistant_delta".to_string(),
+                        serde_json::to_string(&data).unwrap_or_default(),
+                    );
+                }
+            }
+
+            (String::new(), String::new())
+        }
+        "tool_use" => {
+            let data = serde_json::json!({
+                "toolUseId": value.get("id"),
+                "toolName": value.get("tool_name").or_else(|| value.get("name")),
+                "toolInput": value.get("input"),
+            });
+            (
+                "tool_use".to_string(),
+                serde_json::to_string(&data).unwrap_or_default(),
+            )
+        }
+        "tool_result" => {
+            let content = value.get("result").or_else(|| value.get("content"));
+            let data = serde_json::json!({
+                "toolUseId": value.get("tool_use_id"),
+                "content": content,
+                "isError": value.get("is_error").and_then(|v| v.as_bool()).unwrap_or(false),
+            });
+            (
+                "tool_result".to_string(),
+                serde_json::to_string(&data).unwrap_or_default(),
+            )
+        }
+        _ => {
+            (
+                raw_type.to_string(),
+                serde_json::to_string(value).unwrap_or_default(),
+            )
         }
     }
 }
@@ -394,6 +533,7 @@ impl ClaudeSdkManager {
         );
 
         let args = build_cli_args(&options);
+        println!("[ClaudeSdkManager] CLI args: {:?}", args);
         let mut child = Command::new("claude")
             .args(&args)
             .current_dir(cwd)
@@ -444,19 +584,19 @@ impl ClaudeSdkManager {
         let (cancel_tx, cancel_rx) = oneshot::channel::<()>();
         let (peer, msg_rx) = ProtocolPeer::spawn(raw_stdin, raw_stdout, cancel_rx);
 
-        let hooks = build_hooks(options.permission_mode);
-        peer.initialize(hooks)
-            .await
-            .map_err(|e| ClaudeSdkError::IoError(e))?;
-
-        peer.set_permission_mode(options.permission_mode)
-            .await
-            .map_err(|e| ClaudeSdkError::IoError(e))?;
+        // NOTE: Do NOT send initialize or set_permission_mode control requests.
+        // The Claude CLI (v2.x) hangs when it receives an initialize control_request
+        // via --input-format=stream-json. Permission mode and hooks are configured
+        // via CLI flags instead (--permission-mode, --permission-prompt-tool=stdio).
 
         let prompt_owned = prompt.to_string();
-        peer.send_user_message(prompt_owned)
-            .await
-            .map_err(|e| ClaudeSdkError::IoError(e))?;
+        if !prompt_owned.is_empty() {
+            println!("[ClaudeSdkManager] Sending user message ({} chars)...", prompt_owned.len());
+            peer.send_user_message(prompt_owned)
+                .await
+                .map_err(|e| ClaudeSdkError::IoError(e))?;
+            println!("[ClaudeSdkManager] User message sent OK");
+        }
 
         let task_id_clone = task_id.to_string();
         let sessions_clone = self.sessions.clone();
@@ -822,6 +962,13 @@ async fn run_message_loop(
         task_id
     );
 
+    let agent_session_id: Option<String> = {
+        let db = app.state::<std::sync::Mutex<crate::db::Database>>();
+        db.lock().ok()
+            .and_then(|db_lock| db_lock.get_latest_session_for_ticket(&task_id).ok().flatten())
+            .map(|s| s.id)
+    };
+
     let timestamp = || -> u64 {
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -833,15 +980,31 @@ async fn run_message_loop(
         let action = classify_message(&msg);
 
         match action {
-            MessageAction::EmitAgentEvent { event_type, data } => {
+            MessageAction::EmitAgentEvent { event_type, data, persist } => {
+                if event_type.is_empty() {
+                    continue;
+                }
+                println!(
+                    "[ClaudeSdkManager] emit type={} persist={} task={}",
+                    event_type, persist, task_id
+                );
+                let ts = timestamp();
                 let payload = AgentEventPayload {
                     task_id: task_id.clone(),
-                    event_type,
-                    data,
-                    timestamp: timestamp(),
+                    event_type: event_type.clone(),
+                    data: data.clone(),
+                    timestamp: ts,
                 };
                 if let Err(e) = app.emit("agent-event", &payload) {
-                    eprintln!("[ClaudeSdkManager] Failed to emit agent-event: {}", e);
+                    eprintln!("[ClaudeSdkManager]   EMIT FAILED: {}", e);
+                }
+
+                if persist {
+                    if let Some(ref sid) = agent_session_id {
+                        persist_agent_log(&app, sid, &event_type, &data);
+                    } else {
+                        println!("[ClaudeSdkManager]   persist skipped: no agent_session_id");
+                    }
                 }
             }
 
@@ -894,6 +1057,11 @@ async fn run_message_loop(
 
                 persist_session_completed(&app, &task_id);
 
+                if let Some(ref sid) = agent_session_id {
+                    persist_agent_log(&app, sid, "result.success",
+                        &serde_json::to_string(&result).unwrap_or_default());
+                }
+
                 let completion = CompletionPayload {
                     task_id: task_id.clone(),
                 };
@@ -910,6 +1078,10 @@ async fn run_message_loop(
                 );
 
                 persist_session_failed(&app, &task_id, &error);
+
+                if let Some(ref sid) = agent_session_id {
+                    persist_agent_log(&app, sid, "result.error", &error);
+                }
 
                 let failure = FailurePayload {
                     task_id: task_id.clone(),
@@ -956,6 +1128,15 @@ async fn run_message_loop(
 // ============================================================================
 // DB Helpers
 // ============================================================================
+
+fn persist_agent_log(app: &AppHandle, session_id: &str, log_type: &str, content: &str) {
+    let db = app.state::<std::sync::Mutex<db::Database>>();
+    if let Ok(db_lock) = db.lock() {
+        if let Err(e) = db_lock.insert_agent_log(session_id, log_type, content) {
+            eprintln!("[ClaudeSdkManager] Failed to persist agent log ({}): {}", log_type, e);
+        }
+    };
+}
 
 fn store_claude_session_id(app: &AppHandle, task_id: &str, claude_session_id: &str) {
     let db = app.state::<std::sync::Mutex<db::Database>>();
@@ -1439,17 +1620,19 @@ mod tests {
     }
 
     #[test]
-    fn test_classify_other_message_emits_agent_event() {
+    fn test_classify_other_assistant_extracts_text() {
         let msg = CLIMessage::Other(serde_json::json!({
             "type": "assistant",
+            "session_id": "ses-1",
             "message": {"content": [{"type": "text", "text": "Hello!"}]}
         }));
 
         let action = classify_message(&msg);
         match action {
-            MessageAction::EmitAgentEvent { event_type, data } => {
+            MessageAction::EmitAgentEvent { event_type, data, .. } => {
                 assert_eq!(event_type, "assistant");
-                assert!(data.contains("Hello!"));
+                let parsed: serde_json::Value = serde_json::from_str(&data).unwrap();
+                assert_eq!(parsed["text"], "Hello!");
             }
             _ => panic!("Expected EmitAgentEvent, got {:?}", action),
         }
@@ -1468,6 +1651,166 @@ mod tests {
             }
             _ => panic!("Expected EmitAgentEvent, got {:?}", action),
         }
+    }
+
+    // ========================================================================
+    // transform_cli_event tests
+    // ========================================================================
+
+    #[test]
+    fn test_transform_system_to_system_init() {
+        let value = serde_json::json!({
+            "type": "system",
+            "subtype": "init",
+            "session_id": "ses-abc",
+            "cwd": "/tmp",
+            "tools": ["Read", "Edit"]
+        });
+        let (event_type, data) = transform_cli_event("system", &value);
+        assert_eq!(event_type, "system.init");
+        let parsed: serde_json::Value = serde_json::from_str(&data).unwrap();
+        assert_eq!(parsed["sessionId"], "ses-abc");
+    }
+
+    #[test]
+    fn test_transform_assistant_extracts_text_and_tool_uses() {
+        let value = serde_json::json!({
+            "type": "assistant",
+            "session_id": "ses-1",
+            "message": {
+                "content": [
+                    {"type": "text", "text": "Let me read that file."},
+                    {"type": "tool_use", "id": "tu-1", "name": "Read", "input": {"file_path": "main.rs"}}
+                ],
+                "stop_reason": "tool_use"
+            }
+        });
+        let (event_type, data) = transform_cli_event("assistant", &value);
+        assert_eq!(event_type, "assistant");
+        let parsed: serde_json::Value = serde_json::from_str(&data).unwrap();
+        assert_eq!(parsed["text"], "Let me read that file.");
+        let tool_uses = parsed["toolUses"].as_array().unwrap();
+        assert_eq!(tool_uses.len(), 1);
+        assert_eq!(tool_uses[0]["id"], "tu-1");
+        assert_eq!(tool_uses[0]["name"], "Read");
+    }
+
+    #[test]
+    fn test_transform_assistant_text_only() {
+        let value = serde_json::json!({
+            "type": "assistant",
+            "message": {
+                "content": [{"type": "text", "text": "Just text, no tools."}],
+                "stop_reason": "end_turn"
+            }
+        });
+        let (event_type, data) = transform_cli_event("assistant", &value);
+        assert_eq!(event_type, "assistant");
+        let parsed: serde_json::Value = serde_json::from_str(&data).unwrap();
+        assert_eq!(parsed["text"], "Just text, no tools.");
+        assert!(parsed.get("toolUses").is_none());
+    }
+
+    #[test]
+    fn test_transform_stream_event_text_delta() {
+        let value = serde_json::json!({
+            "type": "stream_event",
+            "session_id": "ses-1",
+            "event": {
+                "type": "content_block_delta",
+                "index": 0,
+                "delta": {"type": "text_delta", "text": "Hello "}
+            }
+        });
+        let (event_type, data) = transform_cli_event("stream_event", &value);
+        assert_eq!(event_type, "assistant_delta");
+        let parsed: serde_json::Value = serde_json::from_str(&data).unwrap();
+        assert_eq!(parsed["text"], "Hello ");
+    }
+
+    #[test]
+    fn test_transform_stream_event_non_text_delta_ignored() {
+        let value = serde_json::json!({
+            "type": "stream_event",
+            "event": {
+                "type": "content_block_delta",
+                "index": 0,
+                "delta": {"type": "thinking_delta", "thinking": "hmm"}
+            }
+        });
+        let (event_type, _) = transform_cli_event("stream_event", &value);
+        assert!(event_type.is_empty(), "Non-text deltas should be skipped");
+    }
+
+    #[test]
+    fn test_transform_stream_event_message_start_ignored() {
+        let value = serde_json::json!({
+            "type": "stream_event",
+            "event": {
+                "type": "message_start",
+                "message": {"role": "assistant"}
+            }
+        });
+        let (event_type, _) = transform_cli_event("stream_event", &value);
+        assert!(event_type.is_empty());
+    }
+
+    #[test]
+    fn test_transform_tool_use() {
+        let value = serde_json::json!({
+            "type": "tool_use",
+            "id": "toolu_abc",
+            "tool_name": "Bash",
+            "input": {"command": "ls"},
+            "session_id": "ses-1"
+        });
+        let (event_type, data) = transform_cli_event("tool_use", &value);
+        assert_eq!(event_type, "tool_use");
+        let parsed: serde_json::Value = serde_json::from_str(&data).unwrap();
+        assert_eq!(parsed["toolUseId"], "toolu_abc");
+        assert_eq!(parsed["toolName"], "Bash");
+        assert_eq!(parsed["toolInput"]["command"], "ls");
+    }
+
+    #[test]
+    fn test_transform_tool_result() {
+        let value = serde_json::json!({
+            "type": "tool_result",
+            "tool_use_id": "toolu_abc",
+            "result": "file contents here",
+            "is_error": false,
+            "session_id": "ses-1"
+        });
+        let (event_type, data) = transform_cli_event("tool_result", &value);
+        assert_eq!(event_type, "tool_result");
+        let parsed: serde_json::Value = serde_json::from_str(&data).unwrap();
+        assert_eq!(parsed["toolUseId"], "toolu_abc");
+        assert_eq!(parsed["content"], "file contents here");
+        assert_eq!(parsed["isError"], false);
+    }
+
+    #[test]
+    fn test_transform_tool_result_error() {
+        let value = serde_json::json!({
+            "type": "tool_result",
+            "tool_use_id": "toolu_xyz",
+            "result": "Permission denied",
+            "is_error": true
+        });
+        let (_, data) = transform_cli_event("tool_result", &value);
+        let parsed: serde_json::Value = serde_json::from_str(&data).unwrap();
+        assert_eq!(parsed["isError"], true);
+    }
+
+    #[test]
+    fn test_transform_unknown_type_passthrough() {
+        let value = serde_json::json!({
+            "type": "rate_limit_event",
+            "retry_after": 5
+        });
+        let (event_type, data) = transform_cli_event("rate_limit_event", &value);
+        assert_eq!(event_type, "rate_limit_event");
+        assert!(data.contains("retry_after"));
     }
 
     // ========================================================================
@@ -1670,5 +2013,23 @@ mod tests {
             }
             _ => panic!("Expected SessionCompleted, got {:?}", action),
         }
+    }
+
+    #[test]
+    fn test_should_persist_meaningful_events() {
+        let v = serde_json::json!({});
+        assert!(should_persist_event("system", &v));
+        assert!(should_persist_event("assistant", &v));
+        assert!(should_persist_event("tool_use", &v));
+        assert!(should_persist_event("tool_result", &v));
+    }
+
+    #[test]
+    fn test_should_not_persist_transient_events() {
+        let v = serde_json::json!({});
+        assert!(!should_persist_event("stream_event", &v));
+        assert!(!should_persist_event("user", &v));
+        assert!(!should_persist_event("result", &v));
+        assert!(!should_persist_event("unknown", &v));
     }
 }

@@ -310,18 +310,40 @@ impl ProtocolPeer {
                     line = lines.next_line() => {
                         match line {
                             Ok(Some(line)) => {
+                                let raw_type = serde_json::from_str::<serde_json::Value>(&line)
+                                    .ok()
+                                    .and_then(|v| v.get("type").and_then(|t| t.as_str()).map(String::from))
+                                    .unwrap_or_else(|| "??".to_string());
+                                println!("[ProtocolPeer] stdout type={} len={}", raw_type, line.len());
                                 match serde_json::from_str::<CLIMessage>(&line) {
                                     Ok(msg) => {
+                                        let variant = match &msg {
+                                            CLIMessage::ControlRequest { .. } => "ControlRequest",
+                                            CLIMessage::ControlResponse { .. } => "ControlResponse",
+                                            CLIMessage::ControlCancelRequest { .. } => "ControlCancelRequest",
+                                            CLIMessage::Result(_) => "Result",
+                                            CLIMessage::Other(_) => "Other",
+                                        };
+                                        println!("[ProtocolPeer] parsed as CLIMessage::{}", variant);
                                         let done = matches!(msg, CLIMessage::Result(_));
                                         let _ = tx.send(msg);
                                         if done {
                                             break;
                                         }
                                     }
-                                    Err(_) => {}
+                                    Err(e) => {
+                                        eprintln!("[ProtocolPeer] PARSE FAILED: {} — raw: {:.300}", e, line);
+                                    }
                                 }
                             }
-                            _ => break,
+                            Ok(None) => {
+                                println!("[ProtocolPeer] stdout EOF");
+                                break;
+                            }
+                            Err(e) => {
+                                eprintln!("[ProtocolPeer] stdout read error: {}", e);
+                                break;
+                            }
                         }
                     }
                 }
@@ -332,10 +354,12 @@ impl ProtocolPeer {
     async fn send_json<T: serde::Serialize>(&self, message: &T) -> Result<(), std::io::Error> {
         let json = serde_json::to_string(message)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+        println!("[ProtocolPeer] stdin → {:.500}", json);
         let mut stdin = self.stdin.lock().await;
         stdin.write_all(json.as_bytes()).await?;
         stdin.write_all(b"\n").await?;
         stdin.flush().await?;
+        println!("[ProtocolPeer] stdin flush OK");
         Ok(())
     }
 

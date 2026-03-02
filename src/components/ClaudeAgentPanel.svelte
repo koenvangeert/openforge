@@ -28,14 +28,20 @@
     (claudeSession.state.status === 'interrupted' || claudeSession.state.status === 'completed') &&
     claudeSession.state.sessionId !== null
   )
+  let canFollowUp = $derived(
+    (claudeSession.state.status === 'completed' || claudeSession.state.status === 'interrupted') &&
+    claudeSession.state.sessionId !== null
+  )
   let inputDisabled = $derived(
-    claudeSession.state.status !== 'running' && claudeSession.state.status !== 'idle'
+    claudeSession.state.status !== 'running' && !canFollowUp
   )
 
   // Lifecycle
   onMount(async () => {
+    console.log(`[ClaudeAgentPanel] onMount taskId=${taskId}`)
     await claudeSession.setup()
     await loadHistory()
+    console.log(`[ClaudeAgentPanel] onMount complete, messages=${claudeSession.state.messages.length} status=${claudeSession.state.status}`)
   })
 
   onDestroy(() => {
@@ -48,11 +54,14 @@
 
   async function loadHistory(): Promise<void> {
     loadingHistory = true
+    console.log(`[ClaudeAgentPanel] loadHistory start taskId=${taskId}`)
     try {
       let existingSession = $activeSessions.get(taskId) ?? null
+      console.log(`[ClaudeAgentPanel] existingSession from store: ${existingSession ? `id=${existingSession.id} provider=${existingSession.provider} status=${existingSession.status}` : 'null'}`)
 
       if (!existingSession) {
         const dbSession = await getLatestSession(taskId)
+        console.log(`[ClaudeAgentPanel] dbSession: ${dbSession ? `id=${dbSession.id} provider=${dbSession.provider} status=${dbSession.status}` : 'null'}`)
         if (dbSession && ['completed', 'failed', 'paused', 'interrupted'].includes(dbSession.status)) {
           const updated = new Map($activeSessions)
           updated.set(taskId, dbSession)
@@ -61,33 +70,22 @@
         }
       }
 
-      if (!existingSession) return
+      if (!existingSession) {
+        console.log(`[ClaudeAgentPanel] no session found, skipping history`)
+        return
+      }
 
-      // Replay stored events as SDKChatMessage objects
       try {
         const logs = await getAgentLogs(existingSession.id)
+        console.log(`[ClaudeAgentPanel] replaying ${logs.length} agent logs for session ${existingSession.id}`)
         for (const log of logs) {
-          try {
-            const data = JSON.parse(log.content) as Record<string, unknown>
-            if (log.log_type === 'assistant') {
-              const text = typeof data.text === 'string' ? data.text : ''
-              if (text) {
-                claudeSession.state.messages.push({
-                  id: crypto.randomUUID(),
-                  role: 'assistant' as const,
-                  content: text,
-                  timestamp: log.timestamp,
-                  status: 'complete' as const,
-                  toolCalls: null,
-                })
-              }
-            } else if (log.log_type === 'system.init') {
-              const sessionId = typeof data.sessionId === 'string' ? data.sessionId : null
-              if (sessionId) {
-                claudeSession.state.sessionId = sessionId
-              }
-            }
-          } catch { /* skip unparseable logs */ }
+          console.log(`[ClaudeAgentPanel]   replay log_type=${log.log_type} content_len=${log.content.length}`)
+          claudeSession.replayEvent(log.log_type, log.content, log.timestamp)
+        }
+        for (const msg of claudeSession.state.messages) {
+          if (msg.status === 'streaming') {
+            msg.status = 'complete'
+          }
         }
       } catch (e) {
         console.error('[ClaudeAgentPanel] Failed to load agent logs:', e)
@@ -264,7 +262,7 @@
       <ChatInput
         onSend={claudeSession.sendInput}
         disabled={inputDisabled}
-        placeholder={inputDisabled ? 'Session not active' : 'Send a message to Claude...'}
+        placeholder={inputDisabled ? 'Session not active' : canFollowUp ? 'Send a follow-up message...' : 'Send a message to Claude...'}
       />
     {/if}
   </div>
