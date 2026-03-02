@@ -1,6 +1,6 @@
 use std::sync::{Mutex, Arc};
 use tauri::{State, Emitter};
-use crate::{db, opencode_client::OpenCodeClient, server_manager::ServerManager, sse_bridge::SseBridgeManager, git_worktree, pty_manager::PtyManager, claude_process_manager::ClaudeProcessManager, claude_bridge::ClaudeBridgeManager};
+use crate::{db, opencode_client::OpenCodeClient, server_manager::ServerManager, sse_bridge::SseBridgeManager, git_worktree, pty_manager::PtyManager, claude_sdk_manager::ClaudeSdkManager};
 
 pub fn build_task_prompt(task: &db::TaskRow, action_instruction: &str, additional_instructions: Option<&str>) -> String {
     let mut prompt = String::new();
@@ -31,8 +31,7 @@ pub fn build_task_prompt(task: &db::TaskRow, action_instruction: &str, additiona
     db: &State<'_, Arc<Mutex<db::Database>>>,
     server_mgr: &State<'_, ServerManager>,
     sse_mgr: &State<'_, SseBridgeManager>,
-    claude_process_mgr: &State<'_, ClaudeProcessManager>,
-    claude_bridge_mgr: &State<'_, ClaudeBridgeManager>,
+    sdk_mgr: &State<'_, ClaudeSdkManager>,
     task_id: &str,
 ) -> Result<(), String> {
     // Get provider from latest session
@@ -46,8 +45,7 @@ pub fn build_task_prompt(task: &db::TaskRow, action_instruction: &str, additiona
     };
 
     if provider == "claude-code" {
-        let _ = claude_process_mgr.kill_process(task_id).await;
-        claude_bridge_mgr.stop_bridge(task_id).await;
+        let _ = sdk_mgr.stop_session(task_id).await;
 
         let session = {
             let db_lock = db.lock().unwrap();
@@ -107,8 +105,7 @@ pub async fn start_implementation(
     db: State<'_, Arc<Mutex<db::Database>>>,
     server_mgr: State<'_, ServerManager>,
     sse_mgr: State<'_, SseBridgeManager>,
-    claude_process_mgr: State<'_, ClaudeProcessManager>,
-    claude_bridge_mgr: State<'_, ClaudeBridgeManager>,
+    sdk_mgr: State<'_, ClaudeSdkManager>,
     app: tauri::AppHandle,
     task_id: String,
     repo_path: String,
@@ -181,15 +178,9 @@ pub async fn start_implementation(
             .map_err(|e| format!("Failed to create agent session: {}", e))?;
         }
 
-        let (_, stdout) = claude_process_mgr
-            .spawn_claude(&task_id, &worktree_path, &prompt)
+        let _ = sdk_mgr.start_session(app.clone(), &task_id, &prompt, worktree_path.to_str().unwrap(), Default::default())
             .await
-            .map_err(|e| e.to_string())?;
-
-        claude_bridge_mgr
-            .start_bridge(app.clone(), task_id.clone(), stdout)
-            .await
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| format!("{}", e))?;
 
         {
             let db = db.lock().unwrap();
@@ -271,8 +262,7 @@ pub async fn run_action(
     db: State<'_, Arc<Mutex<db::Database>>>,
     server_mgr: State<'_, ServerManager>,
     sse_mgr: State<'_, SseBridgeManager>,
-    claude_process_mgr: State<'_, ClaudeProcessManager>,
-    claude_bridge_mgr: State<'_, ClaudeBridgeManager>,
+    sdk_mgr: State<'_, ClaudeSdkManager>,
     app: tauri::AppHandle,
     task_id: String,
     repo_path: String,
@@ -323,17 +313,14 @@ pub async fn run_action(
                                 .map(|w| w.worktree_path)
                                 .unwrap_or_default();
 
+                            let _ = sdk_mgr.resume_session(app.clone(), &task_id, claude_session_id, &worktree_path)
+                                .await
+                                .map_err(|e| format!("{}", e))?;
+
                             let prompt = build_task_prompt(&task, &action_prompt, additional_instructions.as_deref());
-
-                            let (_, stdout) = claude_process_mgr
-                                .spawn_claude_resume(&task_id, std::path::Path::new(&worktree_path), claude_session_id, &prompt)
+                            sdk_mgr.send_input(&task_id, &prompt)
                                 .await
-                                .map_err(|e| e.to_string())?;
-
-                            claude_bridge_mgr
-                                .start_bridge(app.clone(), task_id.clone(), stdout)
-                                .await
-                                .map_err(|e| e.to_string())?;
+                                .map_err(|e| format!("Failed to send prompt after resume: {}", e))?;
 
                             {
                                 let db = db.lock().unwrap();
@@ -420,15 +407,9 @@ pub async fn run_action(
             .map_err(|e| format!("Failed to create agent session: {}", e))?;
         }
 
-        let (_, stdout) = claude_process_mgr
-            .spawn_claude(&task_id, &worktree_path, &prompt)
+        let _ = sdk_mgr.start_session(app.clone(), &task_id, &prompt, worktree_path.to_str().unwrap(), Default::default())
             .await
-            .map_err(|e| e.to_string())?;
-
-        claude_bridge_mgr
-            .start_bridge(app.clone(), task_id.clone(), stdout)
-            .await
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| format!("{}", e))?;
 
         if task.status == "backlog" {
             let db = db.lock().unwrap();
@@ -626,13 +607,12 @@ pub async fn abort_implementation(
     server_mgr: State<'_, ServerManager>,
     sse_mgr: State<'_, SseBridgeManager>,
     pty_mgr: State<'_, PtyManager>,
-    claude_process_mgr: State<'_, ClaudeProcessManager>,
-    claude_bridge_mgr: State<'_, ClaudeBridgeManager>,
+    sdk_mgr: State<'_, ClaudeSdkManager>,
     _app: tauri::AppHandle,
     task_id: String,
 ) -> Result<(), String> {
     let _ = pty_mgr.kill_pty(&task_id).await;
-    abort_task_agent(&db, &server_mgr, &sse_mgr, &claude_process_mgr, &claude_bridge_mgr, &task_id).await
+    abort_task_agent(&db, &server_mgr, &sse_mgr, &sdk_mgr, &task_id).await
 }
 
 #[cfg(test)]
