@@ -11,6 +11,7 @@
   import DiffViewer from './DiffViewer.svelte'
   import ReviewSubmitPanel from './ReviewSubmitPanel.svelte'
   import PrOverviewTab from './PrOverviewTab.svelte'
+  import AgentReviewOutputModal from './AgentReviewOutputModal.svelte'
   import type { ReviewPullRequest, PrFileDiff } from '../lib/types'
   import type { FileContents } from '../lib/diffAdapter'
 
@@ -22,6 +23,7 @@
   let fileTreeVisible = $state(true)
   let activeTab = $state<PrDetailTab>('overview')
   let reviewSessionKey = $state<string | null>(null)
+  let showOutputModal = $state(false)
   let unlisteners: UnlistenFn[] = []
 
   let groupedPrs = $derived(groupByRepo($reviewPrs))
@@ -152,6 +154,7 @@
     } finally {
       $agentReviewLoading = false
       reviewSessionKey = null
+      showOutputModal = false
     }
   }
 
@@ -187,23 +190,31 @@
         if (!pr) return
         if (task_id !== `pr-review-${pr.id}`) return
 
+        console.log('[PrReviewView] Agent event:', event_type, 'for task:', task_id, 'data:', data)
+
         if (event_type === 'session.idle' || event_type === 'session.status') {
           try {
             const parsed = JSON.parse(data)
             const statusType = parsed.properties?.status?.type
+            console.log('[PrReviewView] Status event:', event_type, 'statusType:', statusType)
             if (event_type === 'session.idle' || statusType === 'idle') {
+              console.log('[PrReviewView] Session completed, fetching agent comments for PR:', pr.id)
               const comments = await getAgentReviewComments(pr.id)
+              console.log('[PrReviewView] Fetched', comments.length, 'agent comments')
               $agentReviewComments = comments
               $agentReviewLoading = false
             }
-          } catch {
+          } catch (e) {
+            console.error('[PrReviewView] Failed to parse status event:', e, 'raw:', data)
             if (event_type === 'session.idle') {
               const comments = await getAgentReviewComments(pr.id)
+              console.log('[PrReviewView] Fetched', comments.length, 'agent comments (fallback)')
               $agentReviewComments = comments
               $agentReviewLoading = false
             }
           }
         } else if (event_type === 'session.error') {
+          console.error('[PrReviewView] Agent review error:', data)
           $agentReviewError = 'Agent review failed. Please try again.'
           $agentReviewLoading = false
         }
@@ -291,6 +302,11 @@
                     Reviewing...
                   </button>
                   <button
+                    class="btn btn-ghost btn-xs text-base-content/50"
+                    onclick={() => { showOutputModal = true }}
+                    title="View agent output"
+                  >View Output</button>
+                  <button
                     class="btn btn-ghost btn-xs text-error"
                     onclick={handleCancelReview}
                     title="Cancel AI review"
@@ -306,6 +322,13 @@
                       <span class="badge badge-primary badge-xs">{$agentReviewComments.length}</span>
                     {/if}
                   </button>
+                  {#if reviewSessionKey}
+                    <button
+                      class="btn btn-ghost btn-xs text-base-content/50"
+                      onclick={() => { showOutputModal = true }}
+                      title="View last agent review output"
+                    >View Output</button>
+                  {/if}
                 {/if}
                 {#if $agentReviewError}
                   <span class="text-xs text-error">{$agentReviewError}</span>
@@ -372,3 +395,10 @@
     </div>
   {/if}
 </div>
+
+{#if showOutputModal && reviewSessionKey}
+  <AgentReviewOutputModal
+    sessionKey={reviewSessionKey}
+    onClose={() => { showOutputModal = false }}
+  />
+{/if}
