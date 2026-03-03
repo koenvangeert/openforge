@@ -8,3 +8,4 @@ Map-based stores require `new Map()` to trigger Svelte reactivity — direct `.s
 Types in `src/lib/types.ts`. `import type` enforced by `verbatimModuleSyntax`. Nullable fields use `T | null`, not optional.
 Rust commands: `Result<T, String>` with `.map_err(|e| format!(...))`. DB domain files use `impl super::Database`.
 `T-<number>` references (e.g. T-438) are this app's own task IDs — they are NOT Jira tickets. Do not use acli or any Jira tool to look them up.
+Always use TDD: write or update tests first, verify they fail, then implement the code to make them pass.
