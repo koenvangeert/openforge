@@ -108,6 +108,13 @@ pub(crate) fn map_hook_to_status(event_type: &str, current_status: &str) -> Opti
             }
         }
         "stop" | "session-end" => Some("completed".to_string()),
+        "notification-permission" => {
+            if current_status == "running" {
+                Some("paused".to_string())
+            } else {
+                None
+            }
+        }
         _ => None,
     }
 }
@@ -200,6 +207,13 @@ pub async fn hook_notification_handler(
     handle_hook(State(state), Json(payload), "notification").await
 }
 
+pub async fn hook_notification_permission_handler(
+    State(state): State<AppState>,
+    Json(payload): Json<ClaudeHookPayload>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    handle_hook(State(state), Json(payload), "notification-permission").await
+}
+
 /// Create the HTTP router with all available routes
 pub fn create_router(state: AppState) -> Router {
     Router::new()
@@ -209,6 +223,7 @@ pub fn create_router(state: AppState) -> Router {
         .route("/hooks/post-tool-use", post(hook_post_tool_use_handler))
         .route("/hooks/session-end", post(hook_session_end_handler))
         .route("/hooks/notification", post(hook_notification_handler))
+        .route("/hooks/notification-permission", post(hook_notification_permission_handler))
         .with_state(state)
 }
 
@@ -290,6 +305,18 @@ mod tests {
     fn test_notification_produces_no_status_change() {
         assert_eq!(map_hook_to_status("notification", "running"), None);
         assert_eq!(map_hook_to_status("notification", "paused"), None);
+    }
+
+    #[test]
+    fn test_notification_permission_maps_running_to_paused() {
+        assert_eq!(map_hook_to_status("notification-permission", "running"), Some("paused".to_string()));
+    }
+
+    #[test]
+    fn test_notification_permission_no_op_when_not_running() {
+        assert_eq!(map_hook_to_status("notification-permission", "paused"), None);
+        assert_eq!(map_hook_to_status("notification-permission", "completed"), None);
+        assert_eq!(map_hook_to_status("notification-permission", "interrupted"), None);
     }
 
     #[test]
@@ -522,6 +549,18 @@ mod tests {
             status = s;
         }
         assert_eq!(status, "running", "post-tool-use when running — no change");
+
+        // Permission prompt pauses the session
+        if let Some(s) = map_hook_to_status("notification-permission", &status) {
+            status = s;
+        }
+        assert_eq!(status, "paused", "notification-permission transitions running→paused");
+
+        // Tool use resumes from paused
+        if let Some(s) = map_hook_to_status("pre-tool-use", &status) {
+            status = s;
+        }
+        assert_eq!(status, "running", "Resumed: pre-tool-use transitions paused→running");
 
         if let Some(s) = map_hook_to_status("stop", &status) {
             status = s;

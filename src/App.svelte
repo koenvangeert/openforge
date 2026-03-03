@@ -3,7 +3,7 @@
   import { listen } from '@tauri-apps/api/event'
   import type { UnlistenFn, Event } from '@tauri-apps/api/event'
   import { tasks, selectedTaskId, activeSessions, checkpointNotification, ciFailureNotification, ticketPrs, error, isLoading, projects, activeProjectId, currentView, reviewRequestCount, projectAttention, taskSpawned } from './lib/stores'
-  import { getProjects, getTasksForProject, getOpenCodeStatus, getPullRequests, runAction, getSessionStatus, getLatestSession, getLatestSessions, forceGithubSync, createTask, updateTask, getProjectAttention, getAppMode } from './lib/ipc'
+  import { getProjects, getTasksForProject, getOpenCodeStatus, getPullRequests, runAction, getSessionStatus, getLatestSession, getLatestSessions, forceGithubSync, createTask, updateTask, getProjectAttention, getAppMode, finalizeClaudeSession } from './lib/ipc'
   import type { Task, PullRequestInfo, OpenCodeStatus, AgentEvent, ProjectAttention } from './lib/types'
   import KanbanBoard from './components/KanbanBoard.svelte'
   import TaskDetailView from './components/TaskDetailView.svelte'
@@ -446,6 +446,75 @@
           $checkpointNotification = null
         }
         loadProjectAttention()
+      })
+    )
+
+    // Claude Code hooks → frontend status updates
+    unlisteners.push(
+      await listen<{ task_id: string; status: string }>('agent-status-changed', (event: Event<{ task_id: string; status: string }>) => {
+        const { task_id: taskId, status } = event.payload
+        const session = $activeSessions.get(taskId)
+        if (!session) return
+
+        if (status === 'completed') {
+          if (session.status === 'completed') return
+          const updated = new Map($activeSessions)
+          updated.set(taskId, { ...session, status: 'completed' })
+          $activeSessions = updated
+          if ($checkpointNotification?.ticketId === taskId) {
+            $checkpointNotification = null
+          }
+          loadTasks()
+        } else if (status === 'running') {
+          if (session.status === 'running') return
+          const updated = new Map($activeSessions)
+          updated.set(taskId, { ...session, status: 'running', checkpoint_data: null })
+          $activeSessions = updated
+          if ($checkpointNotification?.ticketId === taskId) {
+            $checkpointNotification = null
+          }
+        } else if (status === 'paused') {
+          if (session.status === 'paused') return
+          const updated = new Map($activeSessions)
+          updated.set(taskId, { ...session, status: 'paused' })
+          $activeSessions = updated
+          const task = $tasks.find(t => t.id === taskId)
+          $checkpointNotification = {
+            ticketId: taskId,
+            ticketKey: task?.jira_key ?? null,
+            sessionId: session.id,
+            stage: session.stage,
+            message: 'Agent needs permission',
+            timestamp: Date.now(),
+          }
+        } else if (status === 'interrupted') {
+          if (session.status === 'interrupted') return
+          const updated = new Map($activeSessions)
+          updated.set(taskId, { ...session, status: 'interrupted' })
+          $activeSessions = updated
+          if ($checkpointNotification?.ticketId === taskId) {
+            $checkpointNotification = null
+          }
+          loadTasks()
+        }
+        loadProjectAttention()
+      })
+    )
+
+    // Claude PTY exit fallback — if hooks didn't fire, mark session interrupted
+    unlisteners.push(
+      await listen<{ task_id: string }>('claude-pty-exited', (event: Event<{ task_id: string }>) => {
+        const taskId = event.payload.task_id
+        setTimeout(async () => {
+          const session = $activeSessions.get(taskId)
+          if (session && session.status === 'running') {
+            try {
+              await finalizeClaudeSession(taskId)
+            } catch (e) {
+              console.error('[pty-exit] Failed to finalize session for task:', taskId, e)
+            }
+          }
+        }, 1500)
       })
     )
 

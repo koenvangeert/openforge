@@ -92,6 +92,11 @@ fn build_hooks_json(port: u16) -> Value {
         port
     );
 
+    let notification_permission_cmd = format!(
+        "curl -s -X POST http://127.0.0.1:{}/hooks/notification-permission -H 'Content-Type: application/json' -d '{{\"session_id\":\"'\"$CLAUDE_SESSION_ID\"'\",\"CLAUDE_TASK_ID\":\"'\"$CLAUDE_TASK_ID\"'\"}}' ",
+        port
+    );
+
     let notification_cmd = format!(
         "curl -s -X POST http://127.0.0.1:{}/hooks/notification -H 'Content-Type: application/json' -d '{{\"session_id\":\"'\"$CLAUDE_SESSION_ID\"'\",\"CLAUDE_TASK_ID\":\"'\"$CLAUDE_TASK_ID\"'\"}}' ",
         port
@@ -141,6 +146,17 @@ fn build_hooks_json(port: u16) -> Value {
             ],
             "Notification": [
                 {
+                    "matcher": {
+                        "message": "permission"
+                    },
+                    "hooks": [
+                        {
+                            "type": "command",
+                            "command": notification_permission_cmd
+                        }
+                    ]
+                },
+                {
                     "hooks": [
                         {
                             "type": "command",
@@ -167,6 +183,11 @@ mod tests {
         assert!(json["hooks"].get("Stop").is_some());
         assert!(json["hooks"].get("SessionEnd").is_some());
         assert!(json["hooks"].get("Notification").is_some());
+        // Notification should have two entries: permission matcher + catch-all
+        let notification = &json["hooks"]["Notification"];
+        assert_eq!(notification.as_array().unwrap().len(), 2, "Notification should have 2 entries");
+        assert!(notification[0].get("matcher").is_some(), "First entry should have a matcher");
+        assert!(notification[1].get("matcher").is_none(), "Second entry should be catch-all (no matcher)");
     }
 
     #[test]
@@ -303,40 +324,53 @@ mod tests {
         let port = 54321u16;
         let json = build_hooks_json(port);
 
+        // Single-entry hooks (index 0)
         let hook_entries = [
-            ("PreToolUse", "/hooks/pre-tool-use"),
-            ("PostToolUse", "/hooks/post-tool-use"),
-            ("Stop", "/hooks/stop"),
-            ("SessionEnd", "/hooks/session-end"),
-            ("Notification", "/hooks/notification"),
+            ("PreToolUse", 0, "/hooks/pre-tool-use"),
+            ("PostToolUse", 0, "/hooks/post-tool-use"),
+            ("Stop", 0, "/hooks/stop"),
+            ("SessionEnd", 0, "/hooks/session-end"),
+            // Notification[0] = permission matcher, Notification[1] = catch-all
+            ("Notification", 0, "/hooks/notification-permission"),
+            ("Notification", 1, "/hooks/notification"),
         ];
 
-        for (hook_key, expected_route) in &hook_entries {
-            let cmd = json["hooks"][hook_key][0]["hooks"][0]["command"]
+        for (hook_key, idx, expected_route) in &hook_entries {
+            let cmd = json["hooks"][hook_key][idx]["hooks"][0]["command"]
                 .as_str()
-                .unwrap_or_else(|| panic!("Missing command for {}", hook_key));
+                .unwrap_or_else(|| panic!("Missing command for {}[{}]", hook_key, idx));
 
             assert!(
                 cmd.contains(&format!("127.0.0.1:{}", port)),
-                "{} command should use port {}, got: {}",
+                "{}[{}] command should use port {}, got: {}",
                 hook_key,
+                idx,
                 port,
                 cmd
             );
             assert!(
                 cmd.contains(expected_route),
-                "{} command should POST to {}, got: {}",
+                "{}[{}] command should POST to {}, got: {}",
                 hook_key,
+                idx,
                 expected_route,
                 cmd
             );
-            assert!(cmd.contains("curl"), "{} command should use curl", hook_key);
+            assert!(cmd.contains("curl"), "{}[{}] command should use curl", hook_key, idx);
             assert!(
                 cmd.contains("-X POST"),
-                "{} command should be a POST",
-                hook_key
+                "{}[{}] command should be a POST",
+                hook_key,
+                idx
             );
         }
+    }
+
+    #[test]
+    fn test_notification_permission_matcher() {
+        let json = build_hooks_json(17422);
+        let matcher = &json["hooks"]["Notification"][0]["matcher"];
+        assert_eq!(matcher["message"], "permission");
     }
 
     #[test]

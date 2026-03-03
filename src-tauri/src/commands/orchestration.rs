@@ -601,6 +601,30 @@ pub async fn abort_implementation(
     Ok(())
 }
 
+#[tauri::command]
+pub async fn finalize_claude_session(
+    db: State<'_, Arc<Mutex<db::Database>>>,
+    app: tauri::AppHandle,
+    task_id: String,
+) -> Result<(), String> {
+    let db_lock = db.lock().unwrap();
+    if let Ok(Some(session)) = db_lock.get_latest_session_for_ticket(&task_id) {
+        if session.provider == "claude-code" && session.status == "running" {
+            let _ = db_lock.update_agent_session(&session.id, &session.stage, "interrupted", None, Some("PTY process exited"));
+            drop(db_lock);
+            let _ = app.emit(
+                "agent-status-changed",
+                serde_json::json!({
+                    "task_id": task_id,
+                    "status": "interrupted",
+                    "provider": "claude-code"
+                })
+            );
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

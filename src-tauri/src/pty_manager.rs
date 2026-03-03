@@ -583,6 +583,7 @@ impl PtyManager {
                                 }
                                 println!("[PTY] task={} emitter received exit signal", task_id_emitter);
                                 let _ = app_handle.emit(&format!("pty-exit-{}", task_id_emitter), serde_json::json!({"instance_id": instance_id_emitter}));
+                                let _ = app_handle.emit("claude-pty-exited", serde_json::json!({"task_id": &task_id_emitter}));
                                 break;
                             }
                         }
