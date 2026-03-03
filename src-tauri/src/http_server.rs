@@ -139,6 +139,17 @@ async fn handle_hook(
             let db = state.db.lock().unwrap();
             if let Ok(Some(session)) = db.get_latest_session_for_ticket(task_id) {
                 if session.provider == "claude-code" {
+                    // Persist the Claude session ID on first hook so run_action can resume it later
+                    if session.claude_session_id.is_none() {
+                        if let Some(ref sid) = payload.session_id {
+                            if !sid.is_empty() {
+                                if let Err(e) = db.set_agent_session_claude_id(&session.id, sid) {
+                                    eprintln!("[http_server] Failed to set claude_session_id for session {}: {}", session.id, e);
+                                }
+                            }
+                        }
+                    }
+
                     if let Some(new_status) = map_hook_to_status(event_type, &session.status) {
                         if let Err(e) = db.update_agent_session(&session.id, &session.stage, &new_status, None, None) {
                             eprintln!("[http_server] Failed to update session status for task {}: {}", task_id, e);

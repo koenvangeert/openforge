@@ -292,48 +292,49 @@ pub async fn run_action(
                 "running" => return Err("Agent is busy".to_string()),
                 "paused" => return Err("Answer pending question first".to_string()),
                 "completed" | "failed" | "interrupted" => {
-                    if let Some(ref claude_session_id) = session.claude_session_id {
-                        let worktree = {
+                    let worktree = {
+                        let db = db.lock().unwrap();
+                        db.get_worktree_for_task(&task_id)
+                            .map_err(|e| format!("Failed to get worktree: {}", e))?
+                    };
+
+                    if let Some(w) = worktree {
+                        let port = crate::claude_hooks::get_http_server_port();
+                        let hooks_path = crate::claude_hooks::generate_hooks_settings(port).map_err(|e| e.to_string())?;
+
+                        // Resume existing session if we have a session ID, otherwise start fresh
+                        let resume_id = session.claude_session_id.as_deref();
+
+                        pty_mgr.spawn_claude_pty(
+                            &task_id,
+                            std::path::Path::new(&w.worktree_path),
+                            &action_prompt,
+                            resume_id,
+                            &hooks_path,
+                            80,
+                            24,
+                            app.clone(),
+                        ).await.map_err(|e| e.to_string())?;
+
+                        {
                             let db = db.lock().unwrap();
-                            db.get_worktree_for_task(&task_id)
-                                .map_err(|e| format!("Failed to get worktree: {}", e))?
-                        };
-
-                        if let Some(w) = worktree {
-                            let port = crate::claude_hooks::get_http_server_port();
-                            let hooks_path = crate::claude_hooks::generate_hooks_settings(port).map_err(|e| e.to_string())?;
-
-                            pty_mgr.spawn_claude_pty(
-                                &task_id,
-                                std::path::Path::new(&w.worktree_path),
-                                &action_prompt,
-                                Some(claude_session_id),
-                                &hooks_path,
-                                80,
-                                24,
-                                app.clone(),
-                            ).await.map_err(|e| e.to_string())?;
-
-                            {
-                                let db = db.lock().unwrap();
-                                db.update_agent_session(&session.id, &session.stage, "running", None, None)
-                                    .map_err(|e| format!("Failed to update agent session: {}", e))?;
-                            }
-
-                            if task.status == "backlog" {
-                                let db = db.lock().unwrap();
-                                db.update_task_status(&task_id, "doing")
-                                    .map_err(|e| format!("Failed to update task status: {}", e))?;
-                                let _ = app.emit("task-changed", serde_json::json!({ "action": "updated", "task_id": task_id }));
-                            }
-
-                            return Ok(serde_json::json!({
-                                "task_id": task_id,
-                                "session_id": session.id,
-                                "worktree_path": w.worktree_path,
-                                "port": 0,
-                            }));
+                            db.update_agent_session(&session.id, &session.stage, "running", None, None)
+                                .map_err(|e| format!("Failed to update agent session: {}", e))?;
                         }
+
+                        if task.status == "backlog" {
+                            let db = db.lock().unwrap();
+                            db.update_task_status(&task_id, "doing")
+                                .map_err(|e| format!("Failed to update task status: {}", e))?;
+                            let _ = app.emit("task-changed", serde_json::json!({ "action": "updated", "task_id": task_id }));
+                        }
+
+                        return Ok(serde_json::json!({
+                            "task_id": task_id,
+                            "session_id": session.id,
+                            "worktree_path": w.worktree_path,
+                            "port": 0,
+                        }));
                     }
                 }
                 _ => {}
@@ -428,8 +429,34 @@ pub async fn run_action(
                     return Err("Answer pending question first".to_string());
                 }
                 "completed" | "failed" | "interrupted" => {
-                    if let Some(port) = server_mgr.get_server_port(&task_id).await {
-                        if let Some(ref opencode_session_id) = session.opencode_session_id {
+                    // Get the existing worktree for this task
+                    let worktree = {
+                        let db = db.lock().unwrap();
+                        db.get_worktree_for_task(&task_id)
+                            .map_err(|e| format!("Failed to get worktree: {}", e))?
+                    };
+
+                    if let Some(ref w) = worktree {
+                        // Ensure the server is running (respawn if it was stopped)
+                        let port = match server_mgr.get_server_port(&task_id).await {
+                            Some(p) => p,
+                            None => {
+                                let p = server_mgr
+                                    .spawn_server(&task_id, std::path::Path::new(&w.worktree_path))
+                                    .await
+                                    .map_err(|e| e.to_string())?;
+                                {
+                                    let db = db.lock().unwrap();
+                                    let _ = db.update_worktree_server(&task_id, p as i64, 0);
+                                }
+                                p
+                            }
+                        };
+
+                        let client = OpenCodeClient::with_base_url(format!("http://127.0.0.1:{}", port));
+
+                        // Reuse existing session or create a new one
+                        let opencode_session_id = if let Some(ref sid) = session.opencode_session_id {
                             {
                                 let db = db.lock().unwrap();
                                 let recheck_session = db.get_latest_session_for_ticket(&task_id)
@@ -440,53 +467,45 @@ pub async fn run_action(
                                     }
                                 }
                             }
-
-                            let client = OpenCodeClient::with_base_url(format!("http://127.0.0.1:{}", port));
-
-                            // Active session already has task context — send only the action prompt
-                            let prompt = action_prompt.clone();
-
+                            sid.clone()
+                        } else {
                             client
-                                .prompt_async(opencode_session_id, prompt, agent.clone())
+                                .create_session(format!("Task {}", task_id))
                                 .await
-                                .map_err(|e| format!("Failed to send prompt: {}", e))?;
+                                .map_err(|e| format!("Failed to create session: {}", e))?
+                        };
 
-                            {
-                                let db = db.lock().unwrap();
-                                db.update_agent_session(&session.id, &session.stage, "running", None, None)
-                                    .map_err(|e| format!("Failed to update agent session: {}", e))?;
-                            }
+                        let prompt = action_prompt.clone();
+                        client
+                            .prompt_async(&opencode_session_id, prompt, agent.clone())
+                            .await
+                            .map_err(|e| format!("Failed to send prompt: {}", e))?;
 
-                            match sse_mgr.start_bridge(app.clone(), task_id.clone(), Some(opencode_session_id.clone()), port).await {
-                                Ok(_) => {},
-                                Err(e) if e.to_string().contains("already running") => {},
-                                Err(e) => return Err(e.to_string()),
-                            }
-
-                            let worktree = {
-                                let db = db.lock().unwrap();
-                                db.get_worktree_for_task(&task_id)
-                                    .map_err(|e| format!("Failed to get worktree: {}", e))?
-                            };
-
-                            let worktree_path = worktree
-                                .map(|w| w.worktree_path)
-                                .unwrap_or_default();
-
-                            if task.status == "backlog" {
-                                let db = db.lock().unwrap();
-                                db.update_task_status(&task_id, "doing")
-                                    .map_err(|e| format!("Failed to update task status: {}", e))?;
-                                let _ = app.emit("task-changed", serde_json::json!({ "action": "updated", "task_id": task_id }));
-                            }
-
-                            return Ok(serde_json::json!({
-                                "task_id": task_id,
-                                "session_id": session.id,
-                                "worktree_path": worktree_path,
-                                "port": port,
-                            }));
+                        {
+                            let db = db.lock().unwrap();
+                            db.update_agent_session(&session.id, &session.stage, "running", None, None)
+                                .map_err(|e| format!("Failed to update agent session: {}", e))?;
                         }
+
+                        match sse_mgr.start_bridge(app.clone(), task_id.clone(), Some(opencode_session_id.clone()), port).await {
+                            Ok(_) => {},
+                            Err(e) if e.to_string().contains("already running") => {},
+                            Err(e) => return Err(e.to_string()),
+                        }
+
+                        if task.status == "backlog" {
+                            let db = db.lock().unwrap();
+                            db.update_task_status(&task_id, "doing")
+                                .map_err(|e| format!("Failed to update task status: {}", e))?;
+                            let _ = app.emit("task-changed", serde_json::json!({ "action": "updated", "task_id": task_id }));
+                        }
+
+                        return Ok(serde_json::json!({
+                            "task_id": task_id,
+                            "session_id": session.id,
+                            "worktree_path": w.worktree_path,
+                            "port": port,
+                        }));
                     }
                 }
                 _ => {}
