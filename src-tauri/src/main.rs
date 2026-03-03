@@ -293,6 +293,7 @@ fn main() {
             commands::orchestration::start_implementation,
             commands::orchestration::run_action,
             commands::orchestration::abort_implementation,
+            commands::orchestration::finalize_claude_session,
             commands::jira::refresh_jira_info,
             commands::github::force_github_sync,
             commands::github::get_pull_requests,
