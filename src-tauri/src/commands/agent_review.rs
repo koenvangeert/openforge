@@ -1,10 +1,10 @@
-use std::sync::Mutex;
+use std::sync::{Mutex, Arc};
 use tauri::State;
 use crate::{db, opencode_client::OpenCodeClient, server_manager::ServerManager, sse_bridge::SseBridgeManager, git_worktree, review_prompt};
 
 #[tauri::command]
 pub async fn start_agent_review(
-    db: State<'_, Mutex<db::Database>>,
+    db: State<'_, Arc<Mutex<db::Database>>>,
     server_mgr: State<'_, ServerManager>,
     sse_mgr: State<'_, SseBridgeManager>,
     app: tauri::AppHandle,
@@ -99,7 +99,7 @@ pub async fn start_agent_review(
 
 #[tauri::command]
 pub async fn get_agent_review_comments(
-    db: State<'_, Mutex<db::Database>>,
+    db: State<'_, Arc<Mutex<db::Database>>>,
     review_pr_id: i64,
 ) -> Result<Vec<db::AgentReviewCommentRow>, String> {
     let db = db.lock().unwrap();
@@ -109,7 +109,7 @@ pub async fn get_agent_review_comments(
 
 #[tauri::command]
 pub async fn update_agent_review_comment_status(
-    db: State<'_, Mutex<db::Database>>,
+    db: State<'_, Arc<Mutex<db::Database>>>,
     comment_id: i64,
     status: String,
 ) -> Result<(), String> {
@@ -120,7 +120,7 @@ pub async fn update_agent_review_comment_status(
 
 #[tauri::command]
 pub async fn dismiss_all_agent_review_comments(
-    db: State<'_, Mutex<db::Database>>,
+    db: State<'_, Arc<Mutex<db::Database>>>,
     review_pr_id: i64,
 ) -> Result<(), String> {
     let db = db.lock().unwrap();
