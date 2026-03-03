@@ -16,9 +16,8 @@ mod diff_parser;
 mod whisper_manager;
 mod http_server;
 mod plugin_installer;
+mod claude_hooks;
 mod commands;
-mod claude_sdk_protocol;
-mod claude_sdk_manager;
 use std::sync::{Mutex, Arc};
 use tauri::{Manager, Emitter};
 use jira_client::JiraClient;
@@ -218,7 +217,6 @@ fn main() {
             let sse_bridge_manager = sse_bridge::SseBridgeManager::new();
             let pty_manager = PtyManager::new();
             let whisper_manager = WhisperManager::with_active_model(whisper_model_pref);
-            let claude_sdk_manager = claude_sdk_manager::ClaudeSdkManager::new();
 
             app.manage(opencode_client);
             app.manage(jira_client);
@@ -227,7 +225,6 @@ fn main() {
             app.manage(sse_bridge_manager);
             app.manage(pty_manager);
             app.manage(whisper_manager);
-            app.manage(claude_sdk_manager);
 
             if let Err(e) = server_manager::ServerManager::new().cleanup_stale_pids() {
                 eprintln!("Failed to cleanup stale server PIDs: {}", e);
@@ -236,11 +233,6 @@ fn main() {
             if let Err(e) = PtyManager::new().cleanup_stale_pids() {
                 eprintln!("Failed to cleanup stale PTY PIDs: {}", e);
             }
-
-            if let Err(e) = claude_sdk_manager::ClaudeSdkManager::new().cleanup_stale_pids() {
-                eprintln!("Failed to cleanup stale Claude SDK PIDs: {}", e);
-            }
-
 
             println!("Server manager initialized");
 
@@ -338,10 +330,6 @@ fn main() {
             commands::whisper::get_all_whisper_model_statuses,
             commands::whisper::set_whisper_model,
             commands::opencode::list_opencode_agents,
-            commands::claude_sdk::send_claude_input,
-            commands::claude_sdk::interrupt_claude_session,
-            commands::claude_sdk::resume_claude_sdk_session,
-            commands::claude_sdk::respond_tool_approval,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
@@ -359,13 +347,8 @@ fn main() {
             let sse_mgr = app_handle.state::<sse_bridge::SseBridgeManager>();
             let server_mgr = app_handle.state::<server_manager::ServerManager>();
             let pty_mgr = app_handle.state::<pty_manager::PtyManager>();
-            let sdk_mgr = app_handle.state::<claude_sdk_manager::ClaudeSdkManager>();
 
             tauri::async_runtime::block_on(async {
-                // Order matters: SDK → PTY → SSE → Server
-                println!("[shutdown] Stopping all Claude SDK sessions...");
-                let _ = sdk_mgr.stop_all().await;
-
                 println!("[shutdown] Killing all PTY sessions...");
 
                 pty_mgr.kill_all().await;

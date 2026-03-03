@@ -10,4 +10,3 @@ pub mod review;
 pub mod self_review;
 pub mod config;
 pub mod whisper;
-pub mod claude_sdk;

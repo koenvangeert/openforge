@@ -33,6 +33,17 @@ pub struct CreateTaskResponse {
     pub status: String,
 }
 
+/// Payload from Claude Code hooks
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ClaudeHookPayload {
+    pub session_id: Option<String>,
+    pub tool_name: Option<String>,
+    pub tool_input: Option<serde_json::Value>,
+    pub transcript_path: Option<String>,
+    #[serde(alias = "CLAUDE_TASK_ID")]
+    pub claude_task_id: Option<String>,
+}
+
 /// Handle create_task requests from OpenCode sessions
 ///
 /// Creates a new task in the database with "backlog" status and
@@ -87,10 +98,72 @@ pub async fn create_task_handler(
     }))
 }
 
+async fn handle_hook(
+    State(state): State<AppState>,
+    Json(payload): Json<ClaudeHookPayload>,
+    event_type: &str,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    if let Some(task_id) = &payload.claude_task_id {
+        let payload_value = serde_json::to_value(&payload).unwrap_or(serde_json::json!({}));
+        let _ = state.app.emit(
+            "claude-hook-event",
+            serde_json::json!({
+                "task_id": task_id,
+                "event_type": event_type,
+                "payload": payload_value
+            })
+        );
+    } else {
+        eprintln!("[http_server] Warning: Hook event '{}' received without CLAUDE_TASK_ID", event_type);
+    }
+
+    Ok(Json(serde_json::json!({ "status": "ok" })))
+}
+
+pub async fn hook_stop_handler(
+    State(state): State<AppState>,
+    Json(payload): Json<ClaudeHookPayload>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    handle_hook(State(state), Json(payload), "stop").await
+}
+
+pub async fn hook_pre_tool_use_handler(
+    State(state): State<AppState>,
+    Json(payload): Json<ClaudeHookPayload>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    handle_hook(State(state), Json(payload), "pre-tool-use").await
+}
+
+pub async fn hook_post_tool_use_handler(
+    State(state): State<AppState>,
+    Json(payload): Json<ClaudeHookPayload>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    handle_hook(State(state), Json(payload), "post-tool-use").await
+}
+
+pub async fn hook_session_end_handler(
+    State(state): State<AppState>,
+    Json(payload): Json<ClaudeHookPayload>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    handle_hook(State(state), Json(payload), "session-end").await
+}
+
+pub async fn hook_notification_handler(
+    State(state): State<AppState>,
+    Json(payload): Json<ClaudeHookPayload>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    handle_hook(State(state), Json(payload), "notification").await
+}
+
 /// Create the HTTP router with all available routes
 pub fn create_router(state: AppState) -> Router {
     Router::new()
         .route("/create_task", post(create_task_handler))
+        .route("/hooks/stop", post(hook_stop_handler))
+        .route("/hooks/pre-tool-use", post(hook_pre_tool_use_handler))
+        .route("/hooks/post-tool-use", post(hook_post_tool_use_handler))
+        .route("/hooks/session-end", post(hook_session_end_handler))
+        .route("/hooks/notification", post(hook_notification_handler))
         .with_state(state)
 }
 
@@ -252,6 +325,85 @@ mod tests {
         assert_eq!(json_value["task_id"], "T-789");
         assert_eq!(json_value["project_id"], "P-2");
         assert_eq!(json_value["status"], "created");
+    }
+
+    // ========================================================================
+    // ClaudeHookPayload Tests
+    // ========================================================================
+
+    #[test]
+    fn test_claude_hook_payload_deserialize_with_claude_task_id() {
+        let json = r#"{"session_id": "sess-123", "tool_name": "bash", "CLAUDE_TASK_ID": "task-456"}"#;
+        let payload: ClaudeHookPayload = serde_json::from_str(json).expect("Failed to deserialize");
+        assert_eq!(payload.session_id, Some("sess-123".to_string()));
+        assert_eq!(payload.tool_name, Some("bash".to_string()));
+        assert_eq!(payload.claude_task_id, Some("task-456".to_string()));
+        assert!(payload.tool_input.is_none());
+        assert!(payload.transcript_path.is_none());
+    }
+
+    #[test]
+    fn test_claude_hook_payload_deserialize_with_claude_task_id_lowercase() {
+        let json = r#"{"session_id": "sess-789", "claude_task_id": "task-999"}"#;
+        let payload: ClaudeHookPayload = serde_json::from_str(json).expect("Failed to deserialize");
+        assert_eq!(payload.session_id, Some("sess-789".to_string()));
+        assert_eq!(payload.claude_task_id, Some("task-999".to_string()));
+    }
+
+    #[test]
+    fn test_claude_hook_payload_deserialize_all_fields() {
+        let json = r#"{
+            "session_id": "sess-123",
+            "tool_name": "bash",
+            "tool_input": {"cmd": "ls -la"},
+            "transcript_path": "/path/to/transcript",
+            "CLAUDE_TASK_ID": "task-456"
+        }"#;
+        let payload: ClaudeHookPayload = serde_json::from_str(json).expect("Failed to deserialize");
+        assert_eq!(payload.session_id, Some("sess-123".to_string()));
+        assert_eq!(payload.tool_name, Some("bash".to_string()));
+        assert!(payload.tool_input.is_some());
+        assert_eq!(payload.transcript_path, Some("/path/to/transcript".to_string()));
+        assert_eq!(payload.claude_task_id, Some("task-456".to_string()));
+    }
+
+    #[test]
+    fn test_claude_hook_payload_deserialize_missing_task_id() {
+        let json = r#"{"session_id": "sess-123", "tool_name": "bash"}"#;
+        let payload: ClaudeHookPayload = serde_json::from_str(json).expect("Failed to deserialize");
+        assert_eq!(payload.session_id, Some("sess-123".to_string()));
+        assert!(payload.claude_task_id.is_none());
+    }
+
+    #[test]
+    fn test_claude_hook_payload_deserialize_empty_object() {
+        let json = r#"{}"#;
+        let payload: ClaudeHookPayload = serde_json::from_str(json).expect("Failed to deserialize");
+        assert!(payload.session_id.is_none());
+        assert!(payload.tool_name.is_none());
+        assert!(payload.tool_input.is_none());
+        assert!(payload.transcript_path.is_none());
+        assert!(payload.claude_task_id.is_none());
+    }
+
+    #[test]
+    fn test_claude_hook_payload_deserialize_malformed_json() {
+        let json = r#"{"session_id": "sess-123", invalid json}"#;
+        let result: Result<ClaudeHookPayload, _> = serde_json::from_str(json);
+        assert!(result.is_err(), "Should fail with malformed JSON");
+    }
+
+    #[test]
+    fn test_claude_hook_payload_creation() {
+        let payload = ClaudeHookPayload {
+            session_id: Some("sess-123".to_string()),
+            tool_name: Some("bash".to_string()),
+            tool_input: Some(serde_json::json!({"cmd": "ls"})),
+            transcript_path: Some("/path".to_string()),
+            claude_task_id: Some("task-456".to_string()),
+        };
+        assert_eq!(payload.session_id, Some("sess-123".to_string()));
+        assert_eq!(payload.claude_task_id, Some("task-456".to_string()));
     }
 
 }
