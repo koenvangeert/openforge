@@ -146,9 +146,7 @@ fn build_hooks_json(port: u16) -> Value {
             ],
             "Notification": [
                 {
-                    "matcher": {
-                        "message": "permission"
-                    },
+                    "matcher": "permission_prompt",
                     "hooks": [
                         {
                             "type": "command",
@@ -370,7 +368,7 @@ mod tests {
     fn test_notification_permission_matcher() {
         let json = build_hooks_json(17422);
         let matcher = &json["hooks"]["Notification"][0]["matcher"];
-        assert_eq!(matcher["message"], "permission");
+        assert_eq!(matcher, "permission_prompt");
     }
 
     #[test]
