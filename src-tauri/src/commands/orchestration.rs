@@ -12,6 +12,17 @@ pub fn build_task_prompt(task: &db::TaskRow, action_instruction: &str, additiona
         }
     }
     
+    prompt.push_str(&task.title);
+    prompt.push('\n');
+    
+    if let Some(ref key) = task.jira_key {
+        if !key.is_empty() {
+            prompt.push_str(&format!("Jira: {}\n", key));
+        }
+    }
+    
+    prompt.push('\n');
+    
     if let Some(ref plan_text) = task.plan_text {
         if !plan_text.is_empty() {
             prompt.push_str("Plan:\n");
@@ -665,6 +676,7 @@ mod tests {
 
         let prompt = build_task_prompt(&task, "Do the thing!", None);
         
+        assert!(prompt.contains("Test Task"));
         assert!(prompt.contains("Plan:"));
         assert!(prompt.contains("Step 1: Do this"));
         assert!(prompt.ends_with("Do the thing!"));
@@ -689,7 +701,7 @@ mod tests {
 
         let prompt = build_task_prompt(&task, "Execute now!", None);
         
-        assert!(!prompt.contains("Acceptance Criteria:"));
+        assert!(prompt.contains("Minimal Task"));
         assert!(!prompt.contains("Plan:"));
         assert!(prompt.ends_with("Execute now!"));
     }
@@ -713,7 +725,7 @@ mod tests {
 
         let prompt = build_task_prompt(&task, "Run test!", None);
         
-        assert!(!prompt.contains("Acceptance Criteria:"));
+        assert!(prompt.contains("Empty Fields Task"));
         assert!(!prompt.contains("Plan:"));
         assert!(prompt.ends_with("Run test!"));
     }
@@ -738,6 +750,7 @@ mod tests {
         let prompt = build_task_prompt(&task, "Do the thing!", Some("Always use TypeScript strict mode.\nFollow the project coding standards."));
         
         assert!(prompt.starts_with("Always use TypeScript strict mode."));
+        assert!(prompt.contains("Instructions Task"));
         assert!(prompt.contains("Plan:\n"));
         assert!(prompt.ends_with("Do the thing!"));
     }
@@ -784,6 +797,81 @@ mod tests {
 
         let prompt = build_task_prompt(&task, "Do the thing!", None);
         
-        assert!(prompt.starts_with("Plan:"));
+        assert!(prompt.starts_with("None Instructions Task"));
+    }
+
+    #[test]
+    fn test_build_task_prompt_with_jira_key() {
+        let task = db::TaskRow {
+            id: "T-333".to_string(),
+            title: "Feature with Jira context".to_string(),
+            plan_text: Some("Step 1: Implement API".to_string()),
+            status: "backlog".to_string(),
+            jira_key: Some("PROJ-42".to_string()),
+            jira_title: Some("Add auth endpoint".to_string()),
+            jira_status: None,
+            jira_assignee: None,
+            jira_description: Some("<p>As a user I want to authenticate via JWT.</p>".to_string()),
+            project_id: None,
+            created_at: 0,
+            updated_at: 0,
+        };
+
+        let prompt = build_task_prompt(&task, "Implement this task.", None);
+
+        assert!(prompt.contains("Feature with Jira context"));
+        assert!(prompt.contains("Jira: PROJ-42"));
+        assert!(!prompt.contains("Description:"));
+        assert!(!prompt.contains("authenticate via JWT"));
+        assert!(prompt.contains("Plan:"));
+        assert!(prompt.contains("Step 1: Implement API"));
+        assert!(prompt.ends_with("Implement this task."));
+    }
+
+    #[test]
+    fn test_build_task_prompt_without_jira_key() {
+        let task = db::TaskRow {
+            id: "T-444".to_string(),
+            title: "Task without jira".to_string(),
+            plan_text: None,
+            status: "backlog".to_string(),
+            jira_key: None,
+            jira_title: None,
+            jira_status: None,
+            jira_assignee: None,
+            jira_description: None,
+            project_id: None,
+            created_at: 0,
+            updated_at: 0,
+        };
+
+        let prompt = build_task_prompt(&task, "Do it!", None);
+
+        assert!(prompt.contains("Task without jira"));
+        assert!(!prompt.contains("Jira:"));
+        assert!(prompt.ends_with("Do it!"));
+    }
+
+    #[test]
+    fn test_build_task_prompt_does_not_include_task_id() {
+        let task = db::TaskRow {
+            id: "T-555".to_string(),
+            title: "No ID in prompt".to_string(),
+            plan_text: None,
+            status: "backlog".to_string(),
+            jira_key: None,
+            jira_title: None,
+            jira_status: None,
+            jira_assignee: None,
+            jira_description: None,
+            project_id: None,
+            created_at: 0,
+            updated_at: 0,
+        };
+
+        let prompt = build_task_prompt(&task, "Go!", None);
+
+        assert!(!prompt.contains("T-555"));
+        assert!(prompt.contains("No ID in prompt"));
     }
 }
