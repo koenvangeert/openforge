@@ -230,7 +230,7 @@
     <div class="flex flex-col h-full overflow-hidden">
       <div class="flex flex-col gap-1.5 px-4 py-2.5 bg-base-200 border-b border-base-300 shrink-0">
         <div class="flex items-center gap-2 min-w-0">
-          <button class="btn btn-ghost btn-xs text-base-content/50 shrink-0" onclick={backToList}>← Back to list</button>
+          <button class="btn btn-ghost btn-xs text-base-content/50 shrink-0" onclick={backToList}>← Back</button>
           <span class="badge badge-primary badge-sm shrink-0">{$selectedReviewPr.repo_owner}/{$selectedReviewPr.repo_name}</span>
           <h2 class="text-sm font-semibold text-base-content m-0 truncate flex-1">{$selectedReviewPr.title}</h2>
           <span

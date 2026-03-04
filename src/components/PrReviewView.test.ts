@@ -174,7 +174,7 @@ describe('PrReviewView', () => {
     selectedReviewPr.set(basePr)
 
     await waitFor(() => {
-      expect(screen.getByText('← Back to list')).toBeTruthy()
+      expect(screen.getByText('← Back')).toBeTruthy()
       expect(screen.getByText('Fix authentication middleware')).toBeTruthy()
     })
   })
@@ -189,7 +189,7 @@ describe('PrReviewView', () => {
     selectedReviewPr.set(basePr)
 
     await waitFor(() => {
-      expect(screen.getByText('← Back to list')).toBeTruthy()
+      expect(screen.getByText('← Back')).toBeTruthy()
     })
   })
 
@@ -231,10 +231,10 @@ describe('PrReviewView', () => {
     selectedReviewPr.set(basePr)
 
     await waitFor(() => {
-      expect(screen.getByText('← Back to list')).toBeTruthy()
+      expect(screen.getByText('← Back')).toBeTruthy()
     })
 
-    const backBtn = screen.getByText('← Back to list')
+    const backBtn = screen.getByText('← Back')
     await fireEvent.click(backBtn)
 
     await waitFor(() => {
@@ -324,10 +324,10 @@ describe('PrReviewView', () => {
     ])
 
     await waitFor(() => {
-      expect(screen.getByText('← Back to list')).toBeTruthy()
+      expect(screen.getByText('← Back')).toBeTruthy()
     })
 
-    const backBtn = screen.getByText('← Back to list')
+    const backBtn = screen.getByText('← Back')
     await fireEvent.click(backBtn)
 
     await waitFor(() => {
@@ -352,10 +352,10 @@ describe('PrReviewView', () => {
     ])
 
     await waitFor(() => {
-      expect(screen.getByText('← Back to list')).toBeTruthy()
+      expect(screen.getByText('← Back')).toBeTruthy()
     })
 
-    const backBtn = screen.getByText('← Back to list')
+    const backBtn = screen.getByText('← Back')
     await fireEvent.click(backBtn)
 
     await waitFor(() => {
