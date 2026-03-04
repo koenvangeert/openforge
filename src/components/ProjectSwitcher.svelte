@@ -118,7 +118,7 @@
                   {:else if attn.running_agents > 0}
                     <span class="w-2 h-2 rounded-full bg-success animate-pulse" title="{attn.running_agents} agent{attn.running_agents > 1 ? 's' : ''} running"></span>
                   {:else if attn.completed_agents > 0}
-                    <span class="w-2 h-2 rounded-full bg-success" title="{attn.completed_agents} agent{attn.completed_agents > 1 ? 's' : ''} completed"></span>
+                    <span class="w-2 h-2 rounded-full bg-info" title="{attn.completed_agents} agent{attn.completed_agents > 1 ? 's' : ''} completed"></span>
                   {:else if attn.ci_failures > 0}
                     <span class="w-2 h-2 rounded-full bg-error" title="{attn.ci_failures} CI failure{attn.ci_failures > 1 ? 's' : ''}"></span>
                   {:else if attn.unaddressed_comments > 0}
