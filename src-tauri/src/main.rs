@@ -99,10 +99,9 @@ async fn resume_task_servers(app: tauri::AppHandle, http_ready: tokio::sync::one
 
                 if let Some(hooks_path) = hooks_path {
                     let resume_id = session.claude_session_id.as_deref();
-                    let prompt = if resume_id.is_some() {
-                        "Continue working on this task".to_string()
-                    } else {
-                        // No session ID — build a full prompt so Claude has context
+                    // Only build a prompt for fresh sessions (no session ID to resume).
+                    // When resuming, build_claude_args ignores the prompt.
+                    let prompt = if resume_id.is_none() {
                         let db = app.state::<Arc<Mutex<db::Database>>>();
                         let db_lock = db.lock().unwrap();
                         let task = db_lock.get_task(&worktree.task_id).ok().flatten();
@@ -117,6 +116,8 @@ async fn resume_task_servers(app: tauri::AppHandle, http_ready: tokio::sync::one
                             ),
                             None => "Continue working on this task.".to_string(),
                         }
+                    } else {
+                        String::new()
                     };
 
                     let pty_mgr = app.state::<PtyManager>();
