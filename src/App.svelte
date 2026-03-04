@@ -578,7 +578,7 @@
 </script>
 
 <div class="flex h-screen overflow-hidden">
-  <IconRail currentView={$currentView} onNavigate={handleNavigate} />
+  <IconRail currentView={$currentView} onNavigate={handleNavigate} reviewRequestCount={$reviewRequestCount} />
 
   <div class="flex flex-col flex-1 min-w-0">
     <header class="bg-neutral text-neutral-content h-12 flex items-center justify-between px-6 shrink-0">
