@@ -1,6 +1,6 @@
 use std::sync::{Mutex, Arc};
 use tauri::State;
-use crate::{db, opencode_client::OpenCodeClient, server_manager::ServerManager, sse_bridge::SseBridgeManager};
+use crate::{db, opencode_client::OpenCodeClient, server_manager::ServerManager, sse_bridge::SseBridgeManager, pty_manager::PtyManager};
 
 #[tauri::command]
 pub async fn get_session_status(
@@ -19,51 +19,45 @@ pub async fn abort_session(
     db: State<'_, Arc<Mutex<db::Database>>>,
     server_mgr: State<'_, ServerManager>,
     sse_mgr: State<'_, SseBridgeManager>,
+    pty_mgr: State<'_, PtyManager>,
     _app: tauri::AppHandle,
     session_id: String,
 ) -> Result<(), String> {
-    let task_id = {
+    // 1. Look up the session to get task_id and provider
+    let session = {
         let db_lock = db.lock().unwrap();
-        let session = db_lock
+        db_lock
             .get_agent_session(&session_id)
             .map_err(|e| format!("Failed to get session: {}", e))?
-            .ok_or_else(|| format!("Session {} not found", session_id))?;
-        session.ticket_id
+            .ok_or_else(|| format!("Session {} not found", session_id))?
     };
-    
-    let port = server_mgr.get_server_port(&task_id).await;
-    if let Some(port) = port {
-        let (session_opt, opencode_session_id) = {
-            let db_lock = db.lock().unwrap();
-            let session = db_lock
-                .get_latest_session_for_ticket(&task_id)
-                .map_err(|e| format!("Failed to get session: {}", e))?;
-            let opencode_session_id = session
-                .as_ref()
-                .and_then(|s| s.opencode_session_id.clone());
-            (session, opencode_session_id)
-        };
-        
-        if let Some(opencode_session_id) = opencode_session_id {
-            let client = OpenCodeClient::with_base_url(format!("http://127.0.0.1:{}", port));
-            let _ = client.abort_session(&opencode_session_id).await;
-        }
-        
-        if let Some(session) = session_opt {
-            let db_lock = db.lock().unwrap();
-            let _ = db_lock.update_agent_session(&session.id, "implementing", "failed", None, Some("Aborted by user"));
-        }
-    }
-    
-    sse_mgr.stop_bridge(&task_id).await;
-    
-    let _ = server_mgr.stop_server(&task_id).await;
-    
+    let task_id = &session.ticket_id;
+
+    // 2. Create provider from session's provider field
+    let provider = crate::providers::Provider::from_name(
+        &session.provider,
+        pty_mgr.inner().clone(),
+        server_mgr.inner().clone(),
+        sse_mgr.inner().clone(),
+    ).map_err(|e| format!("Unknown provider: {}", e))?;
+
+    // 3. Abort via provider (handles PTY kill for Claude, HTTP abort + SSE/server stop for OpenCode)
+    let _ = provider.abort(task_id, &session).await;
+
+    // 4. Update session status (orchestration-level concern)
+    // Claude uses "interrupted", OpenCode uses "failed"
+    let abort_status = if session.provider == "claude-code" { "interrupted" } else { "failed" };
     {
-        let db = db.lock().unwrap();
-        let _ = db.update_worktree_status(&task_id, "stopped");
+        let db_lock = db.lock().unwrap();
+        let _ = db_lock.update_agent_session(&session.id, "implementing", abort_status, None, Some("Aborted by user"));
     }
-    
+
+    // 5. Update worktree status for OpenCode
+    if session.provider != "claude-code" {
+        let db = db.lock().unwrap();
+        let _ = db.update_worktree_status(task_id, "stopped");
+    }
+
     Ok(())
 }
 

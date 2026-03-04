@@ -101,6 +101,7 @@ struct PtySession {
 // ============================================================================
 
 /// Manages multiple PTY sessions (one per task)
+#[derive(Clone)]
 pub struct PtyManager {
     sessions: Arc<Mutex<HashMap<String, PtySession>>>,
     pid_dir_override: Option<PathBuf>,

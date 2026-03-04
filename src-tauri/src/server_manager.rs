@@ -67,6 +67,7 @@ struct ManagedServer {
 // ============================================================================
 
 /// Manages multiple OpenCode servers (one per task/worktree)
+#[derive(Clone)]
 pub struct ServerManager {
     servers: Arc<Mutex<HashMap<String, ManagedServer>>>,
     pid_dir_override: Option<PathBuf>,

@@ -13,7 +13,6 @@ mod sse_bridge;
 mod pty_manager;
 pub mod review_parser;
 mod review_prompt;
-mod agent_coordinator;
 mod diff_parser;
 mod whisper_manager;
 mod http_server;
@@ -21,6 +20,7 @@ mod plugin_installer;
 mod claude_hooks;
 mod commands;
 mod migration;
+pub mod providers;
 use std::sync::{Mutex, Arc};
 use tauri::{Manager, Emitter};
 use jira_client::JiraClient;
@@ -60,10 +60,7 @@ async fn resume_task_servers(app: tauri::AppHandle, http_ready: tokio::sync::one
         return;
     }
 
-    println!("[startup] Resuming OpenCode servers for {} task(s)", worktrees.len());
-
-    let server_mgr = app.state::<server_manager::ServerManager>();
-    let sse_mgr = app.state::<sse_bridge::SseBridgeManager>();
+    println!("[startup] Resuming servers for {} task(s)", worktrees.len());
 
     for worktree in worktrees {
         let worktree_path = std::path::Path::new(&worktree.worktree_path);
@@ -75,101 +72,69 @@ async fn resume_task_servers(app: tauri::AppHandle, http_ready: tokio::sync::one
             continue;
         }
 
-        // Check provider for this task's latest session
+        // Look up the latest session to determine which provider to use
         let latest_session = {
             let db = app.state::<Arc<Mutex<db::Database>>>();
             let db_lock = db.lock().unwrap();
             db_lock.get_latest_session_for_ticket(&worktree.task_id).ok().flatten()
         };
-        let provider = latest_session.as_ref().map(|s| s.provider.as_str()).unwrap_or("claude-code");
+        let provider_name = latest_session.as_ref()
+            .map(|s| s.provider.as_str())
+            .unwrap_or("claude-code");
 
-        // Handle Claude Code sessions: auto-resume with --resume or --continue
-        if provider == "claude-code" {
-            let port = claude_hooks::get_http_server_port();
-            let hooks_path = claude_hooks::generate_hooks_settings(port)
-                .map_err(|e| {
-                    eprintln!(
-                        "[startup] Failed to generate hooks settings for task {}: {}",
-                        worktree.task_id, e
-                    );
-                })
-                .ok();
-
-            if let Some(hooks_path) = hooks_path {
-                // Use --resume <id> if we have a session ID, otherwise --continue
-                let resume_id = latest_session.as_ref()
-                    .and_then(|s| s.claude_session_id.as_deref());
-                let use_continue = resume_id.is_none();
-
-                let pty_mgr = app.state::<PtyManager>();
-                match pty_mgr.spawn_claude_pty(
-                    &worktree.task_id,
-                    std::path::Path::new(&worktree.worktree_path),
-                    "",
-                    resume_id,
-                    use_continue,
-                    &hooks_path,
-                    80,
-                    24,
-                    app.clone(),
-                ).await {
-                    Ok(_) => {
-                        let _ = app.emit(
-                            "server-resumed",
-                            serde_json::json!({
-                                "task_id": worktree.task_id,
-                                "port": 0,
-                            }),
-                        );
-                        if let Some(id) = resume_id {
-                            println!(
-                                "[startup] Claude Code task {} resumed with --resume {}",
-                                worktree.task_id, id
-                            );
-                        } else {
-                            println!(
-                                "[startup] Claude Code task {} resumed with --continue",
-                                worktree.task_id
-                            );
-                        }
-                        continue;
-                    }
-                    Err(e) => {
-                        eprintln!(
-                            "[startup] Failed to spawn Claude PTY for task {}: {}",
-                            worktree.task_id, e
-                        );
-                    }
-                }
+        // Build a dummy session for the case where no session exists in the DB.
+        // ClaudeCodeProvider uses claude_session_id=None → spawns with --continue.
+        let dummy_session;
+        let session_ref: &db::AgentSessionRow = match &latest_session {
+            Some(s) => s,
+            None => {
+                dummy_session = db::AgentSessionRow {
+                    id: String::new(),
+                    ticket_id: worktree.task_id.clone(),
+                    opencode_session_id: None,
+                    stage: "implementing".to_string(),
+                    status: "running".to_string(),
+                    checkpoint_data: None,
+                    error_message: None,
+                    created_at: 0,
+                    updated_at: 0,
+                    provider: provider_name.to_string(),
+                    claude_session_id: None,
+                };
+                &dummy_session
             }
+        };
 
-            // Hooks generation failed or spawn failed — mark interrupted
-            if let Some(ref session) = latest_session {
-                let db = app.state::<Arc<Mutex<db::Database>>>();
-                let db_lock = db.lock().unwrap();
-                let _ = db_lock.update_agent_session(&session.id, &session.stage, "interrupted", None, Some("App restarted"));
+        let provider = match providers::Provider::from_name(
+            provider_name,
+            app.state::<PtyManager>().inner().clone(),
+            app.state::<server_manager::ServerManager>().inner().clone(),
+            app.state::<sse_bridge::SseBridgeManager>().inner().clone(),
+        ) {
+            Ok(p) => p,
+            Err(e) => {
+                eprintln!("[startup] Unknown provider for task {}: {}", worktree.task_id, e);
+                continue;
             }
-            let _ = app.emit(
-                "server-resumed",
-                serde_json::json!({
-                    "task_id": worktree.task_id,
-                    "port": 0,
-                }),
-            );
-            println!(
-                "[startup] Claude Code task {} marked as interrupted (failed to resume)",
-                worktree.task_id
-            );
-            continue;
-        }
+        };
 
-        // OpenCode path: spawn server and start SSE bridge
-        match server_mgr.spawn_server(&worktree.task_id, worktree_path).await {
-            Ok(port) => {
-                {
+        match provider.resume(
+            &worktree.task_id,
+            session_ref,
+            worktree_path,
+            None,
+            None,
+            &app,
+        ).await {
+            Ok(result) => {
+                if provider_name != "claude-code" {
                     let db = app.state::<Arc<Mutex<db::Database>>>();
                     let db_lock = db.lock().unwrap();
-                    if let Err(e) = db_lock.update_worktree_server(&worktree.task_id, port as i64, 0) {
+                    if let Err(e) = db_lock.update_worktree_server(
+                        &worktree.task_id,
+                        result.port as i64,
+                        0,
+                    ) {
                         eprintln!(
                             "[startup] Failed to update worktree server for {}: {}",
                             worktree.task_id, e
@@ -177,33 +142,46 @@ async fn resume_task_servers(app: tauri::AppHandle, http_ready: tokio::sync::one
                     }
                 }
 
-                if let Err(e) = sse_mgr
-                    .start_bridge(app.clone(), worktree.task_id.clone(), None, port)
-                    .await
-                {
-                    eprintln!(
-                        "[startup] Failed to start SSE bridge for {}: {}",
-                        worktree.task_id, e
-                    );
+                let _ = app.emit(
+                    "server-resumed",
+                    serde_json::json!({
+                        "task_id": worktree.task_id,
+                        "port": result.port,
+                    }),
+                );
+
+                println!(
+                    "[startup] Resumed {} for task {} (port {})",
+                    provider_name, worktree.task_id, result.port
+                );
+            }
+            Err(e) => {
+                eprintln!(
+                    "[startup] Failed to resume {} for task {}: {}",
+                    provider_name, worktree.task_id, e
+                );
+
+                // Mark Claude sessions as interrupted on failure
+                if provider_name == "claude-code" {
+                    if let Some(ref session) = latest_session {
+                        let db = app.state::<Arc<Mutex<db::Database>>>();
+                        let db_lock = db.lock().unwrap();
+                        let _ = db_lock.update_agent_session(
+                            &session.id,
+                            &session.stage,
+                            "interrupted",
+                            None,
+                            Some("App restarted"),
+                        );
+                    }
                 }
 
                 let _ = app.emit(
                     "server-resumed",
                     serde_json::json!({
                         "task_id": worktree.task_id,
-                        "port": port,
+                        "port": 0,
                     }),
-                );
-
-                println!(
-                    "[startup] Resumed server for task {} on port {}",
-                    worktree.task_id, port
-                );
-            }
-            Err(e) => {
-                eprintln!(
-                    "[startup] Failed to spawn server for task {}: {}",
-                    worktree.task_id, e
                 );
             }
         }

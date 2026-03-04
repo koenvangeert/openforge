@@ -1,6 +1,6 @@
 use std::sync::{Mutex, Arc};
 use tauri::{State, Emitter};
-use crate::{db, opencode_client::OpenCodeClient, server_manager::ServerManager, sse_bridge::SseBridgeManager, git_worktree, pty_manager::PtyManager};
+use crate::{db, server_manager::ServerManager, sse_bridge::SseBridgeManager, git_worktree, pty_manager::PtyManager};
 
 pub fn build_task_prompt(task: &db::TaskRow, action_instruction: &str, additional_instructions: Option<&str>) -> String {
     let mut prompt = String::new();
@@ -27,6 +27,68 @@ pub fn build_task_prompt(task: &db::TaskRow, action_instruction: &str, additiona
     prompt
 }
 
+pub(crate) fn create_and_record_session(
+    db: &std::sync::Arc<std::sync::Mutex<crate::db::Database>>,
+    task_id: &str,
+    provider_session_id: Option<&str>,
+    provider_name: &str,
+) -> Result<String, String> {
+    let agent_session_id = uuid::Uuid::new_v4().to_string();
+    db.lock()
+        .unwrap()
+        .create_agent_session(
+            &agent_session_id,
+            task_id,
+            provider_session_id,
+            "implementing",
+            "running",
+            provider_name,
+        )
+        .map_err(|e| format!("Failed to create agent session: {}", e))?;
+    Ok(agent_session_id)
+}
+
+fn activate_task_status_update(
+    db: &std::sync::Arc<std::sync::Mutex<crate::db::Database>>,
+    task_id: &str,
+    current_status: &str,
+) -> Result<(), String> {
+    if current_status == "backlog" {
+        db.lock()
+            .unwrap()
+            .update_task_status(task_id, "doing")
+            .map_err(|e| format!("Failed to update task status: {}", e))?;
+    }
+    Ok(())
+}
+
+pub(crate) fn activate_task(
+    db: &std::sync::Arc<std::sync::Mutex<crate::db::Database>>,
+    app: &tauri::AppHandle,
+    task_id: &str,
+    current_status: &str,
+) -> Result<(), String> {
+    activate_task_status_update(db, task_id, current_status)?;
+    if current_status == "backlog" {
+        let _ = app.emit("task-changed", serde_json::json!({ "action": "updated", "task_id": task_id }));
+    }
+    Ok(())
+}
+
+pub(crate) fn build_start_response(
+    task_id: &str,
+    session_id: &str,
+    worktree_path: &str,
+    port: u16,
+) -> serde_json::Value {
+    serde_json::json!({
+        "task_id": task_id,
+        "session_id": session_id,
+        "worktree_path": worktree_path,
+        "port": port,
+    })
+}
+
 
     pub(crate) async fn abort_task_agent(
     db: &State<'_, Arc<Mutex<db::Database>>>,
@@ -35,53 +97,33 @@ pub fn build_task_prompt(task: &db::TaskRow, action_instruction: &str, additiona
     pty_mgr: &State<'_, PtyManager>,
     task_id: &str,
 ) -> Result<(), String> {
-    let (provider, session) = {
+    let (provider_name, session) = {
         let db_lock = db.lock().unwrap();
         let session = db_lock.get_latest_session_for_ticket(task_id).ok().flatten();
         let provider = session.as_ref().map(|s| s.provider.clone()).unwrap_or_else(|| "claude-code".to_string());
         (provider, session)
     };
 
-    if provider == "claude-code" {
-        let _ = pty_mgr.kill_pty(task_id).await;
+    let provider = crate::providers::Provider::from_name(
+        &provider_name,
+        pty_mgr.inner().clone(),
+        server_mgr.inner().clone(),
+        sse_mgr.inner().clone(),
+    ).map_err(|e| format!("Unknown provider: {}", e))?;
 
-        if let Some(s) = session {
-            let db_lock = db.lock().unwrap();
-            let _ = db_lock.update_agent_session(&s.id, &s.stage, "interrupted", None, Some("Aborted by user"));
-        }
-    } else {
-        // OpenCode path - existing logic unchanged
-        let port = server_mgr.get_server_port(task_id).await;
-        if let Some(port) = port {
-            let (session, opencode_session_id) = {
-                let db_lock = db.lock().unwrap();
-                let session = db_lock
-                    .get_latest_session_for_ticket(task_id)
-                    .map_err(|e| format!("Failed to get session: {}", e))?;
-                let opencode_session_id = session
-                    .as_ref()
-                    .and_then(|s| s.opencode_session_id.clone());
-                (session, opencode_session_id)
-            };
+    if let Some(ref s) = session {
+        let _ = provider.abort(task_id, s).await;
+    }
 
-            if let Some(opencode_session_id) = opencode_session_id {
-                let client = OpenCodeClient::with_base_url(format!("http://127.0.0.1:{}", port));
-                let _ = client.abort_session(&opencode_session_id).await;
-            }
+    if let Some(ref s) = session {
+        let db_lock = db.lock().unwrap();
+        let status = if provider_name == "claude-code" { "interrupted" } else { "failed" };
+        let _ = db_lock.update_agent_session(&s.id, &s.stage, status, None, Some("Aborted by user"));
+    }
 
-            if let Some(session) = session {
-                let db_lock = db.lock().unwrap();
-                let _ = db_lock.update_agent_session(&session.id, "implementing", "failed", None, Some("Aborted by user"));
-            }
-        }
-
-        sse_mgr.stop_bridge(task_id).await;
-        let _ = server_mgr.stop_server(task_id).await;
-
-        {
-            let db = db.lock().unwrap();
-            let _ = db.update_worktree_status(task_id, "stopped");
-        }
+    if provider_name != "claude-code" {
+        let db = db.lock().unwrap();
+        let _ = db.update_worktree_status(task_id, "stopped");
     }
 
     Ok(())
@@ -109,12 +151,18 @@ pub async fn start_implementation(
         (task, project_id, instructions)
     };
 
-    let provider = {
+    let provider_name = {
         let db_lock = db.lock().unwrap();
         db_lock.get_config("ai_provider").ok().flatten().unwrap_or_else(|| "claude-code".to_string())
     };
 
-    // Shared: create worktree (both providers use the same logic)
+    let provider = crate::providers::Provider::from_name(
+        &provider_name,
+        pty_mgr.inner().clone(),
+        server_mgr.inner().clone(),
+        sse_mgr.inner().clone(),
+    ).map_err(|e| format!("Unknown provider: {}", e))?;
+
     let branch = git_worktree::slugify_branch_name(&task_id, &task.title);
     let home = dirs::home_dir().ok_or("Failed to get home directory")?;
     let repo_name = std::path::Path::new(&repo_path)
@@ -148,109 +196,30 @@ pub async fn start_implementation(
         .map_err(|e| e.to_string())?;
     }
 
-    if provider == "claude-code" {
-        let port = crate::claude_hooks::get_http_server_port();
-        let hooks_path = crate::claude_hooks::generate_hooks_settings(port).map_err(|e| e.to_string())?;
-        let prompt = build_task_prompt(&task, "Implement this task. Create a branch, make the changes, and create a pull request when done.", additional_instructions.as_deref());
+    let prompt = build_task_prompt(&task, "Implement this task. Create a branch, make the changes, and create a pull request when done.", additional_instructions.as_deref());
+    let result = provider.start(&task_id, &worktree_path, &prompt, &app).await?;
 
-        pty_mgr.spawn_claude_pty(
-            &task_id,
-            &worktree_path,
-            &prompt,
-            None,
-            false,
-            &hooks_path,
-            80,
-            24,
-            app.clone(),
-        ).await.map_err(|e| e.to_string())?;
-
-        let agent_session_id = uuid::Uuid::new_v4().to_string();
-        {
-            let db = db.lock().unwrap();
-            db.create_agent_session(
-                &agent_session_id,
-                &task_id,
-                None,
-                "implementing",
-                "running",
-                "claude-code",
-            ).map_err(|e| format!("Failed to create agent session: {}", e))?;
-        }
-
-        if task.status == "backlog" {
-            let db = db.lock().unwrap();
-            db.update_task_status(&task_id, "doing")
-                .map_err(|e| format!("Failed to update task status: {}", e))?;
-        }
-        let _ = app.emit("task-changed", serde_json::json!({ "action": "updated", "task_id": task_id }));
-
-        return Ok(serde_json::json!({
-            "task_id": task_id,
-            "session_id": agent_session_id,
-            "worktree_path": worktree_path.to_str().unwrap(),
-            "port": 0,
-        }));
-    } else {
-        // OpenCode path - existing logic unchanged
-        let port = server_mgr
-            .spawn_server(&task_id, &worktree_path)
-            .await
+    if provider_name != "claude-code" {
+        let db = db.lock().unwrap();
+        db.update_worktree_server(&task_id, result.port as i64, 0)
             .map_err(|e| e.to_string())?;
-
-        {
-            let db = db.lock().unwrap();
-            db.update_worktree_server(&task_id, port as i64, 0)
-                .map_err(|e| e.to_string())?;
-        }
-
-        let client = OpenCodeClient::with_base_url(format!("http://127.0.0.1:{}", port));
-
-        let opencode_session_id = client
-            .create_session(format!("Task {}", task_id))
-            .await
-            .map_err(|e| format!("Failed to create session: {}", e))?;
-
-        sse_mgr
-            .start_bridge(app.clone(), task_id.clone(), Some(opencode_session_id.clone()), port)
-            .await
-            .map_err(|e| e.to_string())?;
-
-        let prompt = build_task_prompt(&task, "Implement this task. Create a branch, make the changes, and create a pull request when done.", additional_instructions.as_deref());
-
-        client
-            .prompt_async(&opencode_session_id, prompt, None)
-            .await
-            .map_err(|e| format!("Failed to send prompt: {}", e))?;
-
-        let agent_session_id = uuid::Uuid::new_v4().to_string();
-        {
-            let db = db.lock().unwrap();
-            db.create_agent_session(
-                &agent_session_id,
-                &task_id,
-                Some(&opencode_session_id),
-                "implementing",
-                "running",
-                "opencode",
-            )
-            .map_err(|e| format!("Failed to create agent session: {}", e))?;
-        }
-
-        {
-            let db = db.lock().unwrap();
-            db.update_task_status(&task_id, "doing")
-                .map_err(|e| format!("Failed to update task status: {}", e))?;
-        }
-        let _ = app.emit("task-changed", serde_json::json!({ "action": "updated", "task_id": task_id }));
-
-        Ok(serde_json::json!({
-            "task_id": task_id,
-            "worktree_path": worktree_path.to_str().unwrap(),
-            "port": port,
-            "session_id": agent_session_id,
-        }))
     }
+
+    let agent_session_id = create_and_record_session(
+        db.inner(),
+        &task_id,
+        result.opencode_session_id.as_deref(),
+        provider.provider_name(),
+    )?;
+
+    activate_task(db.inner(), &app, &task_id, &task.status)?;
+
+    Ok(build_start_response(
+        &task_id,
+        &agent_session_id,
+        worktree_path.to_str().unwrap(),
+        result.port,
+    ))
 }
 
 #[tauri::command]
@@ -277,337 +246,138 @@ pub async fn run_action(
         (task, project_id, instructions)
     };
 
-    let provider = {
+    let provider_name = {
         let db_lock = db.lock().unwrap();
         db_lock.get_config("ai_provider").ok().flatten().unwrap_or_else(|| "claude-code".to_string())
     };
 
-    if provider == "claude-code" {
-        let existing_session = {
-            let db = db.lock().unwrap();
-            db.get_latest_session_for_ticket(&task_id)
-                .map_err(|e| format!("Failed to get latest session: {}", e))?
-        };
+    let provider = crate::providers::Provider::from_name(
+        &provider_name,
+        pty_mgr.inner().clone(),
+        server_mgr.inner().clone(),
+        sse_mgr.inner().clone(),
+    ).map_err(|e| format!("Unknown provider: {}", e))?;
 
-        if let Some(ref session) = existing_session {
-            match session.status.as_str() {
-                "running" => return Err("Agent is busy".to_string()),
-                "paused" => return Err("Answer pending question first".to_string()),
-                "completed" | "failed" | "interrupted" => {
-                    let worktree = {
+    let existing_session = {
+        let db = db.lock().unwrap();
+        db.get_latest_session_for_ticket(&task_id)
+            .map_err(|e| format!("Failed to get latest session: {}", e))?
+    };
+
+    if let Some(ref session) = existing_session {
+        match session.status.as_str() {
+            "running" => return Err("Agent is busy".to_string()),
+            "paused" => return Err("Answer pending question first".to_string()),
+            "completed" | "failed" | "interrupted" => {
+                let worktree = {
+                    let db = db.lock().unwrap();
+                    db.get_worktree_for_task(&task_id)
+                        .map_err(|e| format!("Failed to get worktree: {}", e))?
+                };
+
+                if let Some(w) = worktree {
+                    if provider.provider_session_id(session).is_some() {
                         let db = db.lock().unwrap();
-                        db.get_worktree_for_task(&task_id)
-                            .map_err(|e| format!("Failed to get worktree: {}", e))?
-                    };
-
-                    if let Some(w) = worktree {
-                        let port = crate::claude_hooks::get_http_server_port();
-                        let hooks_path = crate::claude_hooks::generate_hooks_settings(port).map_err(|e| e.to_string())?;
-
-                        // Resume existing session if we have a session ID, otherwise start fresh
-                        let resume_id = session.claude_session_id.as_deref();
-
-                        pty_mgr.spawn_claude_pty(
-                            &task_id,
-                            std::path::Path::new(&w.worktree_path),
-                            &action_prompt,
-                            resume_id,
-                            false,
-                            &hooks_path,
-                            80,
-                            24,
-                            app.clone(),
-                        ).await.map_err(|e| e.to_string())?;
-
-                        {
-                            let db = db.lock().unwrap();
-                            db.update_agent_session(&session.id, &session.stage, "running", None, None)
-                                .map_err(|e| format!("Failed to update agent session: {}", e))?;
+                        let recheck = db.get_latest_session_for_ticket(&task_id)
+                            .map_err(|e| format!("Failed to recheck session: {}", e))?;
+                        if let Some(s) = recheck {
+                            if s.status != "completed" && s.status != "failed" && s.status != "interrupted" {
+                                return Err("Session status changed, cannot reuse".to_string());
+                            }
                         }
-
-                        if task.status == "backlog" {
-                            let db = db.lock().unwrap();
-                            db.update_task_status(&task_id, "doing")
-                                .map_err(|e| format!("Failed to update task status: {}", e))?;
-                            let _ = app.emit("task-changed", serde_json::json!({ "action": "updated", "task_id": task_id }));
-                        }
-
-                        return Ok(serde_json::json!({
-                            "task_id": task_id,
-                            "session_id": session.id,
-                            "worktree_path": w.worktree_path,
-                            "port": 0,
-                        }));
                     }
-                }
-                _ => {}
-            }
-        }
 
-        let port = crate::claude_hooks::get_http_server_port();
-        let hooks_path = crate::claude_hooks::generate_hooks_settings(port).map_err(|e| e.to_string())?;
-        let prompt = build_task_prompt(&task, &action_prompt, additional_instructions.as_deref());
+                    let result = provider.resume(
+                        &task_id,
+                        session,
+                        std::path::Path::new(&w.worktree_path),
+                        Some(&action_prompt),
+                        agent.as_deref(),
+                        &app,
+                    ).await?;
 
-        let branch = git_worktree::slugify_branch_name(&task_id, &task.title);
-        let home = dirs::home_dir().ok_or("Failed to get home directory")?;
-        let repo_name = std::path::Path::new(&repo_path)
-            .file_name()
-            .and_then(|n| n.to_str())
-            .ok_or("Invalid repo path")?;
-        let worktree_path = home
-            .join(".openforge")
-            .join("worktrees")
-            .join(repo_name)
-            .join(&task_id);
-
-        git_worktree::create_worktree(
-            std::path::Path::new(&repo_path),
-            &worktree_path,
-            &branch,
-            "origin/main",
-        ).await.map_err(|e| e.to_string())?;
-
-        {
-            let db = db.lock().unwrap();
-            db.create_worktree_record(
-                &task_id,
-                &project_id_owned,
-                &repo_path,
-                worktree_path.to_str().unwrap(),
-                &branch,
-            ).map_err(|e| e.to_string())?;
-        }
-
-        pty_mgr.spawn_claude_pty(
-            &task_id,
-            &worktree_path,
-            &prompt,
-            None,
-            false,
-            &hooks_path,
-            80,
-            24,
-            app.clone(),
-        ).await.map_err(|e| e.to_string())?;
-
-        let agent_session_id = uuid::Uuid::new_v4().to_string();
-        {
-            let db = db.lock().unwrap();
-            db.create_agent_session(
-                &agent_session_id,
-                &task_id,
-                None,
-                "implementing",
-                "running",
-                "claude-code",
-            ).map_err(|e| format!("Failed to create agent session: {}", e))?;
-        }
-
-        if task.status == "backlog" {
-            let db = db.lock().unwrap();
-            db.update_task_status(&task_id, "doing")
-                .map_err(|e| format!("Failed to update task status: {}", e))?;
-            let _ = app.emit("task-changed", serde_json::json!({ "action": "updated", "task_id": task_id }));
-        }
-
-        return Ok(serde_json::json!({
-            "task_id": task_id,
-            "worktree_path": worktree_path.to_str().unwrap(),
-            "port": 0,
-            "session_id": agent_session_id,
-        }));
-    } else {
-        // OpenCode path - existing logic unchanged
-        let existing_session = {
-            let db = db.lock().unwrap();
-            db.get_latest_session_for_ticket(&task_id)
-                .map_err(|e| format!("Failed to get latest session: {}", e))?
-        };
-
-        if let Some(session) = existing_session {
-            match session.status.as_str() {
-                "running" => {
-                    return Err("Agent is busy".to_string());
-                }
-                "paused" => {
-                    return Err("Answer pending question first".to_string());
-                }
-                "completed" | "failed" | "interrupted" => {
-                    // Get the existing worktree for this task
-                    let worktree = {
+                    {
                         let db = db.lock().unwrap();
-                        db.get_worktree_for_task(&task_id)
-                            .map_err(|e| format!("Failed to get worktree: {}", e))?
-                    };
-
-                    if let Some(ref w) = worktree {
-                        // Ensure the server is running (respawn if it was stopped)
-                        let port = match server_mgr.get_server_port(&task_id).await {
-                            Some(p) => p,
-                            None => {
-                                let p = server_mgr
-                                    .spawn_server(&task_id, std::path::Path::new(&w.worktree_path))
-                                    .await
-                                    .map_err(|e| e.to_string())?;
-                                {
-                                    let db = db.lock().unwrap();
-                                    let _ = db.update_worktree_server(&task_id, p as i64, 0);
-                                }
-                                p
-                            }
-                        };
-
-                        let client = OpenCodeClient::with_base_url(format!("http://127.0.0.1:{}", port));
-
-                        // Reuse existing session or create a new one
-                        let opencode_session_id = if let Some(ref sid) = session.opencode_session_id {
-                            {
-                                let db = db.lock().unwrap();
-                                let recheck_session = db.get_latest_session_for_ticket(&task_id)
-                                    .map_err(|e| format!("Failed to recheck session: {}", e))?;
-                                if let Some(s) = recheck_session {
-                                    if s.status != "completed" && s.status != "failed" && s.status != "interrupted" {
-                                        return Err("Session status changed, cannot reuse".to_string());
-                                    }
-                                }
-                            }
-                            sid.clone()
-                        } else {
-                            client
-                                .create_session(format!("Task {}", task_id))
-                                .await
-                                .map_err(|e| format!("Failed to create session: {}", e))?
-                        };
-
-                        let prompt = action_prompt.clone();
-                        client
-                            .prompt_async(&opencode_session_id, prompt, agent.clone())
-                            .await
-                            .map_err(|e| format!("Failed to send prompt: {}", e))?;
-
-                        {
-                            let db = db.lock().unwrap();
-                            db.update_agent_session(&session.id, &session.stage, "running", None, None)
-                                .map_err(|e| format!("Failed to update agent session: {}", e))?;
-                        }
-
-                        match sse_mgr.start_bridge(app.clone(), task_id.clone(), Some(opencode_session_id.clone()), port).await {
-                            Ok(_) => {},
-                            Err(e) if e.to_string().contains("already running") => {},
-                            Err(e) => return Err(e.to_string()),
-                        }
-
-                        if task.status == "backlog" {
-                            let db = db.lock().unwrap();
-                            db.update_task_status(&task_id, "doing")
-                                .map_err(|e| format!("Failed to update task status: {}", e))?;
-                            let _ = app.emit("task-changed", serde_json::json!({ "action": "updated", "task_id": task_id }));
-                        }
-
-                        return Ok(serde_json::json!({
-                            "task_id": task_id,
-                            "session_id": session.id,
-                            "worktree_path": w.worktree_path,
-                            "port": port,
-                        }));
+                        db.update_agent_session(&session.id, &session.stage, "running", None, None)
+                            .map_err(|e| format!("Failed to update agent session: {}", e))?;
                     }
+
+                    if provider_name != "claude-code" {
+                        let db = db.lock().unwrap();
+                        let _ = db.update_worktree_server(&task_id, result.port as i64, 0);
+                    }
+
+                    activate_task(db.inner(), &app, &task_id, &task.status)?;
+
+                    return Ok(build_start_response(
+                        &task_id,
+                        &session.id,
+                        &w.worktree_path,
+                        result.port,
+                    ));
                 }
-                _ => {}
             }
+            _ => {}
         }
-
-        // OpenCode new start
-        let branch = git_worktree::slugify_branch_name(&task_id, &task.title);
-        let home = dirs::home_dir().ok_or("Failed to get home directory")?;
-        let repo_name = std::path::Path::new(&repo_path)
-            .file_name()
-            .and_then(|n| n.to_str())
-            .ok_or("Invalid repo path")?;
-        let worktree_path = home
-            .join(".openforge")
-            .join("worktrees")
-            .join(repo_name)
-            .join(&task_id);
-
-        git_worktree::create_worktree(
-            std::path::Path::new(&repo_path),
-            &worktree_path,
-            &branch,
-            "origin/main",
-        )
-        .await
-        .map_err(|e| e.to_string())?;
-
-        {
-            let db = db.lock().unwrap();
-            db.create_worktree_record(
-                &task_id,
-                &project_id_owned,
-                &repo_path,
-                worktree_path.to_str().unwrap(),
-                &branch,
-            )
-            .map_err(|e| e.to_string())?;
-        }
-
-        let port = server_mgr
-            .spawn_server(&task_id, &worktree_path)
-            .await
-            .map_err(|e| e.to_string())?;
-
-        {
-            let db = db.lock().unwrap();
-            db.update_worktree_server(&task_id, port as i64, 0)
-                .map_err(|e| e.to_string())?;
-        }
-
-        let client = OpenCodeClient::with_base_url(format!("http://127.0.0.1:{}", port));
-
-        let opencode_session_id = client
-            .create_session(format!("Task {}", task_id))
-            .await
-            .map_err(|e| format!("Failed to create session: {}", e))?;
-
-        sse_mgr
-            .start_bridge(app.clone(), task_id.clone(), Some(opencode_session_id.clone()), port)
-            .await
-            .map_err(|e| e.to_string())?;
-
-        let prompt = build_task_prompt(&task, &action_prompt, additional_instructions.as_deref());
-
-        client
-            .prompt_async(&opencode_session_id, prompt, agent)
-            .await
-            .map_err(|e| format!("Failed to send prompt: {}", e))?;
-
-        let agent_session_id = uuid::Uuid::new_v4().to_string();
-        {
-            let db = db.lock().unwrap();
-            db.create_agent_session(
-                &agent_session_id,
-                &task_id,
-                Some(&opencode_session_id),
-                "implementing",
-                "running",
-                "opencode",
-            )
-            .map_err(|e| format!("Failed to create agent session: {}", e))?;
-        }
-
-        if task.status == "backlog" {
-            let db = db.lock().unwrap();
-            db.update_task_status(&task_id, "doing")
-                .map_err(|e| format!("Failed to update task status: {}", e))?;
-            let _ = app.emit("task-changed", serde_json::json!({ "action": "updated", "task_id": task_id }));
-        }
-
-        Ok(serde_json::json!({
-            "task_id": task_id,
-            "worktree_path": worktree_path.to_str().unwrap(),
-            "port": port,
-            "session_id": agent_session_id,
-        }))
     }
+
+    let branch = git_worktree::slugify_branch_name(&task_id, &task.title);
+    let home = dirs::home_dir().ok_or("Failed to get home directory")?;
+    let repo_name = std::path::Path::new(&repo_path)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .ok_or("Invalid repo path")?;
+    let worktree_path = home
+        .join(".openforge")
+        .join("worktrees")
+        .join(repo_name)
+        .join(&task_id);
+
+    git_worktree::create_worktree(
+        std::path::Path::new(&repo_path),
+        &worktree_path,
+        &branch,
+        "origin/main",
+    )
+    .await
+    .map_err(|e| e.to_string())?;
+
+    {
+        let db = db.lock().unwrap();
+        db.create_worktree_record(
+            &task_id,
+            &project_id_owned,
+            &repo_path,
+            worktree_path.to_str().unwrap(),
+            &branch,
+        )
+        .map_err(|e| e.to_string())?;
+    }
+
+    let prompt = build_task_prompt(&task, &action_prompt, additional_instructions.as_deref());
+    let result = provider.start(&task_id, &worktree_path, &prompt, &app).await?;
+
+    if provider_name != "claude-code" {
+        let db = db.lock().unwrap();
+        db.update_worktree_server(&task_id, result.port as i64, 0)
+            .map_err(|e| e.to_string())?;
+    }
+
+    let agent_session_id = create_and_record_session(
+        db.inner(),
+        &task_id,
+        result.opencode_session_id.as_deref(),
+        provider.provider_name(),
+    )?;
+
+    activate_task(db.inner(), &app, &task_id, &task.status)?;
+
+    Ok(build_start_response(
+        &task_id,
+        &agent_session_id,
+        worktree_path.to_str().unwrap(),
+        result.port,
+    ))
 }
 
 #[tauri::command]
@@ -858,4 +628,109 @@ mod tests {
         assert!(!prompt.contains("T-555"));
         assert!(prompt.contains("No ID in prompt"));
     }
+
+    #[test]
+    fn test_create_and_record_session_returns_valid_uuid() {
+        use crate::db::test_helpers::*;
+        let (db, path) = make_test_db("create_session_uuid");
+        insert_test_task(&db);
+        let db_arc = std::sync::Arc::new(std::sync::Mutex::new(db));
+
+        let result = create_and_record_session(&db_arc, "T-100", None, "claude-code");
+        assert!(result.is_ok());
+        let session_id = result.unwrap();
+
+        assert_eq!(session_id.len(), 36);
+        assert_eq!(session_id.chars().filter(|c| *c == '-').count(), 4);
+
+        drop(db_arc);
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_create_and_record_session_generates_unique_ids() {
+        use crate::db::test_helpers::*;
+        let (db, path) = make_test_db("create_session_unique");
+        insert_test_task(&db);
+        let db_arc = std::sync::Arc::new(std::sync::Mutex::new(db));
+
+        let id1 = create_and_record_session(&db_arc, "T-100", None, "claude-code").unwrap();
+        let id2 = create_and_record_session(&db_arc, "T-100", None, "claude-code").unwrap();
+        assert_ne!(id1, id2);
+
+        drop(db_arc);
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_create_and_record_session_with_provider_session_id() {
+        use crate::db::test_helpers::*;
+        let (db, path) = make_test_db("create_session_provider");
+        insert_test_task(&db);
+        let db_arc = std::sync::Arc::new(std::sync::Mutex::new(db));
+
+        let result = create_and_record_session(&db_arc, "T-100", Some("opencode-sess-xyz"), "opencode");
+        assert!(result.is_ok());
+
+        drop(db_arc);
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_build_start_response_contains_all_fields() {
+        let response = build_start_response("T-100", "sess-abc", "/path/to/worktree", 3000);
+
+        assert_eq!(response["task_id"], "T-100");
+        assert_eq!(response["session_id"], "sess-abc");
+        assert_eq!(response["worktree_path"], "/path/to/worktree");
+        assert_eq!(response["port"], 3000);
+    }
+
+    #[test]
+    fn test_build_start_response_zero_port() {
+        let response = build_start_response("T-200", "sess-def", "/another/path", 0);
+
+        assert_eq!(response["task_id"], "T-200");
+        assert_eq!(response["port"], 0);
+    }
+
+    #[test]
+    fn test_activate_task_status_update_sets_doing_when_backlog() {
+        use crate::db::test_helpers::*;
+        let (db, path) = make_test_db("activate_task_backlog");
+        insert_test_task(&db);
+        let db_arc = std::sync::Arc::new(std::sync::Mutex::new(db));
+
+        let task = db_arc.lock().unwrap().get_task("T-100").unwrap().unwrap();
+        assert_eq!(task.status, "backlog");
+
+        let result = activate_task_status_update(&db_arc, "T-100", "backlog");
+        assert!(result.is_ok());
+
+        let task = db_arc.lock().unwrap().get_task("T-100").unwrap().unwrap();
+        assert_eq!(task.status, "doing");
+
+        drop(db_arc);
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_activate_task_status_update_skips_non_backlog() {
+        use crate::db::test_helpers::*;
+        let (db, path) = make_test_db("activate_task_doing");
+        insert_test_task(&db);
+        let db_arc = std::sync::Arc::new(std::sync::Mutex::new(db));
+
+        db_arc.lock().unwrap().update_task_status("T-100", "doing").unwrap();
+
+        let result = activate_task_status_update(&db_arc, "T-100", "doing");
+        assert!(result.is_ok());
+
+        let task = db_arc.lock().unwrap().get_task("T-100").unwrap().unwrap();
+        assert_eq!(task.status, "doing");
+
+        drop(db_arc);
+        let _ = std::fs::remove_file(&path);
+    }
+
 }

@@ -95,6 +95,7 @@ struct BridgeHandle {
 // ============================================================================
 
 /// Manages multiple concurrent SSE bridges (one per active task/worktree)
+#[derive(Clone)]
 pub struct SseBridgeManager {
     bridges: Arc<Mutex<HashMap<String, BridgeHandle>>>,
 }
