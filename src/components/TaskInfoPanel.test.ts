@@ -36,7 +36,7 @@ const baseTask: Task = {
 describe('TaskInfoPanel', () => {
   it('renders Initial Prompt section with task title', () => {
     render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null } })
-    expect(screen.getByText('Initial Prompt')).toBeTruthy()
+    expect(screen.getByText('// INITIAL_PROMPT')).toBeTruthy()
     expect(screen.getByText('Implement auth middleware')).toBeTruthy()
   })
 
@@ -73,18 +73,18 @@ describe('TaskInfoPanel', () => {
     render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null } })
 
     await new Promise((r) => setTimeout(r, 10))
-    expect(screen.getByText('Pipeline Status')).toBeTruthy()
+    expect(screen.getByText('// PIPELINE_STATUS')).toBeTruthy()
   })
 
 
   it('renders worktree path section when worktreePath is provided', () => {
     render(TaskInfoPanel, { props: { task: baseTask, worktreePath: '/home/user/worktrees/T-42' } })
-    expect(screen.getByText('Worktree')).toBeTruthy()
+    expect(screen.getByText('// WORKTREE')).toBeTruthy()
     expect(screen.getByText('/home/user/worktrees/T-42')).toBeTruthy()
   })
 
   it('does not render worktree section when worktreePath is null', () => {
     render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null } })
-    expect(screen.queryByText('Worktree')).toBeNull()
+    expect(screen.queryByText('// WORKTREE')).toBeNull()
   })
 })

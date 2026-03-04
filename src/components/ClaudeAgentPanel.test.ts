@@ -129,7 +129,7 @@ describe('ClaudeAgentPanel', () => {
     activeSessions.set(sessions)
 
     render(ClaudeAgentPanel, { props: { taskId: 'T-1' } })
-    expect(screen.getByText('running')).toBeTruthy()
+    expect(screen.getByText('RUNNING')).toBeTruthy()
   })
 
   it('shows stage label when session is running', () => {
@@ -138,7 +138,7 @@ describe('ClaudeAgentPanel', () => {
     activeSessions.set(sessions)
 
     render(ClaudeAgentPanel, { props: { taskId: 'T-1' } })
-    expect(screen.getByText('Implementing')).toBeTruthy()
+    expect(screen.getByText('// implementing')).toBeTruthy()
   })
 
   it('shows completed badge when session is completed', () => {
@@ -147,7 +147,7 @@ describe('ClaudeAgentPanel', () => {
     activeSessions.set(sessions)
 
     render(ClaudeAgentPanel, { props: { taskId: 'T-1' } })
-    expect(screen.getByText('completed')).toBeTruthy()
+    expect(screen.getByText('COMPLETED')).toBeTruthy()
   })
 
   it('shows failed badge when session has failed', () => {
@@ -156,7 +156,7 @@ describe('ClaudeAgentPanel', () => {
     activeSessions.set(sessions)
 
     render(ClaudeAgentPanel, { props: { taskId: 'T-1' } })
-    expect(screen.getByText('failed')).toBeTruthy()
+    expect(screen.getByText('FAILED')).toBeTruthy()
   })
 
   it('shows claude session id when available', () => {
@@ -204,25 +204,25 @@ describe('ClaudeAgentPanel', () => {
     activeSessions.set(sessions)
 
     render(ClaudeAgentPanel, { props: { taskId: 'T-1' } })
-    expect(screen.getByText('running')).toBeTruthy()
+    expect(screen.getByText('RUNNING')).toBeTruthy()
 
     const completedSessions = new Map<string, AgentSession>()
     completedSessions.set('T-1', { ...baseSession, status: 'completed' })
     activeSessions.set(completedSessions)
 
     await vi.waitFor(() => {
-      expect(screen.getByText('completed')).toBeTruthy()
+      expect(screen.getByText('COMPLETED')).toBeTruthy()
     })
-    expect(screen.queryByText('running')).toBeNull()
+    expect(screen.queryByText('RUNNING')).toBeNull()
 
     const failedSessions = new Map<string, AgentSession>()
     failedSessions.set('T-1', { ...baseSession, status: 'failed' })
     activeSessions.set(failedSessions)
 
     await vi.waitFor(() => {
-      expect(screen.getByText('failed')).toBeTruthy()
+      expect(screen.getByText('FAILED')).toBeTruthy()
     })
-    expect(screen.queryByText('completed')).toBeNull()
+    expect(screen.queryByText('COMPLETED')).toBeNull()
   })
 
   it('test_abort_button_visible_only_when_running', async () => {
@@ -246,7 +246,7 @@ describe('ClaudeAgentPanel', () => {
     render(ClaudeAgentPanel, { props: { taskId: 'T-1' } })
 
     await vi.waitFor(() => {
-      expect(screen.queryByText('completed')).toBeTruthy()
+      expect(screen.queryByText('COMPLETED')).toBeTruthy()
     })
     expect(screen.queryByRole('button', { name: /abort/i })).toBeNull()
   })
