@@ -104,7 +104,13 @@ async fn resume_task_servers(app: tauri::AppHandle, http_ready: tokio::sync::one
                     let prompt = if resume_id.is_none() {
                         let db = app.state::<Arc<Mutex<db::Database>>>();
                         let db_lock = db.lock().unwrap();
-                        let task = db_lock.get_task(&worktree.task_id).ok().flatten();
+                        let task = match db_lock.get_task(&worktree.task_id) {
+                            Ok(t) => t,
+                            Err(e) => {
+                                eprintln!("[startup] Failed to get task {}: {}", worktree.task_id, e);
+                                None
+                            }
+                        };
                         let project_id = task.as_ref().and_then(|t| t.project_id.clone()).unwrap_or_default();
                         let additional = db_lock.get_project_config(&project_id, "additional_instructions").ok().flatten();
                         drop(db_lock);
