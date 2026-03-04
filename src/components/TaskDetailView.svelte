@@ -124,13 +124,17 @@
         </div>
       {/if}
     </div>
-    {#if task.jira_title && task.jira_key}
-      <button
-        class="text-sm text-base-content/50 hover:text-primary text-left truncate px-6 pb-3 -mt-1 transition-colors cursor-pointer"
-        title={task.jira_title}
-        onclick={() => jiraBaseUrl && openUrl(`${jiraBaseUrl}/browse/${task.jira_key}`)}
-      >{task.jira_title}</button>
-    {/if}
+    <div class="text-sm text-base-content/50 truncate px-6 pb-3 -mt-1" data-testid="subtitle-row">
+      {#if task.jira_title && task.jira_key}
+        <button
+          class="hover:text-primary transition-colors cursor-pointer text-left w-full truncate"
+          title={task.jira_title}
+          onclick={() => jiraBaseUrl && openUrl(`${jiraBaseUrl}/browse/${task.jira_key}`)}
+        >{task.jira_title}</button>
+      {:else}
+        <span class="invisible">&#8203;</span>
+      {/if}
+    </div>
   </header>
 
   <div class="flex flex-1 overflow-hidden max-[800px]:flex-col">
