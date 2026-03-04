@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { Task, AgentSession, AgentLog, PrComment, PollResult, PullRequestInfo, OpenCodeStatus, AgentInfo, Project, ProjectAttention, WorktreeInfo, ImplementationStatus, ReviewPullRequest, PrFileDiff, ReviewComment, ReviewSubmissionComment, SelfReviewComment, AgentReviewComment, CommandInfo, AutocompleteAgentInfo, PrOverviewComment, TranscriptionResult, WhisperModelStatus, WhisperModelSizeId } from "./types";
+import type { Task, AgentSession, AgentLog, PrComment, PollResult, PullRequestInfo, AgentInfo, Project, ProjectAttention, WorktreeInfo, ImplementationStatus, ReviewPullRequest, PrFileDiff, ReviewComment, ReviewSubmissionComment, SelfReviewComment, AgentReviewComment, CommandInfo, AutocompleteAgentInfo, PrOverviewComment, TranscriptionResult, WhisperModelStatus, WhisperModelSizeId } from "./types";
 
 export async function createTask(title: string, status: string, jiraKey: string | null, projectId: string | null): Promise<Task> {
   return invoke<Task>("create_task", { title, status, jiraKey, projectId });
@@ -25,9 +25,6 @@ export async function refreshJiraInfo(): Promise<number> {
   return invoke<number>("refresh_jira_info");
 }
 
-export async function getOpenCodeStatus(): Promise<OpenCodeStatus> {
-  return invoke<OpenCodeStatus>("get_opencode_status");
-}
 export async function getAppMode(): Promise<string> {
   return invoke<string>("get_app_mode");
 }

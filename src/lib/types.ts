@@ -112,12 +112,6 @@ export interface CiFailureNotification {
   timestamp: number;
 }
 
-export interface OpenCodeStatus {
-  api_url: string;
-  healthy: boolean;
-  version: string | null;
-}
-
 export interface AgentInfo {
   name: string;
 }
