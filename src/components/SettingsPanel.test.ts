@@ -19,9 +19,7 @@ vi.mock('../lib/actions', () => ({
   saveActions: vi.fn(),
   createAction: vi.fn(),
   DEFAULT_ACTIONS: [
-    { id: 'builtin-start-implementation', name: 'Start Implementation', prompt: 'Implement this task...', agent: null, builtin: true, enabled: true },
-    { id: 'builtin-plan-design', name: 'Plan/Design', prompt: 'Analyze this task...', agent: null, builtin: true, enabled: true },
-    { id: 'builtin-manual-testing', name: 'Manual Testing', prompt: 'Create a comprehensive manual testing plan...', agent: null, builtin: true, enabled: true },
+    { id: 'builtin-go', name: 'Go', prompt: '', agent: null, builtin: true, enabled: true },
   ],
 }))
 
@@ -88,11 +86,8 @@ describe('SettingsPanel', () => {
     render(SettingsPanel)
     
     await vi.waitFor(() => {
-      expect(screen.getByText('Start Implementation')).toBeTruthy()
+      expect(screen.getByText('Go')).toBeTruthy()
     })
-    
-    expect(screen.getByText('Plan/Design')).toBeTruthy()
-    expect(screen.getByText('Manual Testing')).toBeTruthy()
   })
 
   it('add action creates new entry', async () => {
@@ -110,7 +105,7 @@ describe('SettingsPanel', () => {
     render(SettingsPanel)
     
     await vi.waitFor(() => {
-      expect(screen.getByText('Start Implementation')).toBeTruthy()
+      expect(screen.getByText('Go')).toBeTruthy()
     })
     
     const addButton = screen.getByRole('button', { name: /add action/i })

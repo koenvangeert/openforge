@@ -99,8 +99,7 @@ vi.mock('@tauri-apps/api/event', () => ({
 
 vi.mock('../lib/actions', () => ({
   loadActions: vi.fn(() => Promise.resolve([
-    { id: 'action-1', name: 'Plan/Design', prompt: 'Plan this task', agent: null, builtin: true, enabled: true },
-    { id: 'action-2', name: 'Start Implementation', prompt: 'Implement this task', agent: null, builtin: true, enabled: true },
+    { id: 'builtin-go', name: 'Go', prompt: '', agent: null, builtin: true, enabled: true },
   ])),
   getEnabledActions: vi.fn((actions: { enabled: boolean }[]) => actions.filter(a => a.enabled)),
 }))
@@ -197,27 +196,26 @@ describe('TaskDetailView', () => {
   it('renders action buttons in header', async () => {
     render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
     await waitFor(() => {
-      expect(screen.getByText('Plan/Design')).toBeTruthy()
+      expect(screen.getByText('Go')).toBeTruthy()
     })
-    expect(screen.getByText('Start Implementation')).toBeTruthy()
   })
 
   it('calls onRunAction when action button clicked', async () => {
     render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
     await waitFor(() => {
-      expect(screen.getByText('Start Implementation')).toBeTruthy()
+      expect(screen.getByText('Go')).toBeTruthy()
     })
-    await fireEvent.click(screen.getByText('Start Implementation'))
-    expect(mockOnRunAction).toHaveBeenCalledWith({ taskId: 'T-42', actionPrompt: 'Implement this task', agent: null })
+    await fireEvent.click(screen.getByText('Go'))
+    expect(mockOnRunAction).toHaveBeenCalledWith({ taskId: 'T-42', actionPrompt: '', agent: null })
   })
 
   it('disables action buttons when session is running', async () => {
     activeSessions.set(new Map([['T-42', { ...baseSession, status: 'running' }]]))
     render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
     await waitFor(() => {
-      expect(screen.getByText('Start Implementation')).toBeTruthy()
+      expect(screen.getByText('Go')).toBeTruthy()
     })
-    const button = screen.getByText('Start Implementation').closest('button')
+    const button = screen.getByText('Go').closest('button')
     expect(button?.disabled).toBe(true)
     expect(button?.title).toBe('Agent is busy')
     activeSessions.set(new Map())
@@ -227,9 +225,9 @@ describe('TaskDetailView', () => {
     activeSessions.set(new Map())
     render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
     await waitFor(() => {
-      expect(screen.getByText('Start Implementation')).toBeTruthy()
+      expect(screen.getByText('Go')).toBeTruthy()
     })
-    const button = screen.getByText('Start Implementation').closest('button')
+    const button = screen.getByText('Go').closest('button')
     expect(button?.disabled).toBe(false)
   })
 

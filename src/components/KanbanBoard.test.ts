@@ -14,8 +14,7 @@ vi.mock('../lib/ipc', () => ({
 
 // Mock actions module
 const mockActions: Action[] = [
-  { id: 'action-1', name: 'Start Implementation', prompt: 'Implement this task', agent: null, builtin: true, enabled: true },
-  { id: 'action-2', name: 'Write Tests', prompt: 'Write tests for this', agent: null, builtin: true, enabled: true },
+  { id: 'builtin-go', name: 'Go', prompt: '', agent: null, builtin: true, enabled: true },
 ]
 
 vi.mock('../lib/actions', () => ({
@@ -71,8 +70,7 @@ describe('KanbanBoard', () => {
     await new Promise(resolve => setTimeout(resolve, 10))
     
     // Check that dynamic actions appear in context menu
-    expect(screen.getByText('Start Implementation')).toBeTruthy()
-    expect(screen.getByText('Write Tests')).toBeTruthy()
+    expect(screen.getByText('Go')).toBeTruthy()
   })
 
   it('disables actions when session is running', async () => {
@@ -104,14 +102,11 @@ describe('KanbanBoard', () => {
     
     // Check that action buttons are disabled
     const actionButtons = container.querySelectorAll('.context-item')
-    const startImplButton = Array.from(actionButtons).find(btn => btn.textContent?.includes('Start Implementation')) as HTMLButtonElement
-    const writeTestsButton = Array.from(actionButtons).find(btn => btn.textContent?.includes('Write Tests')) as HTMLButtonElement
+    const goButton = Array.from(actionButtons).find(btn => btn.textContent?.includes('Go')) as HTMLButtonElement
     
-    expect(startImplButton).toBeTruthy()
-    expect(writeTestsButton).toBeTruthy()
-    expect(startImplButton.disabled).toBe(true)
-    expect(writeTestsButton.disabled).toBe(true)
-    expect(startImplButton.title).toBe('Agent is busy')
+    expect(goButton).toBeTruthy()
+    expect(goButton.disabled).toBe(true)
+    expect(goButton.title).toBe('Agent is busy')
   })
 
   it('disables actions when session is paused', async () => {
@@ -143,11 +138,11 @@ describe('KanbanBoard', () => {
     
     // Check that action buttons are disabled with correct message
     const actionButtons = container.querySelectorAll('.context-item')
-    const startImplButton = Array.from(actionButtons).find(btn => btn.textContent?.includes('Start Implementation')) as HTMLButtonElement
+    const goButton = Array.from(actionButtons).find(btn => btn.textContent?.includes('Go')) as HTMLButtonElement
     
-    expect(startImplButton).toBeTruthy()
-    expect(startImplButton.disabled).toBe(true)
-    expect(startImplButton.title).toBe('Answer pending question first')
+    expect(goButton).toBeTruthy()
+    expect(goButton.disabled).toBe(true)
+    expect(goButton.title).toBe('Answer pending question first')
   })
 
   it('dispatches run-action event when action is clicked', async () => {
@@ -162,13 +157,13 @@ describe('KanbanBoard', () => {
     // Wait for reactive statements
     await new Promise(resolve => setTimeout(resolve, 10))
     
-    // Click on "Start Implementation" action
-    const startImplButton = screen.getByText('Start Implementation')
-    await fireEvent.click(startImplButton)
+    // Click on "Go" action
+    const goButton = screen.getByText('Go')
+    await fireEvent.click(goButton)
     
     expect(onRunAction).toHaveBeenCalledWith({
       taskId: 'T-1',
-      actionPrompt: 'Implement this task',
+      actionPrompt: '',
       agent: null,
     })
   })

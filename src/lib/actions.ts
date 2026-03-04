@@ -3,25 +3,9 @@ import { getProjectConfig, setProjectConfig } from './ipc';
 
 export const DEFAULT_ACTIONS: Action[] = [
   {
-    id: "builtin-start-implementation",
-    name: "Start Implementation",
-    prompt: "Implement this task. Create a branch, make the changes, and create a pull request when done.",
-    agent: null,
-    builtin: true,
-    enabled: true,
-  },
-  {
-    id: "builtin-plan-design",
-    name: "Plan/Design",
-    prompt: "Analyze this task and create a detailed implementation plan. Break it down into concrete steps, identify potential risks, and suggest the approach. Don't implement anything yet — just plan and document your findings.",
-    agent: null,
-    builtin: true,
-    enabled: true,
-  },
-  {
-    id: "builtin-manual-testing",
-    name: "Manual Testing",
-    prompt: "Create a comprehensive manual testing plan for this task. List all test scenarios with detailed steps, expected results, and edge cases. Include positive, negative, and boundary test cases.",
+    id: "builtin-go",
+    name: "Go",
+    prompt: "",
     agent: null,
     builtin: true,
     enabled: true,
