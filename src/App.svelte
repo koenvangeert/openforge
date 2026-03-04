@@ -3,8 +3,8 @@
   import { listen } from '@tauri-apps/api/event'
   import type { UnlistenFn, Event } from '@tauri-apps/api/event'
   import { tasks, selectedTaskId, activeSessions, checkpointNotification, ciFailureNotification, ticketPrs, error, isLoading, projects, activeProjectId, currentView, reviewRequestCount, projectAttention, taskSpawned } from './lib/stores'
-  import { getProjects, getTasksForProject, getOpenCodeStatus, getPullRequests, runAction, getSessionStatus, getLatestSession, getLatestSessions, forceGithubSync, createTask, updateTask, getProjectAttention, getAppMode, finalizeClaudeSession } from './lib/ipc'
-  import type { Task, PullRequestInfo, OpenCodeStatus, AgentEvent, ProjectAttention } from './lib/types'
+  import { getProjects, getTasksForProject, getPullRequests, runAction, getSessionStatus, getLatestSession, getLatestSessions, forceGithubSync, createTask, updateTask, getProjectAttention, getAppMode, finalizeClaudeSession } from './lib/ipc'
+  import type { Task, PullRequestInfo, AgentEvent, ProjectAttention } from './lib/types'
   import KanbanBoard from './components/KanbanBoard.svelte'
   import TaskDetailView from './components/TaskDetailView.svelte'
    import PromptInput from './components/PromptInput.svelte'
@@ -24,7 +24,6 @@
   import { pushNavState, navigateBack } from './lib/navigation'
   import { release as releaseTerminal } from './lib/terminalPool'
 
-  let openCodeStatus = $state<OpenCodeStatus | null>(null)
   let unlisteners: UnlistenFn[] = []
   let showAddDialog = $state(false)
   let isSyncing = $state(false)
@@ -149,14 +148,6 @@
     }
   }
 
-  async function checkOpenCode() {
-    try {
-      openCodeStatus = await getOpenCodeStatus()
-    } catch (e) {
-      openCodeStatus = null
-    }
-  }
-
   async function handleRunAction(data: { taskId: string; actionPrompt: string; agent: string | null }) {
     if (!activeProject) {
       $error = 'No active project selected'
@@ -214,7 +205,6 @@
     unlisteners.push(() => window.removeEventListener('keydown', handleKeydown))
 
     await loadProjects()
-    await checkOpenCode()
 
     try {
       appMode = await getAppMode()
@@ -635,20 +625,6 @@
         Settings
       </button>
     </nav>
-
-    <div class="flex items-center gap-3 flex-1 justify-end">
-      {#if openCodeStatus}
-        <span class="flex items-center gap-1.5 text-xs text-base-content/60">
-          <span class="status {openCodeStatus.healthy ? 'status-success' : 'status-error'}"></span>
-          OpenCode {openCodeStatus.healthy ? 'Connected' : 'Disconnected'}
-        </span>
-      {:else}
-        <span class="flex items-center gap-1.5 text-xs text-base-content/60">
-          <span class="status status-error"></span>
-          OpenCode Unavailable
-        </span>
-      {/if}
-    </div>
   </header>
 
   <main class="flex-1 overflow-hidden flex">
