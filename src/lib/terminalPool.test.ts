@@ -40,7 +40,7 @@ vi.mock('@xterm/addon-fit', () => {
 vi.mock('./ipc', () => ({
   writePty: vi.fn().mockResolvedValue(undefined),
   resizePty: vi.fn().mockResolvedValue(undefined),
-  getClaudePtyBuffer: vi.fn().mockResolvedValue(null),
+  getPtyBuffer: vi.fn().mockResolvedValue(null),
 }))
 
 import { acquire, attach, detach, release, releaseAll, _getPool } from './terminalPool'

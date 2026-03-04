@@ -408,7 +408,7 @@ fn main() {
             commands::pty::pty_write,
             commands::pty::pty_resize,
             commands::pty::pty_kill,
-            commands::pty::get_claude_pty_buffer,
+            commands::pty::get_pty_buffer,
             commands::self_review::get_task_diff,
             commands::self_review::get_task_file_contents,
             commands::self_review::get_task_batch_file_contents,

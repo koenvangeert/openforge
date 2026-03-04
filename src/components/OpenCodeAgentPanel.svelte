@@ -4,14 +4,12 @@
   import type { UnlistenFn } from '@tauri-apps/api/event'
   import type { AgentEvent } from '../lib/types'
   import { activeSessions } from '../lib/stores'
-  import { abortImplementation, resizePty, getLatestSession } from '../lib/ipc'
+  import { writePty, killPty, spawnPty, abortImplementation, getLatestSession } from '../lib/ipc'
   import '@xterm/xterm/css/xterm.css'
   import { parseCheckpointQuestion } from '../lib/parseCheckpoint'
   import VoiceInput from './VoiceInput.svelte'
-  import { createTerminal } from '../lib/useTerminal.svelte'
-  import { createPtyBridge } from '../lib/usePtyBridge.svelte'
+  import { acquire, attach, detach, type PoolEntry } from '../lib/terminalPool'
   import { createSessionHistory } from '../lib/useSessionHistory.svelte'
-  import type { PtyBridgeHandle } from '../lib/usePtyBridge.svelte'
 
   interface Props {
     taskId: string
@@ -24,33 +22,7 @@
   let opencodePort = $state<number | null>(null)
   let unlisten: UnlistenFn | null = null
   let terminalEl: HTMLDivElement
-
-  // Declare ptyBridge before termHandle so the onData/onResize closures can reference it.
-  // The variable is assigned immediately below — closures only execute after both are set.
-  let ptyBridge: PtyBridgeHandle
-
-  const termHandle = createTerminal({
-    onData: (data: string) => {
-      if (ptyBridge?.ptySpawned) ptyBridge.writeToPty(data)
-    },
-    onResize: (cols: number, rows: number) => {
-      if (ptyBridge?.ptySpawned) {
-        resizePty(taskId, cols, rows).catch((e) => {
-          console.error('[OpenCodeAgentPanel] Failed to resize PTY:', e)
-        })
-      }
-    },
-  })
-
-  ptyBridge = createPtyBridge({
-    taskId: untrack(() => taskId),
-    getTerminal: () => termHandle.terminal,
-    setOpencodePort: (port) => { opencodePort = port },
-    onAttached: () => {
-      const currentSession = $activeSessions.get(taskId)
-      if (currentSession?.status === 'running') status = 'running'
-    },
-  })
+  let poolEntry: PoolEntry | null = null
 
   const sessionHistory = createSessionHistory({
     taskId: untrack(() => taskId),
@@ -69,27 +41,46 @@
   let questionText = $derived(session ? parseCheckpointQuestion(session.checkpoint_data) : null)
 
   $effect(() => {
-    if (questionText !== undefined) {
+    if (questionText !== undefined && poolEntry) {
       requestAnimationFrame(() => {
-        requestAnimationFrame(() => termHandle.safeFit())
+        requestAnimationFrame(() => {
+          if (poolEntry) {
+            const proposed = poolEntry.fitAddon.proposeDimensions()
+            if (proposed && !isNaN(proposed.cols) && !isNaN(proposed.rows)) {
+              poolEntry.fitAddon.fit()
+            }
+          }
+        })
       })
     }
   })
 
   async function tryAttachPty(): Promise<void> {
+    if (!poolEntry) return
+    if (poolEntry.ptyActive) return  // PTY survived from pool — no need to re-spawn
+
     const currentSession = $activeSessions.get(taskId)
     if (!currentSession) return
     if (!currentSession.opencode_session_id) return
 
-    await ptyBridge.attachPty({
-      provider: currentSession.provider,
-      opencodeSessionId: currentSession.opencode_session_id,
-    })
+    // Get port from session history or worktree
+    if (!opencodePort) {
+      await sessionHistory.loadSessionHistory()
+    }
+    if (!opencodePort) return
+
+    try {
+      await spawnPty(taskId, opencodePort, currentSession.opencode_session_id, poolEntry.terminal.cols, poolEntry.terminal.rows)
+      poolEntry.ptyActive = true
+      if (currentSession.status === 'running') status = 'running'
+    } catch (e) {
+      console.error('[OpenCodeAgentPanel] Failed to spawn PTY:', e)
+    }
   }
 
   onMount(async () => {
-    termHandle.terminalEl = terminalEl
-    await termHandle.mount()
+    poolEntry = await acquire(taskId)
+    attach(poolEntry, terminalEl)
 
     await sessionHistory.loadSessionHistory()
     await tryAttachPty()
@@ -137,22 +128,19 @@
 
   onDestroy(() => {
     if (unlisten) unlisten()
-    const isSessionRunning = session?.status === 'running'
-    if (ptyBridge.ptySpawned && !isSessionRunning) {
-      ptyBridge.killPty().catch((e) => {
-        console.error('[OpenCodeAgentPanel] Failed to kill PTY on destroy:', e)
-      })
+    if (poolEntry) {
+      detach(poolEntry)
     }
-    ptyBridge.dispose()
-    termHandle.dispose()
   })
 
   async function handleAbort() {
     try {
-      if (ptyBridge.ptySpawned) {
-        await ptyBridge.killPty().catch((e) => {
+      if (poolEntry?.ptyActive) {
+        await killPty(taskId).catch((e) => {
           console.error('[OpenCodeAgentPanel] Failed to kill PTY on abort:', e)
         })
+        poolEntry.ptyActive = false
+        poolEntry.needsClear = true
       }
       await abortImplementation(taskId)
       status = 'error'
@@ -163,7 +151,7 @@
   }
 
   function handleTranscription(text: string) {
-    ptyBridge.writeToPty(text)
+    if (poolEntry?.ptyActive) writePty(taskId, text).catch(e => console.error('[OpenCodeAgentPanel] transcription write failed:', e))
   }
 
   function getStatusText(): string {

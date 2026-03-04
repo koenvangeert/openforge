@@ -54,27 +54,30 @@ vi.mock('../lib/audioRecorder', () => ({
   createAudioRecorder: vi.fn(),
 }))
 
-// Mock composables to avoid xterm constructor issues in test environment
-vi.mock('../lib/useTerminal.svelte', () => ({
-  createTerminal: vi.fn(() => ({
-    get terminalEl() { return null },
-    set terminalEl(_el: HTMLDivElement | null) {},
-    get terminal() { return null },
-    get terminalMounted() { return false },
-    mount: vi.fn().mockResolvedValue(undefined),
-    safeFit: vi.fn(),
-    dispose: vi.fn(),
-  })),
+// Mock terminalPool to avoid xterm constructor issues in test environment
+const { mockPoolEntry } = vi.hoisted(() => ({
+  mockPoolEntry: {
+    taskId: '',
+    terminal: { write: vi.fn(), dispose: vi.fn(), reset: vi.fn(), cols: 80, rows: 24 },
+    fitAddon: { fit: vi.fn() },
+    hostDiv: document.createElement('div'),
+    ptyActive: false,
+    needsClear: false,
+    unlisteners: [] as Array<() => void>,
+    resizeObserver: null,
+    visibilityObserver: null,
+    resizeTimeout: null,
+    attached: false,
+  },
 }))
 
-vi.mock('../lib/usePtyBridge.svelte', () => ({
-  createPtyBridge: vi.fn(() => ({
-    get ptySpawned() { return false },
-    attachPty: vi.fn().mockResolvedValue(undefined),
-    writeToPty: vi.fn(),
-    killPty: vi.fn().mockResolvedValue(undefined),
-    dispose: vi.fn(),
-  })),
+vi.mock('../lib/terminalPool', () => ({
+  acquire: vi.fn().mockResolvedValue(mockPoolEntry),
+  attach: vi.fn(),
+  detach: vi.fn(),
+  release: vi.fn(),
+  releaseAll: vi.fn(),
+  _getPool: vi.fn().mockReturnValue(new Map()),
 }))
 
 vi.mock('../lib/useSessionHistory.svelte', () => ({

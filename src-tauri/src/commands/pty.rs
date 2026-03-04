@@ -55,9 +55,9 @@ pub async fn pty_kill(
 }
 
 #[tauri::command]
-pub async fn get_claude_pty_buffer(
+pub async fn get_pty_buffer(
     task_id: String,
     pty_mgr: State<'_, PtyManager>,
 ) -> Result<Option<String>, String> {
-    Ok(pty_mgr.get_claude_pty_buffer(&task_id).await)
+    Ok(pty_mgr.get_pty_buffer(&task_id).await)
 }
