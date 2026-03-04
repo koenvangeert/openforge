@@ -95,12 +95,6 @@
         >↗</button>
       {/if}
       <h1 class="text-lg font-bold text-base-content m-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap min-w-0" title={task.title.split('\n')[0]}>{task.title.split('\n')[0]}</h1>
-      {#if worktreePath !== null}
-        <div class="inline-flex items-center bg-base-300 border border-base-300 rounded-full p-0.5 gap-0.5 shrink-0 shadow-sm">
-          <button class="btn btn-ghost btn-xs rounded-full px-4 transition-all duration-200 {!reviewMode ? 'btn-active bg-primary text-primary-content font-semibold shadow-sm' : 'hover:bg-base-200'}" onclick={() => reviewMode = false}>Code</button>
-          <button class="btn btn-ghost btn-xs rounded-full px-4 transition-all duration-200 {reviewMode ? 'btn-active bg-primary text-primary-content font-semibold shadow-sm' : 'hover:bg-base-200'}" onclick={() => reviewMode = true}>Review</button>
-        </div>
-      {/if}
       {#if task.status !== 'done'}
         <button
           class="btn btn-success btn-sm shrink-0 shadow-sm hover:shadow-md transition-shadow"
@@ -136,6 +130,30 @@
       {/if}
     </div>
   </header>
+
+  <div class="flex items-center justify-between h-10 px-6 border-b border-base-300 shrink-0">
+    <div class="flex items-center gap-1 font-mono text-xs">
+      <span class="text-base-content/50">$ cd board</span>
+      <span class="text-base-content/20 mx-1">/</span>
+      <span class="text-base-content/50">{task.status}</span>
+      <span class="text-base-content/20 mx-1">/</span>
+      <span class="text-primary font-semibold">{task.jira_key || task.id}</span>
+      <span class="text-base-content/20 mx-1">/</span>
+      <span class="text-primary font-semibold">{reviewMode ? 'self_review' : 'code'}</span>
+    </div>
+    {#if worktreePath !== null}
+      <div class="flex items-center gap-1">
+        <button
+          class="btn btn-ghost btn-xs {!reviewMode ? 'text-primary border border-primary' : 'text-base-content/50 border border-base-300'}"
+          onclick={() => reviewMode = false}
+        >code_view</button>
+        <button
+          class="btn btn-ghost btn-xs {reviewMode ? 'text-primary border border-primary' : 'text-base-content/50 border border-base-300'}"
+          onclick={() => reviewMode = true}
+        >review_view</button>
+      </div>
+    {/if}
+  </div>
 
   <div class="flex flex-1 overflow-hidden max-[800px]:flex-col">
     {#if reviewMode}

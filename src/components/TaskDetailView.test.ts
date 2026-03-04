@@ -154,7 +154,8 @@ describe('TaskDetailView', () => {
   it('renders task id when jira_key is null', () => {
     const taskWithoutJira = { ...baseTask, jira_key: null }
     render(TaskDetailView, { props: { task: taskWithoutJira, onRunAction: mockOnRunAction } })
-    expect(screen.getByText('T-42')).toBeTruthy()
+    const matches = screen.getAllByText('T-42')
+    expect(matches.length).toBeGreaterThanOrEqual(1)
   })
 
   it('renders task title in header', () => {
