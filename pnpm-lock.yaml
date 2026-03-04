@@ -13,6 +13,9 @@ importers:
 
   .:
     dependencies:
+      '@fontsource/jetbrains-mono':
+        specifier: ^5.2.8
+        version: 5.2.8
       '@git-diff-view/core':
         specifier: ^0.0.39
         version: 0.0.39
@@ -31,6 +34,9 @@ importers:
       daisyui:
         specifier: ^5.5.18
         version: 5.5.18
+      lucide-svelte:
+        specifier: ^0.576.0
+        version: 0.576.0(svelte@5.51.3)
       marked:
         specifier: ^17.0.3
         version: 17.0.3
@@ -303,6 +309,9 @@ packages:
     peerDependenciesMeta:
       '@noble/hashes':
         optional: true
+
+  '@fontsource/jetbrains-mono@5.2.8':
+    resolution: {integrity: sha512-6w8/SG4kqvIMu7xd7wt6x3idn1Qux3p9N62s6G3rfldOUYHpWcc2FKrqf+Vo44jRvqWj2oAtTHrZXEP23oSKwQ==}
 
   '@git-diff-view/core@0.0.39':
     resolution: {integrity: sha512-GJGsti+R8XV11XFWVziXiSgZ8T26pcb1/7H/e5PLSByG7JKeDU9O9JPvjvSShQokj/5Zp5kXvtNM+tgCtrRrYQ==}
@@ -997,6 +1006,11 @@ packages:
     resolution: {integrity: sha512-ESL2CrkS/2wTPfuend7Zhkzo2u0daGJ/A2VucJOgQ/C48S/zB8MMeMHSGKYpXhIjbPxfuezITkaBH1wqv00DDQ==}
     engines: {node: 20 || >=22}
 
+  lucide-svelte@0.576.0:
+    resolution: {integrity: sha512-bm7RCoptI8unoEyo9H9sRHTHgnleuBW8npge05ZtxHkNsDNnO3p/BQEU79sshf4k+MSrjqlWvsCN5vVZtgV7ww==}
+    peerDependencies:
+      svelte: ^3 || ^4 || ^5.0.0-next.42
+
   lz-string@1.5.0:
     resolution: {integrity: sha512-h5bgJWpxJNswbU7qCrV0tIKQCaS3blPDrqKWx+QxzuzL1zGUzij9XCWLrSLsJPu5t+eWA/ycetzYAO5IOMcWAQ==}
     hasBin: true
@@ -1397,6 +1411,8 @@ snapshots:
     optional: true
 
   '@exodus/bytes@1.14.1': {}
+
+  '@fontsource/jetbrains-mono@5.2.8': {}
 
   '@git-diff-view/core@0.0.39':
     dependencies:
@@ -2004,6 +2020,10 @@ snapshots:
       highlight.js: 11.11.1
 
   lru-cache@11.2.6: {}
+
+  lucide-svelte@0.576.0(svelte@5.51.3):
+    dependencies:
+      svelte: 5.51.3
 
   lz-string@1.5.0: {}
 
