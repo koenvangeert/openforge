@@ -12,7 +12,7 @@
 </script>
 
 <button
-  class="w-full text-left bg-base-100 border rounded-lg shadow-sm cursor-pointer transition-all {selected ? 'selected border-2 border-primary bg-primary/10' : 'border-base-300 hover:border-primary hover:shadow-md'} {className}"
+  class="w-full text-left bg-base-100 border rounded cursor-pointer transition-all {selected ? 'selected border-2 border-primary bg-primary/10' : 'border-base-300 hover:border-primary'} {className}"
   {onclick}
 >
   {@render children()}

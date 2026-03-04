@@ -26,11 +26,11 @@ describe('Card', () => {
     expect(card.className).toContain('bg-base-100')
   })
 
-  it('applies border and rounded-lg by default', () => {
+  it('applies border and rounded by default', () => {
     render(Card, { props: { children: createSnippet('Card') } })
     const card = screen.getByRole('button')
     expect(card.className).toContain('border')
-    expect(card.className).toContain('rounded-lg')
+    expect(card.className).toContain('rounded')
   })
 
   it('applies default border-base-300 when not selected', () => {

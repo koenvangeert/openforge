@@ -47,9 +47,9 @@ describe('KanbanBoard', () => {
 
   it('renders kanban columns', () => {
     render(KanbanBoard)
-    expect(screen.getByText('Backlog')).toBeTruthy()
-    expect(screen.getByText('Doing')).toBeTruthy()
-    expect(screen.getByText('Done')).toBeTruthy()
+    expect(screen.getByText('// backlog')).toBeTruthy()
+    expect(screen.getByText('// doing')).toBeTruthy()
+    expect(screen.getByText('// done')).toBeTruthy()
   })
 
   it('renders tasks in correct columns', () => {
@@ -86,6 +86,8 @@ describe('KanbanBoard', () => {
       error_message: null,
       created_at: 1000,
       updated_at: 2000,
+      provider: 'opencode',
+      claude_session_id: null,
     }
     
     activeSessions.set(new Map([['T-1', runningSession]]))
@@ -123,6 +125,8 @@ describe('KanbanBoard', () => {
       error_message: null,
       created_at: 1000,
       updated_at: 2000,
+      provider: 'opencode',
+      claude_session_id: null,
     }
     
     activeSessions.set(new Map([['T-1', pausedSession]]))
@@ -169,11 +173,6 @@ describe('KanbanBoard', () => {
     })
   })
 
-  it('renders search input', () => {
-    render(KanbanBoard)
-    expect(screen.getByPlaceholderText('Search tasks...')).toBeTruthy()
-  })
-
   it('filters tasks by title', async () => {
     const taskA: Task = { ...baseTask, id: 'T-1', title: 'Fix auth bug', status: 'backlog' }
     const taskB: Task = { ...baseTask, id: 'T-2', title: 'Add dashboard', status: 'backlog' }
@@ -185,9 +184,6 @@ describe('KanbanBoard', () => {
     expect(screen.getByText('Fix auth bug')).toBeTruthy()
     expect(screen.getByText('Add dashboard')).toBeTruthy()
 
-    // Type in search
-    const input = screen.getByPlaceholderText('Search tasks...')
-    await fireEvent.input(input, { target: { value: 'auth' } })
     searchQuery.set('auth')
     await new Promise(resolve => setTimeout(resolve, 10))
 
@@ -232,18 +228,6 @@ describe('KanbanBoard', () => {
     expect(screen.getByText('Fix Auth Bug')).toBeTruthy()
   })
 
-  it('shows result count when searching', async () => {
-    const taskA: Task = { ...baseTask, id: 'T-1', title: 'Match me', status: 'backlog' }
-    const taskB: Task = { ...baseTask, id: 'T-2', title: 'Skip me', status: 'doing' }
-    tasks.set([taskA, taskB])
-
-    searchQuery.set('Match')
-    render(KanbanBoard)
-    await new Promise(resolve => setTimeout(resolve, 10))
-
-    expect(screen.getByText('1 of 2 tasks')).toBeTruthy()
-  })
-
   it('shows all tasks when search is cleared', async () => {
     const taskA: Task = { ...baseTask, id: 'T-1', title: 'Task A', status: 'backlog' }
     const taskB: Task = { ...baseTask, id: 'T-2', title: 'Task B', status: 'doing' }
@@ -264,35 +248,4 @@ describe('KanbanBoard', () => {
     expect(screen.getByText('Task B')).toBeTruthy()
   })
 
-  it('renders refresh button with correct title', () => {
-    render(KanbanBoard)
-    const refreshBtn = screen.getByTitle('Refresh GitHub data (⌘⇧R)')
-    expect(refreshBtn).toBeTruthy()
-  })
-
-  it('calls onRefresh when refresh button is clicked', async () => {
-    const onRefresh = vi.fn()
-    render(KanbanBoard, { props: { onRefresh } })
-    const refreshBtn = screen.getByTitle('Refresh GitHub data (⌘⇧R)')
-    await fireEvent.click(refreshBtn)
-    expect(onRefresh).toHaveBeenCalledOnce()
-  })
-
-  it('shows loading spinner and disables button when isSyncing is true', () => {
-    render(KanbanBoard, { props: { isSyncing: true } })
-    const refreshBtn = screen.getByTitle('Refresh GitHub data (⌘⇧R)') as HTMLButtonElement
-    expect(refreshBtn.disabled).toBe(true)
-    const spinner = refreshBtn.querySelector('.loading-spinner')
-    expect(spinner).toBeTruthy()
-  })
-
-  it('shows refresh SVG icon and button is enabled when isSyncing is false', () => {
-    render(KanbanBoard, { props: { isSyncing: false } })
-    const refreshBtn = screen.getByTitle('Refresh GitHub data (⌘⇧R)') as HTMLButtonElement
-    expect(refreshBtn.disabled).toBe(false)
-    const svg = refreshBtn.querySelector('svg')
-    expect(svg).toBeTruthy()
-    const spinner = refreshBtn.querySelector('.loading-spinner')
-    expect(spinner).toBeNull()
-  })
 })

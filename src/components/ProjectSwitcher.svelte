@@ -86,12 +86,12 @@
 </script>
 
 <div class="relative" bind:this={dropdownRef}>
-  <button class="btn btn-sm gap-2 bg-base-100 border border-base-300" onclick={toggleDropdown} type="button">
-    <span class="font-medium">{activeProject ? activeProject.name : 'No Project'}</span>
+  <button class="btn btn-sm gap-2 bg-[#1C1C1C] border-none hover:bg-[#2A2A2A]" onclick={toggleDropdown} type="button">
+    <span class="font-medium font-mono text-xs text-neutral-content">{activeProject ? activeProject.name : 'No Project'}</span>
     {#if otherProjectsNeedAttention}
       <span class="w-2 h-2 rounded-full bg-warning" title="Other projects need attention"></span>
     {/if}
-    <span class="text-[0.6rem] text-base-content/50 transition-transform duration-200 {isOpen ? 'rotate-180' : ''}">▼</span>
+    <span class="text-[0.6rem] text-secondary transition-transform duration-200 {isOpen ? 'rotate-180' : ''}">▼</span>
   </button>
 
   {#if isOpen}
