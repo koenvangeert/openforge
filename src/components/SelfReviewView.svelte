@@ -135,7 +135,7 @@
             {/snippet}
           </DiffViewer>
         {#if sidebarVisible}
-          <div class="w-[480px] shrink-0 border-l border-base-300 overflow-hidden flex flex-col bg-base-100">
+           <div class="w-[360px] shrink-0 border-l border-base-300 overflow-hidden flex flex-col bg-base-100">
             <div class="flex items-center border-b border-base-300 bg-base-200 shrink-0">
               <button class="flex-1 px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-center transition-colors {sidebarTab === 'pr' ? 'text-primary border-b-2 border-primary bg-base-100' : 'text-base-content/50 hover:text-base-content hover:bg-base-content/5'}"
                 onclick={() => { sidebarTab = 'pr' }}>

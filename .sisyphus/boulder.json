@@ -1,8 +1,7 @@
 {
-  "active_plan": "/Users/koen.vangeert/.ai-command-center/worktrees/my-command-center/T-392/.sisyphus/plans/claude-pty-terminal.md",
-  "started_at": "2026-03-03T07:26:00.000Z",
-  "session_ids": ["ses_35131d074ffePFn5X6Qk2LJeuC"],
-  "plan_name": "claude-pty-terminal",
-  "agent": "atlas",
-  "worktree_path": "/Users/koen.vangeert/.ai-command-center/worktrees/my-command-center/T-392"
+  "active_plan": "/Users/koen.vangeert/.openforge/worktrees/my-command-center/T-468/.sisyphus/plans/self-review-design-alignment.md",
+  "started_at": "2026-03-04T08:49:48.550Z",
+  "session_ids": ["ses_34808b308ffe8vn0HCVgoW56Wj"],
+  "plan_name": "self-review-design-alignment",
+  "worktree_path": "/Users/koen.vangeert/.openforge/worktrees/my-command-center/T-468"
 }

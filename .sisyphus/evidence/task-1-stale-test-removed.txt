@@ -1,0 +1,42 @@
+TASK 1: Remove Stale Test from TaskDetailView.test.ts
+======================================================
+
+OBJECTIVE:
+Remove the stale test 'renders status badge with status label' from TaskDetailView.test.ts
+that was expecting screen.getAllByText('Backlog') but no code renders that text.
+
+CHANGES MADE:
+- File: src/components/TaskDetailView.test.ts
+- Removed lines 166-170 (the failing test case)
+- Test case removed: it('renders status badge with status label', ...)
+
+TEST RESULTS:
+✓ src/components/TaskDetailView.test.ts (13 tests) - ALL PASSING
+
+Before: 14 tests (1 failing: 'renders status badge with status label')
+After:  13 tests (0 failing)
+
+VERIFICATION:
+Command: pnpm test -- --run src/components/TaskDetailView.test.ts
+Result: All 13 remaining tests pass successfully
+
+PASSING TESTS:
+1. renders back button with "Back" text
+2. renders task jira_key when present
+3. renders task id when jira_key is null
+4. renders task title in header
+5. has AgentPanel child with empty state text
+6. has TaskInfoPanel child with Initial Prompt section
+7. shows Move to Done button when task is not done
+8. hides Move to Done button when task is already done
+9. hides Review toggle when no worktree
+10. renders action buttons in header
+11. calls onRunAction when action button clicked
+12. disables action buttons when session is running
+13. action buttons enabled when no active session
+
+STATUS: ✅ COMPLETE
+- Stale test removed
+- All remaining tests pass
+- No component source files modified
+- Ready for next task

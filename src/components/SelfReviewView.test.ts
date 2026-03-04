@@ -346,9 +346,43 @@ describe('SelfReviewView — hide addressed comments', () => {
     expect(screen.queryByText(/Show.*addressed/)).toBeNull()
   })
 
-  it('all addressed empty state', async () => {
+   it('all addressed empty state', async () => {
+     const comments = [
+       makeComment(1, 1), // addressed only
+     ]
+     vi.mocked(getPrComments).mockResolvedValue(comments)
+     ticketPrs.set(new Map([['task-1', [mockPr]]]))
+     vi.mocked(getTaskDiff).mockResolvedValue([baseDiff])
+
+     render(SelfReviewView, {
+       props: {
+         task: baseTask,
+         agentStatus: null,
+         onSendToAgent: vi.fn(),
+       },
+     })
+
+     // Sidebar doesn't auto-open when all comments are addressed (unaddressedCount === 0)
+     // So we need to manually click the Comments button
+     await waitFor(() => {
+       const commentsButton = screen.getByText('Comments')
+       expect(commentsButton).toBeTruthy()
+     })
+
+     const commentsButton = screen.getByText('Comments')
+     commentsButton.click()
+
+     await waitFor(() => {
+       // Should show "All comments addressed" empty state
+       expect(screen.getByText('All comments addressed')).toBeTruthy()
+       // Comment should not be visible (toggle is OFF by default)
+       expect(screen.queryByText('Comment 1')).toBeNull()
+     })
+})
+
+  it('comments sidebar renders at 360px width', async () => {
     const comments = [
-      makeComment(1, 1), // addressed only
+      makeComment(1, 0), // unaddressed — triggers auto-open
     ]
     vi.mocked(getPrComments).mockResolvedValue(comments)
     ticketPrs.set(new Map([['task-1', [mockPr]]]))
@@ -362,22 +396,16 @@ describe('SelfReviewView — hide addressed comments', () => {
       },
     })
 
-    // Sidebar doesn't auto-open when all comments are addressed (unaddressedCount === 0)
-    // So we need to manually click the Comments button
     await waitFor(() => {
-      const commentsButton = screen.getByText('Comments')
-      expect(commentsButton).toBeTruthy()
+      // Sidebar should auto-open due to unaddressed comment
+      expect(screen.getByText('Comment 1')).toBeTruthy()
     })
 
-    const commentsButton = screen.getByText('Comments')
-    commentsButton.click()
-
-    await waitFor(() => {
-      // Should show "All comments addressed" empty state
-      expect(screen.getByText('All comments addressed')).toBeTruthy()
-      // Comment should not be visible (toggle is OFF by default)
-      expect(screen.queryByText('Comment 1')).toBeNull()
-    })
-})
+    // Find the sidebar container by looking for the PR Comments tab button
+    const prCommentsTab = screen.getByText('PR Comments')
+    const sidebarContainer = prCommentsTab.closest('div')?.parentElement
+    expect(sidebarContainer).toBeTruthy()
+    expect(sidebarContainer?.className).toContain('w-[360px]')
+  })
 
 })
