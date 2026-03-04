@@ -84,4 +84,21 @@ describe('IconRail', () => {
     const buttons = screen.getAllByRole('button')
     expect(buttons[0].className).toContain('text-[#666666]')
   })
+
+  it('shows review request count badge when reviewRequestCount > 0', () => {
+    render(IconRail, { props: { currentView: 'board' as AppView, onNavigate: vi.fn(), reviewRequestCount: 3 } })
+    expect(screen.getByText('3')).toBeTruthy()
+  })
+
+  it('does not show badge when reviewRequestCount is 0', () => {
+    render(IconRail, { props: { currentView: 'board' as AppView, onNavigate: vi.fn(), reviewRequestCount: 0 } })
+    expect(screen.queryByText('0')).toBeNull()
+  })
+
+  it('shows dot indicator without number when reviewRequestCount is not provided', () => {
+    render(IconRail, { props: { currentView: 'board' as AppView, onNavigate: vi.fn() } })
+    // No badge should be shown when count is not provided (defaults to 0)
+    const prButton = screen.getAllByRole('button')[1]
+    expect(prButton.querySelector('.badge')).toBeNull()
+  })
 })
