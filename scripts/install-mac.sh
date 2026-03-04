@@ -28,4 +28,7 @@ echo "Installing to ${INSTALL_DIR}..."
 rm -rf "${INSTALL_DIR}/${APP_NAME}.app"
 cp -R "$APP_PATH" "${INSTALL_DIR}/"
 
+# Unsigned apps trigger macOS Gatekeeper — clear quarantine flag
+xattr -rd com.apple.quarantine "${INSTALL_DIR}/${APP_NAME}.app"
+
 echo "Installed ${APP_NAME} to ${INSTALL_DIR}/${APP_NAME}.app"
