@@ -204,16 +204,7 @@
     window.addEventListener('keydown', handleKeydown)
     unlisteners.push(() => window.removeEventListener('keydown', handleKeydown))
 
-    await loadProjects()
-
-    try {
-      appMode = await getAppMode()
-    } catch (e) {
-      console.error('[App] Failed to get app mode:', e)
-      // Graceful degradation: no badge shown if call fails
-    }
-    loadProjectAttention()
-
+    // Phase 1: Register ALL event listeners
     unlisteners.push(
       await listen('jira-sync-complete', () => {
         loadTasks()
@@ -552,6 +543,20 @@
         loadTasks()
       })
     )
+
+    // Phase 2: Load data
+    await loadProjects()
+
+    try {
+      appMode = await getAppMode()
+    } catch (e) {
+      console.error('[App] Failed to get app mode:', e)
+      // Graceful degradation: no badge shown if call fails
+    }
+    loadProjectAttention()
+
+    // Phase 3: Safety net
+    await loadTasks()
   })
 
   onDestroy(() => {
