@@ -481,16 +481,17 @@ impl WhisperManager {
         let duration_ms = start.elapsed().as_millis() as u64;
 
         // 6. Collect and concatenate segment texts.
-        let n_segments = state
-            .full_n_segments()
-            .map_err(|e| WhisperError::InferenceError(format!("full_n_segments failed: {}", e)))?;
+        let n_segments = state.full_n_segments();
 
         let mut text = String::new();
         for i in 0..n_segments {
             let segment = state
-                .full_get_segment_text(i)
+                .get_segment(i)
+                .ok_or_else(|| WhisperError::InferenceError(format!("segment {} not found", i)))?;
+            let segment_text = segment
+                .to_str_lossy()
                 .map_err(|e| WhisperError::InferenceError(format!("segment {} text: {}", i, e)))?;
-            text.push_str(&segment);
+            text.push_str(&segment_text);
         }
 
         Ok(TranscriptionResult {

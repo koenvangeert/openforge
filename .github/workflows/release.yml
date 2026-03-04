@@ -22,6 +22,8 @@ jobs:
             args: "--target x86_64-apple-darwin --bundles dmg"
             target: x86_64-apple-darwin
     runs-on: ${{ matrix.platform }}
+    env:
+      SOURCE_DATE_EPOCH: "1"
 
     steps:
       - uses: actions/checkout@v4
