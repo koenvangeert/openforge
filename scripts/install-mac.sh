@@ -28,7 +28,4 @@ echo "Installing to ${INSTALL_DIR}..."
 rm -rf "${INSTALL_DIR}/${APP_NAME}.app"
 cp -R "$APP_PATH" "${INSTALL_DIR}/"
 
-# Remove quarantine attribute to prevent Gatekeeper "damaged" error on unsigned builds
-xattr -rd com.apple.quarantine "${INSTALL_DIR}/${APP_NAME}.app" 2>/dev/null || true
-
 echo "Installed ${APP_NAME} to ${INSTALL_DIR}/${APP_NAME}.app"

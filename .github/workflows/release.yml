@@ -57,7 +57,13 @@ jobs:
         with:
           tagName: v__VERSION__
           releaseName: "AI Command Center v__VERSION__"
-          releaseBody: "See the assets to download and install this version."
+          releaseBody: |
+            See the assets to download and install this version.
+
+            **macOS:** If you see _"Open Forge is damaged and can't be opened"_, run this after mounting the DMG and copying the app to Applications:
+            ```
+            xattr -rd com.apple.quarantine /Applications/Open\ Forge.app
+            ```
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
