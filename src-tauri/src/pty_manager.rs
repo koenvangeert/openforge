@@ -371,14 +371,16 @@ impl PtyManager {
     }
 
     /// Spawns a Claude CLI process in a PTY for the given task_id.
-    /// Runs `claude "prompt"` for new sessions or `claude --resume <id> "prompt"` for resuming.
+    /// Runs `claude "prompt"` for new sessions, `claude --resume <id>` for resuming,
+    /// or `claude --continue` to continue the most recent session in the working directory.
     /// Always passes `--settings <hooks_settings_path>` to load the Claude hooks config.
     ///
     /// # Arguments
     /// * `task_id` - Unique identifier for the task (used for events and PID tracking)
     /// * `cwd` - Working directory for the Claude process (task's worktree path)
-    /// * `prompt` - The prompt to send to Claude
+    /// * `prompt` - The prompt to send to Claude (empty string to skip)
     /// * `resume_session_id` - If Some, resumes an existing Claude session with `--resume <id>`
+    /// * `continue_session` - If true and no resume_session_id, uses `--continue`
     /// * `hooks_settings_path` - Path to the hooks settings JSON file
     /// * `cols` - Terminal width in columns
     /// * `rows` - Terminal height in rows
@@ -392,6 +394,7 @@ impl PtyManager {
         cwd: &Path,
         prompt: &str,
         resume_session_id: Option<&str>,
+        continue_session: bool,
         hooks_settings_path: &Path,
         cols: u16,
         rows: u16,
@@ -431,7 +434,7 @@ impl PtyManager {
             .map_err(|e| PtyError::SpawnFailed(format!("Failed to create PTY pair: {}", e)))?;
 
         let mut cmd = CommandBuilder::new("claude");
-        for arg in build_claude_args(prompt, resume_session_id, hooks_settings_path) {
+        for arg in build_claude_args(prompt, resume_session_id, continue_session, hooks_settings_path) {
             cmd.arg(arg);
         }
         cmd.cwd(cwd);
@@ -1011,12 +1014,15 @@ fn get_user_environment() -> HashMap<String, String> {
 pub(crate) fn build_claude_args(
     prompt: &str,
     resume_session_id: Option<&str>,
+    continue_session: bool,
     hooks_settings_path: &Path,
 ) -> Vec<String> {
     let mut args = Vec::new();
     if let Some(session_id) = resume_session_id {
         args.push("--resume".to_string());
         args.push(session_id.to_string());
+    } else if continue_session {
+        args.push("--continue".to_string());
     }
     if !prompt.is_empty() {
         args.push(prompt.to_string());
@@ -1178,7 +1184,7 @@ mod tests {
     #[test]
     fn test_build_claude_args_new_session() {
         let settings = Path::new("/home/user/.openforge/claude-hooks-settings.json");
-        let args = build_claude_args("implement the feature", None, settings);
+        let args = build_claude_args("implement the feature", None, false, settings);
         assert_eq!(
             args,
             vec![
@@ -1192,7 +1198,7 @@ mod tests {
     #[test]
     fn test_build_claude_args_resume_session_with_prompt() {
         let settings = Path::new("/path/to/settings.json");
-        let args = build_claude_args("continue work", Some("sess-abc-123"), settings);
+        let args = build_claude_args("continue work", Some("sess-abc-123"), false, settings);
         assert_eq!(
             args,
             vec![
@@ -1208,8 +1214,7 @@ mod tests {
     #[test]
     fn test_build_claude_args_resume_session_without_prompt() {
         let settings = Path::new("/path/to/settings.json");
-        let args = build_claude_args("", Some("sess-abc-123"), settings);
-        // When resuming without a prompt, no prompt arg should be included
+        let args = build_claude_args("", Some("sess-abc-123"), false, settings);
         assert_eq!(
             args,
             vec![
@@ -1222,19 +1227,44 @@ mod tests {
     }
 
     #[test]
+    fn test_build_claude_args_continue_session() {
+        let settings = Path::new("/path/to/settings.json");
+        let args = build_claude_args("", None, true, settings);
+        assert_eq!(
+            args,
+            vec![
+                "--continue",
+                "--settings",
+                "/path/to/settings.json",
+            ]
+        );
+    }
+
+    #[test]
+    fn test_build_claude_args_resume_takes_precedence_over_continue() {
+        let settings = Path::new("/path/to/settings.json");
+        // When both resume_session_id and continue_session are set, --resume wins
+        let args = build_claude_args("", Some("sess-123"), true, settings);
+        assert!(args.contains(&"--resume".to_string()));
+        assert!(!args.contains(&"--continue".to_string()));
+    }
+
+    #[test]
     fn test_build_claude_args_settings_always_present() {
         let settings = Path::new("/config/hooks.json");
-        let args_new = build_claude_args("prompt", None, settings);
-        let args_resume = build_claude_args("prompt", Some("sid"), settings);
+        let args_new = build_claude_args("prompt", None, false, settings);
+        let args_resume = build_claude_args("prompt", Some("sid"), false, settings);
+        let args_continue = build_claude_args("", None, true, settings);
 
         assert!(args_new.contains(&"--settings".to_string()));
         assert!(args_resume.contains(&"--settings".to_string()));
+        assert!(args_continue.contains(&"--settings".to_string()));
     }
 
     #[test]
     fn test_build_claude_args_no_headless_flags() {
         let settings = Path::new("/config/hooks.json");
-        let args = build_claude_args("prompt", None, settings);
+        let args = build_claude_args("prompt", None, false, settings);
 
         assert!(!args.contains(&"-p".to_string()));
         assert!(!args.contains(&"--output-format".to_string()));
@@ -1244,7 +1274,7 @@ mod tests {
     #[test]
     fn test_build_claude_args_resume_flag_before_prompt() {
         let settings = Path::new("/config/hooks.json");
-        let args = build_claude_args("my prompt", Some("session-xyz"), settings);
+        let args = build_claude_args("my prompt", Some("session-xyz"), false, settings);
 
         let resume_pos = args.iter().position(|a| a == "--resume").unwrap();
         let session_pos = args.iter().position(|a| a == "session-xyz").unwrap();
@@ -1270,13 +1300,13 @@ mod tests {
             std::env::remove_var("HOME");
         }
 
-        let args_new = build_claude_args("fix the bug", None, &temp_path);
+        let args_new = build_claude_args("fix the bug", None, false, &temp_path);
         assert_eq!(args_new[0], "fix the bug");
         let s_idx = args_new.iter().position(|a| a == "--settings").unwrap();
         assert_eq!(args_new[s_idx + 1], temp_path.to_string_lossy().to_string());
         assert!(!args_new.contains(&"-p".to_string()));
 
-        let args_resume = build_claude_args("continue impl", Some("resume-sess-999"), &temp_path);
+        let args_resume = build_claude_args("continue impl", Some("resume-sess-999"), false, &temp_path);
         assert_eq!(args_resume[0], "--resume");
         assert_eq!(args_resume[1], "resume-sess-999");
         assert_eq!(args_resume[2], "continue impl");
