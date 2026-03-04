@@ -31,13 +31,14 @@
   let hasVisibleStatus = $derived(session !== null && ['running', 'completed', 'paused', 'failed', 'interrupted'].includes(session?.status ?? ''))
   let hasCiFailure = $derived(pullRequests.some(pr => pr.ci_status === 'failure' && pr.state === 'open'))
   let hasPendingCi = $derived(pullRequests.some(pr => pr.ci_status === 'pending' && pr.state === 'open'))
+  let hasReadyToMerge = $derived(pullRequests.some(pr => isReadyToMerge(pr)))
   let totalUnaddressed = $derived(
     pullRequests.reduce((sum, pr) => sum + (pr.unaddressed_comment_count || 0), 0)
   )
 </script>
 
 <Card
-  class="block px-3.5 py-3 {hasCiFailure && !hasPendingCi && statusClass !== 'running' && !needsInput ? 'ci-failed' : ''} {statusClass === 'running' ? 'running' : ''} {statusClass === 'paused' && !needsInput ? 'paused' : ''} {statusClass === 'failed' ? 'failed' : ''} {statusClass === 'interrupted' ? 'interrupted' : ''} {statusClass === 'completed' ? 'completed' : ''} {needsInput ? 'needs-input' : ''}"
+  class="block px-3.5 py-3 {hasCiFailure && !hasPendingCi && statusClass !== 'running' && !needsInput ? 'ci-failed' : ''} {statusClass === 'running' ? 'running' : ''} {statusClass === 'paused' && !needsInput ? 'paused' : ''} {statusClass === 'failed' ? 'failed' : ''} {statusClass === 'interrupted' ? 'interrupted' : ''} {statusClass === 'completed' ? 'completed' : ''} {needsInput ? 'needs-input' : ''} {hasReadyToMerge && statusClass !== 'running' ? 'ready-to-merge' : ''}"
   onclick={handleClick}
 >
   <div class="flex items-center justify-between mb-1">
@@ -83,7 +84,7 @@
     <div class="flex flex-wrap gap-1 mb-1">
       {#each pullRequests as pr}
         <span
-          class="font-mono text-[10px] font-semibold px-1.5 py-px rounded cursor-pointer transition-opacity hover:opacity-80 {pr.state === 'open' && !isReadyToMerge(pr) ? 'text-primary' : ''} {pr.state === 'merged' ? 'text-secondary' : ''} {isReadyToMerge(pr) ? 'text-primary border border-primary/40' : ''} {pr.state === 'closed' ? 'text-base-content/40' : ''}"
+          class="font-mono text-[10px] font-semibold px-1.5 py-px rounded cursor-pointer transition-opacity hover:opacity-80 {pr.state === 'open' && !isReadyToMerge(pr) ? 'text-primary' : ''} {pr.state === 'merged' ? 'text-secondary' : ''} {isReadyToMerge(pr) ? 'text-info bg-info/10 border border-info/40' : ''} {pr.state === 'closed' ? 'text-base-content/40' : ''}"
           role="link"
           tabindex="0"
           onclick={(e: MouseEvent) => { e.stopPropagation(); openUrl(pr.url) }}
@@ -109,7 +110,7 @@
       {#if pr.state === 'merged'}
         <div class="font-mono text-[10px] font-semibold px-2 py-0.5 rounded mt-1 text-center text-secondary">// merged</div>
       {:else if isReadyToMerge(pr)}
-        <div class="font-mono text-[10px] font-semibold px-2 py-0.5 rounded mt-1 text-center text-primary border border-primary/30">$ ready to merge</div>
+        <div class="font-mono text-[10px] font-semibold px-2 py-0.5 rounded mt-1 text-center text-info bg-info/10 border border-info/30">$ ready to merge</div>
       {/if}
     {/each}
   {/if}

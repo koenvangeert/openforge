@@ -99,7 +99,7 @@
           <div class="mb-3">
             <div class="flex items-center justify-between gap-2">
               <span class="text-xs text-base-content/50">{pr.title}</span>
-              <span class="text-[0.65rem] font-semibold px-1.5 py-0.5 rounded bg-success/25 text-success merge-ready">&#x25CF; Ready to Merge</span>
+              <span class="text-[0.65rem] font-semibold px-1.5 py-0.5 rounded bg-info/15 text-info merge-ready">&#x25CF; Ready to Merge</span>
             </div>
           </div>
         {/if}
