@@ -68,7 +68,7 @@
     </label>
 
     <label class="flex flex-col gap-1.5">
-      <span class="text-xs text-base-content/60 font-medium">Repository Path <span class="text-error">*</span></span>
+      <span class="text-xs text-base-content/60 font-medium">Local Repository Path <span class="text-error">*</span></span>
       <input
         type="text"
         class="input input-bordered input-sm w-full"
@@ -76,6 +76,7 @@
         placeholder="/Users/you/workspace/my-project"
         required
       />
+      <span class="text-[0.65rem] text-base-content/40">Absolute path to the git repository on your machine</span>
     </label>
 
     <div class="divider my-2"></div>
@@ -121,13 +122,14 @@
     {#if showGithubSection}
       <div class="flex flex-col gap-3.5 pl-4 mt-2">
         <label class="flex flex-col gap-1.5">
-          <span class="text-xs text-base-content/60 font-medium">Default Repository</span>
+          <span class="text-xs text-base-content/60 font-medium">Default GitHub Repository</span>
           <input
             type="text"
             class="input input-bordered input-sm w-full"
             bind:value={githubDefaultRepo}
             placeholder="owner/repo-name"
           />
+          <span class="text-[0.65rem] text-base-content/40">GitHub remote repository for PRs and reviews (e.g. collibra/openforge)</span>
         </label>
       </div>
     {/if}

@@ -127,6 +127,15 @@ export interface CommandInfo {
   agent: string | null;
 }
 
+/** Skill info for the Skills view — enriched from CommandInfo with content and level */
+export interface SkillInfo {
+  name: string;
+  description: string | null;
+  agent: string | null;
+  template: string | null;
+  level: "project" | "user";
+}
+
 /** Extended agent info from OpenCode GET /agent endpoint — used for @ autocomplete */
 export interface AutocompleteAgentInfo {
   name: string;
@@ -301,7 +310,7 @@ export interface AgentReviewComment {
 }
 
 /** App-level view for top-bar navigation */
-export type AppView = "board" | "pr_review" | "settings" | "global_settings";
+export type AppView = "board" | "pr_review" | "settings" | "global_settings" | "skills";
 
 export interface PtySpawnRequest {
   task_id: string;

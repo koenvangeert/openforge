@@ -2,7 +2,7 @@
   import { onMount, onDestroy } from 'svelte'
   import { listen } from '@tauri-apps/api/event'
   import type { UnlistenFn, Event } from '@tauri-apps/api/event'
-  import { tasks, selectedTaskId, activeSessions, checkpointNotification, ciFailureNotification, ticketPrs, error, isLoading, projects, activeProjectId, currentView, reviewRequestCount, projectAttention, taskSpawned, searchQuery } from './lib/stores'
+  import { tasks, selectedTaskId, activeSessions, checkpointNotification, ciFailureNotification, ticketPrs, error, isLoading, projects, activeProjectId, currentView, reviewRequestCount, projectAttention, taskSpawned, searchQuery, selectedSkillName } from './lib/stores'
   import { getProjects, getTasksForProject, getPullRequests, runAction, getSessionStatus, getLatestSession, getLatestSessions, forceGithubSync, createTask, updateTask, getProjectAttention, getAppMode, finalizeClaudeSession } from './lib/ipc'
   import type { Task, PullRequestInfo, AgentEvent, ProjectAttention, AppView } from './lib/types'
   import KanbanBoard from './components/KanbanBoard.svelte'
@@ -12,6 +12,7 @@
   import SettingsPanel from './components/SettingsPanel.svelte'
   import GlobalSettingsPanel from './components/GlobalSettingsPanel.svelte'
   import PrReviewView from './components/PrReviewView.svelte'
+  import SkillsView from './components/SkillsView.svelte'
   import Toast from './components/Toast.svelte'
   import CheckpointToast from './components/CheckpointToast.svelte'
   import CiFailureToast from './components/CiFailureToast.svelte'
@@ -43,6 +44,11 @@
   
   $effect(() => {
     if ($currentView === 'settings' || $currentView === 'global_settings') {
+      $selectedTaskId = null
+    }
+  })
+  $effect(() => {
+    if ($currentView === 'skills') {
       $selectedTaskId = null
     }
   })
@@ -656,6 +662,8 @@
         </div>
       {:else if $currentView === 'pr_review'}
         <PrReviewView />
+      {:else if $currentView === 'skills'}
+        <SkillsView onRunAction={handleRunAction} />
       {:else if selectedTask}
         <TaskDetailView task={selectedTask} onRunAction={handleRunAction} />
       {:else}

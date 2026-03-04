@@ -617,6 +617,16 @@ pub struct CommandInfo {
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
+/// Skill information — enriched from CommandInfo with template content and level
+#[derive(Debug, Clone, Serialize)]
+pub struct SkillInfo {
+    pub name: String,
+    pub description: Option<String>,
+    pub agent: Option<String>,
+    pub template: Option<String>,
+    pub level: String, // "project" or "user"
+}
+
 /// Session information from OpenCode API
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct SessionInfo {

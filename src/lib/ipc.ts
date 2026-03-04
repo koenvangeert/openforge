@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { Task, AgentSession, AgentLog, PrComment, PollResult, PullRequestInfo, AgentInfo, Project, ProjectAttention, WorktreeInfo, ImplementationStatus, ReviewPullRequest, PrFileDiff, ReviewComment, ReviewSubmissionComment, SelfReviewComment, AgentReviewComment, CommandInfo, AutocompleteAgentInfo, PrOverviewComment, TranscriptionResult, WhisperModelStatus, WhisperModelSizeId } from "./types";
+import type { Task, AgentSession, AgentLog, PrComment, PollResult, PullRequestInfo, AgentInfo, Project, ProjectAttention, WorktreeInfo, ImplementationStatus, ReviewPullRequest, PrFileDiff, ReviewComment, ReviewSubmissionComment, SelfReviewComment, AgentReviewComment, CommandInfo, AutocompleteAgentInfo, PrOverviewComment, TranscriptionResult, WhisperModelStatus, WhisperModelSizeId, SkillInfo } from "./types";
 
 export async function createTask(title: string, status: string, jiraKey: string | null, projectId: string | null): Promise<Task> {
   return invoke<Task>("create_task", { title, status, jiraKey, projectId });
@@ -270,6 +270,10 @@ export async function abortAgentReview(reviewSessionKey: string): Promise<void> 
 
 export async function listOpenCodeCommands(projectId: string): Promise<CommandInfo[]> {
   return invoke<CommandInfo[]>("list_opencode_commands", { projectId });
+}
+
+export async function listOpenCodeSkills(projectId: string): Promise<SkillInfo[]> {
+  return invoke<SkillInfo[]>("list_opencode_skills", { projectId });
 }
 
 export async function searchOpenCodeFiles(projectId: string, query: string): Promise<string[]> {
