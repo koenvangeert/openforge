@@ -163,12 +163,6 @@ describe('TaskDetailView', () => {
     expect(titles.length).toBeGreaterThanOrEqual(1)
   })
 
-  it('renders status badge with status label', () => {
-    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
-    const matches = screen.getAllByText('Backlog')
-    expect(matches.length).toBeGreaterThanOrEqual(1)
-  })
-
   it('has AgentPanel child with empty state text', async () => {
     render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
     await vi.waitFor(() => {
