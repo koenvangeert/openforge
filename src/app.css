@@ -1,6 +1,121 @@
+@import "@fontsource/jetbrains-mono/400.css";
+@import "@fontsource/jetbrains-mono/500.css";
+@import "@fontsource/jetbrains-mono/600.css";
+@import "@fontsource/jetbrains-mono/700.css";
 @import "tailwindcss";
-@plugin "daisyui" {
-  themes: light --default;
+
+@plugin "daisyui";
+
+@plugin "daisyui/theme" {
+  name: "openforge";
+  default: true;
+  prefersdark: false;
+  color-scheme: light;
+
+  --color-base-100: #FFFFFF;
+  --color-base-200: #F5F5F5;
+  --color-base-300: #E0E0E0;
+  --color-base-content: #000000;
+  --color-primary: #00D084;
+  --color-primary-content: #000000;
+  --color-secondary: #888888;
+  --color-secondary-content: #FFFFFF;
+  --color-accent: #00D084;
+  --color-accent-content: #000000;
+  --color-neutral: #000000;
+  --color-neutral-content: #FFFFFF;
+  --color-info: #00D084;
+  --color-info-content: #000000;
+  --color-success: #00D084;
+  --color-success-content: #000000;
+  --color-warning: #FFB800;
+  --color-warning-content: #000000;
+  --color-error: #FF4444;
+  --color-error-content: #FFFFFF;
+
+  --radius-selector: 0.25rem;
+  --radius-field: 0.25rem;
+  --radius-box: 0.5rem;
+  --size-selector: 0.25rem;
+  --size-field: 0.25rem;
+  --border: 1px;
+  --depth: 0;
+  --noise: 0;
+}
+
+:root {
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, Liberation Mono, monospace;
+}
+
+/* Status border indicators — daisyUI v5 vars are full oklch() values, use var() directly */
+.running {
+  border: 2px solid var(--color-success);
+  background-color: var(--color-base-100);
+  background-image: linear-gradient(to right, color-mix(in oklch, var(--color-success) 5%, transparent), transparent 40%);
+  animation: border-pulse-success 2s ease-in-out infinite;
+}
+.completed {
+  border-left: 3px solid var(--color-primary);
+  background-image: linear-gradient(to right, color-mix(in oklch, var(--color-primary) 8%, transparent), transparent 40%);
+}
+.paused {
+  border-left: 3px solid var(--color-warning);
+  background-image: linear-gradient(to right, color-mix(in oklch, var(--color-warning) 5%, transparent), transparent 40%);
+}
+.failed {
+  border-left: 3px solid var(--color-error);
+  background-image: linear-gradient(to right, color-mix(in oklch, var(--color-error) 5%, transparent), transparent 40%);
+}
+.interrupted {
+  border-left: 3px solid color-mix(in oklch, var(--color-base-content) 30%, transparent);
+  background-image: linear-gradient(to right, color-mix(in oklch, var(--color-base-content) 3%, transparent), transparent 40%);
+}
+.needs-input {
+  border: 2px solid var(--color-warning);
+  background-color: var(--color-base-100);
+  animation: border-pulse-warning 2s ease-in-out infinite;
+}
+.ci-failed {
+  border: 2px solid var(--color-error);
+  background-image: linear-gradient(to right, color-mix(in oklch, var(--color-error) 8%, transparent), transparent 40%);
+}
+@keyframes border-pulse-success {
+  0%, 100% {
+    border-color: var(--color-success);
+    box-shadow: 0 0 8px color-mix(in oklch, var(--color-success) 30%, transparent);
+  }
+  50% {
+    border-color: color-mix(in oklch, var(--color-success) 40%, transparent);
+    box-shadow: 0 0 3px color-mix(in oklch, var(--color-success) 10%, transparent);
+  }
+}
+@keyframes border-pulse-warning {
+  0%, 100% {
+    border-color: var(--color-warning);
+    box-shadow: 0 0 8px color-mix(in oklch, var(--color-warning) 30%, transparent);
+  }
+  50% {
+    border-color: color-mix(in oklch, var(--color-warning) 40%, transparent);
+    box-shadow: 0 0 3px color-mix(in oklch, var(--color-warning) 10%, transparent);
+  }
+}
+@keyframes badge-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+@keyframes ci-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+/* CI/Review text animations */
+.ci-failure-text {
+  animation: ci-pulse 1.5s ease-in-out infinite;
+}
+.ci-pending-text {
+  animation: ci-pulse 2s ease-in-out infinite;
+}
+.review-pending-text {
+  animation: ci-pulse 2s ease-in-out infinite;
 }
 
 .markdown-body {

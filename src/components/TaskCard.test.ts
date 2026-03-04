@@ -32,6 +32,7 @@ const basePr: PullRequestInfo = {
   merged_at: null,
   created_at: 1000,
   updated_at: 2000,
+  unaddressed_comment_count: 0,
 }
 
 describe('TaskCard', () => {
@@ -54,18 +55,18 @@ describe('TaskCard', () => {
 
   it('renders jira_title when present', () => {
     render(TaskCard, { props: { task: baseTask } })
-    expect(screen.getByText('Add JWT authentication to REST API')).toBeTruthy()
+    expect(screen.getByText('// Add JWT authentication to REST API')).toBeTruthy()
   })
 
   it('hides jira_title when null', () => {
     const taskWithoutJiraTitle = { ...baseTask, jira_title: null }
     render(TaskCard, { props: { task: taskWithoutJiraTitle } })
-    expect(screen.queryByText('Add JWT authentication to REST API')).toBeNull()
+    expect(screen.queryByText('// Add JWT authentication to REST API')).toBeNull()
   })
 
   it('renders jira_assignee', () => {
     render(TaskCard, { props: { task: baseTask } })
-    expect(screen.getByText('Alice')).toBeTruthy()
+    expect(screen.getByText('@Alice')).toBeTruthy()
   })
 
   it('shows running status when session is running', () => {
@@ -79,6 +80,8 @@ describe('TaskCard', () => {
       error_message: null,
       created_at: 1000,
       updated_at: 2000,
+      provider: 'opencode',
+      claude_session_id: null,
     }
     render(TaskCard, { props: { task: baseTask, session } })
     expect(screen.getByText('Running')).toBeTruthy()
@@ -95,6 +98,8 @@ describe('TaskCard', () => {
       error_message: null,
       created_at: 1000,
       updated_at: 2000,
+      provider: 'opencode',
+      claude_session_id: null,
     }
     render(TaskCard, { props: { task: baseTask, session } })
     expect(screen.getByText('Done')).toBeTruthy()
@@ -111,6 +116,8 @@ describe('TaskCard', () => {
       error_message: null,
       created_at: 1000,
       updated_at: 2000,
+      provider: 'opencode',
+      claude_session_id: null,
     }
     render(TaskCard, { props: { task: baseTask, session } })
     const card = screen.getByRole('button')
@@ -128,6 +135,8 @@ describe('TaskCard', () => {
       error_message: null,
       created_at: 1000,
       updated_at: 2000,
+      provider: 'opencode',
+      claude_session_id: null,
     }
     render(TaskCard, { props: { task: baseTask, session } })
     expect(screen.getByText('Paused')).toBeTruthy()
@@ -144,6 +153,8 @@ describe('TaskCard', () => {
       error_message: 'Build failed',
       created_at: 1000,
       updated_at: 2000,
+      provider: 'opencode',
+      claude_session_id: null,
     }
     render(TaskCard, { props: { task: baseTask, session } })
     const card = screen.getByRole('button')
@@ -161,6 +172,8 @@ describe('TaskCard', () => {
       error_message: null,
       created_at: 1000,
       updated_at: 2000,
+      provider: 'opencode',
+      claude_session_id: null,
     }
     render(TaskCard, { props: { task: baseTask, session } })
     expect(screen.getByText('Stopped')).toBeTruthy()
@@ -177,6 +190,8 @@ describe('TaskCard', () => {
       error_message: null,
       created_at: 1000,
       updated_at: 2000,
+      provider: 'opencode',
+      claude_session_id: null,
     }
     render(TaskCard, { props: { task: baseTask, session } })
     expect(screen.getByText('Needs Input')).toBeTruthy()
@@ -193,6 +208,8 @@ describe('TaskCard', () => {
       error_message: null,
       created_at: 1000,
       updated_at: 2000,
+      provider: 'opencode',
+      claude_session_id: null,
     }
     render(TaskCard, { props: { task: baseTask, session } })
     expect(screen.queryByText('Needs Input')).toBeNull()
@@ -209,6 +226,8 @@ describe('TaskCard', () => {
       error_message: null,
       created_at: 1000,
       updated_at: 2000,
+      provider: 'opencode',
+      claude_session_id: null,
     }
     render(TaskCard, { props: { task: baseTask, session } })
     expect(screen.queryByText('Needs Input')).toBeNull()
@@ -247,6 +266,8 @@ describe('TaskCard', () => {
       error_message: null,
       created_at: 1000,
       updated_at: 2000,
+      provider: 'opencode',
+      claude_session_id: null,
     }
     render(TaskCard, { props: { task: baseTask, session } })
     const card = screen.getByRole('button')
@@ -264,6 +285,8 @@ describe('TaskCard', () => {
       error_message: null,
       created_at: 1000,
       updated_at: 2000,
+      provider: 'opencode',
+      claude_session_id: null,
     }
     render(TaskCard, { props: { task: baseTask, session } })
     const card = screen.getByRole('button')
@@ -281,6 +304,8 @@ describe('TaskCard', () => {
       error_message: null,
       created_at: 1000,
       updated_at: 2000,
+      provider: 'opencode',
+      claude_session_id: null,
     }
     render(TaskCard, { props: { task: baseTask, session } })
     const card = screen.getByRole('button')
@@ -381,6 +406,8 @@ describe('TaskCard', () => {
       error_message: null,
       created_at: 1000,
       updated_at: 2000,
+      provider: 'opencode',
+      claude_session_id: null,
     }
     const pr = { ...basePr, ci_status: 'failure', state: 'open' }
     render(TaskCard, { props: { task: baseTask, session, pullRequests: [pr] } })
@@ -400,6 +427,8 @@ describe('TaskCard', () => {
       error_message: null,
       created_at: 1000,
       updated_at: 2000,
+      provider: 'opencode',
+      claude_session_id: null,
     }
     const pr = { ...basePr, ci_status: 'failure', state: 'open' }
     render(TaskCard, { props: { task: baseTask, session, pullRequests: [pr] } })
@@ -410,7 +439,7 @@ describe('TaskCard', () => {
   it('shows unaddressed comment badge when comments exist', () => {
     const pr = { ...basePr, unaddressed_comment_count: 3 }
     render(TaskCard, { props: { task: baseTask, pullRequests: [pr] } })
-    expect(screen.getByText('3 unaddressed')).toBeTruthy()
+    expect(screen.getByText('! 3 unaddressed')).toBeTruthy()
   })
 
   it('hides unaddressed comment badge when count is 0', () => {
@@ -423,7 +452,7 @@ describe('TaskCard', () => {
     const pr1 = { ...basePr, id: 1, unaddressed_comment_count: 2 }
     const pr2 = { ...basePr, id: 2, unaddressed_comment_count: 1 }
     render(TaskCard, { props: { task: baseTask, pullRequests: [pr1, pr2] } })
-    expect(screen.getByText('3 unaddressed')).toBeTruthy()
+    expect(screen.getByText('! 3 unaddressed')).toBeTruthy()
   })
 
   it('hides badge when no pull requests', () => {

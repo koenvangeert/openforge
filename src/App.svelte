@@ -2,9 +2,9 @@
   import { onMount, onDestroy } from 'svelte'
   import { listen } from '@tauri-apps/api/event'
   import type { UnlistenFn, Event } from '@tauri-apps/api/event'
-  import { tasks, selectedTaskId, activeSessions, checkpointNotification, ciFailureNotification, ticketPrs, error, isLoading, projects, activeProjectId, currentView, reviewRequestCount, projectAttention, taskSpawned } from './lib/stores'
+  import { tasks, selectedTaskId, activeSessions, checkpointNotification, ciFailureNotification, ticketPrs, error, isLoading, projects, activeProjectId, currentView, reviewRequestCount, projectAttention, taskSpawned, searchQuery } from './lib/stores'
   import { getProjects, getTasksForProject, getPullRequests, runAction, getSessionStatus, getLatestSession, getLatestSessions, forceGithubSync, createTask, updateTask, getProjectAttention, getAppMode, finalizeClaudeSession } from './lib/ipc'
-  import type { Task, PullRequestInfo, AgentEvent, ProjectAttention } from './lib/types'
+  import type { Task, PullRequestInfo, AgentEvent, ProjectAttention, AppView } from './lib/types'
   import KanbanBoard from './components/KanbanBoard.svelte'
   import TaskDetailView from './components/TaskDetailView.svelte'
    import PromptInput from './components/PromptInput.svelte'
@@ -18,9 +18,9 @@
   import TaskSpawnedToast from './components/TaskSpawnedToast.svelte'
   import ProjectSwitcher from './components/ProjectSwitcher.svelte'
   import ProjectSetupDialog from './components/ProjectSetupDialog.svelte'
+  import IconRail from './components/IconRail.svelte'
+  import { RefreshCw } from 'lucide-svelte'
 
-
-  import { computeDoingStatus } from './lib/doingStatus'
   import { pushNavState, navigateBack } from './lib/navigation'
   import { release as releaseTerminal } from './lib/terminalPool'
 
@@ -33,9 +33,6 @@
 
   let selectedTask = $derived($tasks.find(t => t.id === $selectedTaskId) || null)
 
-
-  // Doing column status indicators for Board nav button
-  let doingStatus = $derived(computeDoingStatus($tasks, $activeSessions))
 
   // Navigation logic - clear selected task when switching views
   $effect(() => {
@@ -178,6 +175,11 @@
     loadProjects()
   }
 
+  function handleNavigate(view: AppView) {
+    pushNavState()
+    $currentView = view
+  }
+
   function handleKeydown(e: KeyboardEvent) {
     if (e.metaKey && e.key === 't') {
       e.preventDefault()
@@ -197,6 +199,11 @@
     if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key === 'd') {
       e.preventDefault()
       window.dispatchEvent(new CustomEvent('toggle-voice-recording'))
+    }
+    if ((e.metaKey || e.ctrlKey) && e.key === '/') {
+      e.preventDefault()
+      const searchInput = document.querySelector('[data-search-input]') as HTMLInputElement
+      searchInput?.focus()
     }
   }
 
@@ -564,146 +571,141 @@
   })
 </script>
 
-<div class="flex flex-col h-screen overflow-hidden">
-  <header class="navbar bg-base-200 border-b border-base-300 px-6 gap-5 min-h-14 shrink-0">
-    <div class="flex items-center gap-4 flex-1">
-      <h1 class="text-sm font-semibold text-base-content tracking-wide m-0">Open Forge</h1>
-      {#if appMode === 'dev'}
-        <span class="badge badge-warning badge-sm font-mono">DEV</span>
-      {/if}
-      <ProjectSwitcher onNewProject={() => showProjectSetup = true} />
-      <button 
-        type="button"
-        class="btn btn-primary btn-sm"
-        onclick={() => {
-          editingTask = null
-          showAddDialog = true
-        }}
-      >
-        + Add Task <span class="text-[0.65rem] opacity-70 ml-1 font-normal">&#8984;T</span>
-      </button>
-    </div>
-    
-    <nav class="flex gap-1 bg-base-100 p-1 rounded-lg">
-      <button 
-        class="btn btn-ghost btn-sm"
-        class:btn-active={$currentView === 'board'} 
-        onclick={() => { pushNavState(); $currentView = 'board' }}
-      >
-        Board
-        {#if doingStatus.doingCount > 0}
-          <span class="flex items-center gap-1 ml-1">
-            {#if doingStatus.hasNeedsAnswer}
-              <span class="w-2.5 h-2.5 rounded-full bg-warning" title="Agent needs input"></span>
-            {/if}
-            {#if doingStatus.hasRunning}
-              <span class="w-2.5 h-2.5 rounded-full bg-success animate-pulse" title="Agent running"></span>
-            {/if}
-            {#if doingStatus.allDone}
-              <span class="w-2.5 h-2.5 rounded-full bg-info" title="All agents completed"></span>
-            {/if}
-            <span class="badge badge-ghost badge-sm">{doingStatus.doingCount}</span>
-          </span>
-        {/if}
-      </button>
-      <button 
-        class="btn btn-ghost btn-sm"
-        class:btn-active={$currentView === 'pr_review'} 
-        onclick={() => { pushNavState(); $currentView = 'pr_review' }}
-      >
-        PR Review
-        {#if $reviewRequestCount > 0}
-          <span class="badge badge-primary badge-sm ml-1">{$reviewRequestCount}</span>
-        {/if}
-      </button>
-      <button 
-        class="btn btn-ghost btn-sm"
-        class:btn-active={$currentView === 'settings' || $currentView === 'global_settings'} 
-        onclick={() => { if ($currentView !== 'settings' && $currentView !== 'global_settings') { pushNavState(); $currentView = 'settings' } }}
-      >
-        Settings
-      </button>
-    </nav>
-  </header>
+<div class="flex h-screen overflow-hidden">
+  <IconRail currentView={$currentView} onNavigate={handleNavigate} />
 
-  <main class="flex-1 overflow-hidden flex">
-    {#if $currentView === 'settings' || $currentView === 'global_settings'}
-      <div class="flex flex-col flex-1 overflow-hidden w-full">
-        <div class="flex bg-base-200 border-b border-base-300 px-6 shrink-0">
-          <button
-            class="btn btn-ghost btn-sm rounded-none border-b-2 {$currentView === 'settings' ? 'text-primary border-b-primary' : 'border-transparent'}"
-            onclick={() => { pushNavState(); $currentView = 'settings' }}
-          >
-            Project
-          </button>
-          <button
-            class="btn btn-ghost btn-sm rounded-none border-b-2 {$currentView === 'global_settings' ? 'text-primary border-b-primary' : 'border-transparent'}"
-            onclick={() => { pushNavState(); $currentView = 'global_settings' }}
-          >
-            Global
-          </button>
-        </div>
-        <div class="flex-1 overflow-hidden">
-          {#if $currentView === 'settings'}
-            <SettingsPanel onClose={() => { pushNavState(); $currentView = 'board' }} onProjectDeleted={loadProjects} />
+  <div class="flex flex-col flex-1 min-w-0">
+    <header class="bg-neutral text-neutral-content h-12 flex items-center justify-between px-6 shrink-0">
+      <div class="flex items-center gap-4">
+        <span class="flex items-center gap-1.5 font-mono text-sm">
+          <span class="text-primary font-bold">&gt;</span>
+          <span class="font-semibold">open_forge</span>
+        </span>
+        {#if appMode === 'dev'}
+          <span class="badge badge-sm bg-primary text-black font-mono">DEV</span>
+        {/if}
+        <ProjectSwitcher onNewProject={() => showProjectSetup = true} />
+        <button
+          type="button"
+          class="btn btn-sm bg-primary text-black hover:bg-primary/80 font-mono"
+          onclick={() => {
+            editingTask = null
+            showAddDialog = true
+          }}
+        >
+          + new_task <span class="text-[0.65rem] opacity-70 ml-1 font-normal">&#8984;T</span>
+        </button>
+      </div>
+
+
+    </header>
+
+    {#if $currentView === 'board'}
+      <div class="flex items-center gap-3 px-6 py-2 border-b border-base-300 shrink-0">
+        <label class="input input-bordered input-sm flex items-center gap-2 w-72 font-mono text-xs">
+          <span class="text-secondary">$</span>
+          <input
+            type="text"
+            class="grow bg-transparent border-none outline-none text-sm font-mono"
+            placeholder="grep --tasks"
+            data-search-input
+            bind:value={$searchQuery}
+          />
+        </label>
+        <button
+          class="btn btn-ghost btn-sm btn-square"
+          onclick={triggerGithubSync}
+          disabled={isSyncing}
+          title="Refresh GitHub data (⌘⇧R)"
+        >
+          {#if isSyncing}
+            <span class="loading loading-spinner loading-xs"></span>
           {:else}
-            <GlobalSettingsPanel onClose={() => { pushNavState(); $currentView = 'board' }} />
+            <RefreshCw size={16} />
+          {/if}
+        </button>
+      </div>
+    {/if}
+
+    <main class="flex-1 overflow-hidden flex">
+      {#if $currentView === 'settings' || $currentView === 'global_settings'}
+        <div class="flex flex-col flex-1 overflow-hidden w-full">
+          <div class="flex bg-base-200 border-b border-base-300 px-6 shrink-0">
+            <button
+              class="btn btn-ghost btn-sm rounded-none border-b-2 {$currentView === 'settings' ? 'text-primary border-b-primary' : 'border-transparent'}"
+              onclick={() => { pushNavState(); $currentView = 'settings' }}
+            >
+              Project
+            </button>
+            <button
+              class="btn btn-ghost btn-sm rounded-none border-b-2 {$currentView === 'global_settings' ? 'text-primary border-b-primary' : 'border-transparent'}"
+              onclick={() => { pushNavState(); $currentView = 'global_settings' }}
+            >
+              Global
+            </button>
+          </div>
+          <div class="flex-1 overflow-hidden">
+            {#if $currentView === 'settings'}
+              <SettingsPanel onClose={() => { pushNavState(); $currentView = 'board' }} onProjectDeleted={loadProjects} />
+            {:else}
+              <GlobalSettingsPanel onClose={() => { pushNavState(); $currentView = 'board' }} />
+            {/if}
+          </div>
+        </div>
+      {:else if $currentView === 'pr_review'}
+        <PrReviewView />
+      {:else if selectedTask}
+        <TaskDetailView task={selectedTask} onRunAction={handleRunAction} />
+      {:else}
+        <div class="flex-1 overflow-hidden">
+          {#if $isLoading && $tasks.length === 0}
+            <div class="flex flex-col items-center justify-center h-full gap-3 text-base-content/50 text-sm">
+              <span class="loading loading-spinner loading-md text-primary"></span>
+              <span>Loading tasks...</span>
+            </div>
+          {:else}
+            <KanbanBoard onRunAction={handleRunAction} />
           {/if}
         </div>
-      </div>
-    {:else if $currentView === 'pr_review'}
-      <PrReviewView />
-    {:else if selectedTask}
-      <TaskDetailView task={selectedTask} onRunAction={handleRunAction} />
-    {:else}
-      <div class="flex-1 overflow-hidden">
-        {#if $isLoading && $tasks.length === 0}
-          <div class="flex flex-col items-center justify-center h-full gap-3 text-base-content/50 text-sm">
-            <span class="loading loading-spinner loading-md text-primary"></span>
-            <span>Loading tasks...</span>
-          </div>
-        {:else}
-          <KanbanBoard onRunAction={handleRunAction} {isSyncing} onRefresh={triggerGithubSync} />
-        {/if}
-      </div>
-    {/if}
+      {/if}
 
-    {#if showAddDialog && $activeProjectId}
-      <Modal onClose={() => { showAddDialog = false; editingTask = null }} maxWidth="640px" overflowVisible>
-        {#snippet header()}
-          <h2 class="text-[0.95rem] font-semibold text-base-content m-0">{editingTask ? 'Edit Task' : 'Create Task'}</h2>
-        {/snippet}
-        <div class="p-4 overflow-visible">
-          <PromptInput
-            projectId={$activeProjectId}
-            value={editingTask ? editingTask.title : ''}
-            jiraKey={editingTask ? (editingTask.jira_key || '') : ''}
-            autofocus={true}
-            onSubmit={async (prompt, jiraKey) => {
-              try {
-                if (editingTask) {
-                  await updateTask(editingTask.id, prompt, jiraKey)
-                } else {
-                  await createTask(prompt, 'backlog', jiraKey, $activeProjectId)
+      {#if showAddDialog && $activeProjectId}
+        <Modal onClose={() => { showAddDialog = false; editingTask = null }} maxWidth="640px" overflowVisible>
+          {#snippet header()}
+            <h2 class="text-[0.95rem] font-semibold text-base-content m-0">{editingTask ? 'Edit Task' : 'Create Task'}</h2>
+          {/snippet}
+          <div class="p-4 overflow-visible">
+            <PromptInput
+              projectId={$activeProjectId}
+              value={editingTask ? editingTask.title : ''}
+              jiraKey={editingTask ? (editingTask.jira_key || '') : ''}
+              autofocus={true}
+              onSubmit={async (prompt, jiraKey) => {
+                try {
+                  if (editingTask) {
+                    await updateTask(editingTask.id, prompt, jiraKey)
+                  } else {
+                    await createTask(prompt, 'backlog', jiraKey, $activeProjectId)
+                  }
+                  showAddDialog = false
+                  editingTask = null
+                  await loadTasks()
+                } catch (e) {
+                  console.error('Failed to save task:', e)
+                  $error = String(e)
                 }
-                showAddDialog = false
-                editingTask = null
-                await loadTasks()
-              } catch (e) {
-                console.error('Failed to save task:', e)
-                $error = String(e)
-              }
-            }}
-            onCancel={() => { showAddDialog = false; editingTask = null }}
-          />
-        </div>
-      </Modal>
-    {/if}
+              }}
+              onCancel={() => { showAddDialog = false; editingTask = null }}
+            />
+          </div>
+        </Modal>
+      {/if}
 
-    {#if showProjectSetup}
-      <ProjectSetupDialog onClose={() => showProjectSetup = false} onProjectCreated={handleProjectCreated} />
-    {/if}
-  </main>
+      {#if showProjectSetup}
+        <ProjectSetupDialog onClose={() => showProjectSetup = false} onProjectCreated={handleProjectCreated} />
+      {/if}
+    </main>
+  </div>
 </div>
 
 <Toast />
