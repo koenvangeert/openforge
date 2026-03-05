@@ -228,4 +228,54 @@ describe('terminalPool', () => {
     expect(wrapper2.contains(entry.hostDiv)).toBe(true)
     expect(entry.attached).toBe(true)
   })
+
+  describe('shell-key independence', () => {
+    it('agent key and shell key create separate pool entries', async () => {
+      const agentEntry = await acquire('T-42')
+      const shellEntry = await acquire('T-42-shell')
+
+      expect(agentEntry).toBeDefined()
+      expect(shellEntry).toBeDefined()
+      expect(agentEntry).not.toBe(shellEntry)
+      expect(agentEntry.taskId).toBe('T-42')
+      expect(shellEntry.taskId).toBe('T-42-shell')
+      expect(_getPool().has('T-42')).toBe(true)
+      expect(_getPool().has('T-42-shell')).toBe(true)
+      expect(_getPool().size).toBe(2)
+    })
+
+    it('releasing agent key does not affect shell key entry', async () => {
+      await acquire('T-43')
+      const shellEntry = await acquire('T-43-shell')
+
+      release('T-43')
+
+      expect(_getPool().has('T-43')).toBe(false)
+      expect(_getPool().has('T-43-shell')).toBe(true)
+      expect(_getPool().get('T-43-shell')).toBe(shellEntry)
+    })
+
+    it('both entries have independent ptyActive state', async () => {
+      const agentEntry = await acquire('T-44')
+      const shellEntry = await acquire('T-44-shell')
+
+      const agentOutputCb = listenCallbacks.get('pty-output-T-44')!
+      agentOutputCb({ payload: { data: 'agent output' } })
+
+      expect(agentEntry.ptyActive).toBe(true)
+      expect(shellEntry.ptyActive).toBe(false)
+
+      const shellOutputCb = listenCallbacks.get('pty-output-T-44-shell')!
+      shellOutputCb({ payload: { data: 'shell output' } })
+
+      expect(agentEntry.ptyActive).toBe(true)
+      expect(shellEntry.ptyActive).toBe(true)
+
+      const agentExitCb = listenCallbacks.get('pty-exit-T-44')!
+      agentExitCb({ payload: {} })
+
+      expect(agentEntry.ptyActive).toBe(false)
+      expect(shellEntry.ptyActive).toBe(true)
+    })
+  })
 })
