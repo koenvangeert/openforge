@@ -614,7 +614,7 @@
           <input
             type="text"
             class="grow bg-transparent border-none outline-none text-sm font-mono"
-            placeholder="grep --tasks"
+            placeholder="search"
             data-search-input
             bind:value={$searchQuery}
           />
