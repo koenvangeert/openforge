@@ -577,7 +577,7 @@
   })
 </script>
 
-<div class="flex h-screen overflow-hidden">
+<div class="flex h-screen overflow-hidden bg-base-200">
   <IconRail currentView={$currentView} onNavigate={handleNavigate} reviewRequestCount={$reviewRequestCount} />
 
   <div class="flex flex-col flex-1 min-w-0">
