@@ -1,6 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import { getConfig, setConfig, checkOpenCodeInstalled, checkClaudeInstalled } from '../lib/ipc'
+  import { themeMode, applyTheme } from '../lib/theme'
+  import type { ThemeMode } from '../lib/theme'
 
   interface Props {
     onClose?: () => void
@@ -20,6 +22,16 @@
   let githubToken = $state('')
   let isSaving = $state(false)
   let saved = $state(false)
+  let isDarkMode = $state(false)
+
+  $effect(() => {
+    isDarkMode = $themeMode === 'dark'
+  })
+
+  function handleThemeToggle() {
+    const next: ThemeMode = isDarkMode ? 'light' : 'dark'
+    applyTheme(next)
+  }
 
   onMount(() => {
     loadConfig()
@@ -84,6 +96,17 @@
 
   <div class="flex-1 overflow-y-auto">
     <div class="py-5 flex flex-col gap-6 max-w-4xl mx-auto w-full px-6">
+    <section class="flex flex-col gap-2">
+      <h3 class="text-xs font-semibold text-primary uppercase tracking-wider mb-3 mt-0">Appearance</h3>
+      <label class="flex items-center justify-between cursor-pointer">
+        <div class="flex flex-col gap-0.5">
+          <span class="text-sm text-base-content">Dark Mode</span>
+          <span class="text-[0.7rem] text-base-content/50">Switch between light and dark theme</span>
+        </div>
+        <input type="checkbox" class="toggle toggle-primary toggle-sm" checked={isDarkMode} onchange={handleThemeToggle} data-testid="theme-toggle" />
+      </label>
+    </section>
+
     <section class="flex flex-col gap-2">
       <h3 class="text-xs font-semibold text-primary uppercase tracking-wider mb-3 mt-0">AI Provider</h3>
       <label class="flex flex-col gap-1">

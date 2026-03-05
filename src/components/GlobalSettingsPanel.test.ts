@@ -1,5 +1,5 @@
 import { render, screen, fireEvent } from '@testing-library/svelte'
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 vi.mock('../lib/ipc', () => ({
   getConfig: vi.fn().mockResolvedValue(null),
@@ -8,15 +8,29 @@ vi.mock('../lib/ipc', () => ({
   checkClaudeInstalled: vi.fn().mockResolvedValue({ installed: false, path: null, version: null, authenticated: false }),
 }))
 
+vi.mock('../lib/theme', async () => {
+  const { writable } = await import('svelte/store')
+  return {
+    themeMode: writable('light'),
+    applyTheme: vi.fn(),
+  }
+})
+
 import GlobalSettingsPanel from './GlobalSettingsPanel.svelte'
 import { getConfig, setConfig } from '../lib/ipc'
+import { applyTheme } from '../lib/theme'
 
 describe('GlobalSettingsPanel', () => {
   beforeEach(() => {
     vi.mocked(getConfig).mockClear()
     vi.mocked(setConfig).mockClear()
+    vi.mocked(applyTheme).mockClear()
     vi.mocked(getConfig).mockResolvedValue(null)
     vi.mocked(setConfig).mockResolvedValue(undefined)
+  })
+
+  afterEach(() => {
+    document.documentElement.removeAttribute('data-theme')
   })
 
   it('renders JIRA section with base URL, username, and API token fields', () => {
@@ -91,5 +105,22 @@ describe('GlobalSettingsPanel', () => {
     expect(vi.mocked(setConfig)).toHaveBeenCalledWith('github_token', 'ghp_abc123')
     expect(vi.mocked(setConfig)).toHaveBeenCalledWith('ai_provider', 'claude-code')
     expect(vi.mocked(setConfig)).toHaveBeenCalledTimes(5)
+  })
+
+  it('renders Appearance section with dark mode toggle', () => {
+    render(GlobalSettingsPanel)
+
+    expect(screen.getByText('Appearance')).toBeTruthy()
+    expect(screen.getByText('Dark Mode')).toBeTruthy()
+    expect(screen.getByTestId('theme-toggle')).toBeTruthy()
+  })
+
+  it('calls applyTheme when toggle is clicked', async () => {
+    render(GlobalSettingsPanel)
+
+    const toggle = screen.getByTestId('theme-toggle') as HTMLInputElement
+    await fireEvent.click(toggle)
+
+    expect(vi.mocked(applyTheme)).toHaveBeenCalledWith('dark')
   })
 })
