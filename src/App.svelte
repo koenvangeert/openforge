@@ -11,8 +11,9 @@
   import Modal from './components/Modal.svelte'
    import SettingsView from './components/SettingsView.svelte'
    import PrReviewView from './components/PrReviewView.svelte'
-  import SkillsView from './components/SkillsView.svelte'
-  import Toast from './components/Toast.svelte'
+   import SkillsView from './components/SkillsView.svelte'
+   import CreaturesView from './components/CreaturesView.svelte'
+   import Toast from './components/Toast.svelte'
   import CheckpointToast from './components/CheckpointToast.svelte'
   import CiFailureToast from './components/CiFailureToast.svelte'
   import TaskSpawnedToast from './components/TaskSpawnedToast.svelte'
@@ -46,13 +47,19 @@
       $selectedTaskId = null
     }
   })
-  $effect(() => {
-    if ($currentView === 'skills') {
-      $selectedTaskId = null
-    }
-  })
+   $effect(() => {
+     if ($currentView === 'skills') {
+       $selectedTaskId = null
+     }
+   })
+   
+   $effect(() => {
+     if ($currentView === 'creatures') {
+       $selectedTaskId = null
+     }
+   })
 
-  // Reload tasks when active project changes
+   // Reload tasks when active project changes
   $effect(() => {
     if ($activeProjectId) {
       loadTasks()
@@ -639,9 +646,17 @@
         <SettingsView onClose={() => { pushNavState(); $currentView = 'board' }} onProjectDeleted={loadProjects} />
       {:else if $currentView === 'pr_review'}
         <PrReviewView />
-      {:else if $currentView === 'skills'}
-        <SkillsView onRunAction={handleRunAction} />
-      {:else if selectedTask}
+       {:else if $currentView === 'skills'}
+         <SkillsView onRunAction={handleRunAction} />
+       {:else if $currentView === 'creatures'}
+         <CreaturesView
+           onCreatureClick={(taskId) => {
+             pushNavState()
+             $currentView = 'board'
+             $selectedTaskId = taskId
+           }}
+         />
+       {:else if selectedTask}
         <TaskDetailView task={selectedTask} onRunAction={handleRunAction} />
       {:else}
         <div class="flex-1 overflow-hidden">
