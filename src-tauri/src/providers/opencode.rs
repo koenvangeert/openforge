@@ -22,6 +22,7 @@ impl OpenCodeProvider {
         task_id: &str,
         worktree_path: &Path,
         prompt: &str,
+        agent: Option<&str>,
         app: &AppHandle,
     ) -> Result<ProviderSessionResult, String> {
         let port = self.server_mgr
@@ -42,7 +43,7 @@ impl OpenCodeProvider {
             .map_err(|e| e.to_string())?;
 
         client
-            .prompt_async(&opencode_session_id, prompt.to_string(), None)
+            .prompt_async(&opencode_session_id, prompt.to_string(), agent.map(str::to_string))
             .await
             .map_err(|e| format!("Failed to send prompt: {}", e))?;
 

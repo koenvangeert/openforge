@@ -57,11 +57,12 @@ impl Provider {
         task_id: &str,
         worktree_path: &Path,
         prompt: &str,
+        agent: Option<&str>,
         app: &AppHandle,
     ) -> Result<ProviderSessionResult, String> {
         match self {
-            Provider::ClaudeCode(p) => p.start(task_id, worktree_path, prompt, app).await,
-            Provider::OpenCode(p) => p.start(task_id, worktree_path, prompt, app).await,
+            Provider::ClaudeCode(p) => p.start(task_id, worktree_path, prompt, agent, app).await,
+            Provider::OpenCode(p) => p.start(task_id, worktree_path, prompt, agent, app).await,
         }
     }
 
