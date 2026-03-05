@@ -310,7 +310,7 @@ export interface AgentReviewComment {
 }
 
 /** App-level view for top-bar navigation */
-export type AppView = "board" | "pr_review" | "settings" | "skills";
+export type AppView = "board" | "pr_review" | "skills" | "creatures" | "settings";
 
 export interface PtySpawnRequest {
   task_id: string;

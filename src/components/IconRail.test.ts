@@ -9,10 +9,10 @@ describe('IconRail', () => {
     expect(screen.getByText('>_')).toBeTruthy()
   })
 
-  it('renders 4 navigation buttons', () => {
+  it('renders 5 navigation buttons', () => {
     render(IconRail, { props: { currentView: 'board' as AppView, onNavigate: vi.fn() } })
     const buttons = screen.getAllByRole('button')
-    expect(buttons).toHaveLength(4)
+    expect(buttons).toHaveLength(5)
   })
 
   it('clicking first button (dashboard) calls onNavigate with "board"', () => {
@@ -39,11 +39,19 @@ describe('IconRail', () => {
     expect(onNavigate).toHaveBeenCalledWith('skills')
   })
 
-  it('clicking fourth button (settings) calls onNavigate with "settings"', () => {
+  it('clicking fourth button (creatures) calls onNavigate with "creatures"', () => {
     const onNavigate = vi.fn()
     render(IconRail, { props: { currentView: 'board' as AppView, onNavigate } })
     const buttons = screen.getAllByRole('button')
     fireEvent.click(buttons[3])
+    expect(onNavigate).toHaveBeenCalledWith('creatures')
+  })
+
+  it('clicking fifth button (settings) calls onNavigate with "settings"', () => {
+    const onNavigate = vi.fn()
+    render(IconRail, { props: { currentView: 'board' as AppView, onNavigate } })
+    const buttons = screen.getAllByRole('button')
+    fireEvent.click(buttons[4])
     expect(onNavigate).toHaveBeenCalledWith('settings')
   })
 
@@ -59,6 +67,7 @@ describe('IconRail', () => {
     expect(buttons[1].className).toContain('text-neutral-content/40')
     expect(buttons[2].className).toContain('text-neutral-content/40')
     expect(buttons[3].className).toContain('text-neutral-content/40')
+    expect(buttons[4].className).toContain('text-neutral-content/40')
   })
 
   it('active pr_review button has text-primary class when currentView is "pr_review"', () => {
@@ -76,7 +85,7 @@ describe('IconRail', () => {
   it('active settings button has text-primary class when currentView is "settings"', () => {
     render(IconRail, { props: { currentView: 'settings' as AppView, onNavigate: vi.fn() } })
     const buttons = screen.getAllByRole('button')
-    expect(buttons[3].className).toContain('text-primary')
+    expect(buttons[4].className).toContain('text-primary')
   })
 
   it('board button is not primary when currentView is "pr_review"', () => {
