@@ -183,6 +183,18 @@
   25% { transform: rotate(-5deg); }
   75% { transform: rotate(5deg); }
 }
+@keyframes creature-work {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
+@keyframes creature-alert {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+@keyframes hover-card-fade {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 
 .creature-bounce {
   animation: creature-bounce 2s ease-in-out infinite;
@@ -203,6 +215,18 @@
 .creature-wobble {
   animation: creature-wobble 1s ease-in-out infinite;
   will-change: transform;
+}
+.creature-work {
+  animation: creature-work 1s ease-in-out infinite;
+  will-change: transform;
+}
+.creature-alert {
+  animation: creature-alert 1.5s ease-in-out infinite;
+  will-change: transform;
+}
+.hover-card-fade {
+  animation: hover-card-fade 200ms ease-out forwards;
+  will-change: transform, opacity;
 }
 
 .markdown-body {
