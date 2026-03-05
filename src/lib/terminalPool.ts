@@ -4,6 +4,8 @@ import { listen } from '@tauri-apps/api/event'
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import type { PtyEvent } from './types'
 import { writePty, resizePty, getPtyBuffer } from './ipc'
+import { themeMode, getTerminalTheme } from './theme'
+import { get } from 'svelte/store'
 
 export interface PoolEntry {
   taskId: string
@@ -48,30 +50,7 @@ export async function acquire(taskId: string): Promise<PoolEntry> {
     cursorBlink: true,
     cursorStyle: 'block',
     scrollback: 10000,
-    theme: {
-      background: '#ffffff',
-      foreground: '#1f2937',
-      cursor: '#1f2937',
-      cursorAccent: '#ffffff',
-      selectionBackground: '#bfdbfe',
-      selectionForeground: '#1f2937',
-      black: '#1f2937',
-      red: '#dc2626',
-      green: '#16a34a',
-      yellow: '#ca8a04',
-      blue: '#2563eb',
-      magenta: '#9333ea',
-      cyan: '#0891b2',
-      white: '#f3f4f6',
-      brightBlack: '#6b7280',
-      brightRed: '#ef4444',
-      brightGreen: '#22c55e',
-      brightYellow: '#eab308',
-      brightBlue: '#3b82f6',
-      brightMagenta: '#a855f7',
-      brightCyan: '#06b6d4',
-      brightWhite: '#ffffff',
-    },
+    theme: getTerminalTheme(get(themeMode)),
     allowProposedApi: true,
   })
 
@@ -242,7 +221,13 @@ export function releaseAll(): void {
   }
 }
 
-// Expose pool for testing
+themeMode.subscribe((mode) => {
+  const theme = getTerminalTheme(mode)
+  for (const entry of pool.values()) {
+    entry.terminal.options.theme = theme
+  }
+})
+
 export function _getPool(): Map<string, PoolEntry> {
   return pool
 }

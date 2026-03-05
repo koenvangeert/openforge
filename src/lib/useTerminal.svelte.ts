@@ -1,5 +1,7 @@
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
+import { themeMode, getTerminalTheme } from './theme'
+import { get } from 'svelte/store'
 
 export interface TerminalHandle {
   terminalEl: HTMLDivElement | null
@@ -22,6 +24,7 @@ export function createTerminal(deps: {
   let resizeObserver: ResizeObserver | null = null
   let resizeTimeout: ReturnType<typeof setTimeout> | null = null
   let visibilityObserver: IntersectionObserver | null = null
+  let themeUnsub: (() => void) | null = null
 
   function safeFit(): void {
     if (!fitAddon || !terminalEl) return
@@ -42,30 +45,7 @@ export function createTerminal(deps: {
       cursorBlink: true,
       cursorStyle: 'block',
       scrollback: 10000,
-      theme: {
-        background: '#ffffff',
-        foreground: '#1f2937',
-        cursor: '#1f2937',
-        cursorAccent: '#ffffff',
-        selectionBackground: '#bfdbfe',
-        selectionForeground: '#1f2937',
-        black: '#1f2937',
-        red: '#dc2626',
-        green: '#16a34a',
-        yellow: '#ca8a04',
-        blue: '#2563eb',
-        magenta: '#9333ea',
-        cyan: '#0891b2',
-        white: '#f3f4f6',
-        brightBlack: '#6b7280',
-        brightRed: '#ef4444',
-        brightGreen: '#22c55e',
-        brightYellow: '#eab308',
-        brightBlue: '#3b82f6',
-        brightMagenta: '#a855f7',
-        brightCyan: '#06b6d4',
-        brightWhite: '#ffffff',
-      },
+      theme: getTerminalTheme(get(themeMode)),
       allowProposedApi: true,
     })
     fitAddon = new FitAddon()
@@ -109,12 +89,17 @@ export function createTerminal(deps: {
     visibilityObserver.observe(terminalEl)
 
     terminal.onData(deps.onData)
+
+    themeUnsub = themeMode.subscribe((mode) => {
+      if (terminal?.options) terminal.options.theme = getTerminalTheme(mode)
+    })
   }
 
   function dispose(): void {
     if (resizeTimeout) clearTimeout(resizeTimeout)
     if (resizeObserver) resizeObserver.disconnect()
     if (visibilityObserver) visibilityObserver.disconnect()
+    if (themeUnsub) themeUnsub()
     if (terminal) terminal.dispose()
   }
 
