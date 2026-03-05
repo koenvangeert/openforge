@@ -155,8 +155,9 @@ describe('AgentPanel (router)', () => {
     activeSessions.set(sessions)
 
     render(AgentPanel, { props: { taskId: 'T-1' } })
-    expect(screen.getByText('Implementing')).toBeTruthy()
-    expect(screen.getByText('running')).toBeTruthy()
+    // ClaudeAgentPanel uses uppercase status and "// " prefixed stage labels
+    expect(screen.getByText('RUNNING')).toBeTruthy()
+    expect(screen.getByText('claude-sess-1')).toBeTruthy()
   })
 })
 

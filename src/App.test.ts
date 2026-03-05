@@ -1,5 +1,4 @@
 import { render } from '@testing-library/svelte'
-import { tick } from 'svelte'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { writable } from 'svelte/store'
 import type { Task, AgentSession, Project, ProjectAttention, OpenCodeStatus, PullRequestInfo, CheckpointNotification, CiFailureNotification } from './lib/types'
@@ -42,6 +41,7 @@ vi.mock('./lib/stores', () => ({
   selectedReviewPrDetails: writable(null),
   reviewPullRequestDiff: writable(null),
   searchQuery: writable(''),
+  skills: writable([]),
   selectedSkillName: writable(null),
 }))
 
@@ -129,31 +129,25 @@ vi.mock('./lib/ipc', () => ({
   updateReviewCommentReply: vi.fn(),
   submitReviewComments: vi.fn(),
   dismissReviewPullRequest: vi.fn(),
+  listOpenCodeSkills: vi.fn(),
 }))
 
-vi.mock('./components/KanbanBoard.svelte', () => ({
-  default: vi.fn(),
-}))
-
-vi.mock('./components/TaskDetailView.svelte', () => ({
-  default: vi.fn(),
-}))
-
-vi.mock('./components/PrReviewView.svelte', () => ({
-  default: vi.fn(),
-}))
-
-vi.mock('./components/ClaudeAgentPanel.svelte', () => ({
-  default: vi.fn(),
-}))
-
-vi.mock('./components/Notifications.svelte', () => ({
-  default: vi.fn(),
-}))
-
-vi.mock('./components/ErrorBoundary.svelte', () => ({
-  default: vi.fn(),
-}))
+vi.mock('./components/KanbanBoard.svelte', () => ({ default: vi.fn() }))
+vi.mock('./components/TaskDetailView.svelte', () => ({ default: vi.fn() }))
+vi.mock('./components/PrReviewView.svelte', () => ({ default: vi.fn() }))
+vi.mock('./components/SkillsView.svelte', () => ({ default: vi.fn() }))
+vi.mock('./components/ClaudeAgentPanel.svelte', () => ({ default: vi.fn() }))
+vi.mock('./components/PromptInput.svelte', () => ({ default: vi.fn() }))
+vi.mock('./components/Modal.svelte', () => ({ default: vi.fn() }))
+vi.mock('./components/SettingsPanel.svelte', () => ({ default: vi.fn() }))
+vi.mock('./components/GlobalSettingsPanel.svelte', () => ({ default: vi.fn() }))
+vi.mock('./components/Toast.svelte', () => ({ default: vi.fn() }))
+vi.mock('./components/CheckpointToast.svelte', () => ({ default: vi.fn() }))
+vi.mock('./components/CiFailureToast.svelte', () => ({ default: vi.fn() }))
+vi.mock('./components/TaskSpawnedToast.svelte', () => ({ default: vi.fn() }))
+vi.mock('./components/ProjectSwitcher.svelte', () => ({ default: vi.fn() }))
+vi.mock('./components/ProjectSetupDialog.svelte', () => ({ default: vi.fn() }))
+vi.mock('./components/IconRail.svelte', () => ({ default: vi.fn() }))
 
 vi.mock('./lib/doingStatus', () => ({
   computeDoingStatus: vi.fn(() => 'idle'),
@@ -166,6 +160,10 @@ vi.mock('./lib/navigation', () => ({
 
 vi.mock('./lib/terminalPool', () => ({
   release: vi.fn(),
+}))
+
+vi.mock('lucide-svelte', () => ({
+  RefreshCw: vi.fn(),
 }))
 
 describe('App onMount initialization order', () => {
@@ -183,13 +181,11 @@ describe('App onMount initialization order', () => {
 
     render(App)
 
-    await tick()
-    await tick()
-    await new Promise(resolve => setTimeout(resolve, 50))
-
-    expect(callOrder).toContain('listen')
-    expect(callOrder).toContain('getProjects')
-    expect(callOrder).toContain('getAppMode')
+    await vi.waitFor(() => {
+      expect(callOrder).toContain('listen')
+      expect(callOrder).toContain('getProjects')
+      expect(callOrder).toContain('getAppMode')
+    })
 
     const firstListen = callOrder.indexOf('listen')
     const firstGetProjects = callOrder.indexOf('getProjects')
