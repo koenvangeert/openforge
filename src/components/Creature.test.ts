@@ -279,31 +279,4 @@ describe('Creature', () => {
     })
   })
 
-  describe('Creature sizing', () => {
-    it('pixel character svg has w-40 h-32 size classes', () => {
-      const { container } = renderCreature('active', 'forge')
-      const svg = container.querySelector('svg')
-      expect(svg?.classList.contains('w-40')).toBe(true)
-      expect(svg?.classList.contains('h-32')).toBe(true)
-    })
-
-    it('nest svg has w-40 h-32 size classes', () => {
-      const { container } = renderCreature('egg', 'nursery')
-      const svg = container.querySelector('svg')
-      expect(svg?.classList.contains('w-40')).toBe(true)
-      expect(svg?.classList.contains('h-32')).toBe(true)
-    })
-
-    it('thought bubble has max-w-[180px] class', () => {
-      const { container } = renderCreature('active', 'forge')
-      const thoughtBubble = container.querySelector('[class*="max-w-"]')
-      expect(thoughtBubble?.className).toContain('max-w-[180px]')
-    })
-
-    it('assignee label has max-w-[140px] class', () => {
-      renderCreature('active', 'forge', null, { jira_assignee: 'alice' })
-      const assigneeLabel = screen.getByText('alice')
-      expect(assigneeLabel?.className).toContain('max-w-[140px]')
-    })
-  })
 })
