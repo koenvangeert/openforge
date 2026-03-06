@@ -53,7 +53,10 @@ pub async fn start_jira_sync(app: AppHandle) {
                 .unwrap_or(60)
         };
 
-        let (jira_base_url, jira_username, jira_api_token) = {
+        let jira_api_token = crate::secure_store::get_secret("jira_api_token")
+            .unwrap_or(None)
+            .unwrap_or_default();
+        let (jira_base_url, jira_username) = {
             let db_lock = db.lock().unwrap();
             let base_url = db_lock
                 .get_config("jira_base_url")
@@ -65,12 +68,7 @@ pub async fn start_jira_sync(app: AppHandle) {
                 .ok()
                 .flatten()
                 .unwrap_or_default();
-            let api_token = db_lock
-                .get_config("jira_api_token")
-                .ok()
-                .flatten()
-                .unwrap_or_default();
-            (base_url, username, api_token)
+            (base_url, username)
         };
 
         if jira_base_url.is_empty() || jira_api_token.is_empty() {

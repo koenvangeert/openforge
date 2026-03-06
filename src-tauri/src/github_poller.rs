@@ -81,14 +81,9 @@ pub async fn poll_github_once(app: &AppHandle, github_client: &GitHubClient) -> 
     let cycle_start = Instant::now();
     let db = app.state::<Arc<Mutex<Database>>>();
 
-    let github_token = {
-        let db_lock = db.lock().unwrap();
-        db_lock
-            .get_config("github_token")
-            .ok()
-            .flatten()
-            .unwrap_or_default()
-    };
+    let github_token = crate::secure_store::get_secret("github_token")
+        .unwrap_or(None)
+        .unwrap_or_default();
 
     if github_token.is_empty() {
         return PollResult {
