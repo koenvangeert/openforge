@@ -417,6 +417,42 @@ CREATE INDEX IF NOT EXISTS idx_agent_review_comments_session ON agent_review_com
             }
             Ok(())
         }),
+        M::up_with_hook(r#""#, |tx| {
+            let config_exists: bool = tx
+                .query_row(
+                    "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='config'",
+                    [],
+                    |r| r.get(0),
+                )
+                .unwrap_or(false);
+
+            if config_exists {
+                // Insert the config key with empty placeholder
+                tx.execute(
+                    "INSERT OR IGNORE INTO config (key, value) VALUES ('task_id_prefix', '')",
+                    [],
+                )
+                .map_err(rusqlite_migration::HookError::RusqliteError)?;
+
+                // Generate 3 random uppercase letters (A-Z)
+                use rand::Rng;
+                let mut rng = rand::thread_rng();
+                let prefix: String = (0..3)
+                    .map(|_| {
+                        let idx = rng.gen_range(0..26);
+                        (b'A' + idx as u8) as char
+                    })
+                    .collect();
+
+                // Only set the value if it's currently empty (don't overwrite user-set values)
+                tx.execute(
+                    "UPDATE config SET value = ?1 WHERE key = 'task_id_prefix' AND value = ''",
+                    rusqlite::params![prefix],
+                )
+                .map_err(rusqlite_migration::HookError::RusqliteError)?;
+            }
+            Ok(())
+        }),
     ])
 }
 #[cfg(test)]
@@ -477,8 +513,8 @@ mod tests {
             .expect("Failed to count config rows");
 
         assert_eq!(
-            config_count, 16,
-            "All 16 default config values should be inserted"
+            config_count, 17,
+            "All 17 default config values should be inserted"
         );
 
         // Clean up
@@ -688,9 +724,43 @@ mod tests {
             .query_row("PRAGMA user_version", [], |r| r.get(0))
             .unwrap();
         assert_eq!(
-            uv, 5,
-            "Fresh DB should have user_version=5 after migrations, got {}",
+            uv, 6,
+            "Fresh DB should have user_version=6 after migrations, got {}",
             uv
+        );
+
+        drop(conn);
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_task_id_prefix_seeded() {
+        let path =
+            std::env::temp_dir().join(format!("test_task_id_prefix_{}.db", std::process::id()));
+        let _ = fs::remove_file(&path);
+
+        let db = Database::new(path.clone()).expect("Database::new");
+        let conn = db.connection();
+        let conn = conn.lock().unwrap();
+
+        let prefix: String = conn
+            .query_row(
+                "SELECT value FROM config WHERE key = 'task_id_prefix'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("task_id_prefix should exist in config");
+
+        assert_eq!(
+            prefix.len(),
+            3,
+            "task_id_prefix should be exactly 3 characters"
+        );
+        assert!(
+            prefix.chars().all(|c| c.is_ascii_uppercase()),
+            "task_id_prefix should contain only uppercase letters, got: {}",
+            prefix
         );
 
         drop(conn);
