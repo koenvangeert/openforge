@@ -30,6 +30,7 @@
   let editingTask = $state<Task | null>(null)
   let showProjectSetup = $state(false)
   let appMode = $state<string | null>(null)
+  let showShortcutsDialog = $state(false)
 
   let selectedTask = $derived($tasks.find(t => t.id === $selectedTaskId) || null)
 
@@ -186,6 +187,12 @@
   }
 
   function handleKeydown(e: KeyboardEvent) {
+    // ? — show keyboard shortcuts help (global)
+    if (e.key === '?') {
+      e.preventDefault()
+      showShortcutsDialog = true
+      return
+    }
     if (e.metaKey && e.key === 't') {
       e.preventDefault()
       if (!showAddDialog) {
@@ -699,3 +706,61 @@
 <CheckpointToast />
 <CiFailureToast />
 <TaskSpawnedToast />
+
+<!-- Keyboard shortcuts help dialog (global) -->
+{#if showShortcutsDialog}
+  <Modal onClose={() => showShortcutsDialog = false} maxWidth="420px">
+    {#snippet header()}
+      <h2 class="text-[0.95rem] font-semibold text-base-content m-0">Keyboard Shortcuts</h2>
+    {/snippet}
+    <div class="p-5 flex flex-col gap-4">
+      <!-- Global shortcuts -->
+      <div>
+        <div class="font-mono text-xs text-secondary mb-3">// global</div>
+        <div class="flex flex-col gap-2">
+          <div class="flex items-center justify-between">
+            <span class="text-sm text-base-content">New task</span>
+            <kbd class="kbd kbd-sm">⌘T</kbd>
+          </div>
+          <div class="flex items-center justify-between">
+            <span class="text-sm text-base-content">Go back</span>
+            <kbd class="kbd kbd-sm">⌘[</kbd>
+          </div>
+          <div class="flex items-center justify-between">
+            <span class="text-sm text-base-content">Refresh GitHub</span>
+            <div class="flex gap-0.5"><kbd class="kbd kbd-sm">⌘</kbd><kbd class="kbd kbd-sm">⇧</kbd><kbd class="kbd kbd-sm">R</kbd></div>
+          </div>
+          <div class="flex items-center justify-between">
+            <span class="text-sm text-base-content">Voice input</span>
+            <kbd class="kbd kbd-sm">⌘D</kbd>
+          </div>
+          <div class="flex items-center justify-between">
+            <span class="text-sm text-base-content">Focus search</span>
+            <kbd class="kbd kbd-sm">⌘/</kbd>
+          </div>
+          <div class="flex items-center justify-between">
+            <span class="text-sm text-base-content">Show shortcuts</span>
+            <kbd class="kbd kbd-sm">?</kbd>
+          </div>
+        </div>
+      </div>
+
+      <!-- Board-specific shortcuts -->
+      {#if $currentView === 'board' && !selectedTask}
+        <div>
+          <div class="font-mono text-xs text-secondary mb-3">// board</div>
+          <div class="flex flex-col gap-2">
+            <div class="flex items-center justify-between">
+              <span class="text-sm text-base-content">Toggle backlog</span>
+              <kbd class="kbd kbd-sm">b</kbd>
+            </div>
+            <div class="flex items-center justify-between">
+              <span class="text-sm text-base-content">Toggle done drawer</span>
+              <kbd class="kbd kbd-sm">c</kbd>
+            </div>
+          </div>
+        </div>
+      {/if}
+    </div>
+  </Modal>
+{/if}

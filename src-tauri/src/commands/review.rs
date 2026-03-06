@@ -45,12 +45,9 @@ pub async fn get_github_username(
         return Ok(username);
     }
 
-    let token = {
-        let db_lock = crate::db::acquire_db(&db);
-        db_lock.get_config("github_token")
-            .map_err(|e| format!("Failed to get config: {}", e))?
-            .ok_or("github_token not configured")?
-    };
+    let token = crate::secure_store::get_secret("github_token")
+        .map_err(|e| format!("Failed to get config: {}", e))?
+        .ok_or("github_token not configured".to_string())?;
 
     let username = github_client
         .get_authenticated_user(&token)
@@ -80,12 +77,9 @@ pub async fn fetch_review_prs(
     let username = if let Some(u) = cached_username {
         u
     } else {
-        let token_temp = {
-            let db_lock = crate::db::acquire_db(&db);
-            db_lock.get_config("github_token")
-                .map_err(|e| format!("Failed to get config: {}", e))?
-                .ok_or("github_token not configured")?
-        };
+        let token_temp = crate::secure_store::get_secret("github_token")
+            .map_err(|e| format!("Failed to get config: {}", e))?
+            .ok_or("github_token not configured".to_string())?;
         let u = github_client
             .get_authenticated_user(&token_temp)
             .await
@@ -98,12 +92,9 @@ pub async fn fetch_review_prs(
         u
     };
 
-    let token = {
-        let db_lock = crate::db::acquire_db(&db);
-        db_lock.get_config("github_token")
-            .map_err(|e| format!("Failed to get config: {}", e))?
-            .ok_or("github_token not configured")?
-    };
+    let token = crate::secure_store::get_secret("github_token")
+        .map_err(|e| format!("Failed to get config: {}", e))?
+        .ok_or("github_token not configured".to_string())?;
 
     let prs = github_client
         .search_review_requested_prs(&username, &token)
@@ -165,18 +156,15 @@ pub async fn get_review_prs(
 
 #[tauri::command]
 pub async fn get_pr_file_diffs(
-    db: State<'_, Arc<Mutex<db::Database>>>,
+    _db: State<'_, Arc<Mutex<db::Database>>>,
     github_client: State<'_, GitHubClient>,
     owner: String,
     repo: String,
     pr_number: i64,
 ) -> Result<Vec<crate::github_client::PrFileDiff>, String> {
-    let token = {
-        let db_lock = crate::db::acquire_db(&db);
-        db_lock.get_config("github_token")
-            .map_err(|e| format!("Failed to get config: {}", e))?
-            .ok_or("github_token not configured")?
-    };
+    let token = crate::secure_store::get_secret("github_token")
+        .map_err(|e| format!("Failed to get config: {}", e))?
+        .ok_or("github_token not configured".to_string())?;
 
     github_client
         .get_pr_files(&owner, &repo, pr_number, &token)
@@ -186,18 +174,15 @@ pub async fn get_pr_file_diffs(
 
 #[tauri::command]
 pub async fn get_file_content(
-    db: State<'_, Arc<Mutex<db::Database>>>,
+    _db: State<'_, Arc<Mutex<db::Database>>>,
     github_client: State<'_, GitHubClient>,
     owner: String,
     repo: String,
     sha: String,
 ) -> Result<String, String> {
-    let token = {
-        let db_lock = crate::db::acquire_db(&db);
-        db_lock.get_config("github_token")
-            .map_err(|e| format!("Failed to get config: {}", e))?
-            .ok_or("github_token not configured")?
-    };
+    let token = crate::secure_store::get_secret("github_token")
+        .map_err(|e| format!("Failed to get config: {}", e))?
+        .ok_or("github_token not configured".to_string())?;
 
     github_client
         .get_blob_content(&owner, &repo, &sha, &token)
@@ -207,19 +192,16 @@ pub async fn get_file_content(
 
 #[tauri::command]
 pub async fn get_file_at_ref(
-    db: State<'_, Arc<Mutex<db::Database>>>,
+    _db: State<'_, Arc<Mutex<db::Database>>>,
     _github_client: State<'_, GitHubClient>,
     owner: String,
     repo: String,
     path: String,
     ref_sha: String,
 ) -> Result<String, String> {
-    let token = {
-        let db_lock = crate::db::acquire_db(&db);
-        db_lock.get_config("github_token")
-            .map_err(|e| format!("Failed to get config: {}", e))?
-            .ok_or("github_token not configured")?
-    };
+    let token = crate::secure_store::get_secret("github_token")
+        .map_err(|e| format!("Failed to get config: {}", e))?
+        .ok_or("github_token not configured".to_string())?;
 
     let url = format!(
         "https://api.github.com/repos/{}/{}/contents/{}?ref={}",
@@ -259,18 +241,15 @@ pub async fn get_file_at_ref(
 
 #[tauri::command]
 pub async fn get_review_comments(
-    db: State<'_, Arc<Mutex<db::Database>>>,
+    _db: State<'_, Arc<Mutex<db::Database>>>,
     github_client: State<'_, GitHubClient>,
     owner: String,
     repo: String,
     pr_number: i64,
 ) -> Result<Vec<FrontendReviewComment>, String> {
-    let token = {
-        let db_lock = crate::db::acquire_db(&db);
-        db_lock.get_config("github_token")
-            .map_err(|e| format!("Failed to get config: {}", e))?
-            .ok_or("github_token not configured")?
-    };
+    let token = crate::secure_store::get_secret("github_token")
+        .map_err(|e| format!("Failed to get config: {}", e))?
+        .ok_or("github_token not configured".to_string())?;
 
     let comments = github_client
         .get_pr_review_comments(&owner, &repo, pr_number, &token)
@@ -304,18 +283,15 @@ pub async fn get_review_comments(
 
 #[tauri::command]
 pub async fn get_pr_overview_comments(
-    db: State<'_, Arc<Mutex<db::Database>>>,
+    _db: State<'_, Arc<Mutex<db::Database>>>,
     github_client: State<'_, GitHubClient>,
     owner: String,
     repo: String,
     pr_number: i64,
 ) -> Result<Vec<FrontendPrOverviewComment>, String> {
-    let token = {
-        let db_lock = crate::db::acquire_db(&db);
-        db_lock.get_config("github_token")
-            .map_err(|e| format!("Failed to get config: {}", e))?
-            .ok_or("github_token not configured")?
-    };
+    let token = crate::secure_store::get_secret("github_token")
+        .map_err(|e| format!("Failed to get config: {}", e))?
+        .ok_or("github_token not configured".to_string())?;
 
     let comments = github_client
         .get_pr_comments(&owner, &repo, pr_number, &token, None)
@@ -341,7 +317,7 @@ pub async fn get_pr_overview_comments(
 
 #[tauri::command]
 pub async fn submit_pr_review(
-    db: State<'_, Arc<Mutex<db::Database>>>,
+    _db: State<'_, Arc<Mutex<db::Database>>>,
     github_client: State<'_, GitHubClient>,
     owner: String,
     repo: String,
@@ -351,12 +327,9 @@ pub async fn submit_pr_review(
     comments: Vec<crate::github_client::ReviewSubmitComment>,
     commit_id: String,
 ) -> Result<(), String> {
-    let token = {
-        let db_lock = crate::db::acquire_db(&db);
-        db_lock.get_config("github_token")
-            .map_err(|e| format!("Failed to get config: {}", e))?
-            .ok_or("github_token not configured")?
-    };
+    let token = crate::secure_store::get_secret("github_token")
+        .map_err(|e| format!("Failed to get config: {}", e))?
+        .ok_or("github_token not configured".to_string())?;
 
     github_client
         .submit_review(&owner, &repo, pr_number, &event, &body, comments, &commit_id, &token)

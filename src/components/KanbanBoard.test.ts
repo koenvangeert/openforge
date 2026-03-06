@@ -10,6 +10,7 @@ vi.mock('../lib/ipc', () => ({
   getTasksForProject: vi.fn(() => Promise.resolve([])),
   updateTaskStatus: vi.fn(),
   deleteTask: vi.fn(),
+  clearDoneTasks: vi.fn(),
 }))
 
 // Mock actions module
@@ -44,11 +45,46 @@ describe('KanbanBoard', () => {
     searchQuery.set('')
   })
 
-  it('renders kanban columns', () => {
+  it('renders backlog and doing columns by default', () => {
     render(KanbanBoard)
     expect(screen.getByText('// backlog')).toBeTruthy()
     expect(screen.getByText('// doing')).toBeTruthy()
+  })
+
+  it('does not show done column by default (requires drawer toggle)', () => {
+    render(KanbanBoard)
+    // Done column header should not be in the DOM (drawer is closed)
+    expect(screen.queryByText('// done')).toBeNull()
+  })
+
+  it('shows done drawer when toggle button is clicked', async () => {
+    const doneTask: Task = { ...baseTask, id: 'T-2', title: 'Done task', status: 'done' }
+    tasks.set([baseTask, doneTask])
+
+    render(KanbanBoard)
+
+    // Click the "done" toggle button
+    const doneToggle = screen.getByTitle('Toggle done drawer (c)')
+    await fireEvent.click(doneToggle)
+
+    // Done column header should now be visible in the drawer
     expect(screen.getByText('// done')).toBeTruthy()
+    expect(screen.getByText('Done task')).toBeTruthy()
+  })
+
+  it('hides backlog column when toggle is clicked', async () => {
+    render(KanbanBoard)
+
+    // Backlog column header is visible
+    expect(screen.getByText('// backlog')).toBeTruthy()
+
+    // Click the backlog toggle button
+    const backlogToggle = screen.getByTitle('Toggle backlog (b)')
+    await fireEvent.click(backlogToggle)
+    await new Promise(resolve => setTimeout(resolve, 10))
+
+    // Backlog column header should be gone
+    expect(screen.queryByText('// backlog')).toBeNull()
   })
 
   it('renders tasks in correct columns', () => {
@@ -242,5 +278,6 @@ describe('KanbanBoard', () => {
     expect(screen.getByText('Task A')).toBeTruthy()
     expect(screen.getByText('Task B')).toBeTruthy()
   })
+
 
 })

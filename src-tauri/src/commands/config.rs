@@ -98,6 +98,9 @@ pub async fn get_config(
     db: State<'_, Arc<Mutex<db::Database>>>,
     key: String,
 ) -> Result<Option<String>, String> {
+    if crate::secure_store::is_secret(&key) {
+        return crate::secure_store::get_secret(&key);
+    }
     let db_lock = crate::db::acquire_db(&db);
     db_lock.get_config(&key)
         .map_err(|e| format!("Failed to get config: {}", e))
@@ -110,6 +113,9 @@ pub async fn set_config(
     key: String,
     value: String,
 ) -> Result<(), String> {
+    if crate::secure_store::is_secret(&key) {
+        return crate::secure_store::set_secret(&key, &value);
+    }
     let db_lock = crate::db::acquire_db(&db);
     db_lock.set_config(&key, &value)
         .map_err(|e| format!("Failed to set config: {}", e))

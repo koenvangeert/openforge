@@ -20,6 +20,7 @@ mod plugin_installer;
 mod claude_hooks;
 mod commands;
 mod migration;
+mod secure_store;
 pub mod providers;
 use std::sync::{Mutex, Arc};
 use tauri::{Manager, Emitter};
@@ -221,6 +222,11 @@ fn main() {
             println!("Initializing database at: {:?} (mode: {})", db_path, if cfg!(debug_assertions) { "dev" } else { "prod" });
 
             let database = db::Database::new(db_path).expect("Failed to initialize database");
+
+            match secure_store::migrate_from_db(&database) {
+                Ok(()) => println!("[startup] Secure store migration complete"),
+                Err(e) => eprintln!("[startup] Secure store migration failed: {}", e),
+            }
 
             match database.mark_running_sessions_interrupted() {
                 Ok(count) if count > 0 => {
