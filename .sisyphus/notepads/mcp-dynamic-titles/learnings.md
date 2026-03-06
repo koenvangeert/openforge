@@ -39,3 +39,15 @@
 - All 13 db::tasks tests pass; no regressions
 - Prompt field enables MCP server to store custom prompts per task (Task 5)
 - Summary field enables task summaries from agent output (Task 12)
+
+## 2026-03-06 Task 3 — HTTP /update_task endpoint
+- TDD approach: wrote struct tests first (10 tests), then implemented handler
+- UpdateTaskRequest struct: `task_id: String`, `title: Option<String>`, `summary: Option<String>`
+- UpdateTaskResponse struct: `task_id: String`, `status: String`
+- Handler validates at least one of title/summary is Some — returns 400 BAD_REQUEST if both None
+- Handler pattern mirrors create_task_handler: lock DB → call method → drop lock → emit event → return JSON
+- Event emitted: `{"action": "updated", "task_id": task_id}` on "task-changed" channel
+- Route registered: `.route("/update_task", post(update_task_handler))` after /create_task
+- All 51 http_server tests pass; full suite: 398 tests pass with no regressions
+- Struct serialization tests cover: all fields, title only, summary only, neither (deserialize fails), roundtrip
+- Response tests cover: creation, serialization, JSON structure

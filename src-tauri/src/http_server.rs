@@ -68,6 +68,21 @@ pub struct CreateTaskResponse {
     pub status: String,
 }
 
+/// Request to update a task's title and/or summary
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateTaskRequest {
+    pub task_id: String,
+    pub title: Option<String>,
+    pub summary: Option<String>,
+}
+
+/// Response containing the updated task ID
+#[derive(Debug, Clone, Serialize)]
+pub struct UpdateTaskResponse {
+    pub task_id: String,
+    pub status: String,
+}
+
 /// Payload from Claude Code hooks
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClaudeHookPayload {
@@ -130,6 +145,38 @@ pub async fn create_task_handler(
         task_id: task.id,
         project_id: task.project_id,
         status: "created".to_string(),
+    }))
+}
+
+pub async fn update_task_handler(
+    State(state): State<AppState>,
+    Json(request): Json<UpdateTaskRequest>,
+) -> Result<Json<UpdateTaskResponse>, StatusCode> {
+    if request.title.is_none() && request.summary.is_none() {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
+    let db = state.db.lock().unwrap();
+
+    db.update_task_title_and_summary(
+        &request.task_id,
+        request.title.as_deref(),
+        request.summary.as_deref(),
+    ).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    drop(db);
+
+    let _ = state.app.emit(
+        "task-changed",
+        serde_json::json!({
+            "action": "updated",
+            "task_id": request.task_id
+        })
+    );
+
+    Ok(Json(UpdateTaskResponse {
+        task_id: request.task_id,
+        status: "updated".to_string(),
     }))
 }
 
@@ -264,6 +311,7 @@ pub async fn hook_notification_permission_handler(
 pub fn create_router(state: AppState) -> Router {
     Router::new()
         .route("/create_task", post(create_task_handler))
+        .route("/update_task", post(update_task_handler))
         .route("/hooks/stop", post(hook_stop_handler))
         .route("/hooks/pre-tool-use", post(hook_pre_tool_use_handler))
         .route("/hooks/post-tool-use", post(hook_post_tool_use_handler))
@@ -760,6 +808,115 @@ mod tests {
             status = s;
         }
         assert_eq!(status, "completed");
+    }
+
+    // ========================================================================
+    // UpdateTaskRequest Tests
+    // ========================================================================
+
+    #[test]
+    fn test_update_task_request_creation() {
+        let request = UpdateTaskRequest {
+            task_id: "T-123".to_string(),
+            title: Some("New Title".to_string()),
+            summary: Some("New Summary".to_string()),
+        };
+        assert_eq!(request.task_id, "T-123");
+        assert_eq!(request.title, Some("New Title".to_string()));
+        assert_eq!(request.summary, Some("New Summary".to_string()));
+    }
+
+    #[test]
+    fn test_update_task_request_deserialize_all_fields() {
+        let json = r#"{"task_id": "T-456", "title": "Updated Title", "summary": "Updated Summary"}"#;
+        let request: UpdateTaskRequest = serde_json::from_str(json).expect("Failed to deserialize");
+        assert_eq!(request.task_id, "T-456");
+        assert_eq!(request.title, Some("Updated Title".to_string()));
+        assert_eq!(request.summary, Some("Updated Summary".to_string()));
+    }
+
+    #[test]
+    fn test_update_task_request_deserialize_title_only() {
+        let json = r#"{"task_id": "T-789", "title": "Only Title"}"#;
+        let request: UpdateTaskRequest = serde_json::from_str(json).expect("Failed to deserialize");
+        assert_eq!(request.task_id, "T-789");
+        assert_eq!(request.title, Some("Only Title".to_string()));
+        assert!(request.summary.is_none());
+    }
+
+    #[test]
+    fn test_update_task_request_deserialize_summary_only() {
+        let json = r#"{"task_id": "T-999", "summary": "Only Summary"}"#;
+        let request: UpdateTaskRequest = serde_json::from_str(json).expect("Failed to deserialize");
+        assert_eq!(request.task_id, "T-999");
+        assert!(request.title.is_none());
+        assert_eq!(request.summary, Some("Only Summary".to_string()));
+    }
+
+    #[test]
+    fn test_update_task_request_deserialize_neither_title_nor_summary() {
+        let json = r#"{"task_id": "T-111"}"#;
+        let request: UpdateTaskRequest = serde_json::from_str(json).expect("Failed to deserialize");
+        assert_eq!(request.task_id, "T-111");
+        assert!(request.title.is_none());
+        assert!(request.summary.is_none());
+    }
+
+    #[test]
+    fn test_update_task_request_deserialize_missing_task_id_fails() {
+        let json = r#"{"title": "No Task ID"}"#;
+        let result: Result<UpdateTaskRequest, _> = serde_json::from_str(json);
+        assert!(result.is_err(), "Should fail without required task_id field");
+    }
+
+    #[test]
+    fn test_update_task_request_serialize_roundtrip() {
+        let original = UpdateTaskRequest {
+            task_id: "T-555".to_string(),
+            title: Some("Roundtrip Title".to_string()),
+            summary: Some("Roundtrip Summary".to_string()),
+        };
+        let json = serde_json::to_string(&original).expect("Failed to serialize");
+        let deserialized: UpdateTaskRequest = serde_json::from_str(&json).expect("Failed to deserialize");
+        assert_eq!(deserialized.task_id, original.task_id);
+        assert_eq!(deserialized.title, original.title);
+        assert_eq!(deserialized.summary, original.summary);
+    }
+
+    // ========================================================================
+    // UpdateTaskResponse Tests
+    // ========================================================================
+
+    #[test]
+    fn test_update_task_response_creation() {
+        let response = UpdateTaskResponse {
+            task_id: "T-123".to_string(),
+            status: "updated".to_string(),
+        };
+        assert_eq!(response.task_id, "T-123");
+        assert_eq!(response.status, "updated");
+    }
+
+    #[test]
+    fn test_update_task_response_serialize() {
+        let response = UpdateTaskResponse {
+            task_id: "T-456".to_string(),
+            status: "updated".to_string(),
+        };
+        let json = serde_json::to_string(&response).expect("Failed to serialize");
+        assert!(json.contains("\"task_id\":\"T-456\""));
+        assert!(json.contains("\"status\":\"updated\""));
+    }
+
+    #[test]
+    fn test_update_task_response_json_structure() {
+        let response = UpdateTaskResponse {
+            task_id: "T-789".to_string(),
+            status: "updated".to_string(),
+        };
+        let json_value = serde_json::to_value(&response).expect("Failed to convert to JSON value");
+        assert_eq!(json_value["task_id"], "T-789");
+        assert_eq!(json_value["status"], "updated");
     }
 
 }
