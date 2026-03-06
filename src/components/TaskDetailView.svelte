@@ -14,9 +14,10 @@
   interface Props {
     task: Task
     onRunAction: (data: { taskId: string; actionPrompt: string; agent: string | null }) => void
+    onDelete: (taskId: string) => void
   }
 
-  let { task, onRunAction }: Props = $props()
+  let { task, onRunAction, onDelete }: Props = $props()
 
   let reviewMode = $state(false)
   let rightPanelMode = $state<'info' | 'terminal'>('info')
@@ -80,6 +81,10 @@
     onRunAction({ taskId: task.id, actionPrompt: prompt, agent: null })
   }
 
+  function handleDelete() {
+    onDelete(task.id)
+  }
+
 </script>
 
 <div class="flex flex-col flex-1 h-full bg-base-100 overflow-hidden">
@@ -113,6 +118,13 @@
           {/each}
         </div>
        {/if}
+      <button
+        class="btn btn-ghost btn-sm text-error shrink-0 hover:bg-error hover:text-error-content"
+        title="Delete task"
+        onclick={handleDelete}
+      >
+        Delete
+      </button>
      </div>
    </header>
 

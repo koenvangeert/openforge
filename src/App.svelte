@@ -3,7 +3,7 @@
   import { listen } from '@tauri-apps/api/event'
   import type { UnlistenFn, Event } from '@tauri-apps/api/event'
   import { tasks, selectedTaskId, activeSessions, checkpointNotification, ciFailureNotification, ticketPrs, error, isLoading, projects, activeProjectId, currentView, reviewRequestCount, projectAttention, taskSpawned, searchQuery, selectedSkillName } from './lib/stores'
-  import { getProjects, getTasksForProject, getPullRequests, runAction, getSessionStatus, getLatestSession, getLatestSessions, forceGithubSync, createTask, updateTask, getProjectAttention, getAppMode, finalizeClaudeSession } from './lib/ipc'
+  import { getProjects, getTasksForProject, getPullRequests, runAction, getSessionStatus, getLatestSession, getLatestSessions, forceGithubSync, createTask, updateTask, getProjectAttention, getAppMode, finalizeClaudeSession, deleteTask } from './lib/ipc'
   import type { Task, PullRequestInfo, AgentEvent, ProjectAttention, AppView } from './lib/types'
   import KanbanBoard from './components/KanbanBoard.svelte'
   import TaskDetailView from './components/TaskDetailView.svelte'
@@ -180,6 +180,18 @@
     } catch (e) {
       console.error('[session] Failed to run action for task:', taskId, e)
       $error = String(e)
+    }
+  }
+
+  async function handleDeleteTask(taskId: string) {
+    try {
+      await deleteTask(taskId)
+      if ($selectedTaskId === taskId) {
+        $selectedTaskId = null
+      }
+    } catch (err: unknown) {
+      console.error('Failed to delete task:', err)
+      $error = String(err)
     }
   }
 
@@ -664,7 +676,7 @@
            }}
          />
        {:else if selectedTask}
-        <TaskDetailView task={selectedTask} onRunAction={handleRunAction} />
+        <TaskDetailView task={selectedTask} onRunAction={handleRunAction} onDelete={handleDeleteTask} />
       {:else}
         <div class="flex-1 overflow-hidden">
           {#if $isLoading && $tasks.length === 0}

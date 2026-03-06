@@ -161,68 +161,68 @@ const baseSession: AgentSession = {
 
 describe('TaskDetailView', () => {
   it('renders back button with "back" text', () => {
-    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction, onDelete: vi.fn() } })
     expect(screen.getByText('back')).toBeTruthy()
   })
 
   it('renders task jira_key when present', () => {
-    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction, onDelete: vi.fn() } })
     const matches = screen.getAllByText('PROJ-123')
     expect(matches.length).toBeGreaterThanOrEqual(1)
   })
 
   it('renders task id when jira_key is null', () => {
     const taskWithoutJira = { ...baseTask, jira_key: null }
-    render(TaskDetailView, { props: { task: taskWithoutJira, onRunAction: mockOnRunAction } })
+    render(TaskDetailView, { props: { task: taskWithoutJira, onRunAction: mockOnRunAction, onDelete: vi.fn() } })
     const matches = screen.getAllByText('T-42')
     expect(matches.length).toBeGreaterThanOrEqual(1)
   })
 
   it('renders task title in header', () => {
-    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction, onDelete: vi.fn() } })
     const titles = screen.getAllByText('Implement auth middleware')
     expect(titles.length).toBeGreaterThanOrEqual(1)
   })
 
   it('has AgentPanel child with empty state text', async () => {
-    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction, onDelete: vi.fn() } })
     await vi.waitFor(() => {
       expect(screen.getByText('No active agent session')).toBeTruthy()
     })
   })
 
   it('has TaskInfoPanel child with Initial Prompt section', () => {
-    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction, onDelete: vi.fn() } })
     expect(screen.getByText('// INITIAL_PROMPT')).toBeTruthy()
   })
 
   it('shows Move to Done button when task is not done', () => {
-    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction, onDelete: vi.fn() } })
     expect(screen.getByText('Move to Done')).toBeTruthy()
   })
 
   it('hides Move to Done button when task is already done', () => {
     const doneTask = { ...baseTask, status: 'done' }
-    render(TaskDetailView, { props: { task: doneTask, onRunAction: mockOnRunAction } })
+    render(TaskDetailView, { props: { task: doneTask, onRunAction: mockOnRunAction, onDelete: vi.fn() } })
     expect(screen.queryByText('Move to Done')).toBeNull()
   })
 
   it('hides Review toggle when no worktree', async () => {
-    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction, onDelete: vi.fn() } })
     await waitFor(() => {
       expect(screen.queryByText('review_view')).toBeNull()
     })
   })
 
   it('renders action buttons in header', async () => {
-    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction, onDelete: vi.fn() } })
     await waitFor(() => {
       expect(screen.getByText('Go')).toBeTruthy()
     })
   })
 
   it('calls onRunAction when action button clicked', async () => {
-    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction, onDelete: vi.fn() } })
     await waitFor(() => {
       expect(screen.getByText('Go')).toBeTruthy()
     })
@@ -232,7 +232,7 @@ describe('TaskDetailView', () => {
 
   it('disables action buttons when session is running', async () => {
     activeSessions.set(new Map([['T-42', { ...baseSession, status: 'running' }]]))
-    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction, onDelete: vi.fn() } })
     await waitFor(() => {
       expect(screen.getByText('Go')).toBeTruthy()
     })
@@ -244,7 +244,7 @@ describe('TaskDetailView', () => {
 
   it('action buttons enabled when no active session', async () => {
     activeSessions.set(new Map())
-    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction, onDelete: vi.fn() } })
     await waitFor(() => {
       expect(screen.getByText('Go')).toBeTruthy()
     })
@@ -253,31 +253,31 @@ describe('TaskDetailView', () => {
   })
 
   it('renders breadcrumb with board path segment', () => {
-    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction, onDelete: vi.fn() } })
     expect(screen.getByText('$ cd board')).toBeTruthy()
   })
 
   it('renders breadcrumb with task status segment', () => {
-    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction, onDelete: vi.fn() } })
     const breadcrumbRoot = screen.getByText('$ cd board').closest('div')
     expect(breadcrumbRoot?.textContent).toContain('backlog')
   })
 
   it('renders breadcrumb with task identifier', () => {
-    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction, onDelete: vi.fn() } })
     const breadcrumbRoot = screen.getByText('$ cd board').closest('div')
     expect(breadcrumbRoot?.textContent).toContain('PROJ-123')
   })
 
   it('renders breadcrumb with code segment by default', () => {
-    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction, onDelete: vi.fn() } })
     const breadcrumbRoot = screen.getByText('$ cd board').closest('div')
     expect(breadcrumbRoot?.textContent).toContain('code')
   })
 
   it('renders breadcrumb with task id when no jira_key', () => {
     const taskWithoutJira = { ...baseTask, jira_key: null }
-    render(TaskDetailView, { props: { task: taskWithoutJira, onRunAction: mockOnRunAction } })
+    render(TaskDetailView, { props: { task: taskWithoutJira, onRunAction: mockOnRunAction, onDelete: vi.fn() } })
     const breadcrumbRoot = screen.getByText('$ cd board').closest('div')
     expect(breadcrumbRoot?.textContent).toContain('T-42')
   })
@@ -286,7 +286,7 @@ describe('TaskDetailView', () => {
     const { getWorktreeForTask } = await import('../lib/ipc')
     vi.mocked(getWorktreeForTask).mockResolvedValue({ worktree_path: '/path/to/worktree', repo_path: '/repo', branch_name: 'branch' } as any)
 
-    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction, onDelete: vi.fn() } })
     await waitFor(() => {
       expect(screen.getByText('Info')).toBeTruthy()
       expect(screen.getByText('Terminal')).toBeTruthy()
@@ -295,14 +295,14 @@ describe('TaskDetailView', () => {
   })
 
   it('hides terminal toggle when no worktree', async () => {
-    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction, onDelete: vi.fn() } })
     await waitFor(() => {
       expect(screen.queryByText('Terminal')).toBeNull()
     })
   })
 
   it('shows TaskInfoPanel by default', async () => {
-    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction, onDelete: vi.fn() } })
     expect(screen.getByText('// INITIAL_PROMPT')).toBeTruthy()
   })
 
@@ -310,7 +310,7 @@ describe('TaskDetailView', () => {
     const { getWorktreeForTask } = await import('../lib/ipc')
     vi.mocked(getWorktreeForTask).mockResolvedValue({ worktree_path: '/path/to/worktree', repo_path: '/repo', branch_name: 'branch' } as any)
 
-    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction, onDelete: vi.fn() } })
     await waitFor(() => {
       expect(screen.getByText('Terminal')).toBeTruthy()
     })
@@ -320,6 +320,19 @@ describe('TaskDetailView', () => {
       expect(shellWrapper).toBeTruthy()
     })
     vi.mocked(getWorktreeForTask).mockResolvedValue(null)
+  })
+
+  it('renders a Delete button', () => {
+    const mockOnDelete = vi.fn()
+    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction, onDelete: mockOnDelete } })
+    expect(screen.getByTitle('Delete task')).toBeTruthy()
+  })
+
+  it('calls onDelete with task id when clicked', async () => {
+    const mockOnDelete = vi.fn()
+    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction, onDelete: mockOnDelete } })
+    await fireEvent.click(screen.getByTitle('Delete task'))
+    expect(mockOnDelete).toHaveBeenCalledWith('T-42')
   })
 
 })
