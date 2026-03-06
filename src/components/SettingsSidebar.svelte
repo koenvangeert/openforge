@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Folder, Plug, FileText, Zap, Brain, KeyRound } from 'lucide-svelte'
+  import { Folder, Plug, FileText, Zap, Brain, KeyRound, Settings2 } from 'lucide-svelte'
 
   interface Props {
     activeSection: string
@@ -17,6 +17,7 @@
   ]
 
   const globalItems: { id: string; label: string; Icon: typeof Folder }[] = [
+    { id: 'preferences', label: 'Preferences', Icon: Settings2 },
     { id: 'ai', label: 'AI & Voice', Icon: Brain },
     { id: 'credentials', label: 'Credentials', Icon: KeyRound },
   ]

@@ -67,7 +67,19 @@ impl super::Database {
             },
         )?;
 
-        let task_id = format!("T-{}", next_id);
+        let prefix: String = conn
+            .query_row(
+                "SELECT value FROM config WHERE key = 'task_id_prefix'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or_else(|_| "T".to_string());
+        let prefix = if prefix.is_empty() {
+            "T".to_string()
+        } else {
+            prefix
+        };
+        let task_id = format!("{}-{}", prefix, next_id);
 
         conn.execute(
             "UPDATE config SET value = ?1 WHERE key = 'next_task_id'",
@@ -324,6 +336,7 @@ mod tests {
     #[test]
     fn test_create_task_and_retrieve() {
         let (db, path) = make_test_db("create_task");
+        db.set_config("task_id_prefix", "T").unwrap();
 
         let task = db
             .create_task("My task", "backlog", None, None)
@@ -383,6 +396,7 @@ mod tests {
     #[test]
     fn test_create_task_autoincrement() {
         let (db, path) = make_test_db("task_autoincrement");
+        db.set_config("task_id_prefix", "T").unwrap();
 
         let task1 = db
             .create_task("Task 1", "backlog", None, None)
@@ -480,6 +494,7 @@ mod tests {
     #[test]
     fn test_jira_description_null_handling() {
         let (db, path) = make_test_db("jira_desc_null");
+        db.set_config("task_id_prefix", "T").unwrap();
 
         db.create_task("Task with jira", "backlog", Some("PROJ-1"), None)
             .expect("create task failed");
@@ -591,6 +606,55 @@ mod tests {
             .expect("get self review failed");
         assert!(comments.is_empty());
 
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_create_task_custom_prefix() {
+        let (db, path) = make_test_db("task_custom_prefix");
+        db.set_config("task_id_prefix", "FOO").unwrap();
+        let task = db
+            .create_task("Custom prefix task", "backlog", None, None)
+            .expect("create failed");
+        assert_eq!(task.id, "FOO-1");
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_create_task_fallback_when_prefix_missing() {
+        let (db, path) = make_test_db("task_fallback_missing");
+        let conn = db.connection();
+        conn.lock()
+            .unwrap()
+            .execute("DELETE FROM config WHERE key = 'task_id_prefix'", [])
+            .unwrap();
+        drop(conn);
+        let task = db
+            .create_task("Fallback task", "backlog", None, None)
+            .expect("create failed");
+        assert!(
+            task.id.starts_with("T-"),
+            "Expected T- prefix as fallback, got: {}",
+            task.id
+        );
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_create_task_fallback_when_prefix_empty() {
+        let (db, path) = make_test_db("task_fallback_empty");
+        db.set_config("task_id_prefix", "").unwrap();
+        let task = db
+            .create_task("Fallback task", "backlog", None, None)
+            .expect("create failed");
+        assert!(
+            task.id.starts_with("T-"),
+            "Expected T- prefix as fallback, got: {}",
+            task.id
+        );
         drop(db);
         let _ = fs::remove_file(&path);
     }

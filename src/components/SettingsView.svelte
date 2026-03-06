@@ -19,6 +19,7 @@
   import SettingsSidebar from './SettingsSidebar.svelte'
   import SettingsGeneralCard from './SettingsGeneralCard.svelte'
   import SettingsIntegrationsCard from './SettingsIntegrationsCard.svelte'
+  import SettingsPreferencesCard from './SettingsPreferencesCard.svelte'
   import SettingsAICard from './SettingsAICard.svelte'
   import SettingsInstructionsCard from './SettingsInstructionsCard.svelte'
   import SettingsCredentialsCard from './SettingsCredentialsCard.svelte'
@@ -40,6 +41,7 @@
 
   // Global state
   let aiProvider = $state('claude-code')
+  let taskIdPrefix = $state('')
   let jiraBaseUrl = $state('')
   let jiraUsername = $state('')
   let jiraApiToken = $state('')
@@ -68,7 +70,7 @@
   let scrollContainer = $state<HTMLDivElement | null>(null)
   let isNavigating = false
   const projectSections = ['general', 'integrations', 'instructions', 'actions']
-  const globalSections = ['ai', 'credentials']
+  const globalSections = ['preferences', 'ai', 'credentials']
 
   // Derived state
   const hasProject = $derived(!!$activeProjectId)
@@ -126,9 +128,10 @@
   // Load global config once on mount
   onMount(async () => {
     // Global config
-    const [aiProviderVal, jiraBaseUrlVal, jiraUsernameVal, jiraApiTokenVal, githubTokenVal] =
+    const [aiProviderVal, taskIdPrefixVal, jiraBaseUrlVal, jiraUsernameVal, jiraApiTokenVal, githubTokenVal] =
       await Promise.all([
         getConfig('ai_provider'),
+        getConfig('task_id_prefix'),
         getConfig('jira_base_url'),
         getConfig('jira_username'),
         getConfig('jira_api_token'),
@@ -136,6 +139,7 @@
       ])
 
     if (aiProviderVal) aiProvider = aiProviderVal
+    if (taskIdPrefixVal) taskIdPrefix = taskIdPrefixVal
     if (jiraBaseUrlVal) jiraBaseUrl = jiraBaseUrlVal
     if (jiraUsernameVal) jiraUsername = jiraUsernameVal
     if (jiraApiTokenVal) jiraApiToken = jiraApiTokenVal
@@ -226,6 +230,7 @@
         await saveActions($activeProjectId, actions)
       }
       await setConfig('ai_provider', aiProvider)
+      await setConfig('task_id_prefix', taskIdPrefix)
       await setConfig('jira_base_url', jiraBaseUrl)
       await setConfig('jira_username', jiraUsername)
       await setConfig('jira_api_token', jiraApiToken)
@@ -378,6 +383,11 @@
           </div>
         {/if}
       {:else}
+        <SettingsPreferencesCard
+          {taskIdPrefix}
+          onTaskIdPrefixChange={(v) => (taskIdPrefix = v)}
+        />
+
         <SettingsAICard
           {aiProvider}
           {aiProviderInstalled}
