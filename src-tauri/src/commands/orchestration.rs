@@ -24,6 +24,28 @@ pub fn build_task_prompt(task: &db::TaskRow, action_instruction: &str, additiona
     prompt.push('\n');
     
     prompt.push_str(action_instruction);
+
+    prompt.push_str(&format!(r#"
+
+<openforge_task_management>
+This task is {task_id}. You MUST call `openforge_update_task` at both points below — the task is not complete without these updates.
+
+<title_update trigger="after_initial_analysis">
+Once you understand the scope, call: openforge_update_task(task_id="{task_id}", title="...")
+Write a concise title reflecting the actual work, not the original request verbatim.
+Good: "Add JWT refresh token rotation to auth middleware" — Bad: "implement the auth thing"
+</title_update>
+
+<summary_update trigger="before_finalizing">
+Before reporting completion, call: openforge_update_task(task_id="{task_id}", summary="...")
+Cover: what changed, key decisions, and anything needing attention.
+</summary_update>
+
+<completeness_check>
+Task is incomplete unless both updates were made. If blocked or abandoned, still update the summary with status and what remains.
+</completeness_check>
+</openforge_task_management>"#, task_id = task.id));
+
     prompt
 }
 
@@ -447,7 +469,10 @@ mod tests {
         
         assert!(prompt.contains("Test Task"));
         assert!(!prompt.contains("Plan:"));
-        assert!(prompt.ends_with("Do the thing!"));
+        assert!(prompt.contains("Do the thing!"));
+        assert!(prompt.contains("<openforge_task_management>"));
+        assert!(prompt.contains("openforge_update_task"));
+        assert!(prompt.contains("T-123"));
     }
 
     #[test]
@@ -472,7 +497,9 @@ mod tests {
         
         assert!(prompt.contains("Minimal Task"));
         assert!(!prompt.contains("Plan:"));
-        assert!(prompt.ends_with("Execute now!"));
+        assert!(prompt.contains("Execute now!"));
+        assert!(prompt.contains("openforge_update_task"));
+        assert!(prompt.contains("T-456"));
     }
 
     #[test]
@@ -497,7 +524,8 @@ mod tests {
         
         assert!(prompt.contains("Empty Fields Task"));
         assert!(!prompt.contains("Plan:"));
-        assert!(prompt.ends_with("Run test!"));
+        assert!(prompt.contains("Run test!"));
+        assert!(prompt.contains("openforge_update_task"));
     }
 
     #[test]
@@ -523,7 +551,9 @@ mod tests {
         assert!(prompt.starts_with("Always use TypeScript strict mode."));
         assert!(prompt.contains("Instructions Task"));
         assert!(!prompt.contains("Plan:"));
-        assert!(prompt.ends_with("Do the thing!"));
+        assert!(prompt.contains("Do the thing!"));
+        assert!(prompt.contains("openforge_update_task"));
+        assert!(prompt.contains("T-999"));
     }
 
     #[test]
@@ -598,7 +628,9 @@ mod tests {
         assert!(!prompt.contains("Description:"));
         assert!(!prompt.contains("authenticate via JWT"));
         assert!(!prompt.contains("Plan:"));
-        assert!(prompt.ends_with("Implement this task."));
+        assert!(prompt.contains("Implement this task."));
+        assert!(prompt.contains("openforge_update_task"));
+        assert!(prompt.contains("T-333"));
     }
 
     #[test]
@@ -623,14 +655,15 @@ mod tests {
 
         assert!(prompt.contains("Task without jira"));
         assert!(!prompt.contains("Jira:"));
-        assert!(prompt.ends_with("Do it!"));
+        assert!(prompt.contains("Do it!"));
+        assert!(prompt.contains("openforge_update_task"));
     }
 
     #[test]
-    fn test_build_task_prompt_does_not_include_task_id() {
+    fn test_build_task_prompt_includes_task_id_in_management_section() {
         let task = db::TaskRow {
             id: "T-555".to_string(),
-            title: "No ID in prompt".to_string(),
+            title: "Task with ID in prompt".to_string(),
             status: "backlog".to_string(),
             jira_key: None,
             jira_title: None,
@@ -646,8 +679,10 @@ mod tests {
 
         let prompt = build_task_prompt(&task, "Go!", None);
 
-        assert!(!prompt.contains("T-555"));
-        assert!(prompt.contains("No ID in prompt"));
+        assert!(prompt.contains("T-555"));
+        assert!(prompt.contains("Task with ID in prompt"));
+        // Task ID should appear in the openforge_update_task instruction
+        assert!(prompt.contains("task_id=\"T-555\"") || prompt.contains("\"T-555\""));
     }
 
     #[test]
@@ -672,7 +707,9 @@ mod tests {
         
         assert!(prompt.contains("Fix auth bug"));
         assert!(!prompt.contains("Auth fix"));
-        assert!(prompt.ends_with("Implement this task."));
+        assert!(prompt.contains("Implement this task."));
+        assert!(prompt.contains("openforge_update_task"));
+        assert!(prompt.contains("T-666"));
     }
 
     #[test]
@@ -696,7 +733,75 @@ mod tests {
         let prompt = build_task_prompt(&task, "Do it!", None);
         
         assert!(prompt.contains("My task"));
-        assert!(prompt.ends_with("Do it!"));
+        assert!(prompt.contains("Do it!"));
+        assert!(prompt.contains("openforge_update_task"));
+        assert!(prompt.contains("T-777"));
+    }
+
+    #[test]
+    fn test_build_task_prompt_task_management_section_structure() {
+        let task = db::TaskRow {
+            id: "T-42".to_string(),
+            title: "Test management section".to_string(),
+            status: "backlog".to_string(),
+            jira_key: None,
+            jira_title: None,
+            jira_status: None,
+            jira_assignee: None,
+            jira_description: None,
+            project_id: None,
+            created_at: 0,
+            updated_at: 0,
+            prompt: Some("Add a login page".to_string()),
+            summary: None,
+        };
+
+        let prompt = build_task_prompt(&task, "Implement this task.", None);
+
+        assert!(prompt.contains("<openforge_task_management>"));
+        assert!(prompt.contains("</openforge_task_management>"));
+        assert!(prompt.contains("openforge_update_task"));
+        assert!(prompt.contains("task_id=\"T-42\""));
+        assert!(prompt.contains("<title_update trigger=\"after_initial_analysis\">"));
+        assert!(prompt.contains("<summary_update trigger=\"before_finalizing\">"));
+        assert!(prompt.contains("<completeness_check>"));
+        assert!(prompt.contains("not complete without"));
+
+        let mgmt_pos = prompt.find("<openforge_task_management>").unwrap();
+        let action_pos = prompt.find("Implement this task.").unwrap();
+        assert!(mgmt_pos > action_pos, "Task management section should come after action instruction");
+    }
+
+    #[test]
+    fn test_build_task_prompt_ordering() {
+        let task = db::TaskRow {
+            id: "T-99".to_string(),
+            title: "Ordering test".to_string(),
+            status: "backlog".to_string(),
+            jira_key: Some("PROJ-10".to_string()),
+            jira_title: None,
+            jira_status: None,
+            jira_assignee: None,
+            jira_description: None,
+            project_id: None,
+            created_at: 0,
+            updated_at: 0,
+            prompt: Some("Do the work".to_string()),
+            summary: None,
+        };
+
+        let prompt = build_task_prompt(&task, "Execute!", Some("Project rules here"));
+
+        let instructions_pos = prompt.find("Project rules here").unwrap();
+        let task_prompt_pos = prompt.find("Do the work").unwrap();
+        let jira_pos = prompt.find("Jira: PROJ-10").unwrap();
+        let action_pos = prompt.find("Execute!").unwrap();
+        let mgmt_pos = prompt.find("<openforge_task_management>").unwrap();
+
+        assert!(instructions_pos < task_prompt_pos);
+        assert!(task_prompt_pos < jira_pos);
+        assert!(jira_pos < action_pos);
+        assert!(action_pos < mgmt_pos);
     }
 
     #[test]
