@@ -253,9 +253,9 @@
                                   onclick={async () => {
                                     if (comment.commentId === undefined) return
                                     try {
-                                      await updateAgentReviewCommentStatus(comment.commentId, 'approved')
-                                      $pendingManualComments = [...$pendingManualComments, {
-                                        path: comment.filePath || '',
+                                       await updateAgentReviewCommentStatus(comment.commentId, 'approved')
+                                       $pendingManualComments = [...$pendingManualComments, {
+                                         path: comment.filePath || file.filename,
                                         line: comment.lineNumber || 0,
                                         side: comment.commentSide || 'RIGHT',
                                         body: comment.body
@@ -318,11 +318,11 @@
                           onClose()
                         }}
                       >Cancel</button>
-                      <button
-                        class="btn btn-primary btn-xs"
-                        onclick={() => {
-                          if (!commentText.trim()) return
-                          const path = diffFile._newFileName || diffFile._oldFileName || ''
+                       <button
+                         class="btn btn-primary btn-xs"
+                         onclick={() => {
+                           if (!commentText.trim()) return
+                           const path = file.filename
                           const newComment: ReviewSubmissionComment = {
                             path,
                             line: lineNumber,
