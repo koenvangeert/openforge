@@ -223,6 +223,11 @@ fn main() {
 
             let database = db::Database::new(db_path).expect("Failed to initialize database");
 
+            match secure_store::migrate_service_name() {
+                Ok(()) => {}
+                Err(e) => eprintln!("[startup] Secure store service name migration failed: {}", e),
+            }
+
             match secure_store::migrate_from_db(&database) {
                 Ok(()) => println!("[startup] Secure store migration complete"),
                 Err(e) => eprintln!("[startup] Secure store migration failed: {}", e),

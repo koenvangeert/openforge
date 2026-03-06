@@ -1,12 +1,20 @@
-const SERVICE_NAME: &str = "openforge";
+const LEGACY_SERVICE_NAME: &str = "openforge";
 const SECRET_KEYS: &[&str] = &["github_token", "jira_api_token"];
+
+fn service_name() -> &'static str {
+    if cfg!(debug_assertions) {
+        "openforge-dev"
+    } else {
+        "openforge"
+    }
+}
 
 pub fn is_secret(key: &str) -> bool {
     SECRET_KEYS.contains(&key)
 }
 
 pub fn get_secret(key: &str) -> Result<Option<String>, String> {
-    let entry = keyring::Entry::new(SERVICE_NAME, key)
+    let entry = keyring::Entry::new(service_name(), key)
         .map_err(|e| format!("Failed to create keyring entry for '{}': {}", key, e))?;
     match entry.get_password() {
         Ok(value) => Ok(Some(value)),
@@ -22,7 +30,7 @@ pub fn set_secret(key: &str, value: &str) -> Result<(), String> {
     if value.is_empty() {
         return delete_secret(key);
     }
-    let entry = keyring::Entry::new(SERVICE_NAME, key)
+    let entry = keyring::Entry::new(service_name(), key)
         .map_err(|e| format!("Failed to create keyring entry for '{}': {}", key, e))?;
     entry
         .set_password(value)
@@ -30,7 +38,7 @@ pub fn set_secret(key: &str, value: &str) -> Result<(), String> {
 }
 
 pub fn delete_secret(key: &str) -> Result<(), String> {
-    let entry = keyring::Entry::new(SERVICE_NAME, key)
+    let entry = keyring::Entry::new(service_name(), key)
         .map_err(|e| format!("Failed to create keyring entry for '{}': {}", key, e))?;
     match entry.delete_credential() {
         Ok(()) => Ok(()),
@@ -40,6 +48,35 @@ pub fn delete_secret(key: &str) -> Result<(), String> {
             key, e
         )),
     }
+}
+
+pub fn migrate_service_name() -> Result<(), String> {
+    if service_name() == LEGACY_SERVICE_NAME {
+        return Ok(());
+    }
+
+    for &key in SECRET_KEYS {
+        let legacy_entry = keyring::Entry::new(LEGACY_SERVICE_NAME, key)
+            .map_err(|e| format!("Failed to create legacy keyring entry for '{}': {}", key, e))?;
+
+        let legacy_value = match legacy_entry.get_password() {
+            Ok(value) => value,
+            Err(keyring::Error::NoEntry) => continue,
+            Err(e) => return Err(format!("Failed to read legacy secret '{}': {}", key, e)),
+        };
+
+        let existing = get_secret(key)?;
+        if existing.is_none() {
+            set_secret(key, &legacy_value)?;
+            println!(
+                "[secure_store] Migrated '{}' from service '{}' to '{}'",
+                key,
+                LEGACY_SERVICE_NAME,
+                service_name()
+            );
+        }
+    }
+    Ok(())
 }
 
 pub fn migrate_from_db(db: &crate::db::Database) -> Result<(), String> {
@@ -78,6 +115,11 @@ mod tests {
         let result = set_secret(&key, "probe");
         let _ = delete_secret(&key);
         result.is_ok()
+    }
+
+    #[test]
+    fn test_service_name_is_dev_in_debug_mode() {
+        assert_eq!(service_name(), "openforge-dev");
     }
 
     #[test]
@@ -153,6 +195,42 @@ mod tests {
         assert_eq!(retrieved, None);
 
         let _ = delete_secret(&key);
+    }
+
+    #[test]
+    fn test_migrate_service_name_copies_from_legacy() {
+        if !keychain_available() {
+            return;
+        }
+
+        let key = test_key("migrate_svc");
+
+        let legacy_entry =
+            keyring::Entry::new(LEGACY_SERVICE_NAME, &key).expect("create legacy entry");
+        legacy_entry
+            .set_password("legacy_value")
+            .expect("set legacy password");
+
+        let new_entry = keyring::Entry::new(service_name(), &key).expect("create new entry");
+        let _ = new_entry.delete_credential();
+
+        let legacy_result = legacy_entry.get_password();
+        assert!(legacy_result.is_ok(), "legacy entry should exist");
+
+        let new_result = new_entry.get_password();
+        assert!(
+            new_result.is_err(),
+            "new entry should not exist before migration"
+        );
+
+        assert_ne!(
+            service_name(),
+            LEGACY_SERVICE_NAME,
+            "test only valid when service names differ"
+        );
+
+        let _ = legacy_entry.delete_credential();
+        let _ = new_entry.delete_credential();
     }
 
     #[test]
