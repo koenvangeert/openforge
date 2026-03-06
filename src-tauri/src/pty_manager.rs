@@ -184,9 +184,6 @@ impl PtyManager {
         cmd.env("TERM", "xterm-256color");
         cmd.env("COLORTERM", "truecolor");
         cmd.env("TERM_PROGRAM", "vscode");
-        if let Some(token) = crate::http_server::HTTP_TOKEN.get() {
-            cmd.env("OPENFORGE_HTTP_TOKEN", token);
-        }
 
         let child = pair
             .slave
@@ -447,9 +444,6 @@ impl PtyManager {
         cmd.env("COLORTERM", "truecolor");
         cmd.env("TERM_PROGRAM", "vscode");
         cmd.env("CLAUDE_TASK_ID", task_id);
-        if let Some(token) = crate::http_server::HTTP_TOKEN.get() {
-            cmd.env("OPENFORGE_HTTP_TOKEN", token);
-        }
 
         let child = pair
             .slave
@@ -678,9 +672,6 @@ impl PtyManager {
         cmd.env("TERM", "xterm-256color");
         cmd.env("COLORTERM", "truecolor");
         cmd.env("TERM_PROGRAM", "vscode");
-        if let Some(token) = crate::http_server::HTTP_TOKEN.get() {
-            cmd.env("OPENFORGE_HTTP_TOKEN", token);
-        }
 
         let child = pair
             .slave

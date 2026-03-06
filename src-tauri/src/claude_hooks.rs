@@ -72,39 +72,34 @@ pub fn ensure_workspace_trusted(cwd: &Path) -> Result<(), Box<dyn std::error::Er
 }
 
 fn build_hooks_json(port: u16) -> Value {
-    let auth_header = crate::http_server::HTTP_TOKEN
-        .get()
-        .map(|t| format!("-H 'Authorization: Bearer {}' ", t))
-        .unwrap_or_default();
-
     let pre_tool_use_cmd = format!(
-        "curl -s -X POST http://127.0.0.1:{}/hooks/pre-tool-use -H 'Content-Type: application/json' {}  -d '{{\"session_id\":\"'\"$CLAUDE_SESSION_ID\"'\",\"tool_name\":\"'\"$CLAUDE_TOOL_NAME\"'\",\"CLAUDE_TASK_ID\":\"'\"$CLAUDE_TASK_ID\"'\"}}' ",
-        port, auth_header
+        "curl -s -X POST http://127.0.0.1:{}/hooks/pre-tool-use -H 'Content-Type: application/json' -d '{{\"session_id\":\"'\"$CLAUDE_SESSION_ID\"'\",\"tool_name\":\"'\"$CLAUDE_TOOL_NAME\"'\",\"CLAUDE_TASK_ID\":\"'\"$CLAUDE_TASK_ID\"'\"}}' ",
+        port
     );
 
     let post_tool_use_cmd = format!(
-        "curl -s -X POST http://127.0.0.1:{}/hooks/post-tool-use -H 'Content-Type: application/json' {}  -d '{{\"session_id\":\"'\"$CLAUDE_SESSION_ID\"'\",\"tool_name\":\"'\"$CLAUDE_TOOL_NAME\"'\",\"CLAUDE_TASK_ID\":\"'\"$CLAUDE_TASK_ID\"'\"}}' ",
-        port, auth_header
+        "curl -s -X POST http://127.0.0.1:{}/hooks/post-tool-use -H 'Content-Type: application/json' -d '{{\"session_id\":\"'\"$CLAUDE_SESSION_ID\"'\",\"tool_name\":\"'\"$CLAUDE_TOOL_NAME\"'\",\"CLAUDE_TASK_ID\":\"'\"$CLAUDE_TASK_ID\"'\"}}' ",
+        port
     );
 
     let stop_cmd = format!(
-        "curl -s -X POST http://127.0.0.1:{}/hooks/stop -H 'Content-Type: application/json' {}  -d '{{\"session_id\":\"'\"$CLAUDE_SESSION_ID\"'\",\"CLAUDE_TASK_ID\":\"'\"$CLAUDE_TASK_ID\"'\"}}' ",
-        port, auth_header
+        "curl -s -X POST http://127.0.0.1:{}/hooks/stop -H 'Content-Type: application/json' -d '{{\"session_id\":\"'\"$CLAUDE_SESSION_ID\"'\",\"CLAUDE_TASK_ID\":\"'\"$CLAUDE_TASK_ID\"'\"}}' ",
+        port
     );
 
     let session_end_cmd = format!(
-        "curl -s -X POST http://127.0.0.1:{}/hooks/session-end -H 'Content-Type: application/json' {}  -d '{{\"session_id\":\"'\"$CLAUDE_SESSION_ID\"'\",\"CLAUDE_TASK_ID\":\"'\"$CLAUDE_TASK_ID\"'\"}}' ",
-        port, auth_header
+        "curl -s -X POST http://127.0.0.1:{}/hooks/session-end -H 'Content-Type: application/json' -d '{{\"session_id\":\"'\"$CLAUDE_SESSION_ID\"'\",\"CLAUDE_TASK_ID\":\"'\"$CLAUDE_TASK_ID\"'\"}}' ",
+        port
     );
 
     let notification_permission_cmd = format!(
-        "curl -s -X POST http://127.0.0.1:{}/hooks/notification-permission -H 'Content-Type: application/json' {}  -d '{{\"session_id\":\"'\"$CLAUDE_SESSION_ID\"'\",\"CLAUDE_TASK_ID\":\"'\"$CLAUDE_TASK_ID\"'\"}}' ",
-        port, auth_header
+        "curl -s -X POST http://127.0.0.1:{}/hooks/notification-permission -H 'Content-Type: application/json' -d '{{\"session_id\":\"'\"$CLAUDE_SESSION_ID\"'\",\"CLAUDE_TASK_ID\":\"'\"$CLAUDE_TASK_ID\"'\"}}' ",
+        port
     );
 
     let notification_cmd = format!(
-        "curl -s -X POST http://127.0.0.1:{}/hooks/notification -H 'Content-Type: application/json' {}  -d '{{\"session_id\":\"'\"$CLAUDE_SESSION_ID\"'\",\"CLAUDE_TASK_ID\":\"'\"$CLAUDE_TASK_ID\"'\"}}' ",
-        port, auth_header
+        "curl -s -X POST http://127.0.0.1:{}/hooks/notification -H 'Content-Type: application/json' -d '{{\"session_id\":\"'\"$CLAUDE_SESSION_ID\"'\",\"CLAUDE_TASK_ID\":\"'\"$CLAUDE_TASK_ID\"'\"}}' ",
+        port
     );
 
     json!({

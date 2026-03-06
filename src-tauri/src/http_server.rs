@@ -1,48 +1,13 @@
 use axum::{
     extract::{State, Json, Path},
-    middleware::Next,
     routing::{post, get},
     Router,
     http::StatusCode,
-    response::Response,
 };
 use serde::{Deserialize, Serialize};
 use std::{net::SocketAddr, sync::Mutex};
-use once_cell::sync::OnceCell;
 use crate::db;
 use tauri::Emitter;
-
-pub static HTTP_TOKEN: OnceCell<String> = OnceCell::new();
-
-pub fn generate_token() -> String {
-    use rand::Rng;
-    let bytes: [u8; 32] = rand::thread_rng().gen();
-    bytes.iter().map(|b| format!("{:02x}", b)).collect()
-}
-
-pub fn validate_bearer_token(headers: &axum::http::HeaderMap, expected: &str) -> bool {
-    headers
-        .get(axum::http::header::AUTHORIZATION)
-        .and_then(|v| v.to_str().ok())
-        .map(|h| h == format!("Bearer {}", expected))
-        .unwrap_or(false)
-}
-
-pub(crate) async fn auth_middleware(
-    request: axum::extract::Request,
-    next: Next,
-) -> Result<Response, StatusCode> {
-    match HTTP_TOKEN.get() {
-        Some(token) if validate_bearer_token(request.headers(), token) => {
-            Ok(next.run(request).await)
-        }
-        Some(_) => Err(StatusCode::UNAUTHORIZED),
-        None => {
-            eprintln!("[auth] Warning: HTTP_TOKEN not initialized — rejecting request");
-            Err(StatusCode::UNAUTHORIZED)
-        }
-    }
-}
 
 /// Request to create a new task from OpenCode
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -367,9 +332,6 @@ pub async fn start_http_server(
         .parse::<u16>()
         .unwrap_or(17422);
 
-    let token = generate_token();
-    let _ = HTTP_TOKEN.set(token.clone());
-
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
     let state = AppState { app, db };
     let router = create_router(state);
@@ -387,68 +349,6 @@ pub async fn start_http_server(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    // ========================================================================
-    // Token generation and validation Tests
-    // ========================================================================
-
-    const TEST_HTTP_TOKEN: &str = "test_http_token_abc123def456_0000_1111";
-
-    fn init_test_token() -> &'static str {
-        HTTP_TOKEN.get_or_init(|| TEST_HTTP_TOKEN.to_string())
-    }
-
-    #[test]
-    fn test_generate_token_is_64_char_hex() {
-        let token = generate_token();
-        assert_eq!(token.len(), 64);
-        assert!(token.chars().all(|c| c.is_ascii_hexdigit()));
-    }
-
-    #[test]
-    fn test_generate_token_is_unique() {
-        let t1 = generate_token();
-        let t2 = generate_token();
-        assert_ne!(t1, t2);
-    }
-
-    #[test]
-    fn test_validate_bearer_token_no_header() {
-        let headers = axum::http::HeaderMap::new();
-        assert!(!validate_bearer_token(&headers, "mytoken"));
-    }
-
-    #[test]
-    fn test_validate_bearer_token_wrong_token() {
-        let mut headers = axum::http::HeaderMap::new();
-        headers.insert(
-            axum::http::header::AUTHORIZATION,
-            "Bearer wrongtoken".parse().unwrap(),
-        );
-        assert!(!validate_bearer_token(&headers, "mytoken"));
-    }
-
-    #[test]
-    fn test_validate_bearer_token_correct() {
-        let mut headers = axum::http::HeaderMap::new();
-        headers.insert(
-            axum::http::header::AUTHORIZATION,
-            "Bearer mytoken".parse().unwrap(),
-        );
-        assert!(validate_bearer_token(&headers, "mytoken"));
-    }
-
-    #[test]
-    fn test_validate_bearer_token_wrong_scheme() {
-        let mut headers = axum::http::HeaderMap::new();
-        headers.insert(
-            axum::http::header::AUTHORIZATION,
-            "Basic mytoken".parse().unwrap(),
-        );
-        assert!(!validate_bearer_token(&headers, "mytoken"));
-    }
-
-
 
     // ========================================================================
     // CreateTaskRequest Tests
