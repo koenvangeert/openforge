@@ -275,6 +275,60 @@ describe('terminalPool', () => {
     })
   })
 
+  describe('modal focus suppression', () => {
+    it('attach does not focus terminal when a modal dialog is open', async () => {
+      // Simulate an open modal dialog in the DOM
+      const dialog = document.createElement('div')
+      dialog.setAttribute('role', 'dialog')
+      dialog.setAttribute('aria-modal', 'true')
+      document.body.appendChild(dialog)
+
+      const entry = await acquire('task-modal')
+      const wrapper = document.createElement('div')
+      document.body.appendChild(wrapper)
+
+      // Give hostDiv real dimensions so safeFit doesn't bail
+      Object.defineProperty(entry.hostDiv, 'clientWidth', { value: 800 })
+      Object.defineProperty(entry.hostDiv, 'clientHeight', { value: 600 })
+
+      const focusSpy = entry.terminal.focus as ReturnType<typeof vi.fn>
+      focusSpy.mockClear()
+
+      attach(entry, wrapper)
+
+      // Flush the requestAnimationFrame callback
+      await new Promise(resolve => requestAnimationFrame(resolve))
+
+      expect(focusSpy).not.toHaveBeenCalled()
+
+      // Cleanup
+      document.body.removeChild(dialog)
+      document.body.removeChild(wrapper)
+    })
+
+    it('attach focuses terminal when no modal dialog is open', async () => {
+      const entry = await acquire('task-no-modal')
+      const wrapper = document.createElement('div')
+      document.body.appendChild(wrapper)
+
+      Object.defineProperty(entry.hostDiv, 'clientWidth', { value: 800 })
+      Object.defineProperty(entry.hostDiv, 'clientHeight', { value: 600 })
+
+      const focusSpy = entry.terminal.focus as ReturnType<typeof vi.fn>
+      focusSpy.mockClear()
+
+      attach(entry, wrapper)
+
+      // Flush the requestAnimationFrame callback
+      await new Promise(resolve => requestAnimationFrame(resolve))
+
+      expect(focusSpy).toHaveBeenCalled()
+
+      // Cleanup
+      document.body.removeChild(wrapper)
+    })
+  })
+
   describe('shell-key independence', () => {
     it('agent key and shell key create separate pool entries', async () => {
       const agentEntry = await acquire('T-42')

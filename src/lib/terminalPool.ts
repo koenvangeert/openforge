@@ -31,6 +31,10 @@ function createHostDiv(): HTMLDivElement {
   return div
 }
 
+function isModalOpen(): boolean {
+  return document.querySelector('[role="dialog"][aria-modal="true"]') !== null
+}
+
 function safeFit(entry: PoolEntry): void {
   if (!entry.fitAddon || !entry.hostDiv) return
   if (entry.hostDiv.clientWidth === 0 || entry.hostDiv.clientHeight === 0) return
@@ -166,7 +170,7 @@ export function attach(entry: PoolEntry, wrapperEl: HTMLDivElement): void {
       requestAnimationFrame(() => {
         safeFit(entry)
         entry.terminal.refresh(0, (entry.terminal.rows ?? 1) - 1)
-        entry.terminal.focus()
+        if (!isModalOpen()) entry.terminal.focus()
       })
     }
   }, { threshold: 0 })
@@ -176,7 +180,7 @@ export function attach(entry: PoolEntry, wrapperEl: HTMLDivElement): void {
   requestAnimationFrame(() => {
     safeFit(entry)
     entry.terminal.refresh(0, (entry.terminal.rows ?? 1) - 1)
-    entry.terminal.focus()
+    if (!isModalOpen()) entry.terminal.focus()
   })
 }
 
