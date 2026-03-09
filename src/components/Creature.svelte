@@ -25,11 +25,19 @@
     state === 'frozen' ? 'INTERRUPTED' :
     state === 'celebrating' ? 'DONE' :
     state === 'idle' ? 'IDLE' :
+    state === 'pr-draft' ? 'DRAFT PR' :
+    state === 'pr-open' ? 'PR OPEN' :
+    state === 'ci-failed' ? 'CI FAILED' :
+    state === 'changes-requested' ? 'CHANGES REQ' :
+    state === 'ready-to-merge' ? 'READY' :
+    state === 'pr-merged' ? 'MERGED' :
     ''
   )
 
   let roomColor = $derived(
-    state === 'celebrating' ? 'text-info' :
+    state === 'ci-failed' || state === 'changes-requested' ? 'text-error' :
+    state === 'celebrating' || state === 'pr-merged' ? 'text-info' :
+    state === 'ready-to-merge' ? 'text-accent' :
     room === 'forge' ? 'text-success' :
     room === 'warRoom' ? 'text-warning' :
     'text-base-content/40'
@@ -39,13 +47,15 @@
     room === 'nursery' ? 'creature-sleep' :
     state === 'active' ? 'creature-work' :
     state === 'needs-input' || state === 'sad' || state === 'frozen' ? 'creature-alert' :
-    state === 'celebrating' ? 'creature-celebrate' :
+    state === 'ci-failed' || state === 'changes-requested' ? 'creature-alert' :
+    state === 'celebrating' || state === 'pr-merged' ? 'creature-celebrate' :
     state === 'resting' ? 'creature-sleep' :
     ''
   )
 
   let thoughtBorderClass = $derived(
-    state === 'celebrating' ? 'border-info/50' :
+    state === 'ci-failed' || state === 'changes-requested' ? 'border-error/50' :
+    state === 'celebrating' || state === 'pr-merged' ? 'border-info/50' :
     room === 'forge' ? 'border-success/50' :
     room === 'warRoom' ? 'border-warning/50' :
     'border-base-content/20'
@@ -190,6 +200,49 @@
           <text x="96" y="14" fill="currentColor" font-size="14" font-weight="bold" opacity="0.4">z</text>
           <text x="106" y="6" fill="currentColor" font-size="11" font-weight="bold" opacity="0.3">z</text>
           <text x="114" y="0" fill="currentColor" font-size="8" font-weight="bold" opacity="0.2">z</text>
+        </g>
+      {:else if state === 'ci-failed'}
+        <!-- Broken gear with fire -->
+        <g data-testid="ci-failed-prop">
+          <circle cx="120" cy="60" r="14" fill="none" stroke="currentColor" stroke-width="2" opacity="0.4" />
+          <circle cx="120" cy="60" r="5" fill="currentColor" opacity="0.3" />
+          <line x1="112" y1="52" x2="128" y2="68" stroke="currentColor" stroke-width="2" opacity="0.5" />
+          <!-- Fire flickers -->
+          <ellipse cx="118" cy="42" rx="4" ry="8" fill="currentColor" opacity="0.3" />
+          <ellipse cx="124" cy="44" rx="3" ry="6" fill="currentColor" opacity="0.2" />
+        </g>
+      {:else if state === 'changes-requested'}
+        <!-- Red X mark -->
+        <g data-testid="changes-req-prop">
+          <circle cx="114" cy="16" r="12" fill="currentColor" opacity="0.12" stroke="currentColor" stroke-width="1.5" stroke-opacity="0.3" />
+          <line x1="108" y1="10" x2="120" y2="22" stroke="currentColor" stroke-width="2.5" opacity="0.6" />
+          <line x1="120" y1="10" x2="108" y2="22" stroke="currentColor" stroke-width="2.5" opacity="0.6" />
+        </g>
+      {:else if state === 'ready-to-merge'}
+        <!-- Checkmark trophy -->
+        <g data-testid="ready-prop">
+          <circle cx="114" cy="16" r="12" fill="currentColor" opacity="0.12" stroke="currentColor" stroke-width="1.5" stroke-opacity="0.3" />
+          <polyline points="106,16 112,22 122,10" fill="none" stroke="currentColor" stroke-width="2.5" opacity="0.6" />
+        </g>
+      {:else if state === 'pr-draft'}
+        <!-- Pencil/scroll -->
+        <g data-testid="draft-prop">
+          <rect x="108" y="50" width="8" height="30" rx="1" fill="currentColor" opacity="0.3" transform="rotate(-15 112 65)" />
+          <rect x="106" y="48" width="12" height="4" rx="1" fill="currentColor" opacity="0.4" transform="rotate(-15 112 50)" />
+        </g>
+      {:else if state === 'pr-open'}
+        <!-- Flag -->
+        <g data-testid="pr-open-prop">
+          <line x1="118" y1="40" x2="118" y2="100" stroke="currentColor" stroke-width="2" opacity="0.3" />
+          <polygon points="120,42 140,50 120,58" fill="currentColor" opacity="0.3" />
+        </g>
+      {:else if state === 'pr-merged'}
+        <!-- Reuse celebrating chair scene -->
+        <g data-testid="chair">
+          <rect x="38" y="96" width="64" height="6" rx="2" fill="currentColor" opacity="0.3" />
+          <rect x="38" y="60" width="6" height="42" rx="2" fill="currentColor" opacity="0.25" />
+          <rect x="96" y="96" width="6" height="18" rx="1" fill="currentColor" opacity="0.25" />
+          <rect x="38" y="96" width="6" height="18" rx="1" fill="currentColor" opacity="0.25" />
         </g>
       {/if}
 

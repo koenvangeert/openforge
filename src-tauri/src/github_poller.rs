@@ -443,6 +443,7 @@ async fn sync_open_prs(
                 &pr.state,
                 now,
                 now,
+                pr.draft.unwrap_or(false),
             );
             let _ = db_lock.update_pr_head_sha(pr.number, &pr.head.sha);
             drop(db_lock);
@@ -870,7 +871,7 @@ async fn poll_review_prs(
         return Ok(());
     };
 
-    let prs = github_client
+    let (prs, search_item_count) = github_client
         .search_review_requested_prs(&username, github_token)
         .await
         .map_err(|e| format!("Failed to search review PRs: {}", e))?;
@@ -910,7 +911,13 @@ async fn poll_review_prs(
             );
         }
 
-        let _ = db_lock.delete_stale_review_prs(&current_ids);
+        // Only delete stale PRs when the fetch was complete.
+        // If search found items but detail fetches failed (e.g. rate limiting),
+        // prs will be shorter than search_item_count — skip deletion to avoid
+        // wiping viewed state for PRs whose details we couldn't fetch.
+        if prs.len() >= search_item_count {
+            let _ = db_lock.delete_stale_review_prs(&current_ids);
+        }
         let count = db_lock.get_all_review_prs()
             .map(|prs| prs.iter().filter(|p| p.viewed_at.is_none()).count())
             .unwrap_or(0);

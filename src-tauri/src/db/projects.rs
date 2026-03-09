@@ -509,6 +509,7 @@ mod tests {
             "open",
             1000,
             1000,
+            false,
         )
         .expect("insert pr failed");
         db.update_pr_ci_status(42, "sha1", "failure", "[]")

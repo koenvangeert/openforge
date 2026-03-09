@@ -805,6 +805,7 @@ mod tests {
             "open",
             1000,
             1000,
+            false,
         )
         .expect("insert pr failed");
         db.insert_pr_comment(

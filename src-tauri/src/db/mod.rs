@@ -571,6 +571,33 @@ CREATE INDEX IF NOT EXISTS idx_agent_review_comments_session ON agent_review_com
 
             Ok(())
         }),
+        // V10: Add draft column to pull_requests
+        M::up_with_hook("", |tx| {
+            let table_exists: bool = tx
+                .query_row(
+                    "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='pull_requests'",
+                    [],
+                    |r| r.get(0),
+                )
+                .unwrap_or(false);
+            if table_exists {
+                let has_draft: bool = tx
+                    .query_row(
+                        "SELECT COUNT(*) > 0 FROM pragma_table_info('pull_requests') WHERE name = 'draft'",
+                        [],
+                        |r| r.get(0),
+                    )
+                    .unwrap_or(false);
+                if !has_draft {
+                    tx.execute(
+                        "ALTER TABLE pull_requests ADD COLUMN draft INTEGER NOT NULL DEFAULT 0",
+                        [],
+                    )
+                    .map_err(rusqlite_migration::HookError::RusqliteError)?;
+                }
+            }
+            Ok(())
+        }),
     ])
 }
 #[cfg(test)]
@@ -842,8 +869,8 @@ mod tests {
             .query_row("PRAGMA user_version", [], |r| r.get(0))
             .unwrap();
         assert_eq!(
-            uv, 9,
-            "Fresh DB should have user_version=9 after migrations, got {}",
+            uv, 10,
+            "Fresh DB should have user_version=10 after migrations, got {}",
             uv
         );
 

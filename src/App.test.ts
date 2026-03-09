@@ -130,6 +130,10 @@ vi.mock('./lib/ipc', () => ({
   submitReviewComments: vi.fn(),
   dismissReviewPullRequest: vi.fn(),
   listOpenCodeSkills: vi.fn(),
+  getReviewPrs: vi.fn(async () => {
+    callOrder.push('getReviewPrs')
+    return []
+  }),
 }))
 
 vi.mock('./components/KanbanBoard.svelte', () => ({ default: vi.fn() }))
@@ -174,6 +178,28 @@ describe('App onMount initialization order', () => {
 
   afterEach(() => {
     vi.clearAllMocks()
+  })
+
+  it('initializes reviewRequestCount from DB on startup', async () => {
+    const { getReviewPrs } = await import('./lib/ipc')
+    const stores = await import('./lib/stores')
+    const { get } = await import('svelte/store')
+
+    vi.mocked(getReviewPrs).mockResolvedValue([
+      { id: 1, number: 10, title: 'PR 1', body: null, state: 'open', draft: false, html_url: 'https://github.com/o/r/pull/10', user_login: 'u1', user_avatar_url: null, repo_owner: 'o', repo_name: 'r', head_ref: 'b1', base_ref: 'main', head_sha: 'sha1', additions: 0, deletions: 0, changed_files: 0, created_at: 1000, updated_at: 1000, viewed_at: null, viewed_head_sha: null },
+      { id: 2, number: 20, title: 'PR 2', body: null, state: 'open', draft: false, html_url: 'https://github.com/o/r/pull/20', user_login: 'u2', user_avatar_url: null, repo_owner: 'o', repo_name: 'r', head_ref: 'b2', base_ref: 'main', head_sha: 'sha2', additions: 0, deletions: 0, changed_files: 0, created_at: 2000, updated_at: 2000, viewed_at: 1234567890, viewed_head_sha: 'sha2' },
+      { id: 3, number: 30, title: 'PR 3', body: null, state: 'open', draft: false, html_url: 'https://github.com/o/r/pull/30', user_login: 'u3', user_avatar_url: null, repo_owner: 'o', repo_name: 'r', head_ref: 'b3', base_ref: 'main', head_sha: 'sha3', additions: 0, deletions: 0, changed_files: 0, created_at: 3000, updated_at: 3000, viewed_at: null, viewed_head_sha: null },
+    ] as any)
+
+    const App = (await import('./App.svelte')).default
+    render(App)
+
+    await vi.waitFor(() => {
+      expect(getReviewPrs).toHaveBeenCalled()
+    })
+
+    // 2 out of 3 PRs are unviewed (viewed_at === null)
+    expect(get(stores.reviewRequestCount)).toBe(2)
   })
 
   it('registers event listeners before making IPC data-loading calls', async () => {

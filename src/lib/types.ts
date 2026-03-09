@@ -81,6 +81,7 @@ export interface PullRequestInfo {
   merged_at: number | null;
   created_at: number;
   updated_at: number;
+  draft: boolean;
   unaddressed_comment_count: number;
 }
 

@@ -96,7 +96,7 @@ pub async fn fetch_review_prs(
         .map_err(|e| format!("Failed to get config: {}", e))?
         .ok_or("github_token not configured".to_string())?;
 
-    let prs = github_client
+    let (prs, search_item_count) = github_client
         .search_review_requested_prs(&username, &token)
         .await
         .map_err(|e| format!("Failed to search review PRs: {}", e))?;
@@ -136,8 +136,11 @@ pub async fn fetch_review_prs(
             ).map_err(|e| format!("Failed to upsert review PR: {}", e))?;
         }
 
-        db_lock.delete_stale_review_prs(&current_ids)
-            .map_err(|e| format!("Failed to delete stale review PRs: {}", e))?;
+        // Only delete stale PRs when the fetch was complete (no partial failures)
+        if prs.len() >= search_item_count {
+            db_lock.delete_stale_review_prs(&current_ids)
+                .map_err(|e| format!("Failed to delete stale review PRs: {}", e))?;
+        }
     }
 
     let db_lock = crate::db::acquire_db(&db);

@@ -19,6 +19,7 @@ pub struct PrRow {
     pub merged_at: Option<i64>,
     pub created_at: i64,
     pub updated_at: i64,
+    pub draft: bool,
     pub unaddressed_comment_count: i64,
 }
 
@@ -41,7 +42,7 @@ impl super::Database {
     pub fn get_open_prs(&self) -> Result<Vec<PrRow>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT id, ticket_id, repo_owner, repo_name, title, url, state, head_sha, ci_status, ci_check_runs, review_status, merged_at, created_at, updated_at,
+            "SELECT id, ticket_id, repo_owner, repo_name, title, url, state, head_sha, ci_status, ci_check_runs, review_status, merged_at, created_at, updated_at, draft,
                     (SELECT COUNT(*) FROM pr_comments WHERE pr_id = pull_requests.id AND addressed = 0) as unaddressed_comment_count
              FROM pull_requests
              WHERE state = 'open'
@@ -64,7 +65,8 @@ impl super::Database {
                 merged_at: row.get(11)?,
                 created_at: row.get(12)?,
                 updated_at: row.get(13)?,
-                unaddressed_comment_count: row.get(14)?,
+                draft: row.get(14)?,
+                unaddressed_comment_count: row.get(15)?,
             })
         })?;
 
@@ -78,7 +80,7 @@ impl super::Database {
     pub fn get_all_pull_requests(&self) -> Result<Vec<PrRow>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT id, ticket_id, repo_owner, repo_name, title, url, state, head_sha, ci_status, ci_check_runs, review_status, merged_at, created_at, updated_at,
+            "SELECT id, ticket_id, repo_owner, repo_name, title, url, state, head_sha, ci_status, ci_check_runs, review_status, merged_at, created_at, updated_at, draft,
                     (SELECT COUNT(*) FROM pr_comments WHERE pr_id = pull_requests.id AND addressed = 0) as unaddressed_comment_count
              FROM pull_requests
              ORDER BY updated_at DESC",
@@ -100,7 +102,8 @@ impl super::Database {
                 merged_at: row.get(11)?,
                 created_at: row.get(12)?,
                 updated_at: row.get(13)?,
-                unaddressed_comment_count: row.get(14)?,
+                draft: row.get(14)?,
+                unaddressed_comment_count: row.get(15)?,
             })
         })?;
 
@@ -164,11 +167,12 @@ impl super::Database {
         state: &str,
         created_at: i64,
         updated_at: i64,
+        draft: bool,
     ) -> Result<()> {
         let conn = self.conn.lock().unwrap();
         conn.execute(
-            "INSERT INTO pull_requests (id, ticket_id, repo_owner, repo_name, title, url, state, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+            "INSERT INTO pull_requests (id, ticket_id, repo_owner, repo_name, title, url, state, created_at, updated_at, draft)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
              ON CONFLICT(id) DO UPDATE SET
                ticket_id=excluded.ticket_id,
                repo_owner=excluded.repo_owner,
@@ -176,7 +180,8 @@ impl super::Database {
                title=excluded.title,
                url=excluded.url,
                state=excluded.state,
-               updated_at=excluded.updated_at",
+               updated_at=excluded.updated_at,
+               draft=excluded.draft",
             rusqlite::params![
                 id,
                 ticket_id,
@@ -187,6 +192,7 @@ impl super::Database {
                 state,
                 created_at,
                 updated_at,
+                draft,
             ],
         )?;
         Ok(())
@@ -455,6 +461,7 @@ mod tests {
             "open",
             1000,
             2000,
+            false,
         )
         .expect("insert pr failed");
 
@@ -474,6 +481,7 @@ mod tests {
             "merged",
             1000,
             3000,
+            false,
         )
         .expect("update pr failed");
 
@@ -499,6 +507,7 @@ mod tests {
             "open",
             1000,
             1000,
+            false,
         )
         .expect("insert pr failed");
 
@@ -563,6 +572,7 @@ mod tests {
             "open",
             1000,
             1000,
+            false,
         )
         .expect("insert pr failed");
 
@@ -632,6 +642,7 @@ mod tests {
             "open",
             1000,
             1000,
+            false,
         )
         .expect("insert pr failed");
 
@@ -732,6 +743,7 @@ mod tests {
             "open",
             now,
             now,
+            false,
         )
         .unwrap();
 
@@ -765,6 +777,7 @@ mod tests {
             "open",
             now,
             now,
+            false,
         )
         .unwrap();
 
@@ -780,6 +793,7 @@ mod tests {
             "open",
             now + 30,
             now + 30,
+            false,
         )
         .unwrap();
 
@@ -817,6 +831,7 @@ mod tests {
             "open",
             1000,
             1000,
+            false,
         )
         .expect("insert pr failed");
 
@@ -890,6 +905,7 @@ mod tests {
             "open",
             1000,
             1000,
+            false,
         )
         .expect("insert pr failed");
 
@@ -924,6 +940,7 @@ mod tests {
             "open",
             1000,
             1000,
+            false,
         )
         .expect("insert pr failed");
 
@@ -979,6 +996,7 @@ mod tests {
             "open",
             1000,
             1000,
+            false,
         )
         .expect("insert pr 1 failed");
 
@@ -1029,6 +1047,7 @@ mod tests {
             "open",
             1000,
             1000,
+            false,
         )
         .expect("insert pr 2 failed");
 
