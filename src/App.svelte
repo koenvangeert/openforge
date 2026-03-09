@@ -13,6 +13,7 @@
    import PrReviewView from './components/PrReviewView.svelte'
    import SkillsView from './components/SkillsView.svelte'
    import CreaturesView from './components/CreaturesView.svelte'
+   import WorkQueueView from './components/WorkQueueView.svelte'
    import Toast from './components/Toast.svelte'
   import CheckpointToast from './components/CheckpointToast.svelte'
   import CiFailureToast from './components/CiFailureToast.svelte'
@@ -34,6 +35,7 @@
   let appMode = $state<string | null>(null)
   let showShortcutsDialog = $state(false)
   let showProjectSwitcher = $state(false)
+  let workQueueRefreshTrigger = $state(0)
 
   let selectedTask = $derived($tasks.find(t => t.id === $selectedTaskId) || null)
 
@@ -62,6 +64,11 @@
          $currentView = 'board'
          return
        }
+       $selectedTaskId = null
+     }
+   })
+   $effect(() => {
+     if ($currentView === 'workqueue') {
        $selectedTaskId = null
      }
    })
@@ -235,6 +242,12 @@
       const searchInput = document.querySelector('[data-search-input]') as HTMLInputElement
       searchInput?.focus()
     }
+    if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key === 'r') {
+      e.preventDefault()
+      pushNavState()
+      $currentView = 'workqueue'
+      return
+    }
   }
 
   onMount(async () => {
@@ -283,6 +296,7 @@
         }
         loadTasks()
         loadProjectAttention()
+        workQueueRefreshTrigger++
       })
     )
 
@@ -578,6 +592,7 @@
           $taskSpawned = { taskId: event.payload.task_id, title: event.payload.task_id }
         }
         loadTasks()
+        workQueueRefreshTrigger++
       })
     )
 
@@ -633,10 +648,7 @@
           + new_task <span class="text-[0.65rem] opacity-70 ml-1 font-normal">&#8984;T</span>
         </button>
       </div>
-      <div class="flex items-center gap-1.5">
-        <span class="w-2 h-2 rounded-full bg-primary"></span>
-        <span class="text-xs text-secondary font-mono">connected</span>
-      </div>
+
     </header>
 
     {#if $currentView === 'board' && !selectedTask}
@@ -681,6 +693,8 @@
              $selectedTaskId = taskId
            }}
          />
+       {:else if $currentView === 'workqueue'}
+         <WorkQueueView refreshTrigger={workQueueRefreshTrigger} />
        {:else if selectedTask}
         <TaskDetailView task={selectedTask} onRunAction={handleRunAction} />
       {:else}
@@ -782,6 +796,10 @@
           <div class="flex items-center justify-between">
             <span class="text-sm text-base-content">Show shortcuts</span>
             <kbd class="kbd kbd-sm">?</kbd>
+          </div>
+          <div class="flex items-center justify-between">
+            <span class="text-sm text-base-content">Work queue</span>
+            <kbd class="kbd kbd-sm">⌘R</kbd>
           </div>
         </div>
       </div>

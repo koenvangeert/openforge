@@ -19,6 +19,18 @@ pub struct TaskRow {
     pub summary: Option<String>,
 }
 
+#[derive(Debug, Serialize, Clone)]
+pub struct WorkQueueTaskRow {
+    pub id: String,
+    pub title: String,
+    pub status: String,
+    pub summary: Option<String>,
+    pub project_id: String,
+    pub project_name: String,
+    pub session_completed_at: Option<i64>,
+    pub session_status: Option<String>,
+}
+
 impl super::Database {
     /// Get all tasks for a project
     pub fn get_tasks_for_project(&self, project_id: &str) -> Result<Vec<TaskRow>> {
@@ -50,6 +62,55 @@ impl super::Database {
         for task in tasks {
             result.push(task?);
         }
+        Ok(result)
+    }
+
+    pub fn get_work_queue_tasks(&self) -> std::result::Result<Vec<WorkQueueTaskRow>, String> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn
+            .prepare(
+                "SELECT
+                    t.id,
+                    t.title,
+                    t.status,
+                    t.summary,
+                    t.project_id,
+                    p.name,
+                    ls.updated_at,
+                    ls.status
+                FROM tasks t
+                JOIN projects p ON p.id = t.project_id
+                LEFT JOIN (
+                    SELECT ticket_id, MAX(created_at) AS latest_at, MAX(rowid) AS latest_rowid
+                    FROM agent_sessions
+                    GROUP BY ticket_id
+                ) latest_session ON latest_session.ticket_id = t.id
+                LEFT JOIN agent_sessions ls ON ls.ticket_id = latest_session.ticket_id AND ls.created_at = latest_session.latest_at AND ls.rowid = latest_session.latest_rowid
+                WHERE t.status = 'doing' AND t.project_id IS NOT NULL
+                ORDER BY ls.updated_at DESC",
+            )
+            .map_err(|e| format!("Failed to prepare get_work_queue_tasks query: {e}"))?;
+
+        let rows = stmt
+            .query_map([], |row| {
+                Ok(WorkQueueTaskRow {
+                    id: row.get(0)?,
+                    title: row.get(1)?,
+                    status: row.get(2)?,
+                    summary: row.get(3)?,
+                    project_id: row.get(4)?,
+                    project_name: row.get(5)?,
+                    session_completed_at: row.get(6)?,
+                    session_status: row.get(7)?,
+                })
+            })
+            .map_err(|e| format!("Failed to execute get_work_queue_tasks query: {e}"))?;
+
+        let mut result = Vec::new();
+        for row in rows {
+            result.push(row.map_err(|e| format!("Failed to map work queue task row: {e}"))?);
+        }
+
         Ok(result)
     }
 
@@ -392,6 +453,7 @@ mod tests {
     #[test]
     fn test_create_task_with_prompt() {
         let (db, path) = make_test_db("create_task_with_prompt");
+        db.set_config("task_id_prefix", "T").unwrap();
 
         let task = db
             .create_task("My task", "backlog", None, None, Some("Custom prompt"))
@@ -413,6 +475,7 @@ mod tests {
     #[test]
     fn test_create_task_prompt_defaults_to_title() {
         let (db, path) = make_test_db("create_task_prompt_default");
+        db.set_config("task_id_prefix", "T").unwrap();
 
         let task = db
             .create_task("My task", "backlog", None, None, None)
@@ -784,6 +847,211 @@ mod tests {
             "Expected T- prefix as fallback, got: {}",
             task.id
         );
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_get_work_queue_tasks_returns_doing_with_completed_session() {
+        let (db, path) = make_test_db("work_queue_returns_doing_with_completed_session");
+        let conn = db.connection();
+        let conn = conn.lock().unwrap();
+
+        conn.execute(
+            "INSERT INTO projects (id, name, path, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5)",
+            rusqlite::params!["P-1", "Project One", "/tmp/p1", 1000, 1000],
+        )
+        .expect("insert project failed");
+
+        conn.execute(
+            "INSERT INTO tasks (id, title, status, jira_key, jira_title, jira_status, jira_assignee, project_id, created_at, updated_at, jira_description, prompt, summary) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+            rusqlite::params!["T-1", "Doing task", "doing", None::<String>, None::<String>, None::<String>, None::<String>, Some("P-1"), 1000, 1000, None::<String>, "Doing task", Some("sum")],
+        )
+        .expect("insert task failed");
+
+        conn.execute(
+            "INSERT INTO agent_sessions (id, ticket_id, opencode_session_id, stage, status, checkpoint_data, error_message, created_at, updated_at, provider, claude_session_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+            rusqlite::params!["ses-1", "T-1", None::<String>, "implement", "completed", None::<String>, None::<String>, 1100, 1200, "opencode", None::<String>],
+        )
+        .expect("insert session failed");
+
+        drop(conn);
+
+        let rows = db.get_work_queue_tasks().expect("query failed");
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].id, "T-1");
+        assert_eq!(rows[0].project_name, "Project One");
+        assert_eq!(rows[0].session_completed_at, Some(1200));
+        assert_eq!(rows[0].session_status, Some("completed".to_string()));
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_get_work_queue_tasks_includes_doing_with_running_session() {
+        let (db, path) = make_test_db("work_queue_includes_doing_with_running_session");
+        let conn = db.connection();
+        let conn = conn.lock().unwrap();
+
+        conn.execute(
+            "INSERT INTO projects (id, name, path, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5)",
+            rusqlite::params!["P-1", "Project One", "/tmp/p1", 1000, 1000],
+        )
+        .expect("insert project failed");
+
+        conn.execute(
+            "INSERT INTO tasks (id, title, status, jira_key, jira_title, jira_status, jira_assignee, project_id, created_at, updated_at, jira_description, prompt, summary) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+            rusqlite::params!["T-1", "Doing task", "doing", None::<String>, None::<String>, None::<String>, None::<String>, Some("P-1"), 1000, 1000, None::<String>, "Doing task", None::<String>],
+        )
+        .expect("insert task failed");
+
+        conn.execute(
+            "INSERT INTO agent_sessions (id, ticket_id, opencode_session_id, stage, status, checkpoint_data, error_message, created_at, updated_at, provider, claude_session_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+            rusqlite::params!["ses-1", "T-1", None::<String>, "implement", "running", None::<String>, None::<String>, 1100, 1200, "opencode", None::<String>],
+        )
+        .expect("insert session failed");
+
+        drop(conn);
+
+        let rows = db.get_work_queue_tasks().expect("query failed");
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].id, "T-1");
+        assert_eq!(rows[0].session_completed_at, Some(1200));
+        assert_eq!(rows[0].session_status, Some("running".to_string()));
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_get_work_queue_tasks_excludes_non_doing_with_completed_session() {
+        let (db, path) = make_test_db("work_queue_excludes_non_doing_with_completed_session");
+        let conn = db.connection();
+        let conn = conn.lock().unwrap();
+
+        conn.execute(
+            "INSERT INTO projects (id, name, path, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5)",
+            rusqlite::params!["P-1", "Project One", "/tmp/p1", 1000, 1000],
+        )
+        .expect("insert project failed");
+
+        conn.execute(
+            "INSERT INTO tasks (id, title, status, jira_key, jira_title, jira_status, jira_assignee, project_id, created_at, updated_at, jira_description, prompt, summary) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+            rusqlite::params!["T-1", "Done task", "done", None::<String>, None::<String>, None::<String>, None::<String>, Some("P-1"), 1000, 1000, None::<String>, "Done task", None::<String>],
+        )
+        .expect("insert task failed");
+
+        conn.execute(
+            "INSERT INTO agent_sessions (id, ticket_id, opencode_session_id, stage, status, checkpoint_data, error_message, created_at, updated_at, provider, claude_session_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+            rusqlite::params!["ses-1", "T-1", None::<String>, "implement", "completed", None::<String>, None::<String>, 1100, 1200, "opencode", None::<String>],
+        )
+        .expect("insert session failed");
+
+        drop(conn);
+
+        let rows = db.get_work_queue_tasks().expect("query failed");
+        assert!(rows.is_empty());
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_get_work_queue_tasks_excludes_orphan_tasks() {
+        let (db, path) = make_test_db("work_queue_excludes_orphan_tasks");
+        let conn = db.connection();
+        let conn = conn.lock().unwrap();
+
+        conn.execute(
+            "INSERT INTO tasks (id, title, status, jira_key, jira_title, jira_status, jira_assignee, project_id, created_at, updated_at, jira_description, prompt, summary) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+            rusqlite::params!["T-1", "Orphan doing", "doing", None::<String>, None::<String>, None::<String>, None::<String>, None::<String>, 1000, 1000, None::<String>, "Orphan doing", None::<String>],
+        )
+        .expect("insert task failed");
+
+        conn.execute(
+            "INSERT INTO agent_sessions (id, ticket_id, opencode_session_id, stage, status, checkpoint_data, error_message, created_at, updated_at, provider, claude_session_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+            rusqlite::params!["ses-1", "T-1", None::<String>, "implement", "completed", None::<String>, None::<String>, 1100, 1200, "opencode", None::<String>],
+        )
+        .expect("insert session failed");
+
+        drop(conn);
+
+        let rows = db.get_work_queue_tasks().expect("query failed");
+        assert!(rows.is_empty());
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_get_work_queue_tasks_latest_session_tiebreaker() {
+        let (db, path) = make_test_db("work_queue_latest_session_tiebreaker");
+        let conn = db.connection();
+        let conn = conn.lock().unwrap();
+
+        conn.execute(
+            "INSERT INTO projects (id, name, path, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5)",
+            rusqlite::params!["P-1", "Project One", "/tmp/p1", 1000, 1000],
+        )
+        .expect("insert project failed");
+
+        conn.execute(
+            "INSERT INTO tasks (id, title, status, jira_key, jira_title, jira_status, jira_assignee, project_id, created_at, updated_at, jira_description, prompt, summary) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+            rusqlite::params!["T-1", "Doing task", "doing", None::<String>, None::<String>, None::<String>, None::<String>, Some("P-1"), 1000, 1000, None::<String>, "Doing task", None::<String>],
+        )
+        .expect("insert task failed");
+
+        conn.execute(
+            "INSERT INTO agent_sessions (id, ticket_id, opencode_session_id, stage, status, checkpoint_data, error_message, created_at, updated_at, provider, claude_session_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+            rusqlite::params!["ses-1", "T-1", None::<String>, "implement", "completed", None::<String>, None::<String>, 1100, 1200, "opencode", None::<String>],
+        )
+        .expect("insert session 1 failed");
+
+        conn.execute(
+            "INSERT INTO agent_sessions (id, ticket_id, opencode_session_id, stage, status, checkpoint_data, error_message, created_at, updated_at, provider, claude_session_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+            rusqlite::params!["ses-2", "T-1", None::<String>, "implement", "completed", None::<String>, None::<String>, 1100, 2200, "opencode", None::<String>],
+        )
+        .expect("insert session 2 failed");
+
+        drop(conn);
+
+        let rows = db.get_work_queue_tasks().expect("query failed");
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].id, "T-1");
+        assert_eq!(rows[0].session_completed_at, Some(2200));
+        assert_eq!(rows[0].session_status, Some("completed".to_string()));
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_get_work_queue_tasks_includes_doing_without_any_session() {
+        let (db, path) = make_test_db("work_queue_includes_doing_without_any_session");
+        let conn = db.connection();
+        let conn = conn.lock().unwrap();
+
+        conn.execute(
+            "INSERT INTO projects (id, name, path, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5)",
+            rusqlite::params!["P-1", "Project One", "/tmp/p1", 1000, 1000],
+        )
+        .expect("insert project failed");
+
+        conn.execute(
+            "INSERT INTO tasks (id, title, status, jira_key, jira_title, jira_status, jira_assignee, project_id, created_at, updated_at, jira_description, prompt, summary) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+            rusqlite::params!["T-1", "Doing task no session", "doing", None::<String>, None::<String>, None::<String>, None::<String>, Some("P-1"), 1000, 1000, None::<String>, "Doing task", None::<String>],
+        )
+        .expect("insert task failed");
+
+        drop(conn);
+
+        let rows = db.get_work_queue_tasks().expect("query failed");
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].id, "T-1");
+        assert_eq!(rows[0].session_completed_at, None);
+        assert_eq!(rows[0].session_status, None);
+
         drop(db);
         let _ = fs::remove_file(&path);
     }

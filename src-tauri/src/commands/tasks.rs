@@ -12,6 +12,14 @@ pub async fn get_tasks(
 }
 
 #[tauri::command]
+pub async fn get_work_queue_tasks(
+    db: State<'_, Arc<Mutex<db::Database>>>,
+) -> Result<Vec<db::WorkQueueTaskRow>, String> {
+    let db = crate::db::acquire_db(&db);
+    db.get_work_queue_tasks()
+}
+
+#[tauri::command]
 pub async fn get_task_detail(
     db: State<'_, Arc<Mutex<db::Database>>>,
     task_id: String,

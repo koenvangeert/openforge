@@ -1,5 +1,5 @@
 import { get } from 'svelte/store'
-import { currentView, selectedTaskId, selectedReviewPr, selectedSkillName, prFileDiffs, reviewComments, pendingManualComments, prOverviewComments } from './stores'
+import { currentView, selectedTaskId, selectedReviewPr, selectedSkillName, prFileDiffs, reviewComments, pendingManualComments, prOverviewComments, activeProjectId } from './stores'
 import type { AppView, ReviewPullRequest } from './types'
 
 interface NavState {
@@ -7,6 +7,7 @@ interface NavState {
   selectedTaskId: string | null
   selectedReviewPr: ReviewPullRequest | null
   selectedSkillName: string | null
+  activeProjectId: string | null
 }
 
 const history: NavState[] = []
@@ -18,6 +19,7 @@ function captureState(): NavState {
     selectedTaskId: get(selectedTaskId),
     selectedReviewPr: get(selectedReviewPr),
     selectedSkillName: get(selectedSkillName),
+    activeProjectId: get(activeProjectId),
   }
 }
 
@@ -38,6 +40,7 @@ export function navigateBack(): boolean {
   selectedTaskId.set(prev.selectedTaskId)
   selectedReviewPr.set(prev.selectedReviewPr)
   selectedSkillName.set(prev.selectedSkillName)
+  activeProjectId.set(prev.activeProjectId)
 
   if (hadReviewPr && !prev.selectedReviewPr) {
     prFileDiffs.set([])

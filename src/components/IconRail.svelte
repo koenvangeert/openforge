@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { LayoutDashboard, GitPullRequest, Settings, Sparkles, Bug } from 'lucide-svelte'
+  import { LayoutDashboard, GitPullRequest, Settings, Sparkles, Bug, ListChecks } from 'lucide-svelte'
   import type { AppView } from '../lib/types'
 
   interface Props {
@@ -16,6 +16,7 @@
     { view: 'pr_review', Icon: GitPullRequest },
     { view: 'skills', Icon: Sparkles },
     { view: 'creatures', Icon: Bug },
+    { view: 'workqueue', Icon: ListChecks },
     { view: 'settings', Icon: Settings },
   ]
 

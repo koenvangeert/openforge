@@ -19,7 +19,7 @@ pub use projects::{ProjectAttentionRow, ProjectRow};
 pub use pull_requests::{PrCommentRow, PrRow};
 pub use review::ReviewPrRow;
 pub use self_review::SelfReviewCommentRow;
-pub use tasks::TaskRow;
+pub use tasks::{TaskRow, WorkQueueTaskRow};
 pub use worktrees::WorktreeRow;
 
 /// Database connection wrapper for thread-safe access

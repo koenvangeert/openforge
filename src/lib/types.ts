@@ -312,7 +312,18 @@ export interface AgentReviewComment {
 }
 
 /** App-level view for top-bar navigation */
-export type AppView = "board" | "pr_review" | "skills" | "creatures" | "settings";
+export type AppView = "board" | "pr_review" | "skills" | "creatures" | "settings" | "workqueue";
+
+export interface WorkQueueTask {
+  id: string;
+  title: string;
+  status: string;
+  summary: string | null;
+  project_id: string;
+  project_name: string;
+  session_completed_at: number | null;
+  session_status: string | null;
+}
 
 export interface PtySpawnRequest {
   task_id: string;
