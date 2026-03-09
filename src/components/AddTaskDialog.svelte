@@ -1,7 +1,7 @@
 <script lang="ts">
   import { tick, onMount } from 'svelte'
   import type { Task, KanbanColumn, PermissionMode } from '../lib/types'
-  import { createTask, updateTask, getConfig, getAgents } from '../lib/ipc'
+  import { createTask, updateTask, getProjectConfig, getAgents } from '../lib/ipc'
   import { activeProjectId } from '../lib/stores'
   import Modal from './Modal.svelte'
 
@@ -32,8 +32,12 @@
   })
 
   onMount(async () => {
-    const provider = await getConfig('ai_provider')
-    aiProvider = provider ?? 'claude-code'
+    if ($activeProjectId) {
+      const provider = await getProjectConfig($activeProjectId, 'ai_provider')
+      aiProvider = provider ?? 'claude-code'
+    } else {
+      aiProvider = 'claude-code'
+    }
     if (aiProvider !== 'claude-code') {
       const agents = await getAgents()
       availableAgents = agents.map(a => a.name)

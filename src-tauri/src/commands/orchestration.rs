@@ -178,7 +178,7 @@ pub async fn start_implementation(
 
     let provider_name = {
         let db_lock = crate::db::acquire_db(&db);
-        db_lock.get_config("ai_provider").ok().flatten().unwrap_or_else(|| "claude-code".to_string())
+        db_lock.resolve_ai_provider(&project_id_owned)
     };
 
     let provider = crate::providers::Provider::from_name(
@@ -275,7 +275,7 @@ pub async fn run_action(
 
     let provider_name = {
         let db_lock = crate::db::acquire_db(&db);
-        db_lock.get_config("ai_provider").ok().flatten().unwrap_or_else(|| "claude-code".to_string())
+        db_lock.resolve_ai_provider(&project_id_owned)
     };
 
     let provider = crate::providers::Provider::from_name(

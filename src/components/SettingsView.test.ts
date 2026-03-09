@@ -124,11 +124,11 @@ describe('SettingsView', () => {
     expect(texts.some((t) => /instructions/i.test(t))).toBe(true)
   })
 
-  it('renders sidebar nav with AI & Voice link', () => {
+  it('renders sidebar nav with Voice link', () => {
     render(SettingsView, { props: defaultProps })
     const links = screen.getAllByRole('link')
     const texts = links.map((l) => l.textContent ?? '')
-    expect(texts.some((t) => /ai/i.test(t))).toBe(true)
+    expect(texts.some((t) => /voice/i.test(t))).toBe(true)
   })
 
   it('renders sidebar nav with Credentials link', () => {

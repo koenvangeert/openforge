@@ -177,6 +177,22 @@ impl super::Database {
         Ok(result)
     }
 
+    /// Resolve the AI provider for a project.
+    /// Checks project_config first, falls back to global config, then defaults to "claude-code".
+    pub fn resolve_ai_provider(&self, project_id: &str) -> String {
+        if !project_id.is_empty() {
+            if let Ok(Some(provider)) = self.get_project_config(project_id, "ai_provider") {
+                if !provider.is_empty() {
+                    return provider;
+                }
+            }
+        }
+        self.get_config("ai_provider")
+            .ok()
+            .flatten()
+            .unwrap_or_else(|| "claude-code".to_string())
+    }
+
     /// Find a project by its github_default_repo config value.
     /// Returns the project that has github_default_repo set to the given repo_full_name (e.g. "owner/repo").
     pub fn find_project_by_github_repo(&self, repo_full_name: &str) -> Result<Option<ProjectRow>> {
@@ -521,6 +537,54 @@ mod tests {
         assert_eq!(summary.ci_failures, 1);
         assert_eq!(summary.unaddressed_comments, 1);
         assert_eq!(summary.completed_agents, 1);
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_resolve_ai_provider_uses_project_config() {
+        let (db, path) = make_test_db("resolve_provider_project");
+
+        let project = db
+            .create_project("Test Project", "/tmp/test")
+            .expect("create failed");
+
+        // Set project-level ai_provider to opencode
+        db.set_project_config(&project.id, "ai_provider", "opencode")
+            .expect("set config failed");
+
+        // Global default is claude-code, but project override should win
+        let provider = db.resolve_ai_provider(&project.id);
+        assert_eq!(provider, "opencode");
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_resolve_ai_provider_falls_back_to_global() {
+        let (db, path) = make_test_db("resolve_provider_global");
+
+        let project = db
+            .create_project("Test Project", "/tmp/test")
+            .expect("create failed");
+
+        // No project-level ai_provider set, should fall back to global
+        let provider = db.resolve_ai_provider(&project.id);
+        assert_eq!(provider, "claude-code");
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_resolve_ai_provider_empty_project_id() {
+        let (db, path) = make_test_db("resolve_provider_empty");
+
+        // Empty project ID should fall back to global
+        let provider = db.resolve_ai_provider("");
+        assert_eq!(provider, "claude-code");
 
         drop(db);
         let _ = fs::remove_file(&path);

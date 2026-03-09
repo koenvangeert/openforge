@@ -18,7 +18,7 @@
 
   const globalItems: { id: string; label: string; Icon: typeof Folder }[] = [
     { id: 'preferences', label: 'Preferences', Icon: Settings2 },
-    { id: 'ai', label: 'AI & Voice', Icon: Brain },
+    { id: 'ai', label: 'Voice', Icon: Brain },
     { id: 'credentials', label: 'Credentials', Icon: KeyRound },
   ]
 

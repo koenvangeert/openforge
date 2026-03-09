@@ -40,9 +40,9 @@
   let jiraBoardId = $state('')
   let githubDefaultRepo = $state('')
   let agentInstructions = $state('')
+  let aiProvider = $state('claude-code')
 
   // Global state
-  let aiProvider = $state('claude-code')
   let taskIdPrefix = $state('')
   let jiraBaseUrl = $state('')
   let jiraUsername = $state('')
@@ -97,12 +97,6 @@
   // Derived state
   const hasProject = $derived(!!$activeProjectId)
   const activePage = $derived(globalSections.includes(activeSection) ? 'global' : 'project')
-  const aiProviderInstalled = $derived(
-    aiProvider === 'claude-code' ? claudeInstalled : opencodeInstalled
-  )
-  const aiProviderVersion = $derived(
-    aiProvider === 'claude-code' ? claudeVersion : opencodeVersion
-  )
 
   // Load project config on activeProjectId change
   $effect(() => {
@@ -120,10 +114,12 @@
         getProjectConfig(pid, 'jira_board_id'),
         getProjectConfig(pid, 'github_default_repo'),
         getProjectConfig(pid, 'additional_instructions'),
-      ]).then(([boardId, repo, instructions]) => {
+        getProjectConfig(pid, 'ai_provider'),
+      ]).then(([boardId, repo, instructions, provider]) => {
         jiraBoardId = boardId ?? ''
         githubDefaultRepo = repo ?? ''
         agentInstructions = instructions ?? ''
+        aiProvider = provider ?? 'claude-code'
       })
 
       // Load actions
@@ -136,6 +132,7 @@
       jiraBoardId = ''
       githubDefaultRepo = ''
       agentInstructions = ''
+      aiProvider = 'claude-code'
       actions = []
     }
   })
@@ -150,9 +147,8 @@
   // Load global config once on mount
   onMount(async () => {
     // Global config
-    const [aiProviderVal, taskIdPrefixVal, jiraBaseUrlVal, jiraUsernameVal, jiraApiTokenVal, githubTokenVal, creaturesEnabledVal] =
+    const [taskIdPrefixVal, jiraBaseUrlVal, jiraUsernameVal, jiraApiTokenVal, githubTokenVal, creaturesEnabledVal] =
       await Promise.all([
-        getConfig('ai_provider'),
         getConfig('task_id_prefix'),
         getConfig('jira_base_url'),
         getConfig('jira_username'),
@@ -161,7 +157,6 @@
         getConfig('creatures_enabled'),
       ])
 
-    if (aiProviderVal) aiProvider = aiProviderVal
     if (taskIdPrefixVal) taskIdPrefix = taskIdPrefixVal
     if (jiraBaseUrlVal) jiraBaseUrl = jiraBaseUrlVal
     if (jiraUsernameVal) jiraUsername = jiraUsernameVal
@@ -252,9 +247,9 @@
         await setProjectConfig($activeProjectId, 'jira_board_id', jiraBoardId)
         await setProjectConfig($activeProjectId, 'github_default_repo', githubDefaultRepo)
         await setProjectConfig($activeProjectId, 'additional_instructions', agentInstructions)
+        await setProjectConfig($activeProjectId, 'ai_provider', aiProvider)
         await saveActions($activeProjectId, actions)
       }
-      await setConfig('ai_provider', aiProvider)
       await setConfig('task_id_prefix', taskIdPrefix)
       await setConfig('jira_base_url', jiraBaseUrl)
       await setConfig('jira_username', jiraUsername)
@@ -361,9 +356,16 @@
         <SettingsGeneralCard
           {projectName}
           {projectPath}
+          {aiProvider}
           disabled={!hasProject}
+          {opencodeInstalled}
+          {opencodeVersion}
+          {claudeInstalled}
+          {claudeVersion}
+          {claudeAuthenticated}
           onProjectNameChange={(v) => (projectName = v)}
           onProjectPathChange={(v) => (projectPath = v)}
+          onAiProviderChange={(v) => (aiProvider = v)}
         />
 
         <SettingsIntegrationsCard
@@ -417,18 +419,9 @@
         />
 
         <SettingsAICard
-          {aiProvider}
-          {aiProviderInstalled}
-          aiProviderVersion={aiProviderVersion}
-          {claudeAuthenticated}
-          {opencodeInstalled}
-          {opencodeVersion}
-          {claudeInstalled}
-          {claudeVersion}
           {modelStatuses}
           activeModelSize={modelStatuses.find((m) => m.is_active)?.size ?? null}
           {downloadingModel}
-          onAiProviderChange={(v) => (aiProvider = v)}
           onWhisperModelSelect={handleModelChange}
           onDownloadModel={handleDownloadModel}
           onDownloadComplete={refreshModelStatuses}

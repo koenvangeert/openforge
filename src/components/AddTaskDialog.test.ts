@@ -22,11 +22,18 @@ vi.mock('../lib/ipc', () => ({
     updated_at: 1000,
   } as Task),
   updateTask: vi.fn().mockResolvedValue(undefined),
-  getConfig: vi.fn().mockResolvedValue('claude-code'),
+  getProjectConfig: vi.fn().mockResolvedValue('claude-code'),
   getAgents: vi.fn().mockResolvedValue([{ name: 'agent-1' }, { name: 'agent-2' }]),
 }))
 
-import { createTask, updateTask, getConfig, getAgents } from '../lib/ipc'
+vi.mock('../lib/stores', () => {
+  const { writable } = require('svelte/store')
+  return {
+    activeProjectId: writable('test-project-id'),
+  }
+})
+
+import { createTask, updateTask, getProjectConfig, getAgents } from '../lib/ipc'
 
 const mockTask: Task = {
   id: 'T-42',
@@ -49,7 +56,7 @@ const mockTask: Task = {
 describe('AddTaskDialog', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(getConfig).mockResolvedValue('claude-code')
+    vi.mocked(getProjectConfig).mockResolvedValue('claude-code')
     vi.mocked(getAgents).mockResolvedValue([{ name: 'agent-1' }, { name: 'agent-2' }])
   })
 
@@ -90,7 +97,7 @@ describe('AddTaskDialog', () => {
     await fireEvent.click(submitBtn)
     
     await new Promise((r) => setTimeout(r, 10))
-    expect(createTask).toHaveBeenCalledWith('My new task', 'backlog', 'PROJ-456', null, null, 'default')
+    expect(createTask).toHaveBeenCalledWith('My new task', 'backlog', 'PROJ-456', 'test-project-id', null, 'default')
   })
 
   it('pre-fills fields in edit mode', () => {
@@ -125,7 +132,7 @@ describe('AddTaskDialog', () => {
   })
 
   it('shows permission mode dropdown when ai_provider is claude-code', async () => {
-    vi.mocked(getConfig).mockResolvedValue('claude-code')
+    vi.mocked(getProjectConfig).mockResolvedValue('claude-code')
     render(AddTaskDialog, { props: { mode: 'create' } })
 
     await waitFor(() => {
@@ -134,7 +141,7 @@ describe('AddTaskDialog', () => {
   })
 
   it('hides agent dropdown when ai_provider is claude-code', async () => {
-    vi.mocked(getConfig).mockResolvedValue('claude-code')
+    vi.mocked(getProjectConfig).mockResolvedValue('claude-code')
     render(AddTaskDialog, { props: { mode: 'create' } })
 
     await waitFor(() => {
@@ -143,7 +150,7 @@ describe('AddTaskDialog', () => {
   })
 
   it('shows agent dropdown when ai_provider is opencode', async () => {
-    vi.mocked(getConfig).mockResolvedValue('opencode')
+    vi.mocked(getProjectConfig).mockResolvedValue('opencode')
     render(AddTaskDialog, { props: { mode: 'create' } })
 
     await waitFor(() => {
@@ -152,7 +159,7 @@ describe('AddTaskDialog', () => {
   })
 
   it('hides permission mode dropdown when ai_provider is opencode', async () => {
-    vi.mocked(getConfig).mockResolvedValue('opencode')
+    vi.mocked(getProjectConfig).mockResolvedValue('opencode')
     render(AddTaskDialog, { props: { mode: 'create' } })
 
     await waitFor(() => {
