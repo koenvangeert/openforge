@@ -2,8 +2,8 @@
   import { onMount, onDestroy } from 'svelte'
   import { listen } from '@tauri-apps/api/event'
   import type { UnlistenFn, Event } from '@tauri-apps/api/event'
-  import { tasks, selectedTaskId, activeSessions, checkpointNotification, ciFailureNotification, ticketPrs, error, isLoading, projects, activeProjectId, currentView, reviewRequestCount, projectAttention, taskSpawned, searchQuery, selectedSkillName } from './lib/stores'
-  import { getProjects, getTasksForProject, getPullRequests, runAction, getSessionStatus, getLatestSession, getLatestSessions, forceGithubSync, createTask, updateTask, getProjectAttention, getAppMode, finalizeClaudeSession } from './lib/ipc'
+  import { tasks, selectedTaskId, activeSessions, checkpointNotification, ciFailureNotification, ticketPrs, error, isLoading, projects, activeProjectId, currentView, reviewRequestCount, projectAttention, taskSpawned, searchQuery, selectedSkillName, creaturesEnabled } from './lib/stores'
+  import { getProjects, getTasksForProject, getPullRequests, runAction, getSessionStatus, getLatestSession, getLatestSessions, forceGithubSync, createTask, updateTask, getProjectAttention, getAppMode, getConfig, finalizeClaudeSession } from './lib/ipc'
   import type { Task, PullRequestInfo, AgentEvent, ProjectAttention, AppView } from './lib/types'
   import KanbanBoard from './components/KanbanBoard.svelte'
   import TaskDetailView from './components/TaskDetailView.svelte'
@@ -58,6 +58,10 @@
    
    $effect(() => {
      if ($currentView === 'creatures') {
+       if (!$creaturesEnabled) {
+         $currentView = 'board'
+         return
+       }
        $selectedTaskId = null
      }
    })
@@ -586,6 +590,13 @@
       console.error('[App] Failed to get app mode:', e)
       // Graceful degradation: no badge shown if call fails
     }
+
+    try {
+      const creaturesVal = await getConfig('creatures_enabled')
+      $creaturesEnabled = creaturesVal === 'true'
+    } catch (e) {
+      console.error('[App] Failed to load creatures_enabled config:', e)
+    }
     loadProjectAttention()
 
     // Phase 3: Safety net
@@ -598,7 +609,7 @@
 </script>
 
 <div class="flex h-screen overflow-hidden bg-base-200">
-  <IconRail currentView={$currentView} onNavigate={handleNavigate} reviewRequestCount={$reviewRequestCount} />
+  <IconRail currentView={$currentView} onNavigate={handleNavigate} reviewRequestCount={$reviewRequestCount} creaturesEnabled={$creaturesEnabled} />
 
   <div class="flex flex-col flex-1 min-w-0">
     <header class="bg-neutral text-neutral-content h-12 flex items-center justify-between px-6 shrink-0">

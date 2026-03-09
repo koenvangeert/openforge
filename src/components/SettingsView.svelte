@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte'
-  import { activeProjectId, projects } from '../lib/stores'
+  import { activeProjectId, projects, creaturesEnabled } from '../lib/stores'
   import {
     getProjectConfig,
     setProjectConfig,
@@ -62,6 +62,9 @@
   let actions = $state<Action[]>([])
   let availableAgents = $state<AgentInfo[]>([])
 
+  // Feature flag state
+  let isCreaturesEnabled = $state($creaturesEnabled)
+
   // Theme state
   let isDarkMode = $state($themeMode === 'dark')
 
@@ -72,6 +75,11 @@
   function handleThemeToggle() {
     const next: ThemeMode = isDarkMode ? 'light' : 'dark'
     applyTheme(next)
+  }
+
+  function handleCreaturesToggle() {
+    isCreaturesEnabled = !isCreaturesEnabled
+    $creaturesEnabled = isCreaturesEnabled
   }
 
   // UI state
@@ -142,7 +150,7 @@
   // Load global config once on mount
   onMount(async () => {
     // Global config
-    const [aiProviderVal, taskIdPrefixVal, jiraBaseUrlVal, jiraUsernameVal, jiraApiTokenVal, githubTokenVal] =
+    const [aiProviderVal, taskIdPrefixVal, jiraBaseUrlVal, jiraUsernameVal, jiraApiTokenVal, githubTokenVal, creaturesEnabledVal] =
       await Promise.all([
         getConfig('ai_provider'),
         getConfig('task_id_prefix'),
@@ -150,6 +158,7 @@
         getConfig('jira_username'),
         getConfig('jira_api_token'),
         getConfig('github_token'),
+        getConfig('creatures_enabled'),
       ])
 
     if (aiProviderVal) aiProvider = aiProviderVal
@@ -158,6 +167,8 @@
     if (jiraUsernameVal) jiraUsername = jiraUsernameVal
     if (jiraApiTokenVal) jiraApiToken = jiraApiTokenVal
     if (githubTokenVal) githubToken = githubTokenVal
+    isCreaturesEnabled = creaturesEnabledVal === 'true'
+    $creaturesEnabled = isCreaturesEnabled
 
     // Check installations
     const [opencodeResult, claudeResult] = await Promise.all([
@@ -249,6 +260,7 @@
       await setConfig('jira_username', jiraUsername)
       await setConfig('jira_api_token', jiraApiToken)
       await setConfig('github_token', githubToken)
+      await setConfig('creatures_enabled', isCreaturesEnabled ? 'true' : 'false')
       saved = true
       setTimeout(() => {
         saved = false
@@ -402,6 +414,8 @@
           onTaskIdPrefixChange={(v) => (taskIdPrefix = v)}
           {isDarkMode}
           onThemeToggle={handleThemeToggle}
+          creaturesEnabled={isCreaturesEnabled}
+          onCreaturesToggle={handleCreaturesToggle}
         />
 
         <SettingsAICard

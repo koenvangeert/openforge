@@ -8,6 +8,8 @@ function defaultProps(overrides: Record<string, unknown> = {}) {
 		onTaskIdPrefixChange: vi.fn(),
 		isDarkMode: false,
 		onThemeToggle: vi.fn(),
+		creaturesEnabled: false,
+		onCreaturesToggle: vi.fn(),
 		...overrides,
 	}
 }
@@ -106,6 +108,50 @@ describe('SettingsPreferencesCard', () => {
 			render(SettingsPreferencesCard, { props: defaultProps() })
 
 			expect(screen.getByText('Switch between light and dark theme')).toBeTruthy()
+		})
+	})
+
+	describe('creatures experiment toggle', () => {
+		it('renders Creatures Experiment label', () => {
+			render(SettingsPreferencesCard, { props: defaultProps() })
+
+			expect(screen.getByText('Creatures Experiment')).toBeTruthy()
+		})
+
+		it('renders toggle unchecked when creaturesEnabled is false', () => {
+			render(SettingsPreferencesCard, {
+				props: defaultProps({ creaturesEnabled: false }),
+			})
+
+			const toggle = screen.getByTestId('creatures-toggle') as HTMLInputElement
+			expect(toggle.checked).toBe(false)
+		})
+
+		it('renders toggle checked when creaturesEnabled is true', () => {
+			render(SettingsPreferencesCard, {
+				props: defaultProps({ creaturesEnabled: true }),
+			})
+
+			const toggle = screen.getByTestId('creatures-toggle') as HTMLInputElement
+			expect(toggle.checked).toBe(true)
+		})
+
+		it('calls onCreaturesToggle when toggle is clicked', async () => {
+			const onCreaturesToggle = vi.fn()
+			render(SettingsPreferencesCard, {
+				props: defaultProps({ onCreaturesToggle }),
+			})
+
+			const toggle = screen.getByTestId('creatures-toggle')
+			await fireEvent.click(toggle)
+
+			expect(onCreaturesToggle).toHaveBeenCalledOnce()
+		})
+
+		it('renders description text for creatures toggle', () => {
+			render(SettingsPreferencesCard, { props: defaultProps() })
+
+			expect(screen.getByText('Show the Creatures view in the sidebar')).toBeTruthy()
 		})
 	})
 })
