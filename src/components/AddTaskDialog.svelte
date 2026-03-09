@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { tick } from 'svelte'
-  import type { Task, KanbanColumn } from '../lib/types'
-  import { createTask, updateTask } from '../lib/ipc'
+  import { tick, onMount } from 'svelte'
+  import type { Task, KanbanColumn, PermissionMode } from '../lib/types'
+  import { createTask, updateTask, getConfig, getAgents } from '../lib/ipc'
   import { activeProjectId } from '../lib/stores'
   import Modal from './Modal.svelte'
 
@@ -19,11 +19,24 @@
   let status = $state<KanbanColumn>('backlog')
   let isSubmitting = $state(false)
   let titleInputEl = $state<HTMLInputElement | null>(null)
+  let selectedAgent = $state('')
+  let selectedPermissionMode = $state<PermissionMode>('default')
+  let aiProvider = $state<string | null>(null)
+  let availableAgents = $state<string[]>([])
 
   // Focus the title input after Modal's own focus effect has run
   $effect(() => {
     if (titleInputEl) {
       tick().then(() => titleInputEl?.focus())
+    }
+  })
+
+  onMount(async () => {
+    const provider = await getConfig('ai_provider')
+    aiProvider = provider ?? 'claude-code'
+    if (aiProvider !== 'claude-code') {
+      const agents = await getAgents()
+      availableAgents = agents.map(a => a.name)
     }
   })
 
@@ -45,8 +58,8 @@
           status,
           jiraKey.trim() || null,
           $activeProjectId,
-          null,
-          null
+          selectedAgent || null,
+          selectedPermissionMode
         )
         onTaskSaved?.(newTask)
       } else if (task) {
@@ -98,6 +111,37 @@
           placeholder="e.g. PROJ-123"
         />
       </label>
+
+      {#if mode === 'create'}
+        {#if aiProvider === 'claude-code'}
+          <label class="flex flex-col gap-1.5">
+            <span class="text-xs text-base-content/60 font-medium">Permission Mode</span>
+            <select
+              class="select select-bordered select-sm w-full"
+              bind:value={selectedPermissionMode}
+            >
+              <option value="default">Default</option>
+              <option value="acceptEdits">Accept Edits</option>
+              <option value="plan">Plan</option>
+              <option value="bypassPermissions">Bypass Permissions</option>
+              <option value="dontAsk" class="text-error">Don't Ask (dangerous)</option>
+            </select>
+          </label>
+        {:else if aiProvider !== null}
+          <label class="flex flex-col gap-1.5">
+            <span class="text-xs text-base-content/60 font-medium">Agent</span>
+            <select
+              class="select select-bordered select-sm w-full"
+              bind:value={selectedAgent}
+            >
+              <option value="">Default</option>
+              {#each availableAgents as agent}
+                <option value={agent}>{agent}</option>
+              {/each}
+            </select>
+          </label>
+        {/if}
+      {/if}
     </div>
 
     <div class="flex gap-2.5 px-5 py-4 border-t border-base-300 justify-end">

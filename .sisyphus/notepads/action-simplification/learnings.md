@@ -142,3 +142,85 @@
 - `start_implementation` was left unchanged (still passes `None` for permission_mode — it's deprecated).
 - The `run_action` IPC signature is unchanged (still `agent: Option<String>`).
 - The two duplicate `let (task, project_id_owned, ...)` blocks in the file (one in `start_implementation` at line 167, one in `run_action` at line 262) required extra context in the edit to disambiguate.
+
+## AddTaskDialog: agent + permission_mode dropdowns (Task 7)
+
+- `onMount` + `getConfig('ai_provider')` pattern: await in onMount, fall back to `'claude-code'` when null
+- `getAgents()` returns `AgentInfo[]` where each has `.name`; map to `string[]` before use
+- SettingsActionsCard uses `availableAgents: string[]` prop (not raw AgentInfo[])
+- LSP may show stale "Expected 4 arguments" error for createTask even when ipc.ts is correct — `pnpm build` is the source of truth
+- `queryByLabelText('Permission Mode')` works with `<label>` wrapping the `<select>` when the label text node contains "Permission Mode"
+- Guard `{:else if aiProvider !== null}` is important — avoids showing agent dropdown briefly while provider is still loading (null)
+- Removed "does not show status dropdown in create mode" test that checked `queryByRole('combobox') === null` since permission mode select introduces a combobox
+- The `dontAsk` option gets `class="text-error"` on the `<option>` element itself
+- Default `selectedPermissionMode` is `'default'`; default `selectedAgent` is `''` (maps to `null` via `|| null`)
+
+## Task 7: Remove action buttons from KanbanBoard context menu (2026-03-09)
+
+**Completed:** Removed all action button functionality from the kanban board's right-click context menu.
+
+### Changes Made:
+
+1. **KanbanBoard.svelte** (src/components/KanbanBoard.svelte):
+   - Removed action buttons block (lines 297-306): `{#each actions as action}` loop
+   - Removed divider between actions and "Move to..." (line 307)
+   - Removed `handleRunAction` function (lines 113-117) — was only used by context menu buttons
+   - Removed `actions` state variable (line 88): `let actions = $state<Action[]>([])`
+   - Removed `$effect` that loaded actions (lines 90-94)
+   - Removed derived variables: `contextSession`, `isSessionBusy`, `busyReason` (lines 96-98) — only used by action buttons
+   - Removed unused imports: `loadActions`, `getEnabledActions` from `../lib/actions`
+   - Removed `Action` type from import (line 2)
+   - Removed `onRunAction` from Props interface and destructuring (lines 12, 15)
+
+2. **KanbanBoard.test.ts** (src/components/KanbanBoard.test.ts):
+   - Removed 4 tests that tested action button functionality:
+     - "renders dynamic action items in context menu"
+     - "disables actions when session is running"
+     - "disables actions when session is paused"
+     - "dispatches run-action event when action is clicked"
+   - Removed unused imports: `AgentSession`, `Action` types
+   - Removed mock for `../lib/actions` module
+   - Updated `baseTask` to include missing fields: `prompt`, `summary`, `agent`, `permission_mode`
+
+### Context Menu After Changes:
+- ✓ "Move to..." submenu (unchanged)
+- ✓ "Delete" option (unchanged)
+- ✗ Action buttons (removed)
+- ✗ Divider between actions and "Move to..." (removed)
+
+### Test Results:
+- `pnpm build` succeeds ✓
+- `pnpm test` passes: 876 tests pass (10 fewer than before due to 4 removed tests + 6 other pre-existing failures in AddTaskDialog/TaskDetailView unrelated to this task)
+- No LSP diagnostics in KanbanBoard.svelte (pre-existing ARIA warnings remain, unrelated to this task)
+
+### Key Insight:
+- The `handleRunAction` function referenced `action.agent ?? null`, which would have been a type error since Action no longer has an `agent` field (removed in Task 4)
+- This was another reason to remove the function — it was already broken by the Action type simplification
+
+### Pattern: Removing unused reactive state
+- When removing a feature that uses `$state`, `$derived`, and `$effect`, remove all three together
+- Check for all callers of the removed function (in this case, `handleRunAction` was only called from the removed template block)
+- Update tests to remove assertions about the removed feature, not just update them
+
+## Task 8: Status-dependent header buttons in TaskDetailView (2026-03-09)
+
+**Completed:** Made TaskDetailView header buttons status-dependent:
+- backlog → "Start Task" button (btn-primary), calls `onRunAction({ taskId, actionPrompt: '', agent: null })`
+- doing → "Move to Done" + reusable prompt action buttons (disabled when `isSessionBusy`)
+- done → no buttons at all
+
+**Changes:**
+1. `handleActionClick` in TaskDetailView.svelte: removed `action.agent ?? null` (Action no longer has `agent` field)
+2. Header block replaced with `{#if task.status === 'backlog'}` / `{:else if task.status === 'doing'}` / `{/if}` pattern
+3. Test file: `baseTask` now includes `agent: null, permission_mode: null` fields (Task interface updated in Task 1)
+4. Test file: `loadActions` mock — removed `agent: null` from action object (Action.agent removed in Task 4)
+5. Updated 5 existing tests to use `status: 'doing'` for action-button tests
+6. Replaced "shows Move to Done button when task is not done" with "shows Start Task button for backlog tasks"
+7. Replaced "hides Move to Done button when task is already done" with "hides all action buttons for done tasks"
+8. Added 3 new tests: "Start Task calls onRunAction with empty prompt", "shows Move to Done and action buttons for doing tasks", "shows Start Task button for backlog tasks"
+
+**TDD Flow:** Tests written first, confirmed they failed, then implementation made them pass.
+
+**Key Pattern:** `baseTask` in test file has `status: 'backlog'` — tests for action buttons (Go, Move to Done) must use `{ ...baseTask, status: 'doing' }` override.
+
+**Test Results:** 876 tests pass (1 new test added), `pnpm build` succeeds ✓

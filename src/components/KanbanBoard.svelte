@@ -1,18 +1,16 @@
 <script lang="ts">
-  import type { Task, AgentSession, KanbanColumn, Action } from '../lib/types'
+  import type { Task, AgentSession, KanbanColumn } from '../lib/types'
   import { COLUMNS, COLUMN_LABELS } from '../lib/types'
   import { tasks, selectedTaskId, activeSessions, ticketPrs, error, activeProjectId, searchQuery } from '../lib/stores'
   import { updateTaskStatus, deleteTask, clearDoneTasks } from '../lib/ipc'
   import { pushNavState } from '../lib/navigation'
-  import { loadActions, getEnabledActions } from '../lib/actions'
   import TaskCard from './TaskCard.svelte'
   import Modal from './Modal.svelte'
 
   interface Props {
-    onRunAction?: (data: { taskId: string; actionPrompt: string; agent: string | null }) => void
   }
 
-  let { onRunAction }: Props = $props()
+  let { }: Props = $props()
 
   // Column visibility state
   let showBacklog = $state(true)
@@ -85,17 +83,6 @@
   }
 
   let contextMenu = $state({ visible: false, x: 0, y: 0, taskId: '', showMoveSubmenu: false })
-  let actions = $state<Action[]>([])
-  
-  $effect(() => {
-    if ($activeProjectId) {
-      loadActions($activeProjectId).then(a => { actions = getEnabledActions(a) })
-    }
-  })
-
-  let contextSession = $derived(contextMenu.taskId ? $activeSessions.get(contextMenu.taskId) : null)
-  let isSessionBusy = $derived(contextSession?.status === 'running' || contextSession?.status === 'paused')
-  let busyReason = $derived(contextSession?.status === 'running' ? 'Agent is busy' : contextSession?.status === 'paused' ? 'Answer pending question first' : '')
 
   function handleContextMenu(event: MouseEvent, taskId: string) {
     event.preventDefault()
@@ -108,12 +95,6 @@
 
   function toggleMoveSubmenu() {
     contextMenu = { ...contextMenu, showMoveSubmenu: !contextMenu.showMoveSubmenu }
-  }
-
-  function handleRunAction(action: Action) {
-    const taskId = contextMenu.taskId
-    closeContextMenu()
-    onRunAction?.({ taskId, actionPrompt: action.prompt, agent: action.agent ?? null })
   }
 
   async function handleMoveTo(column: KanbanColumn) {
@@ -294,17 +275,6 @@
 <!-- Context menu -->
 {#if contextMenu.visible}
   <div class="fixed z-[100] bg-base-300 border border-base-300 rounded-lg shadow-xl min-w-[180px] p-1" style="left: {contextMenu.x}px; top: {contextMenu.y}px;">
-    {#each actions as action (action.id)}
-      <button
-        class="context-item block w-full text-left px-3 py-2 text-sm text-base-content cursor-pointer rounded {isSessionBusy ? 'opacity-40 cursor-not-allowed' : 'hover:bg-primary hover:text-primary-content'}"
-        disabled={isSessionBusy}
-        title={isSessionBusy ? busyReason : action.name}
-        onclick={() => handleRunAction(action)}
-      >
-        {action.name}
-      </button>
-    {/each}
-    <div class="h-px bg-base-300 my-1"></div>
     <button class="context-item block w-full text-left px-3 py-2 text-sm text-base-content cursor-pointer rounded hover:bg-primary hover:text-primary-content" onclick={(e: MouseEvent) => { e.stopPropagation(); toggleMoveSubmenu() }}>
       Move to... ›
     </button>
@@ -317,7 +287,6 @@
         {/each}
       </div>
     {/if}
-    <div class="h-px bg-base-300 my-1"></div>
     <button class="context-item block w-full text-left px-3 py-2 text-sm text-error cursor-pointer rounded hover:bg-error hover:text-error-content" onclick={handleDelete}>Delete</button>
   </div>
 {/if}

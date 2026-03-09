@@ -4,8 +4,6 @@
 
 	interface Props {
 		actions: Action[];
-		availableAgents: string[];
-		aiProvider: string;
 		disabled: boolean;
 		onAddAction: () => void;
 		onDeleteAction: (actionId: string) => void;
@@ -16,8 +14,6 @@
 
 	const {
 		actions,
-		availableAgents,
-		aiProvider,
 		disabled,
 		onAddAction,
 		onDeleteAction,
@@ -59,7 +55,7 @@
 
 	<div class="p-5 flex flex-col gap-3 {disabled ? 'opacity-50 pointer-events-none' : ''}">
 		<p class="text-[0.7rem] text-base-content/50 mb-2 leading-snug">
-			Configure actions available in the task context menu.
+			Configure reusable prompt templates for tasks.
 		</p>
 
 		{#each actions as action (action.id)}
@@ -94,32 +90,16 @@
 					/>
 				</label>
 
-				<label class="flex flex-col gap-1">
-					<span class="text-[0.7rem] text-base-content/50">Prompt</span>
-					<textarea
-						value={action.prompt}
-						oninput={(e) => onUpdateAction(action.id, 'prompt', e.currentTarget.value)}
-						placeholder="Instruction for the AI provider..."
-						rows="3"
-						class="textarea textarea-bordered w-full text-sm resize-y"
-					></textarea>
-				</label>
-
-				{#if aiProvider !== 'claude-code'}
-					<label class="flex flex-col gap-1">
-						<span class="text-[0.7rem] text-base-content/50">Agent</span>
-						<select
-							value={action.agent ?? ''}
-							onchange={(e) => onUpdateAction(action.id, 'agent', e.currentTarget.value)}
-							class="select select-bordered select-sm w-full"
-						>
-							<option value="">Default</option>
-							{#each availableAgents as agent}
-								<option value={agent}>{agent}</option>
-							{/each}
-						</select>
-					</label>
-				{/if}
+			<label class="flex flex-col gap-1">
+				<span class="text-[0.7rem] text-base-content/50">Prompt</span>
+				<textarea
+					value={action.prompt}
+					oninput={(e) => onUpdateAction(action.id, 'prompt', e.currentTarget.value)}
+					placeholder="Instruction for the AI provider..."
+					rows="3"
+					class="textarea textarea-bordered w-full text-sm resize-y"
+				></textarea>
+			</label>
 			</div>
 		{/each}
 

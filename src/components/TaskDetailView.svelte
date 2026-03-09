@@ -72,7 +72,7 @@
   }
 
   function handleActionClick(action: Action) {
-    onRunAction({ taskId: task.id, actionPrompt: action.prompt, agent: action.agent ?? null })
+    onRunAction({ taskId: task.id, actionPrompt: action.prompt, agent: null })
   }
 
   function handleSendToAgent(prompt: string) {
@@ -90,28 +90,35 @@
        <span class="text-base-content/20 select-none">|</span>
        <span class="text-[0.8125rem] font-semibold text-primary font-mono shrink-0">{task.jira_key || task.id}</span>
        <h1 class="text-lg font-bold text-base-content m-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap min-w-0" title={displayTitle}>{displayTitle}</h1>
-      {#if task.status !== 'done'}
+      {#if task.status === 'backlog'}
+        <button
+          class="btn btn-primary btn-sm shrink-0 shadow-sm hover:shadow-md transition-shadow"
+          onclick={() => onRunAction({ taskId: task.id, actionPrompt: '', agent: null })}
+        >
+          Start Task
+        </button>
+      {:else if task.status === 'doing'}
         <button
           class="btn btn-success btn-sm shrink-0 shadow-sm hover:shadow-md transition-shadow"
           onclick={() => handleStatusChange('done')}
         >
           Move to Done
         </button>
+        {#if actions.length > 0}
+          <div class="flex gap-1.5 shrink-0">
+            {#each actions as action (action.id)}
+              <button
+                class="btn btn-soft btn-sm shadow-sm hover:shadow-md hover:btn-primary transition-all duration-200"
+                disabled={isSessionBusy}
+                title={isSessionBusy ? busyReason : action.name}
+                onclick={() => handleActionClick(action)}
+              >
+                {action.name}
+              </button>
+            {/each}
+          </div>
+        {/if}
       {/if}
-      {#if actions.length > 0}
-        <div class="flex gap-1.5 shrink-0">
-          {#each actions as action (action.id)}
-            <button
-              class="btn btn-soft btn-sm shadow-sm hover:shadow-md hover:btn-primary transition-all duration-200"
-              disabled={isSessionBusy}
-              title={isSessionBusy ? busyReason : action.name}
-              onclick={() => handleActionClick(action)}
-            >
-              {action.name}
-            </button>
-          {/each}
-        </div>
-       {/if}
      </div>
    </header>
 

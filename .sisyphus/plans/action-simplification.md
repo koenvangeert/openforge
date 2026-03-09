@@ -697,7 +697,7 @@ Max Concurrent: 4 (Wave 1)
   - Files: `src-tauri/src/commands/orchestration.rs`
   - Pre-commit: `cd src-tauri && cargo test`
 
-- [ ] 8. Task creation dialog — add agent + permission_mode selectors
+- [x] 8. Task creation dialog — add agent + permission_mode selectors
 
   **What to do**:
   - In `AddTaskDialog.svelte`, add two new `$state` variables: `agent` and `permissionMode`
@@ -788,7 +788,7 @@ Max Concurrent: 4 (Wave 1)
   - Files: `src/components/AddTaskDialog.svelte`
   - Pre-commit: `pnpm build`
 
-- [ ] 9. Status-driven task detail header
+- [x] 9. Status-driven task detail header
 
   **What to do**:
   - In `TaskDetailView.svelte`, make the header buttons status-dependent:
@@ -863,7 +863,7 @@ Max Concurrent: 4 (Wave 1)
   - Files: `src/components/TaskDetailView.svelte`
   - Pre-commit: `pnpm build`
 
-- [ ] 10. Remove action buttons from kanban context menu
+- [x] 10. Remove action buttons from kanban context menu
 
   **What to do**:
   - In `KanbanBoard.svelte`, remove the action buttons block from the context menu (lines 297-306)
@@ -931,7 +931,7 @@ Max Concurrent: 4 (Wave 1)
   - Files: `src/components/KanbanBoard.svelte`
   - Pre-commit: `pnpm build`
 
-- [ ] 11. Remove agent dropdown from SettingsActionsCard
+- [x] 11. Remove agent dropdown from SettingsActionsCard
 
   **What to do**:
   - In `SettingsActionsCard.svelte`, remove the agent dropdown block (lines 108-122): the `{#if aiProvider !== 'claude-code'}` conditional and its contents

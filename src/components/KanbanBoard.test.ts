@@ -1,7 +1,7 @@
 import { render, screen, fireEvent } from '@testing-library/svelte'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import KanbanBoard from './KanbanBoard.svelte'
-import type { Task, AgentSession, Action } from '../lib/types'
+import type { Task } from '../lib/types'
 import { tasks, activeSessions, activeProjectId, searchQuery } from '../lib/stores'
 
 // Mock IPC functions
@@ -11,16 +11,6 @@ vi.mock('../lib/ipc', () => ({
   updateTaskStatus: vi.fn(),
   deleteTask: vi.fn(),
   clearDoneTasks: vi.fn(),
-}))
-
-// Mock actions module
-const mockActions: Action[] = [
-  { id: 'builtin-go', name: 'Go', prompt: '', agent: null, builtin: true, enabled: true },
-]
-
-vi.mock('../lib/actions', () => ({
-  loadActions: vi.fn(() => Promise.resolve(mockActions)),
-  getEnabledActions: vi.fn((actions: Action[]) => actions.filter(a => a.enabled)),
 }))
 
 const baseTask: Task = {
@@ -35,6 +25,10 @@ const baseTask: Task = {
   project_id: 'proj-1',
   created_at: 1000,
   updated_at: 2000,
+  prompt: '',
+  summary: null,
+  agent: null,
+  permission_mode: 'default',
 }
 
 describe('KanbanBoard', () => {
@@ -90,118 +84,6 @@ describe('KanbanBoard', () => {
   it('renders tasks in correct columns', () => {
     render(KanbanBoard)
     expect(screen.getByText('Test task')).toBeTruthy()
-  })
-
-  it('renders dynamic action items in context menu', async () => {
-    render(KanbanBoard)
-    
-    // Find the task card and trigger context menu
-    const taskCard = screen.getByText('Test task').closest('div')
-    if (!taskCard) throw new Error('Task card not found')
-    
-    // Trigger right-click
-    await fireEvent.contextMenu(taskCard)
-    
-    // Wait a tick for reactive statements to process
-    await new Promise(resolve => setTimeout(resolve, 10))
-    
-    // Check that dynamic actions appear in context menu
-    expect(screen.getByText('Go')).toBeTruthy()
-  })
-
-  it('disables actions when session is running', async () => {
-    const runningSession: AgentSession = {
-      id: 'ses-1',
-      ticket_id: 'T-1',
-      opencode_session_id: null,
-      stage: 'implement',
-      status: 'running',
-      checkpoint_data: null,
-      error_message: null,
-      created_at: 1000,
-      updated_at: 2000,
-      provider: 'opencode',
-      claude_session_id: null,
-    }
-    
-    activeSessions.set(new Map([['T-1', runningSession]]))
-    
-    const { container } = render(KanbanBoard)
-    
-    // Trigger context menu
-    const taskCard = screen.getByText('Test task').closest('div')
-    if (!taskCard) throw new Error('Task card not found')
-    await fireEvent.contextMenu(taskCard)
-    
-    // Wait for reactive statements
-    await new Promise(resolve => setTimeout(resolve, 10))
-    
-    // Check that action buttons are disabled
-    const actionButtons = container.querySelectorAll('.context-item')
-    const goButton = Array.from(actionButtons).find(btn => btn.textContent?.includes('Go')) as HTMLButtonElement
-    
-    expect(goButton).toBeTruthy()
-    expect(goButton.disabled).toBe(true)
-    expect(goButton.title).toBe('Agent is busy')
-  })
-
-  it('disables actions when session is paused', async () => {
-    const pausedSession: AgentSession = {
-      id: 'ses-1',
-      ticket_id: 'T-1',
-      opencode_session_id: null,
-      stage: 'implement',
-      status: 'paused',
-      checkpoint_data: '{"question":"approve?"}',
-      error_message: null,
-      created_at: 1000,
-      updated_at: 2000,
-      provider: 'opencode',
-      claude_session_id: null,
-    }
-    
-    activeSessions.set(new Map([['T-1', pausedSession]]))
-    
-    const { container } = render(KanbanBoard)
-    
-    // Trigger context menu
-    const taskCard = screen.getByText('Test task').closest('div')
-    if (!taskCard) throw new Error('Task card not found')
-    await fireEvent.contextMenu(taskCard)
-    
-    // Wait for reactive statements
-    await new Promise(resolve => setTimeout(resolve, 10))
-    
-    // Check that action buttons are disabled with correct message
-    const actionButtons = container.querySelectorAll('.context-item')
-    const goButton = Array.from(actionButtons).find(btn => btn.textContent?.includes('Go')) as HTMLButtonElement
-    
-    expect(goButton).toBeTruthy()
-    expect(goButton.disabled).toBe(true)
-    expect(goButton.title).toBe('Answer pending question first')
-  })
-
-  it('dispatches run-action event when action is clicked', async () => {
-    const onRunAction = vi.fn()
-    render(KanbanBoard, { props: { onRunAction } })
-    
-    // Trigger context menu
-    const taskCard = screen.getByText('Test task').closest('div')
-    if (!taskCard) throw new Error('Task card not found')
-    await fireEvent.contextMenu(taskCard)
-    
-    // Wait for reactive statements
-    await new Promise(resolve => setTimeout(resolve, 10))
-    
-    // Click on "Go" action
-    const goButton = screen.getByText('Go')
-    await fireEvent.click(goButton)
-    
-    expect(onRunAction).toHaveBeenCalledWith({
-      taskId: 'T-1',
-      actionPrompt: '',
-      agent: null,
-    })
   })
 
   it('filters tasks by title', async () => {

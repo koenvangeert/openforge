@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/svelte'
+import { render, screen, fireEvent, waitFor } from '@testing-library/svelte'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import AddTaskDialog from './AddTaskDialog.svelte'
 import type { Task } from '../lib/types'
@@ -22,9 +22,11 @@ vi.mock('../lib/ipc', () => ({
     updated_at: 1000,
   } as Task),
   updateTask: vi.fn().mockResolvedValue(undefined),
+  getConfig: vi.fn().mockResolvedValue('claude-code'),
+  getAgents: vi.fn().mockResolvedValue([{ name: 'agent-1' }, { name: 'agent-2' }]),
 }))
 
-import { createTask, updateTask } from '../lib/ipc'
+import { createTask, updateTask, getConfig, getAgents } from '../lib/ipc'
 
 const mockTask: Task = {
   id: 'T-42',
@@ -47,6 +49,8 @@ const mockTask: Task = {
 describe('AddTaskDialog', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.mocked(getConfig).mockResolvedValue('claude-code')
+    vi.mocked(getAgents).mockResolvedValue([{ name: 'agent-1' }, { name: 'agent-2' }])
   })
 
   it('renders in create mode with empty fields', () => {
@@ -86,7 +90,7 @@ describe('AddTaskDialog', () => {
     await fireEvent.click(submitBtn)
     
     await new Promise((r) => setTimeout(r, 10))
-    expect(createTask).toHaveBeenCalledWith('My new task', 'backlog', 'PROJ-456', null, null, null)
+    expect(createTask).toHaveBeenCalledWith('My new task', 'backlog', 'PROJ-456', null, null, 'default')
   })
 
   it('pre-fills fields in edit mode', () => {
@@ -115,14 +119,44 @@ describe('AddTaskDialog', () => {
     expect(screen.queryByText('Status')).toBeNull()
   })
 
-  it('does not show status dropdown in create mode', () => {
-    render(AddTaskDialog, { props: { mode: 'create' } })
-    expect(screen.queryByText('Status')).toBeNull()
-    expect(screen.queryByRole('combobox')).toBeNull()
-  })
-
   it('shows Prompt label in create mode', () => {
     render(AddTaskDialog, { props: { mode: 'create' } })
     expect(screen.getByText('Prompt', { exact: false })).toBeTruthy()
+  })
+
+  it('shows permission mode dropdown when ai_provider is claude-code', async () => {
+    vi.mocked(getConfig).mockResolvedValue('claude-code')
+    render(AddTaskDialog, { props: { mode: 'create' } })
+
+    await waitFor(() => {
+      expect(screen.queryByLabelText('Permission Mode')).toBeTruthy()
+    })
+  })
+
+  it('hides agent dropdown when ai_provider is claude-code', async () => {
+    vi.mocked(getConfig).mockResolvedValue('claude-code')
+    render(AddTaskDialog, { props: { mode: 'create' } })
+
+    await waitFor(() => {
+      expect(screen.queryByLabelText('Agent')).toBeNull()
+    })
+  })
+
+  it('shows agent dropdown when ai_provider is opencode', async () => {
+    vi.mocked(getConfig).mockResolvedValue('opencode')
+    render(AddTaskDialog, { props: { mode: 'create' } })
+
+    await waitFor(() => {
+      expect(screen.queryByLabelText('Agent')).toBeTruthy()
+    })
+  })
+
+  it('hides permission mode dropdown when ai_provider is opencode', async () => {
+    vi.mocked(getConfig).mockResolvedValue('opencode')
+    render(AddTaskDialog, { props: { mode: 'create' } })
+
+    await waitFor(() => {
+      expect(screen.queryByLabelText('Permission Mode')).toBeNull()
+    })
   })
 })
