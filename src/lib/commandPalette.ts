@@ -1,14 +1,16 @@
-import type { Task, AgentSession } from './types'
+import type { Task, AgentSession, Project } from './types'
 
-export function matchesSearch(task: Task, query: string): boolean {
+export function matchesSearch(task: Task, query: string, projectMap?: Map<string, Project>): boolean {
   if (!query) return true
   const q = query.toLowerCase()
+  const projectName = task.project_id ? projectMap?.get(task.project_id)?.name : undefined
   return (
     task.id.toLowerCase().includes(q) ||
     task.title.toLowerCase().includes(q) ||
     (task.jira_key?.toLowerCase().includes(q) ?? false) ||
     (task.jira_title?.toLowerCase().includes(q) ?? false) ||
-    (task.jira_assignee?.toLowerCase().includes(q) ?? false)
+    (task.jira_assignee?.toLowerCase().includes(q) ?? false) ||
+    (projectName?.toLowerCase().includes(q) ?? false)
   )
 }
 

@@ -1,7 +1,9 @@
 <script lang="ts">
-  import { tasks, selectedTaskId, activeSessions, currentView } from '../lib/stores'
+  import { selectedTaskId, activeSessions, currentView, projects, activeProjectId } from '../lib/stores'
   import { pushNavState } from '../lib/navigation'
   import { matchesSearch, sortTasks } from '../lib/commandPalette'
+  import { getAllTasks, getLatestSessions } from '../lib/ipc'
+  import type { Task } from '../lib/types'
 
   interface Props {
     onClose: () => void
@@ -11,11 +13,42 @@
 
   let searchQuery = $state('')
   let selectedIndex = $state(0)
+  let allTasks = $state<Task[]>([])
+  let loading = $state(true)
+
+  let projectMap = $derived(new Map($projects.map(p => [p.id, p])))
+
+  // Fetch all tasks across projects on mount
+  $effect(() => {
+    loadAllTasks()
+  })
+
+  async function loadAllTasks() {
+    loading = true
+    try {
+      const tasks = await getAllTasks()
+      allTasks = tasks
+      // Load sessions for all tasks
+      const taskIds = tasks.map(t => t.id)
+      if (taskIds.length > 0) {
+        const sessions = await getLatestSessions(taskIds)
+        const updated = new Map($activeSessions)
+        for (const s of sessions) {
+          updated.set(s.ticket_id, s)
+        }
+        $activeSessions = updated
+      }
+    } catch (e) {
+      console.error('Failed to load all tasks:', e)
+    } finally {
+      loading = false
+    }
+  }
 
   let sortedAndFiltered = $derived.by(() => {
-    const sorted = sortTasks($tasks, $activeSessions)
+    const sorted = sortTasks(allTasks, $activeSessions)
     if (!searchQuery.trim()) return sorted
-    return sorted.filter(t => matchesSearch(t, searchQuery.trim()))
+    return sorted.filter(t => matchesSearch(t, searchQuery.trim(), projectMap))
   })
 
   $effect(() => {
@@ -53,10 +86,14 @@
     }
   }
 
-  function selectTask(taskId: string) {
+  function selectTask(task: Task) {
     pushNavState()
+    // Switch to the task's project if it's different from the active one
+    if (task.project_id && task.project_id !== $activeProjectId) {
+      $activeProjectId = task.project_id
+    }
     $currentView = 'board'
-    $selectedTaskId = taskId
+    $selectedTaskId = task.id
     onClose()
   }
 
@@ -80,7 +117,7 @@
     } else if (e.key === 'Enter') {
       e.preventDefault()
       if (selectedIndex >= 0 && selectedIndex < count) {
-        selectTask(sortedAndFiltered[selectedIndex].id)
+        selectTask(sortedAndFiltered[selectedIndex])
       }
     }
   }
@@ -89,6 +126,11 @@
     if (e.target === e.currentTarget) {
       onClose()
     }
+  }
+
+  function getProjectName(projectId: string | null): string | null {
+    if (!projectId) return null
+    return projectMap.get(projectId)?.name ?? null
   }
 
   function firstLine(text: string): string {
@@ -128,7 +170,7 @@
       <input
         type="text"
         class="input input-sm w-full bg-base-100 border-base-300 focus:outline-none text-base-content placeholder:text-base-content/40 font-mono"
-        placeholder="Search tasks..."
+        placeholder="Search tasks across all projects..."
         bind:value={searchQuery}
         autofocus
       />
@@ -136,7 +178,11 @@
 
     <!-- Task list -->
     <div class="max-h-[400px] overflow-y-auto" bind:this={listContainer}>
-      {#if sortedAndFiltered.length === 0}
+      {#if loading}
+        <div class="px-4 py-6 text-center text-base-content/50 text-sm">
+          Loading tasks...
+        </div>
+      {:else if sortedAndFiltered.length === 0}
         <div class="px-4 py-6 text-center text-base-content/50 text-sm">
           No tasks match your search
         </div>
@@ -146,12 +192,14 @@
           {@const label = statusLabel(sessionStatus)}
           {@const badgeClass = statusBadgeClass(sessionStatus)}
           {@const isHighlighted = i === selectedIndex}
+          {@const projectName = getProjectName(task.project_id)}
+          {@const isOtherProject = task.project_id !== $activeProjectId}
           <button
             type="button"
             data-palette-item
             class="flex items-center gap-3 w-full px-4 py-2.5 text-left text-sm text-base-content transition-colors
               {isHighlighted ? 'bg-base-300' : 'hover:bg-base-300/60'}"
-            onclick={() => selectTask(task.id)}
+            onclick={() => selectTask(task)}
           >
             <div class="flex-1 min-w-0">
               <div class="flex items-center gap-1.5">
@@ -161,6 +209,9 @@
                 {/if}
                 {#if label}
                   <span class="badge {badgeClass} badge-xs font-mono shrink-0 {sessionStatus === 'paused' ? 'animate-pulse' : ''}">{label}</span>
+                {/if}
+                {#if projectName && isOtherProject}
+                  <span class="badge badge-outline badge-xs font-mono shrink-0 opacity-60">{projectName}</span>
                 {/if}
               </div>
               <div class="text-xs text-base-content/70 truncate mt-0.5">

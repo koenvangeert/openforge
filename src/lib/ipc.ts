@@ -72,6 +72,10 @@ export async function setProjectConfig(projectId: string, key: string, value: st
 
 
 
+export async function getAllTasks(): Promise<Task[]> {
+  return invoke<Task[]>("get_tasks");
+}
+
 export async function getTasksForProject(projectId: string): Promise<Task[]> {
   return invoke<Task[]>("get_tasks_for_project", { projectId });
 }

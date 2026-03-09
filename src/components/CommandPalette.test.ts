@@ -1,6 +1,15 @@
 import { describe, it, expect } from 'vitest'
-import type { Task, AgentSession } from '../lib/types'
+import type { Task, AgentSession, Project } from '../lib/types'
 import { matchesSearch, sortTasks } from '../lib/commandPalette'
+
+function makeProject(overrides: Partial<Project> & { id: string; name: string }): Project {
+  return {
+    path: '/tmp/test',
+    created_at: 1000,
+    updated_at: 1000,
+    ...overrides,
+  }
+}
 
 function makeTask(overrides: Partial<Task> & { id: string }): Task {
   return {
@@ -147,5 +156,27 @@ describe('CommandPalette search filtering', () => {
   it('returns all tasks when query is empty', () => {
     const task = makeTask({ id: 'T-1' })
     expect(matchesSearch(task, '')).toBe(true)
+  })
+
+  it('matches by project name when projectMap is provided', () => {
+    const task = makeTask({ id: 'T-1', project_id: 'P-1' })
+    const projectMap = new Map([['P-1', makeProject({ id: 'P-1', name: 'My Frontend App' })]])
+    expect(matchesSearch(task, 'frontend', projectMap)).toBe(true)
+    expect(matchesSearch(task, 'backend', projectMap)).toBe(false)
+  })
+
+  it('still matches other fields when projectMap is provided', () => {
+    const task = makeTask({ id: 'T-42', title: 'Fix login', project_id: 'P-1' })
+    const projectMap = new Map([['P-1', makeProject({ id: 'P-1', name: 'My App' })]])
+    expect(matchesSearch(task, 't-42', projectMap)).toBe(true)
+    expect(matchesSearch(task, 'login', projectMap)).toBe(true)
+    expect(matchesSearch(task, 'my app', projectMap)).toBe(true)
+  })
+
+  it('handles task with no project_id gracefully', () => {
+    const task = makeTask({ id: 'T-1', project_id: null })
+    const projectMap = new Map([['P-1', makeProject({ id: 'P-1', name: 'My App' })]])
+    expect(matchesSearch(task, 'my app', projectMap)).toBe(false)
+    expect(matchesSearch(task, 'T-1', projectMap)).toBe(true)
   })
 })
