@@ -1,0 +1,31 @@
+import type { Task, AgentSession } from './types'
+
+export function matchesSearch(task: Task, query: string): boolean {
+  if (!query) return true
+  const q = query.toLowerCase()
+  return (
+    task.id.toLowerCase().includes(q) ||
+    task.title.toLowerCase().includes(q) ||
+    (task.jira_key?.toLowerCase().includes(q) ?? false) ||
+    (task.jira_title?.toLowerCase().includes(q) ?? false) ||
+    (task.jira_assignee?.toLowerCase().includes(q) ?? false)
+  )
+}
+
+function getTaskSortPriority(task: Task, sessionStatus: string | null): number {
+  if (sessionStatus === 'paused' || sessionStatus === 'interrupted') return 0
+  if (task.status === 'doing') return 1
+  if (task.status === 'backlog') return 2
+  return 3
+}
+
+export function sortTasks(tasks: Task[], sessions: Map<string, AgentSession>): Task[] {
+  return [...tasks].sort((a, b) => {
+    const sessionA = sessions.get(a.id)
+    const sessionB = sessions.get(b.id)
+    const priorityA = getTaskSortPriority(a, sessionA?.status ?? null)
+    const priorityB = getTaskSortPriority(b, sessionB?.status ?? null)
+    if (priorityA !== priorityB) return priorityA - priorityB
+    return b.updated_at - a.updated_at
+  })
+}

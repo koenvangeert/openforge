@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Task, AgentSession, KanbanColumn } from '../lib/types'
-  import { tasks, selectedTaskId, activeSessions, ticketPrs, error, activeProjectId, searchQuery, runningTerminals, startingTasks } from '../lib/stores'
+  import { tasks, selectedTaskId, activeSessions, ticketPrs, error, activeProjectId, runningTerminals, startingTasks } from '../lib/stores'
   import { updateTaskStatus, deleteTask, clearDoneTasks } from '../lib/ipc'
   import { pushNavState } from '../lib/navigation'
   import TaskCard from './TaskCard.svelte'
@@ -48,29 +48,13 @@
     }
   }
 
-  function matchesSearch(task: Task, query: string): boolean {
-    if (!query) return true
-    const q = query.toLowerCase()
-    return (
-      task.id.toLowerCase().includes(q) ||
-      task.title.toLowerCase().includes(q) ||
-      (task.jira_key?.toLowerCase().includes(q) ?? false) ||
-      (task.jira_title?.toLowerCase().includes(q) ?? false) ||
-      (task.jira_assignee?.toLowerCase().includes(q) ?? false)
-    )
-  }
-
-  let filteredTasks = $derived(
-    $searchQuery ? $tasks.filter(t => matchesSearch(t, $searchQuery)) : $tasks
-  )
-
   function tasksForColumn(allTasks: Task[], column: KanbanColumn): Task[] {
     return allTasks.filter(t => t.status === column)
   }
 
-  let backlogTasks = $derived(tasksForColumn(filteredTasks, 'backlog'))
-  let doingTasks = $derived(tasksForColumn(filteredTasks, 'doing'))
-  let doneTasks = $derived(tasksForColumn(filteredTasks, 'done'))
+  let backlogTasks = $derived(tasksForColumn($tasks, 'backlog'))
+  let doingTasks = $derived(tasksForColumn($tasks, 'doing'))
+  let doneTasks = $derived(tasksForColumn($tasks, 'done'))
 
   function getSession(sessions: Map<string, AgentSession>, taskId: string): AgentSession | null {
     return sessions.get(taskId) || null

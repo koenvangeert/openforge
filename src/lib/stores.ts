@@ -35,8 +35,6 @@ export const agentReviewComments = writable<AgentReviewComment[]>([]);
 export const agentReviewLoading = writable(false);
 export const agentReviewError = writable<string | null>(null);
 
-export const searchQuery = writable<string>("");
-
 export const claudeSessionStates = writable<Map<string, ClaudeSessionState>>(new Map())
 
 export const skills = writable<SkillInfo[]>([]);

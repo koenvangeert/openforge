@@ -40,7 +40,6 @@ vi.mock('./lib/stores', () => ({
   pendingManualComments: writable([]),
   selectedReviewPrDetails: writable(null),
   reviewPullRequestDiff: writable(null),
-  searchQuery: writable(''),
   skills: writable([]),
   selectedSkillName: writable(null),
 }))
