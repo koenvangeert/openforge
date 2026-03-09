@@ -599,30 +599,8 @@ CREATE INDEX IF NOT EXISTS idx_agent_review_comments_session ON agent_review_com
             }
             Ok(())
         }),
-        // V11: Add last_interacted_at column to tasks for sorting by user interaction
-        M::up_with_hook("", |tx| {
-            let has_column: bool = tx
-                .query_row(
-                    "SELECT COUNT(*) > 0 FROM pragma_table_info('tasks') WHERE name = 'last_interacted_at'",
-                    [],
-                    |r| r.get(0),
-                )
-                .unwrap_or(false);
-            if !has_column {
-                tx.execute(
-                    "ALTER TABLE tasks ADD COLUMN last_interacted_at INTEGER NOT NULL DEFAULT 0",
-                    [],
-                )
-                .map_err(rusqlite_migration::HookError::RusqliteError)?;
-                // Backfill: set last_interacted_at to updated_at for existing tasks
-                tx.execute(
-                    "UPDATE tasks SET last_interacted_at = updated_at WHERE last_interacted_at = 0",
-                    [],
-                )
-                .map_err(rusqlite_migration::HookError::RusqliteError)?;
-            }
-            Ok(())
-        }),
+        // V11: no-op (placeholder to preserve migration count for existing databases)
+        M::up(""),
     ])
 }
 #[cfg(test)]
