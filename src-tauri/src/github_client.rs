@@ -896,12 +896,14 @@ impl GitHubClient {
     /// * `token` - GitHub Personal Access Token
     ///
     /// # Returns
-    /// Vector of SearchPrResult with full PR details
+    /// Tuple of (results, search_item_count) — search_item_count is the number
+    /// of items the search matched before fetching details. If details fail for
+    /// some items, results.len() < search_item_count.
     pub async fn search_review_requested_prs(
         &self,
         username: &str,
         token: &str,
-    ) -> Result<Vec<SearchPrResult>, GitHubError> {
+    ) -> Result<(Vec<SearchPrResult>, usize), GitHubError> {
         let url = format!(
             "https://api.github.com/search/issues?q=review-requested:{}+type:pr+state:open&per_page=100",
             username
@@ -932,6 +934,8 @@ impl GitHubClient {
             .json()
             .await
             .map_err(|e| GitHubError::ParseError(e.to_string()))?;
+
+        let search_item_count = search_response.items.len();
 
         let items_with_coords: Vec<(SearchItem, String, String)> = search_response
             .items
@@ -1001,7 +1005,7 @@ impl GitHubClient {
             }
         }
 
-        Ok(results)
+        Ok((results, search_item_count))
     }
 
     /// Get file diffs for a pull request

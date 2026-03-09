@@ -3,7 +3,7 @@
   import { listen } from '@tauri-apps/api/event'
   import type { UnlistenFn, Event } from '@tauri-apps/api/event'
   import { tasks, selectedTaskId, activeSessions, checkpointNotification, ciFailureNotification, ticketPrs, error, isLoading, projects, activeProjectId, currentView, reviewRequestCount, projectAttention, taskSpawned, searchQuery, selectedSkillName, runningTerminals, creaturesEnabled } from './lib/stores'
-  import { getProjects, getTasksForProject, getPullRequests, runAction, getSessionStatus, getLatestSession, getLatestSessions, forceGithubSync, createTask, updateTask, getProjectAttention, getAppMode, finalizeClaudeSession, getRunningPtyTaskIds, getConfig, getAgents } from './lib/ipc'
+  import { getProjects, getTasksForProject, getPullRequests, runAction, getSessionStatus, getLatestSession, getLatestSessions, forceGithubSync, createTask, updateTask, getProjectAttention, getAppMode, finalizeClaudeSession, getRunningPtyTaskIds, getConfig, getAgents, getReviewPrs } from './lib/ipc'
   import SearchableSelect from './components/SearchableSelect.svelte'
   import type { Task, PullRequestInfo, AgentEvent, ProjectAttention, AppView } from './lib/types'
   import KanbanBoard from './components/KanbanBoard.svelte'
@@ -651,6 +651,13 @@
       console.error('[App] Failed to load creatures_enabled config:', e)
     }
     loadProjectAttention()
+
+    try {
+      const reviewPrList = await getReviewPrs()
+      $reviewRequestCount = reviewPrList.filter(p => p.viewed_at === null).length
+    } catch (e) {
+      console.error('[App] Failed to initialize review PR count:', e)
+    }
 
     // Phase 3: Safety net
     await loadTasks()
