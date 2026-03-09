@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { Snippet } from 'svelte'
   import type { AutocompleteItem } from './AutocompletePopover.svelte'
   import AutocompletePopover from './AutocompletePopover.svelte'
   import VoiceInput from './VoiceInput.svelte'
@@ -11,8 +12,10 @@
     placeholder?: string
     projectId: string
     onSubmit: (prompt: string, jiraKey: string | null) => void
+    onStartTask?: (prompt: string, jiraKey: string | null) => void
     onCancel: () => void
     autofocus?: boolean
+    extras?: Snippet
   }
 
   let {
@@ -21,8 +24,10 @@
     placeholder = 'Describe what you want to implement...',
     projectId,
     onSubmit,
+    onStartTask,
     onCancel,
-    autofocus = false
+    autofocus = false,
+    extras
   }: Props = $props()
 
   // ── Local state ──────────────────────────────────────────────────────────────
@@ -135,6 +140,16 @@
 
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
       e.preventDefault()
+      if (onStartTask) {
+        handleStart()
+      } else {
+        handleSubmit()
+      }
+      return
+    }
+
+    if (e.key === 'Enter' && e.shiftKey && onStartTask) {
+      e.preventDefault()
       handleSubmit()
       return
     }
@@ -150,6 +165,12 @@
     const prompt = textValue.trim()
     if (!prompt) return
     onSubmit(prompt, jiraKeyValue.trim() || null)
+  }
+
+  function handleStart() {
+    const prompt = textValue.trim()
+    if (!prompt) return
+    onStartTask?.(prompt, jiraKeyValue.trim() || null)
   }
 </script>
 
@@ -174,6 +195,12 @@
       onClose={ac.closePopover}
     />
   </div>
+
+  {#if extras}
+    <div class="px-3 pb-1">
+      {@render extras()}
+    </div>
+  {/if}
 
   <div class="flex items-center justify-between px-3 pb-2">
     <div class="flex items-center gap-2">
@@ -203,13 +230,30 @@
       {/if}
     </div>
     <div class="flex items-center gap-2">
-      <span class="text-xs text-base-content/40">⌘Enter to submit · Enter for newline</span>
-      <button
-        class="btn btn-primary btn-sm"
-        type="button"
-        disabled={!textValue.trim()}
-        onclick={handleSubmit}
-      >Submit</button>
+      {#if onStartTask}
+        <button
+          class="btn btn-ghost btn-sm"
+          type="button"
+          disabled={!textValue.trim()}
+          onclick={handleSubmit}
+          title="⇧Enter"
+        >Add to Backlog <kbd class="kbd kbd-xs ml-1 opacity-50">⇧↵</kbd></button>
+        <button
+          class="btn btn-primary btn-sm"
+          type="button"
+          disabled={!textValue.trim()}
+          onclick={handleStart}
+          title="⌘Enter"
+        >Start Task <kbd class="kbd kbd-xs ml-1 opacity-50">⌘↵</kbd></button>
+      {:else}
+        <span class="text-xs text-base-content/40">⌘Enter to submit</span>
+        <button
+          class="btn btn-primary btn-sm"
+          type="button"
+          disabled={!textValue.trim()}
+          onclick={handleSubmit}
+        >Submit</button>
+      {/if}
     </div>
   </div>
 

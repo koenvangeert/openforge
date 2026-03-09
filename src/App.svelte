@@ -3,7 +3,8 @@
   import { listen } from '@tauri-apps/api/event'
   import type { UnlistenFn, Event } from '@tauri-apps/api/event'
   import { tasks, selectedTaskId, activeSessions, checkpointNotification, ciFailureNotification, ticketPrs, error, isLoading, projects, activeProjectId, currentView, reviewRequestCount, projectAttention, taskSpawned, searchQuery, selectedSkillName, creaturesEnabled } from './lib/stores'
-  import { getProjects, getTasksForProject, getPullRequests, runAction, getSessionStatus, getLatestSession, getLatestSessions, forceGithubSync, createTask, updateTask, getProjectAttention, getAppMode, getConfig, finalizeClaudeSession } from './lib/ipc'
+  import { getProjects, getTasksForProject, getPullRequests, runAction, getSessionStatus, getLatestSession, getLatestSessions, forceGithubSync, createTask, updateTask, getProjectAttention, getAppMode, finalizeClaudeSession, getConfig, getAgents } from './lib/ipc'
+  import SearchableSelect from './components/SearchableSelect.svelte'
   import type { Task, PullRequestInfo, AgentEvent, ProjectAttention, AppView } from './lib/types'
   import KanbanBoard from './components/KanbanBoard.svelte'
   import TaskDetailView from './components/TaskDetailView.svelte'
@@ -31,6 +32,26 @@
   let showAddDialog = $state(false)
   let isSyncing = $state(false)
   let editingTask = $state<Task | null>(null)
+  let dialogAiProvider = $state<string | null>(null)
+  let dialogAgents = $state<string[]>([])
+  let dialogSelectedAgent = $state('')
+
+  async function loadDialogAgentInfo() {
+    dialogSelectedAgent = ''
+    try {
+      const provider = await getConfig('ai_provider')
+      dialogAiProvider = provider ?? 'claude-code'
+      if (dialogAiProvider !== 'claude-code') {
+        const agents = await getAgents()
+        dialogAgents = agents.map(a => a.name)
+      } else {
+        dialogAgents = []
+      }
+    } catch {
+      dialogAiProvider = null
+      dialogAgents = []
+    }
+  }
   let showProjectSetup = $state(false)
   let appMode = $state<string | null>(null)
   let showShortcutsDialog = $state(false)
@@ -223,6 +244,7 @@
       if (!showAddDialog) {
         editingTask = null
         showAddDialog = true
+        loadDialogAgentInfo()
       }
     }
     if ((e.metaKey || e.ctrlKey) && (e.key === '[' || e.key === 'ArrowLeft')) {
@@ -643,6 +665,7 @@
           onclick={() => {
             editingTask = null
             showAddDialog = true
+            loadDialogAgentInfo()
           }}
         >
           + new_task <span class="text-[0.65rem] opacity-70 ml-1 font-normal">&#8984;T</span>
@@ -726,7 +749,7 @@
                   if (editingTask) {
                     await updateTask(editingTask.id, prompt, jiraKey)
                   } else {
-                    await createTask(prompt, 'backlog', jiraKey, $activeProjectId)
+                    await createTask(prompt, 'backlog', jiraKey, $activeProjectId, dialogSelectedAgent || null, null)
                   }
                   showAddDialog = false
                   editingTask = null
@@ -736,8 +759,38 @@
                   $error = String(e)
                 }
               }}
+              onStartTask={editingTask ? undefined : async (prompt, jiraKey) => {
+                try {
+                  const agent = dialogSelectedAgent || null
+                  const newTask = await createTask(prompt, 'backlog', jiraKey, $activeProjectId, agent, null)
+                  showAddDialog = false
+                  editingTask = null
+                  await loadTasks()
+                  await handleRunAction({ taskId: newTask.id, actionPrompt: '', agent })
+                } catch (e) {
+                  console.error('Failed to start task:', e)
+                  $error = String(e)
+                }
+              }}
               onCancel={() => { showAddDialog = false; editingTask = null }}
-            />
+            >
+              {#snippet extras()}
+                {#if !editingTask && dialogAiProvider !== 'claude-code' && dialogAgents.length > 0}
+                  <div class="flex items-center gap-2">
+                    <span class="text-xs text-base-content/50 font-medium shrink-0">Agent</span>
+                    <div class="flex-1">
+                      <SearchableSelect
+                        options={[{ value: '', label: 'Default' }, ...dialogAgents.map(a => ({ value: a, label: a }))]}
+                        value={dialogSelectedAgent}
+                        placeholder="Search agents..."
+                        size="xs"
+                        onSelect={(v) => { dialogSelectedAgent = v }}
+                      />
+                    </div>
+                  </div>
+                {/if}
+              {/snippet}
+            </PromptInput>
           </div>
         </Modal>
       {/if}

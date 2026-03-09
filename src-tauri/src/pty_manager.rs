@@ -378,6 +378,7 @@ impl PtyManager {
     /// * `resume_session_id` - If Some, resumes an existing Claude session with `--resume <id>`
     /// * `continue_session` - If true and no resume_session_id, uses `--continue`
     /// * `hooks_settings_path` - Path to the hooks settings JSON file
+    /// * `permission_mode` - If Some, passes `--permission-mode <mode>` to Claude CLI
     /// * `cols` - Terminal width in columns
     /// * `rows` - Terminal height in rows
     /// * `app_handle` - Tauri app handle for emitting PTY output events
@@ -392,6 +393,7 @@ impl PtyManager {
         resume_session_id: Option<&str>,
         continue_session: bool,
         hooks_settings_path: &Path,
+        permission_mode: Option<&str>,
         cols: u16,
         rows: u16,
         app_handle: tauri::AppHandle,
@@ -430,7 +432,7 @@ impl PtyManager {
             .map_err(|e| PtyError::SpawnFailed(format!("Failed to create PTY pair: {}", e)))?;
 
         let mut cmd = CommandBuilder::new("claude");
-        for arg in build_claude_args(prompt, resume_session_id, continue_session, hooks_settings_path) {
+        for arg in build_claude_args(prompt, resume_session_id, continue_session, hooks_settings_path, permission_mode) {
             cmd.arg(arg);
         }
         cmd.cwd(cwd);
@@ -1239,6 +1241,7 @@ pub(crate) fn build_claude_args(
     resume_session_id: Option<&str>,
     continue_session: bool,
     hooks_settings_path: &Path,
+    permission_mode: Option<&str>,
 ) -> Vec<String> {
     let mut args = Vec::new();
     if let Some(session_id) = resume_session_id {
@@ -1249,6 +1252,10 @@ pub(crate) fn build_claude_args(
     }
     if !prompt.is_empty() {
         args.push(prompt.to_string());
+    }
+    if let Some(mode) = permission_mode {
+        args.push("--permission-mode".to_string());
+        args.push(mode.to_string());
     }
     args.push("--settings".to_string());
     args.push(hooks_settings_path.to_string_lossy().to_string());
@@ -1420,7 +1427,7 @@ mod tests {
     #[test]
     fn test_build_claude_args_new_session() {
         let settings = Path::new("/home/user/.openforge/claude-hooks-settings.json");
-        let args = build_claude_args("implement the feature", None, false, settings);
+        let args = build_claude_args("implement the feature", None, false, settings, None);
         assert_eq!(
             args,
             vec![
@@ -1434,7 +1441,7 @@ mod tests {
     #[test]
     fn test_build_claude_args_resume_session_with_prompt() {
         let settings = Path::new("/path/to/settings.json");
-        let args = build_claude_args("continue work", Some("sess-abc-123"), false, settings);
+        let args = build_claude_args("continue work", Some("sess-abc-123"), false, settings, None);
         assert_eq!(
             args,
             vec![
@@ -1450,7 +1457,7 @@ mod tests {
     #[test]
     fn test_build_claude_args_resume_session_without_prompt() {
         let settings = Path::new("/path/to/settings.json");
-        let args = build_claude_args("", Some("sess-abc-123"), false, settings);
+        let args = build_claude_args("", Some("sess-abc-123"), false, settings, None);
         assert_eq!(
             args,
             vec![
@@ -1465,7 +1472,7 @@ mod tests {
     #[test]
     fn test_build_claude_args_continue_session() {
         let settings = Path::new("/path/to/settings.json");
-        let args = build_claude_args("", None, true, settings);
+        let args = build_claude_args("", None, true, settings, None);
         assert_eq!(
             args,
             vec![
@@ -1480,7 +1487,7 @@ mod tests {
     fn test_build_claude_args_resume_takes_precedence_over_continue() {
         let settings = Path::new("/path/to/settings.json");
         // When both resume_session_id and continue_session are set, --resume wins
-        let args = build_claude_args("", Some("sess-123"), true, settings);
+        let args = build_claude_args("", Some("sess-123"), true, settings, None);
         assert!(args.contains(&"--resume".to_string()));
         assert!(!args.contains(&"--continue".to_string()));
     }
@@ -1488,9 +1495,9 @@ mod tests {
     #[test]
     fn test_build_claude_args_settings_always_present() {
         let settings = Path::new("/config/hooks.json");
-        let args_new = build_claude_args("prompt", None, false, settings);
-        let args_resume = build_claude_args("prompt", Some("sid"), false, settings);
-        let args_continue = build_claude_args("", None, true, settings);
+        let args_new = build_claude_args("prompt", None, false, settings, None);
+        let args_resume = build_claude_args("prompt", Some("sid"), false, settings, None);
+        let args_continue = build_claude_args("", None, true, settings, None);
 
         assert!(args_new.contains(&"--settings".to_string()));
         assert!(args_resume.contains(&"--settings".to_string()));
@@ -1500,7 +1507,7 @@ mod tests {
     #[test]
     fn test_build_claude_args_no_headless_flags() {
         let settings = Path::new("/config/hooks.json");
-        let args = build_claude_args("prompt", None, false, settings);
+        let args = build_claude_args("prompt", None, false, settings, None);
 
         assert!(!args.contains(&"-p".to_string()));
         assert!(!args.contains(&"--output-format".to_string()));
@@ -1510,7 +1517,7 @@ mod tests {
     #[test]
     fn test_build_claude_args_resume_flag_before_prompt() {
         let settings = Path::new("/config/hooks.json");
-        let args = build_claude_args("my prompt", Some("session-xyz"), false, settings);
+        let args = build_claude_args("my prompt", Some("session-xyz"), false, settings, None);
 
         let resume_pos = args.iter().position(|a| a == "--resume").unwrap();
         let session_pos = args.iter().position(|a| a == "session-xyz").unwrap();
@@ -1536,13 +1543,13 @@ mod tests {
             std::env::remove_var("HOME");
         }
 
-        let args_new = build_claude_args("fix the bug", None, false, &temp_path);
+        let args_new = build_claude_args("fix the bug", None, false, &temp_path, None);
         assert_eq!(args_new[0], "fix the bug");
         let s_idx = args_new.iter().position(|a| a == "--settings").unwrap();
         assert_eq!(args_new[s_idx + 1], temp_path.to_string_lossy().to_string());
         assert!(!args_new.contains(&"-p".to_string()));
 
-        let args_resume = build_claude_args("continue impl", Some("resume-sess-999"), false, &temp_path);
+        let args_resume = build_claude_args("continue impl", Some("resume-sess-999"), false, &temp_path, None);
         assert_eq!(args_resume[0], "--resume");
         assert_eq!(args_resume[1], "resume-sess-999");
         assert_eq!(args_resume[2], "continue impl");
@@ -1807,5 +1814,34 @@ mod tests {
         let exit_event = format!("pty-exit-{}", session_key);
         assert_eq!(output_event, "pty-output-my-task-123-shell");
         assert_eq!(exit_event, "pty-exit-my-task-123-shell");
+    }
+
+    #[test]
+    fn test_build_claude_args_with_permission_mode() {
+        let settings = Path::new("/path/to/settings.json");
+        let args = build_claude_args("my prompt", None, false, settings, Some("plan"));
+
+        let pm_pos = args
+            .iter()
+            .position(|a| a == "--permission-mode")
+            .expect("--permission-mode flag should be present");
+        assert_eq!(args[pm_pos + 1], "plan");
+
+        let settings_pos = args.iter().position(|a| a == "--settings").unwrap();
+        assert!(
+            pm_pos < settings_pos,
+            "--permission-mode should appear before --settings"
+        );
+    }
+
+    #[test]
+    fn test_build_claude_args_without_permission_mode() {
+        let settings = Path::new("/path/to/settings.json");
+        let args = build_claude_args("my prompt", None, false, settings, None);
+
+        assert!(
+            !args.contains(&"--permission-mode".to_string()),
+            "--permission-mode should not be present when None"
+        );
     }
 }

@@ -20,6 +20,7 @@ impl ClaudeCodeProvider {
         worktree_path: &Path,
         prompt: &str,
         _agent: Option<&str>,
+        permission_mode: Option<&str>,
         app: &AppHandle,
     ) -> Result<ProviderSessionResult, String> {
         let port = crate::claude_hooks::get_http_server_port();
@@ -34,6 +35,7 @@ impl ClaudeCodeProvider {
                 None,
                 false,
                 &hooks_path,
+                permission_mode,
                 80,
                 24,
                 app.clone(),
@@ -51,6 +53,7 @@ impl ClaudeCodeProvider {
         worktree_path: &Path,
         prompt: Option<&str>,
         _agent: Option<&str>,
+        permission_mode: Option<&str>,
         app: &AppHandle,
     ) -> Result<ProviderSessionResult, String> {
         let port = crate::claude_hooks::get_http_server_port();
@@ -75,6 +78,7 @@ impl ClaudeCodeProvider {
                 resume_id,
                 use_continue,
                 &hooks_path,
+                permission_mode,
                 80,
                 24,
                 app.clone(),

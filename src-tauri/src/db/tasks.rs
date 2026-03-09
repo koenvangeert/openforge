@@ -17,6 +17,8 @@ pub struct TaskRow {
     pub jira_description: Option<String>,
     pub prompt: Option<String>,
     pub summary: Option<String>,
+    pub agent: Option<String>,
+    pub permission_mode: Option<String>,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -36,7 +38,7 @@ impl super::Database {
     pub fn get_tasks_for_project(&self, project_id: &str) -> Result<Vec<TaskRow>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT id, title, status, jira_key, jira_title, jira_status, jira_assignee, project_id, created_at, updated_at, jira_description, prompt, summary 
+            "SELECT id, title, status, jira_key, jira_title, jira_status, jira_assignee, project_id, created_at, updated_at, jira_description, prompt, summary, agent, permission_mode 
              FROM tasks WHERE project_id = ?1 ORDER BY updated_at DESC",
         )?;
 
@@ -55,6 +57,8 @@ impl super::Database {
                 jira_description: row.get(10)?,
                 prompt: row.get(11)?,
                 summary: row.get(12)?,
+                agent: row.get(13)?,
+                permission_mode: row.get(14)?,
             })
         })?;
 
@@ -121,6 +125,8 @@ impl super::Database {
         jira_key: Option<&str>,
         project_id: Option<&str>,
         prompt: Option<&str>,
+        agent: Option<&str>,
+        permission_mode: Option<&str>,
     ) -> Result<TaskRow> {
         let conn = self.conn.lock().unwrap();
 
@@ -161,8 +167,8 @@ impl super::Database {
         let final_prompt = prompt.unwrap_or(title);
 
         conn.execute(
-            "INSERT INTO tasks (id, title, status, jira_key, jira_title, jira_status, jira_assignee, project_id, created_at, updated_at, jira_description, prompt, summary)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+            "INSERT INTO tasks (id, title, status, jira_key, jira_title, jira_status, jira_assignee, project_id, created_at, updated_at, jira_description, prompt, summary, agent, permission_mode)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
             rusqlite::params![
                 &task_id,
                 title,
@@ -177,6 +183,8 @@ impl super::Database {
                 None::<String>,
                 final_prompt,
                 None::<String>,
+                agent,
+                permission_mode,
             ],
         )?;
 
@@ -194,13 +202,15 @@ impl super::Database {
             jira_description: None,
             prompt: Some(final_prompt.to_string()),
             summary: None,
+            agent: agent.map(|s| s.to_string()),
+            permission_mode: permission_mode.map(|s| s.to_string()),
         })
     }
 
     pub fn get_all_tasks(&self) -> Result<Vec<TaskRow>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT id, title, status, jira_key, jira_title, jira_status, jira_assignee, project_id, created_at, updated_at, jira_description, prompt, summary 
+            "SELECT id, title, status, jira_key, jira_title, jira_status, jira_assignee, project_id, created_at, updated_at, jira_description, prompt, summary, agent, permission_mode 
              FROM tasks ORDER BY updated_at DESC"
         )?;
 
@@ -219,6 +229,8 @@ impl super::Database {
                 jira_description: row.get(10)?,
                 prompt: row.get(11)?,
                 summary: row.get(12)?,
+                agent: row.get(13)?,
+                permission_mode: row.get(14)?,
             })
         })?;
 
@@ -232,7 +244,7 @@ impl super::Database {
     pub fn get_task(&self, id: &str) -> Result<Option<TaskRow>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT id, title, status, jira_key, jira_title, jira_status, jira_assignee, project_id, created_at, updated_at, jira_description, prompt, summary 
+            "SELECT id, title, status, jira_key, jira_title, jira_status, jira_assignee, project_id, created_at, updated_at, jira_description, prompt, summary, agent, permission_mode 
              FROM tasks WHERE id = ?1"
         )?;
         let mut rows = stmt.query([id])?;
@@ -251,6 +263,8 @@ impl super::Database {
                 jira_description: row.get(10)?,
                 prompt: row.get(11)?,
                 summary: row.get(12)?,
+                agent: row.get(13)?,
+                permission_mode: row.get(14)?,
             }))
         } else {
             Ok(None)
@@ -404,7 +418,7 @@ impl super::Database {
     pub fn get_tasks_with_jira_links(&self) -> Result<Vec<TaskRow>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT id, title, status, jira_key, jira_title, jira_status, jira_assignee, project_id, created_at, updated_at, jira_description, prompt, summary 
+            "SELECT id, title, status, jira_key, jira_title, jira_status, jira_assignee, project_id, created_at, updated_at, jira_description, prompt, summary, agent, permission_mode 
              FROM tasks WHERE jira_key IS NOT NULL ORDER BY updated_at DESC"
         )?;
 
@@ -423,6 +437,8 @@ impl super::Database {
                 jira_description: row.get(10)?,
                 prompt: row.get(11)?,
                 summary: row.get(12)?,
+                agent: row.get(13)?,
+                permission_mode: row.get(14)?,
             })
         })?;
 
@@ -456,7 +472,15 @@ mod tests {
         db.set_config("task_id_prefix", "T").unwrap();
 
         let task = db
-            .create_task("My task", "backlog", None, None, Some("Custom prompt"))
+            .create_task(
+                "My task",
+                "backlog",
+                None,
+                None,
+                Some("Custom prompt"),
+                None,
+                None,
+            )
             .expect("create failed");
 
         assert_eq!(task.id, "T-1");
@@ -478,7 +502,7 @@ mod tests {
         db.set_config("task_id_prefix", "T").unwrap();
 
         let task = db
-            .create_task("My task", "backlog", None, None, None)
+            .create_task("My task", "backlog", None, None, None, None, None)
             .expect("create failed");
 
         assert_eq!(task.id, "T-1");
@@ -497,7 +521,7 @@ mod tests {
         let (db, path) = make_test_db("update_task_title_summary");
 
         let task = db
-            .create_task("Original", "backlog", None, None, None)
+            .create_task("Original", "backlog", None, None, None, None, None)
             .expect("create failed");
 
         db.update_task_title_and_summary(&task.id, Some("New Title"), Some("New Summary"))
@@ -531,7 +555,7 @@ mod tests {
         db.set_config("task_id_prefix", "T").unwrap();
 
         let task = db
-            .create_task("My task", "backlog", None, None, None)
+            .create_task("My task", "backlog", None, None, None, None, None)
             .expect("create failed");
 
         assert_eq!(task.id, "T-1");
@@ -552,7 +576,7 @@ mod tests {
         let (db, path) = make_test_db("update_task");
 
         let task = db
-            .create_task("Original", "backlog", None, None, None)
+            .create_task("Original", "backlog", None, None, None, None, None)
             .expect("create failed");
 
         db.update_task(&task.id, "Updated", None)
@@ -571,7 +595,7 @@ mod tests {
         let (db, path) = make_test_db("get_task_by_id");
 
         let task = db
-            .create_task("Found me", "backlog", None, None, None)
+            .create_task("Found me", "backlog", None, None, None, None, None)
             .expect("create failed");
 
         let retrieved = db.get_task(&task.id).expect("get failed");
@@ -591,13 +615,13 @@ mod tests {
         db.set_config("task_id_prefix", "T").unwrap();
 
         let task1 = db
-            .create_task("Task 1", "backlog", None, None, None)
+            .create_task("Task 1", "backlog", None, None, None, None, None)
             .expect("create 1 failed");
         let task2 = db
-            .create_task("Task 2", "backlog", None, None, None)
+            .create_task("Task 2", "backlog", None, None, None, None, None)
             .expect("create 2 failed");
         let task3 = db
-            .create_task("Task 3", "backlog", None, None, None)
+            .create_task("Task 3", "backlog", None, None, None, None, None)
             .expect("create 3 failed");
 
         assert_eq!(task1.id, "T-1");
@@ -613,7 +637,7 @@ mod tests {
         let (db, path) = make_test_db("update_task_status");
 
         let task = db
-            .create_task("My task", "backlog", None, None, None)
+            .create_task("My task", "backlog", None, None, None, None, None)
             .expect("create failed");
 
         db.update_task_status(&task.id, "doing")
@@ -630,9 +654,17 @@ mod tests {
     fn test_update_task_jira_info() {
         let (db, path) = make_test_db("update_jira_info");
 
-        db.create_task("Linked task", "backlog", Some("PROJ-1"), None, None)
-            .expect("create 1 failed");
-        db.create_task("Unlinked task", "backlog", None, None, None)
+        db.create_task(
+            "Linked task",
+            "backlog",
+            Some("PROJ-1"),
+            None,
+            None,
+            None,
+            None,
+        )
+        .expect("create 1 failed");
+        db.create_task("Unlinked task", "backlog", None, None, None, None, None)
             .expect("create 2 failed");
 
         let updated = db
@@ -669,11 +701,11 @@ mod tests {
     fn test_get_tasks_with_jira_links() {
         let (db, path) = make_test_db("tasks_with_jira");
 
-        db.create_task("Task 1", "backlog", Some("PROJ-1"), None, None)
+        db.create_task("Task 1", "backlog", Some("PROJ-1"), None, None, None, None)
             .expect("create 1 failed");
-        db.create_task("Task 2", "backlog", Some("PROJ-2"), None, None)
+        db.create_task("Task 2", "backlog", Some("PROJ-2"), None, None, None, None)
             .expect("create 2 failed");
-        db.create_task("Task 3", "backlog", None, None, None)
+        db.create_task("Task 3", "backlog", None, None, None, None, None)
             .expect("create 3 failed");
 
         let linked = db.get_tasks_with_jira_links().expect("get linked failed");
@@ -688,8 +720,16 @@ mod tests {
         let (db, path) = make_test_db("jira_desc_null");
         db.set_config("task_id_prefix", "T").unwrap();
 
-        db.create_task("Task with jira", "backlog", Some("PROJ-1"), None, None)
-            .expect("create task failed");
+        db.create_task(
+            "Task with jira",
+            "backlog",
+            Some("PROJ-1"),
+            None,
+            None,
+            None,
+            None,
+        )
+        .expect("create task failed");
 
         let task = db.get_task("T-1").expect("get failed").unwrap();
         assert_eq!(task.jira_description, None);
@@ -731,7 +771,7 @@ mod tests {
         let (db, path) = make_test_db("delete_task_basic");
 
         let task = db
-            .create_task("Deletable", "backlog", None, None, None)
+            .create_task("Deletable", "backlog", None, None, None, None, None)
             .expect("create failed");
         let tasks = db.get_all_tasks().expect("get failed");
         assert_eq!(tasks.len(), 1);
@@ -807,7 +847,15 @@ mod tests {
         let (db, path) = make_test_db("task_custom_prefix");
         db.set_config("task_id_prefix", "FOO").unwrap();
         let task = db
-            .create_task("Custom prefix task", "backlog", None, None, None)
+            .create_task(
+                "Custom prefix task",
+                "backlog",
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
             .expect("create failed");
         assert_eq!(task.id, "FOO-1");
         drop(db);
@@ -824,7 +872,7 @@ mod tests {
             .unwrap();
         drop(conn);
         let task = db
-            .create_task("Fallback task", "backlog", None, None, None)
+            .create_task("Fallback task", "backlog", None, None, None, None, None)
             .expect("create failed");
         assert!(
             task.id.starts_with("T-"),
@@ -840,7 +888,7 @@ mod tests {
         let (db, path) = make_test_db("task_fallback_empty");
         db.set_config("task_id_prefix", "").unwrap();
         let task = db
-            .create_task("Fallback task", "backlog", None, None, None)
+            .create_task("Fallback task", "backlog", None, None, None, None, None)
             .expect("create failed");
         assert!(
             task.id.starts_with("T-"),
@@ -1051,6 +1099,54 @@ mod tests {
         assert_eq!(rows[0].id, "T-1");
         assert_eq!(rows[0].session_completed_at, None);
         assert_eq!(rows[0].session_status, None);
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_create_task_with_agent_and_permission_mode() {
+        let (db, path) = make_test_db("create_task_agent_permission");
+        db.set_config("task_id_prefix", "T").unwrap();
+
+        let task = db
+            .create_task(
+                "Agent task",
+                "backlog",
+                None,
+                None,
+                Some("Do agent work"),
+                Some("claude-code"),
+                Some("auto"),
+            )
+            .expect("create failed");
+
+        assert_eq!(task.id, "T-1");
+        assert_eq!(task.agent, Some("claude-code".to_string()));
+        assert_eq!(task.permission_mode, Some("auto".to_string()));
+
+        let retrieved = db.get_task(&task.id).expect("get failed").unwrap();
+        assert_eq!(retrieved.agent, Some("claude-code".to_string()));
+        assert_eq!(retrieved.permission_mode, Some("auto".to_string()));
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_create_task_agent_fields_default_to_none() {
+        let (db, path) = make_test_db("create_task_agent_none");
+
+        let task = db
+            .create_task("No agent task", "backlog", None, None, None, None, None)
+            .expect("create failed");
+
+        assert_eq!(task.agent, None);
+        assert_eq!(task.permission_mode, None);
+
+        let retrieved = db.get_task(&task.id).expect("get failed").unwrap();
+        assert_eq!(retrieved.agent, None);
+        assert_eq!(retrieved.permission_mode, None);
 
         drop(db);
         let _ = fs::remove_file(&path);

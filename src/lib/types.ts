@@ -9,6 +9,8 @@ export interface Task {
   jira_description: string | null;
   prompt: string | null;
   summary: string | null;
+  agent: string | null;
+  permission_mode: string | null;
   project_id: string | null;
   created_at: number;
   updated_at: number;
@@ -363,7 +365,6 @@ export interface Action {
   id: string;
   name: string;
   prompt: string;
-  agent: string | null;
   builtin: boolean;
   enabled: boolean;
 }
@@ -397,7 +398,7 @@ export interface WhisperModelStatus {
 // ============================================================================
 
 /** Permission mode for Claude Code sessions */
-export type PermissionMode = 'default' | 'acceptEdits' | 'plan' | 'bypassPermissions';
+export type PermissionMode = 'default' | 'acceptEdits' | 'plan' | 'bypassPermissions' | 'dontAsk';
 
 /** A tool call made by Claude during a session */
 export interface SDKToolCall {

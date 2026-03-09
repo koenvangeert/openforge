@@ -1,7 +1,7 @@
 import { render, screen, fireEvent } from '@testing-library/svelte'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import KanbanBoard from './KanbanBoard.svelte'
-import type { Task, AgentSession, Action } from '../lib/types'
+import type { Task } from '../lib/types'
 import { tasks, activeSessions, activeProjectId, searchQuery } from '../lib/stores'
 
 // Mock IPC functions
@@ -11,16 +11,7 @@ vi.mock('../lib/ipc', () => ({
   updateTaskStatus: vi.fn(),
   deleteTask: vi.fn(),
   clearDoneTasks: vi.fn(),
-}))
-
-// Mock actions module
-const mockActions: Action[] = [
-  { id: 'builtin-go', name: 'Go', prompt: '', agent: null, builtin: true, enabled: true },
-]
-
-vi.mock('../lib/actions', () => ({
-  loadActions: vi.fn(() => Promise.resolve(mockActions)),
-  getEnabledActions: vi.fn((actions: Action[]) => actions.filter(a => a.enabled)),
+  runAction: vi.fn(),
 }))
 
 const baseTask: Task = {
@@ -35,10 +26,17 @@ const baseTask: Task = {
   project_id: 'proj-1',
   created_at: 1000,
   updated_at: 2000,
+  prompt: '',
+  summary: null,
+  agent: null,
+  permission_mode: 'default',
 }
+
+const mockOnRunAction = vi.fn()
 
 describe('KanbanBoard', () => {
   beforeEach(() => {
+    vi.clearAllMocks()
     tasks.set([baseTask])
     activeSessions.set(new Map())
     activeProjectId.set('proj-1')
@@ -46,13 +44,13 @@ describe('KanbanBoard', () => {
   })
 
   it('renders backlog and doing columns by default', () => {
-    render(KanbanBoard)
+    render(KanbanBoard, { props: { onRunAction: mockOnRunAction } })
     expect(screen.getByText('// backlog')).toBeTruthy()
     expect(screen.getByText('// doing')).toBeTruthy()
   })
 
   it('does not show done column by default (requires drawer toggle)', () => {
-    render(KanbanBoard)
+    render(KanbanBoard, { props: { onRunAction: mockOnRunAction } })
     // Done column header should not be in the DOM (drawer is closed)
     expect(screen.queryByText('// done')).toBeNull()
   })
@@ -61,7 +59,7 @@ describe('KanbanBoard', () => {
     const doneTask: Task = { ...baseTask, id: 'T-2', title: 'Done task', status: 'done' }
     tasks.set([baseTask, doneTask])
 
-    render(KanbanBoard)
+    render(KanbanBoard, { props: { onRunAction: mockOnRunAction } })
 
     // Click the "done" toggle button
     const doneToggle = screen.getByTitle('Toggle done drawer (c)')
@@ -73,7 +71,7 @@ describe('KanbanBoard', () => {
   })
 
   it('hides backlog column when toggle is clicked', async () => {
-    render(KanbanBoard)
+    render(KanbanBoard, { props: { onRunAction: mockOnRunAction } })
 
     // Backlog column header is visible
     expect(screen.getByText('// backlog')).toBeTruthy()
@@ -88,120 +86,8 @@ describe('KanbanBoard', () => {
   })
 
   it('renders tasks in correct columns', () => {
-    render(KanbanBoard)
+    render(KanbanBoard, { props: { onRunAction: mockOnRunAction } })
     expect(screen.getByText('Test task')).toBeTruthy()
-  })
-
-  it('renders dynamic action items in context menu', async () => {
-    render(KanbanBoard)
-    
-    // Find the task card and trigger context menu
-    const taskCard = screen.getByText('Test task').closest('div')
-    if (!taskCard) throw new Error('Task card not found')
-    
-    // Trigger right-click
-    await fireEvent.contextMenu(taskCard)
-    
-    // Wait a tick for reactive statements to process
-    await new Promise(resolve => setTimeout(resolve, 10))
-    
-    // Check that dynamic actions appear in context menu
-    expect(screen.getByText('Go')).toBeTruthy()
-  })
-
-  it('disables actions when session is running', async () => {
-    const runningSession: AgentSession = {
-      id: 'ses-1',
-      ticket_id: 'T-1',
-      opencode_session_id: null,
-      stage: 'implement',
-      status: 'running',
-      checkpoint_data: null,
-      error_message: null,
-      created_at: 1000,
-      updated_at: 2000,
-      provider: 'opencode',
-      claude_session_id: null,
-    }
-    
-    activeSessions.set(new Map([['T-1', runningSession]]))
-    
-    const { container } = render(KanbanBoard)
-    
-    // Trigger context menu
-    const taskCard = screen.getByText('Test task').closest('div')
-    if (!taskCard) throw new Error('Task card not found')
-    await fireEvent.contextMenu(taskCard)
-    
-    // Wait for reactive statements
-    await new Promise(resolve => setTimeout(resolve, 10))
-    
-    // Check that action buttons are disabled
-    const actionButtons = container.querySelectorAll('.context-item')
-    const goButton = Array.from(actionButtons).find(btn => btn.textContent?.includes('Go')) as HTMLButtonElement
-    
-    expect(goButton).toBeTruthy()
-    expect(goButton.disabled).toBe(true)
-    expect(goButton.title).toBe('Agent is busy')
-  })
-
-  it('disables actions when session is paused', async () => {
-    const pausedSession: AgentSession = {
-      id: 'ses-1',
-      ticket_id: 'T-1',
-      opencode_session_id: null,
-      stage: 'implement',
-      status: 'paused',
-      checkpoint_data: '{"question":"approve?"}',
-      error_message: null,
-      created_at: 1000,
-      updated_at: 2000,
-      provider: 'opencode',
-      claude_session_id: null,
-    }
-    
-    activeSessions.set(new Map([['T-1', pausedSession]]))
-    
-    const { container } = render(KanbanBoard)
-    
-    // Trigger context menu
-    const taskCard = screen.getByText('Test task').closest('div')
-    if (!taskCard) throw new Error('Task card not found')
-    await fireEvent.contextMenu(taskCard)
-    
-    // Wait for reactive statements
-    await new Promise(resolve => setTimeout(resolve, 10))
-    
-    // Check that action buttons are disabled with correct message
-    const actionButtons = container.querySelectorAll('.context-item')
-    const goButton = Array.from(actionButtons).find(btn => btn.textContent?.includes('Go')) as HTMLButtonElement
-    
-    expect(goButton).toBeTruthy()
-    expect(goButton.disabled).toBe(true)
-    expect(goButton.title).toBe('Answer pending question first')
-  })
-
-  it('dispatches run-action event when action is clicked', async () => {
-    const onRunAction = vi.fn()
-    render(KanbanBoard, { props: { onRunAction } })
-    
-    // Trigger context menu
-    const taskCard = screen.getByText('Test task').closest('div')
-    if (!taskCard) throw new Error('Task card not found')
-    await fireEvent.contextMenu(taskCard)
-    
-    // Wait for reactive statements
-    await new Promise(resolve => setTimeout(resolve, 10))
-    
-    // Click on "Go" action
-    const goButton = screen.getByText('Go')
-    await fireEvent.click(goButton)
-    
-    expect(onRunAction).toHaveBeenCalledWith({
-      taskId: 'T-1',
-      actionPrompt: '',
-      agent: null,
-    })
   })
 
   it('filters tasks by title', async () => {
@@ -209,7 +95,7 @@ describe('KanbanBoard', () => {
     const taskB: Task = { ...baseTask, id: 'T-2', title: 'Add dashboard', status: 'backlog' }
     tasks.set([taskA, taskB])
 
-    render(KanbanBoard)
+    render(KanbanBoard, { props: { onRunAction: mockOnRunAction } })
 
     // Both visible initially
     expect(screen.getByText('Fix auth bug')).toBeTruthy()
@@ -228,7 +114,7 @@ describe('KanbanBoard', () => {
     tasks.set([taskA, taskB])
 
     searchQuery.set('T-100')
-    render(KanbanBoard)
+    render(KanbanBoard, { props: { onRunAction: mockOnRunAction } })
     await new Promise(resolve => setTimeout(resolve, 10))
 
     expect(screen.getByText('First task')).toBeTruthy()
@@ -241,7 +127,7 @@ describe('KanbanBoard', () => {
     tasks.set([taskA, taskB])
 
     searchQuery.set('PROJ')
-    render(KanbanBoard)
+    render(KanbanBoard, { props: { onRunAction: mockOnRunAction } })
     await new Promise(resolve => setTimeout(resolve, 10))
 
     expect(screen.getByText('Task A')).toBeTruthy()
@@ -253,7 +139,7 @@ describe('KanbanBoard', () => {
     tasks.set([taskA])
 
     searchQuery.set('fix auth')
-    render(KanbanBoard)
+    render(KanbanBoard, { props: { onRunAction: mockOnRunAction } })
     await new Promise(resolve => setTimeout(resolve, 10))
 
     expect(screen.getByText('Fix Auth Bug')).toBeTruthy()
@@ -265,7 +151,7 @@ describe('KanbanBoard', () => {
     tasks.set([taskA, taskB])
 
     searchQuery.set('Task A')
-    render(KanbanBoard)
+    render(KanbanBoard, { props: { onRunAction: mockOnRunAction } })
     await new Promise(resolve => setTimeout(resolve, 10))
 
     expect(screen.getByText('Task A')).toBeTruthy()
@@ -279,5 +165,35 @@ describe('KanbanBoard', () => {
     expect(screen.getByText('Task B')).toBeTruthy()
   })
 
+  it('shows Start Task in context menu for backlog tasks', async () => {
+    render(KanbanBoard, { props: { onRunAction: mockOnRunAction } })
+
+    const taskCard = screen.getByText('Test task')
+    await fireEvent.contextMenu(taskCard)
+
+    expect(screen.getByText('Start Task')).toBeTruthy()
+  })
+
+  it('does not show Start Task in context menu for doing tasks', async () => {
+    const doingTask: Task = { ...baseTask, id: 'T-2', title: 'Active task', status: 'doing' }
+    tasks.set([doingTask])
+
+    render(KanbanBoard, { props: { onRunAction: mockOnRunAction } })
+
+    const taskCard = screen.getByText('Active task')
+    await fireEvent.contextMenu(taskCard)
+
+    expect(screen.queryByText('Start Task')).toBeNull()
+  })
+
+  it('calls onRunAction when Start Task is clicked in context menu', async () => {
+    render(KanbanBoard, { props: { onRunAction: mockOnRunAction } })
+
+    const taskCard = screen.getByText('Test task')
+    await fireEvent.contextMenu(taskCard)
+    await fireEvent.click(screen.getByText('Start Task'))
+
+    expect(mockOnRunAction).toHaveBeenCalledWith({ taskId: 'T-1', actionPrompt: '', agent: null })
+  })
 
 })

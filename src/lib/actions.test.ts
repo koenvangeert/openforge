@@ -49,12 +49,11 @@ describe('actions module', () => {
     })
 
     it('parses stored JSON correctly', async () => {
-      const customActions: Action[] = [
+      const storedActions = [
         {
           id: 'custom-1',
           name: 'Custom Action',
           prompt: 'Do something custom',
-          agent: null,
           builtin: false,
           enabled: true,
         },
@@ -62,17 +61,20 @@ describe('actions module', () => {
           id: 'custom-2',
           name: 'Another Custom',
           prompt: 'Do another thing',
-          agent: null,
           builtin: false,
           enabled: false,
         },
       ]
 
-      vi.mocked(getProjectConfig).mockResolvedValue(JSON.stringify(customActions))
+      vi.mocked(getProjectConfig).mockResolvedValue(JSON.stringify(storedActions))
 
       const result = await loadActions('test-project-id')
 
-      expect(result).toEqual(customActions)
+      expect(result).toHaveLength(2)
+      expect(result[0].id).toBe('custom-1')
+      expect(result[0].name).toBe('Custom Action')
+      expect(result[1].id).toBe('custom-2')
+      expect(result[1].enabled).toBe(false)
       expect(setProjectConfig).not.toHaveBeenCalled()
     })
 
@@ -123,7 +125,6 @@ describe('actions module', () => {
           id: 'test-1',
           name: 'Test Action',
           prompt: 'Test prompt',
-          agent: null,
           builtin: false,
           enabled: true,
         },
@@ -165,7 +166,6 @@ describe('actions module', () => {
           id: 'enabled-1',
           name: 'Enabled Action',
           prompt: 'This is enabled',
-          agent: null,
           builtin: true,
           enabled: true,
         },
@@ -173,7 +173,6 @@ describe('actions module', () => {
           id: 'disabled-1',
           name: 'Disabled Action',
           prompt: 'This is disabled',
-          agent: null,
           builtin: true,
           enabled: false,
         },
@@ -181,7 +180,6 @@ describe('actions module', () => {
           id: 'enabled-2',
           name: 'Another Enabled',
           prompt: 'Also enabled',
-          agent: null,
           builtin: false,
           enabled: true,
         },
@@ -200,7 +198,6 @@ describe('actions module', () => {
           id: 'z',
           name: 'Zebra',
           prompt: 'Z',
-          agent: null,
           builtin: true,
           enabled: true,
         },
@@ -208,7 +205,6 @@ describe('actions module', () => {
           id: 'a',
           name: 'Apple',
           prompt: 'A',
-          agent: null,
           builtin: true,
           enabled: true,
         },
@@ -216,7 +212,6 @@ describe('actions module', () => {
           id: 'm',
           name: 'Mango',
           prompt: 'M',
-          agent: null,
           builtin: true,
           enabled: true,
         },
@@ -235,7 +230,6 @@ describe('actions module', () => {
           id: 'disabled-1',
           name: 'Disabled 1',
           prompt: 'Disabled',
-          agent: null,
           builtin: true,
           enabled: false,
         },
@@ -243,7 +237,6 @@ describe('actions module', () => {
           id: 'disabled-2',
           name: 'Disabled 2',
           prompt: 'Also disabled',
-          agent: null,
           builtin: false,
           enabled: false,
         },

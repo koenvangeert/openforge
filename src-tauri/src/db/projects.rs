@@ -386,8 +386,16 @@ mod tests {
         );
 
         // Create a backlog task — still no attention since it's not 'doing'
-        db.create_task("Backlog task", "backlog", None, Some(&project.id), None)
-            .expect("create task failed");
+        db.create_task(
+            "Backlog task",
+            "backlog",
+            None,
+            Some(&project.id),
+            None,
+            None,
+            None,
+        )
+        .expect("create task failed");
         let summaries = db.get_project_attention_summaries().expect("query failed");
         assert!(summaries.is_empty());
 
@@ -405,7 +413,15 @@ mod tests {
 
         // Create a doing task with a paused agent (needs input)
         let task1 = db
-            .create_task("Doing task 1", "doing", None, Some(&project.id), None)
+            .create_task(
+                "Doing task 1",
+                "doing",
+                None,
+                Some(&project.id),
+                None,
+                None,
+                None,
+            )
             .expect("create task failed");
         db.create_agent_session("ses-1", &task1.id, None, "implement", "paused", "opencode")
             .expect("create session failed");
@@ -420,14 +436,30 @@ mod tests {
 
         // Create a doing task with a running agent
         let task2 = db
-            .create_task("Doing task 2", "doing", None, Some(&project.id), None)
+            .create_task(
+                "Doing task 2",
+                "doing",
+                None,
+                Some(&project.id),
+                None,
+                None,
+                None,
+            )
             .expect("create task failed");
         db.create_agent_session("ses-2", &task2.id, None, "implement", "running", "opencode")
             .expect("create session failed");
 
         // Create a doing task with a completed agent (needs review/move)
         let task4 = db
-            .create_task("Doing task 4", "doing", None, Some(&project.id), None)
+            .create_task(
+                "Doing task 4",
+                "doing",
+                None,
+                Some(&project.id),
+                None,
+                None,
+                None,
+            )
             .expect("create task failed");
         db.create_agent_session(
             "ses-4",
@@ -441,7 +473,15 @@ mod tests {
 
         // Create a doing task with an open PR that has CI failure + unaddressed comment
         let task3 = db
-            .create_task("Doing task 3", "doing", None, Some(&project.id), None)
+            .create_task(
+                "Doing task 3",
+                "doing",
+                None,
+                Some(&project.id),
+                None,
+                None,
+                None,
+            )
             .expect("create task failed");
         db.insert_pull_request(
             42,

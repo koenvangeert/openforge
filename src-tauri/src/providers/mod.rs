@@ -58,11 +58,12 @@ impl Provider {
         worktree_path: &Path,
         prompt: &str,
         agent: Option<&str>,
+        permission_mode: Option<&str>,
         app: &AppHandle,
     ) -> Result<ProviderSessionResult, String> {
         match self {
-            Provider::ClaudeCode(p) => p.start(task_id, worktree_path, prompt, agent, app).await,
-            Provider::OpenCode(p) => p.start(task_id, worktree_path, prompt, agent, app).await,
+            Provider::ClaudeCode(p) => p.start(task_id, worktree_path, prompt, agent, permission_mode, app).await,
+            Provider::OpenCode(p) => p.start(task_id, worktree_path, prompt, agent, permission_mode, app).await,
         }
     }
 
@@ -74,11 +75,12 @@ impl Provider {
         worktree_path: &Path,
         prompt: Option<&str>,
         agent: Option<&str>,
+        permission_mode: Option<&str>,
         app: &AppHandle,
     ) -> Result<ProviderSessionResult, String> {
         match self {
-            Provider::ClaudeCode(p) => p.resume(task_id, session, worktree_path, prompt, agent, app).await,
-            Provider::OpenCode(p) => p.resume(task_id, session, worktree_path, prompt, agent, app).await,
+            Provider::ClaudeCode(p) => p.resume(task_id, session, worktree_path, prompt, agent, permission_mode, app).await,
+            Provider::OpenCode(p) => p.resume(task_id, session, worktree_path, prompt, agent, permission_mode, app).await,
         }
     }
 

@@ -126,6 +126,7 @@ async fn resume_task_servers(app: tauri::AppHandle, http_ready: tokio::sync::one
             worktree_path,
             None,
             None,
+            None,
             &app,
         ).await {
             Ok(result) => {

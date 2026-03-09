@@ -102,6 +102,8 @@ pub async fn create_task_handler(
         None,
         project_id.as_deref(),
         None,
+        None,
+        None,
     ).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     drop(db);

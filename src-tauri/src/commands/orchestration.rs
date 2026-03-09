@@ -222,7 +222,7 @@ pub async fn start_implementation(
     }
 
     let prompt = build_task_prompt(&task, "Implement this task. Create a branch, make the changes, and create a pull request when done.", additional_instructions.as_deref());
-    let result = provider.start(&task_id, &worktree_path, &prompt, None, &app).await?;
+    let result = provider.start(&task_id, &worktree_path, &prompt, None, None, &app).await?;
 
     if provider_name != "claude-code" {
         let db = crate::db::acquire_db(&db);
@@ -271,6 +271,8 @@ pub async fn run_action(
         (task, project_id, instructions)
     };
 
+    let effective_agent = agent.or(task.agent.clone());
+
     let provider_name = {
         let db_lock = crate::db::acquire_db(&db);
         db_lock.get_config("ai_provider").ok().flatten().unwrap_or_else(|| "claude-code".to_string())
@@ -317,7 +319,8 @@ pub async fn run_action(
                         session,
                         std::path::Path::new(&w.worktree_path),
                         Some(&action_prompt),
-                        agent.as_deref(),
+                        effective_agent.as_deref(),
+                        task.permission_mode.as_deref(),
                         &app,
                     ).await?;
 
@@ -380,7 +383,7 @@ pub async fn run_action(
     }
 
     let prompt = build_task_prompt(&task, &action_prompt, additional_instructions.as_deref());
-    let result = provider.start(&task_id, &worktree_path, &prompt, agent.as_deref(), &app).await?;
+    let result = provider.start(&task_id, &worktree_path, &prompt, effective_agent.as_deref(), task.permission_mode.as_deref(), &app).await?;
 
     if provider_name != "claude-code" {
         let db = crate::db::acquire_db(&db);
@@ -463,6 +466,8 @@ mod tests {
             updated_at: 0,
             prompt: None,
             summary: None,
+            agent: None,
+            permission_mode: None,
         };
 
         let prompt = build_task_prompt(&task, "Do the thing!", None);
@@ -491,6 +496,8 @@ mod tests {
             updated_at: 0,
             prompt: None,
             summary: None,
+            agent: None,
+            permission_mode: None,
         };
 
         let prompt = build_task_prompt(&task, "Execute now!", None);
@@ -518,6 +525,8 @@ mod tests {
             updated_at: 0,
             prompt: None,
             summary: None,
+            agent: None,
+            permission_mode: None,
         };
 
         let prompt = build_task_prompt(&task, "Run test!", None);
@@ -544,6 +553,8 @@ mod tests {
             updated_at: 0,
             prompt: None,
             summary: None,
+            agent: None,
+            permission_mode: None,
         };
 
         let prompt = build_task_prompt(&task, "Do the thing!", Some("Always use TypeScript strict mode.\nFollow the project coding standards."));
@@ -573,6 +584,8 @@ mod tests {
             updated_at: 0,
             prompt: None,
             summary: None,
+            agent: None,
+            permission_mode: None,
         };
 
         let prompt_with_empty = build_task_prompt(&task, "Do the thing!", Some(""));
@@ -597,6 +610,8 @@ mod tests {
             updated_at: 0,
             prompt: None,
             summary: None,
+            agent: None,
+            permission_mode: None,
         };
 
         let prompt = build_task_prompt(&task, "Do the thing!", None);
@@ -620,6 +635,8 @@ mod tests {
             updated_at: 0,
             prompt: None,
             summary: None,
+            agent: None,
+            permission_mode: None,
         };
 
         let prompt = build_task_prompt(&task, "Implement this task.", None);
@@ -650,6 +667,8 @@ mod tests {
             updated_at: 0,
             prompt: None,
             summary: None,
+            agent: None,
+            permission_mode: None,
         };
 
         let prompt = build_task_prompt(&task, "Do it!", None);
@@ -676,6 +695,8 @@ mod tests {
             updated_at: 0,
             prompt: None,
             summary: None,
+            agent: None,
+            permission_mode: None,
         };
 
         let prompt = build_task_prompt(&task, "Go!", None);
@@ -702,6 +723,8 @@ mod tests {
             updated_at: 0,
             prompt: Some("Fix auth bug".to_string()),
             summary: None,
+            agent: None,
+            permission_mode: None,
         };
 
         let prompt = build_task_prompt(&task, "Implement this task.", None);
@@ -729,6 +752,8 @@ mod tests {
             updated_at: 0,
             prompt: None,
             summary: None,
+            agent: None,
+            permission_mode: None,
         };
 
         let prompt = build_task_prompt(&task, "Do it!", None);
@@ -755,6 +780,8 @@ mod tests {
             updated_at: 0,
             prompt: Some("Add a login page".to_string()),
             summary: None,
+            agent: None,
+            permission_mode: None,
         };
 
         let prompt = build_task_prompt(&task, "Implement this task.", None);
@@ -789,6 +816,8 @@ mod tests {
             updated_at: 0,
             prompt: Some("Do the work".to_string()),
             summary: None,
+            agent: None,
+            permission_mode: None,
         };
 
         let prompt = build_task_prompt(&task, "Execute!", Some("Project rules here"));

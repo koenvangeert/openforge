@@ -23,6 +23,7 @@ impl OpenCodeProvider {
         worktree_path: &Path,
         prompt: &str,
         agent: Option<&str>,
+        _permission_mode: Option<&str>,
         app: &AppHandle,
     ) -> Result<ProviderSessionResult, String> {
         let port = self.server_mgr
@@ -60,6 +61,7 @@ impl OpenCodeProvider {
         worktree_path: &Path,
         prompt: Option<&str>,
         agent: Option<&str>,
+        _permission_mode: Option<&str>,
         app: &AppHandle,
     ) -> Result<ProviderSessionResult, String> {
         match prompt {

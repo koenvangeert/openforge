@@ -6,7 +6,6 @@ export const DEFAULT_ACTIONS: Action[] = [
     id: "builtin-go",
     name: "Go",
     prompt: "",
-    agent: null,
     builtin: true,
     enabled: true,
   },
@@ -23,7 +22,7 @@ export async function loadActions(projectId: string): Promise<Action[]> {
   try {
     const parsed = JSON.parse(stored);
     if (Array.isArray(parsed) && parsed.length > 0) {
-      return parsed.map((a: Action) => ({ ...a, agent: a.agent ?? null }));
+      return parsed.map(({ agent, ...rest }: Record<string, unknown>) => rest as unknown as Action);
     }
   } catch {
     // Fall through to seed defaults
@@ -42,7 +41,6 @@ export function createAction(name: string, prompt: string): Action {
     id: crypto.randomUUID(),
     name,
     prompt,
-    agent: null,
     builtin: false,
     enabled: true,
   };

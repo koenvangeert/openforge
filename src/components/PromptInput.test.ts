@@ -159,4 +159,85 @@ describe('PromptInput', () => {
     const jiraInput = screen.getByPlaceholderText('e.g. PROJ-123')
     expect((jiraInput as HTMLInputElement).value).toBe('PROJ-42')
   })
+
+  describe('dual buttons (onStartTask provided)', () => {
+    it('shows Add to Backlog and Start Task buttons', () => {
+      render(PromptInput, {
+        props: {
+          ...baseProps,
+          onStartTask: vi.fn(),
+        },
+      })
+      expect(screen.getByText('Add to Backlog', { exact: false })).toBeTruthy()
+      expect(screen.getByText('Start Task', { exact: false })).toBeTruthy()
+      expect(screen.queryByRole('button', { name: 'Submit' })).toBeNull()
+    })
+
+    it('calls onSubmit when Add to Backlog is clicked', async () => {
+      const onSubmit = vi.fn()
+      render(PromptInput, {
+        props: {
+          ...baseProps,
+          onSubmit,
+          onStartTask: vi.fn(),
+        },
+      })
+      const textarea = screen.getByPlaceholderText('Describe what you want to implement...') as HTMLTextAreaElement
+      textarea.value = 'New feature'
+      await fireEvent.input(textarea)
+      await fireEvent.click(screen.getByText('Add to Backlog', { exact: false }))
+      expect(onSubmit).toHaveBeenCalledWith('New feature', null)
+    })
+
+    it('calls onStartTask when Start Task is clicked', async () => {
+      const onStartTask = vi.fn()
+      render(PromptInput, {
+        props: {
+          ...baseProps,
+          onStartTask,
+        },
+      })
+      const textarea = screen.getByPlaceholderText('Describe what you want to implement...') as HTMLTextAreaElement
+      textarea.value = 'New feature'
+      await fireEvent.input(textarea)
+      await fireEvent.click(screen.getByText('Start Task', { exact: false }))
+      expect(onStartTask).toHaveBeenCalledWith('New feature', null)
+    })
+
+    it('Cmd+Enter calls onStartTask (primary action)', async () => {
+      const onSubmit = vi.fn()
+      const onStartTask = vi.fn()
+      render(PromptInput, {
+        props: {
+          ...baseProps,
+          onSubmit,
+          onStartTask,
+        },
+      })
+      const textarea = screen.getByPlaceholderText('Describe what you want to implement...') as HTMLTextAreaElement
+      textarea.value = 'New feature'
+      await fireEvent.input(textarea)
+      await fireEvent.keyDown(textarea, { key: 'Enter', metaKey: true })
+      expect(onStartTask).toHaveBeenCalledWith('New feature', null)
+      expect(onSubmit).not.toHaveBeenCalled()
+    })
+
+    it('Shift+Enter calls onSubmit (add to backlog)', async () => {
+      const onSubmit = vi.fn()
+      const onStartTask = vi.fn()
+      render(PromptInput, {
+        props: {
+          ...baseProps,
+          onSubmit,
+          onStartTask,
+        },
+      })
+      const textarea = screen.getByPlaceholderText('Describe what you want to implement...') as HTMLTextAreaElement
+      textarea.value = 'New feature'
+      await fireEvent.input(textarea)
+      await fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: true })
+      expect(onSubmit).toHaveBeenCalledWith('New feature', null)
+      expect(onStartTask).not.toHaveBeenCalled()
+    })
+  })
 })

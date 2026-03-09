@@ -395,8 +395,13 @@ mod tests {
             std::env::temp_dir().join("test_hooks_settings_claude_args_integration.json");
         fs::write(&temp_path, &json_string).unwrap();
 
-        let args =
-            crate::pty_manager::build_claude_args("implement feature", None, false, &temp_path);
+        let args = crate::pty_manager::build_claude_args(
+            "implement feature",
+            None,
+            false,
+            &temp_path,
+            None,
+        );
 
         let settings_idx = args
             .iter()

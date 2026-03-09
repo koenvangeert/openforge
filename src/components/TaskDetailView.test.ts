@@ -120,7 +120,7 @@ vi.mock('../lib/terminalPool', () => ({
 
 vi.mock('../lib/actions', () => ({
   loadActions: vi.fn(() => Promise.resolve([
-    { id: 'builtin-go', name: 'Go', prompt: '', agent: null, builtin: true, enabled: true },
+    { id: 'builtin-go', name: 'Go', prompt: '', builtin: true, enabled: true },
   ])),
   getEnabledActions: vi.fn((actions: { enabled: boolean }[]) => actions.filter(a => a.enabled)),
 }))
@@ -140,6 +140,8 @@ const baseTask: Task = {
   jira_description: null,
   prompt: null,
   summary: null,
+  agent: null,
+  permission_mode: null,
   project_id: null,
   created_at: 1000,
   updated_at: 2000,
@@ -198,15 +200,34 @@ describe('TaskDetailView', () => {
     expect(screen.getByText('// INITIAL_PROMPT')).toBeTruthy()
   })
 
-  it('shows Move to Done button when task is not done', () => {
+  it('shows Start Task button for backlog tasks', () => {
     render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
-    expect(screen.getByText('Move to Done')).toBeTruthy()
+    expect(screen.getByText('Start Task')).toBeTruthy()
+    expect(screen.queryByText('Move to Done')).toBeNull()
   })
 
-  it('hides Move to Done button when task is already done', () => {
+  it('hides all action buttons for done tasks', () => {
     const doneTask = { ...baseTask, status: 'done' }
     render(TaskDetailView, { props: { task: doneTask, onRunAction: mockOnRunAction } })
     expect(screen.queryByText('Move to Done')).toBeNull()
+    expect(screen.queryByText('Start Task')).toBeNull()
+    expect(screen.queryByText('Go')).toBeNull()
+  })
+
+  it('Start Task calls onRunAction with empty prompt', () => {
+    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+    fireEvent.click(screen.getByText('Start Task'))
+    expect(mockOnRunAction).toHaveBeenCalledWith({ taskId: 'T-42', actionPrompt: '', agent: null })
+  })
+
+  it('shows Move to Done and action buttons for doing tasks', async () => {
+    const doingTask = { ...baseTask, status: 'doing' }
+    render(TaskDetailView, { props: { task: doingTask, onRunAction: mockOnRunAction } })
+    expect(screen.getByText('Move to Done')).toBeTruthy()
+    await waitFor(() => {
+      expect(screen.getByText('Go')).toBeTruthy()
+    })
+    expect(screen.queryByText('Start Task')).toBeNull()
   })
 
   it('hides Review toggle when no worktree', async () => {
@@ -217,14 +238,16 @@ describe('TaskDetailView', () => {
   })
 
   it('renders action buttons in header', async () => {
-    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+    const doingTask = { ...baseTask, status: 'doing' }
+    render(TaskDetailView, { props: { task: doingTask, onRunAction: mockOnRunAction } })
     await waitFor(() => {
       expect(screen.getByText('Go')).toBeTruthy()
     })
   })
 
   it('calls onRunAction when action button clicked', async () => {
-    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+    const doingTask = { ...baseTask, status: 'doing' }
+    render(TaskDetailView, { props: { task: doingTask, onRunAction: mockOnRunAction } })
     await waitFor(() => {
       expect(screen.getByText('Go')).toBeTruthy()
     })
@@ -233,8 +256,9 @@ describe('TaskDetailView', () => {
   })
 
   it('disables action buttons when session is running', async () => {
+    const doingTask = { ...baseTask, status: 'doing' }
     activeSessions.set(new Map([['T-42', { ...baseSession, status: 'running' }]]))
-    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+    render(TaskDetailView, { props: { task: doingTask, onRunAction: mockOnRunAction } })
     await waitFor(() => {
       expect(screen.getByText('Go')).toBeTruthy()
     })
@@ -245,8 +269,9 @@ describe('TaskDetailView', () => {
   })
 
   it('action buttons enabled when no active session', async () => {
+    const doingTask = { ...baseTask, status: 'doing' }
     activeSessions.set(new Map())
-    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+    render(TaskDetailView, { props: { task: doingTask, onRunAction: mockOnRunAction } })
     await waitFor(() => {
       expect(screen.getByText('Go')).toBeTruthy()
     })
@@ -337,8 +362,9 @@ describe('TaskDetailView', () => {
   })
 
   it('does not navigate away when task is moved to done', async () => {
+    const doingTask: Task = { ...baseTask, status: 'doing' }
     selectedTaskId.set('T-42')
-    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+    render(TaskDetailView, { props: { task: doingTask, onRunAction: mockOnRunAction } })
     await fireEvent.click(screen.getByText('Move to Done'))
     const { updateTaskStatus } = await import('../lib/ipc')
     expect(updateTaskStatus).toHaveBeenCalledWith('T-42', 'done')
