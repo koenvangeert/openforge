@@ -66,9 +66,6 @@
     if (newStatus === task.status) return
     try {
       await updateTaskStatus(task.id, newStatus)
-      if (newStatus === 'done') {
-        $selectedTaskId = null
-      }
     } catch (e) {
       console.error('Failed to update status:', e)
     }

@@ -127,7 +127,7 @@ vi.mock('../lib/actions', () => ({
 
 import TaskDetailView from './TaskDetailView.svelte'
 import type { Task, AgentSession } from '../lib/types'
-import { activeSessions } from '../lib/stores'
+import { activeSessions, selectedTaskId } from '../lib/stores'
 
 const baseTask: Task = {
   id: 'T-42',
@@ -334,6 +334,17 @@ describe('TaskDetailView', () => {
     const taskNoTitleNoPrompt = { ...baseTask, title: '', prompt: null }
     render(TaskDetailView, { props: { task: taskNoTitleNoPrompt, onRunAction: mockOnRunAction } })
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('T-42')
+  })
+
+  it('does not navigate away when task is moved to done', async () => {
+    selectedTaskId.set('T-42')
+    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+    await fireEvent.click(screen.getByText('Move to Done'))
+    const { updateTaskStatus } = await import('../lib/ipc')
+    expect(updateTaskStatus).toHaveBeenCalledWith('T-42', 'done')
+    let currentValue: string | null = null
+    selectedTaskId.subscribe(v => { currentValue = v })()
+    expect(currentValue).toBe('T-42')
   })
 
 })
