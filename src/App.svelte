@@ -2,7 +2,7 @@
   import { onMount, onDestroy } from 'svelte'
   import { listen } from '@tauri-apps/api/event'
   import type { UnlistenFn, Event } from '@tauri-apps/api/event'
-  import { tasks, selectedTaskId, activeSessions, checkpointNotification, ciFailureNotification, ticketPrs, error, isLoading, projects, activeProjectId, currentView, reviewRequestCount, projectAttention, taskSpawned, searchQuery, selectedSkillName, runningTerminals, startingTasks, creaturesEnabled } from './lib/stores'
+  import { tasks, selectedTaskId, activeSessions, checkpointNotification, ciFailureNotification, ticketPrs, error, isLoading, projects, activeProjectId, currentView, reviewRequestCount, projectAttention, taskSpawned, selectedSkillName, runningTerminals, startingTasks, creaturesEnabled } from './lib/stores'
   import { getProjects, getTasksForProject, getPullRequests, runAction, getSessionStatus, getLatestSession, getLatestSessions, forceGithubSync, createTask, updateTask, getProjectAttention, getAppMode, finalizeClaudeSession, getRunningPtyTaskIds, getConfig, getAgents, writePty, getReviewPrs } from './lib/ipc'
   import SearchableSelect from './components/SearchableSelect.svelte'
   import type { Task, PullRequestInfo, AgentEvent, ProjectAttention, AppView } from './lib/types'
@@ -23,7 +23,7 @@
   import ProjectSwitcherModal from './components/ProjectSwitcherModal.svelte'
   import ProjectSetupDialog from './components/ProjectSetupDialog.svelte'
   import IconRail from './components/IconRail.svelte'
-  import { RefreshCw } from 'lucide-svelte'
+  import CommandPalette from './components/CommandPalette.svelte'
 
   import { pushNavState, navigateBack } from './lib/navigation'
   import { release as releaseTerminal, isPtyActive } from './lib/terminalPool'
@@ -56,6 +56,7 @@
   let appMode = $state<string | null>(null)
   let showShortcutsDialog = $state(false)
   let showProjectSwitcher = $state(false)
+  let showCommandPalette = $state(false)
   let workQueueRefreshTrigger = $state(0)
 
   let selectedTask = $derived($tasks.find(t => t.id === $selectedTaskId) || null)
@@ -297,10 +298,10 @@
       e.preventDefault()
       window.dispatchEvent(new CustomEvent('toggle-voice-recording'))
     }
-    if ((e.metaKey || e.ctrlKey) && e.key === '/') {
+    if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
       e.preventDefault()
-      const searchInput = document.querySelector('[data-search-input]') as HTMLInputElement
-      searchInput?.focus()
+      showCommandPalette = !showCommandPalette
+      return
     }
     if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key === 'r') {
       e.preventDefault()
@@ -721,34 +722,28 @@
         </button>
       </div>
 
-    </header>
-
-    {#if $currentView === 'board' && !selectedTask}
-      <div class="flex items-center gap-3 px-6 py-2 border-b border-base-300 shrink-0">
-        <label class="input input-bordered input-sm flex items-center gap-2 w-72 font-mono text-xs">
-          <span class="text-secondary">$</span>
-          <input
-            type="text"
-            class="grow bg-transparent border-none outline-none text-sm font-mono"
-            placeholder="search"
-            data-search-input
-            bind:value={$searchQuery}
-          />
-        </label>
+      <div class="flex items-center gap-2">
         <button
-          class="btn btn-ghost btn-sm btn-square"
-          onclick={triggerGithubSync}
-          disabled={isSyncing}
-          title="Refresh GitHub data (⌘⇧R)"
+          type="button"
+          class="btn btn-ghost btn-sm text-neutral-content/60 hover:text-neutral-content font-mono text-xs gap-1"
+          onclick={() => showCommandPalette = true}
         >
-          {#if isSyncing}
-            <span class="loading loading-spinner loading-xs"></span>
+          search <kbd class="kbd kbd-xs bg-neutral-content/10 text-neutral-content/50 border-neutral-content/20">&#8984;K</kbd>
+        </button>
+        <button
+          type="button"
+          class="btn btn-ghost btn-sm text-neutral-content/60 hover:text-neutral-content font-mono text-xs gap-1"
+          onclick={() => showProjectSwitcher = true}
+        >
+          {#if activeProject}
+            <span class="text-neutral-content/80">{activeProject.name}</span>
           {:else}
-            <RefreshCw size={16} />
+            projects
           {/if}
+          <kbd class="kbd kbd-xs bg-neutral-content/10 text-neutral-content/50 border-neutral-content/20">&#8984;P</kbd>
         </button>
       </div>
-    {/if}
+    </header>
 
     <main class="flex-1 overflow-hidden flex">
       {#if $currentView === 'settings'}
@@ -861,6 +856,10 @@
   <ProjectSwitcherModal onClose={() => showProjectSwitcher = false} />
 {/if}
 
+{#if showCommandPalette}
+  <CommandPalette onClose={() => showCommandPalette = false} />
+{/if}
+
 <!-- Keyboard shortcuts help dialog (global) -->
 {#if showShortcutsDialog}
   <Modal onClose={() => showShortcutsDialog = false} maxWidth="420px">
@@ -893,8 +892,8 @@
             <kbd class="kbd kbd-sm">⌘D</kbd>
           </div>
           <div class="flex items-center justify-between">
-            <span class="text-sm text-base-content">Focus search</span>
-            <kbd class="kbd kbd-sm">⌘/</kbd>
+            <span class="text-sm text-base-content">Search tasks</span>
+            <kbd class="kbd kbd-sm">⌘K</kbd>
           </div>
           <div class="flex items-center justify-between">
             <span class="text-sm text-base-content">Show shortcuts</span>
