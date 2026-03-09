@@ -14,7 +14,6 @@ use regex::Regex;
 const HEALTH_CHECK_RETRIES: u32 = 10;
 const HEALTH_CHECK_INTERVAL: Duration = Duration::from_millis(500);
 const PORT_DETECTION_TIMEOUT: Duration = Duration::from_secs(30);
-const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(5);
 
 // ============================================================================
 // Error Types
@@ -137,8 +136,8 @@ impl ServerManager {
         Ok(port)
     }
 
-    /// Stops the server for the given task_id.
-    /// Performs graceful shutdown (SIGTERM) followed by force kill if needed.
+    /// Stops the server for the given task_id via force kill.
+    /// OpenCode servers don't respond to SIGTERM, so we skip graceful shutdown.
     ///
     /// # Arguments
     /// * `task_id` - Unique identifier for the task
@@ -149,35 +148,10 @@ impl ServerManager {
             ServerError::ProcessNotFound(task_id.to_string())
         })?;
 
-        println!("Stopping server for task {} (PID: {})", task_id, server.pid);
+        println!("Stopping server for task {} (PID: {}) — force killing", task_id, server.pid);
 
-        #[cfg(unix)]
-        {
-            use nix::sys::signal::{kill, Signal};
-            use nix::unistd::Pid;
-
-            let pid = Pid::from_raw(server.pid as i32);
-            let _ = kill(pid, Signal::SIGTERM);
-
-            let wait_result = timeout(SHUTDOWN_TIMEOUT, server.child.wait()).await;
-
-            match wait_result {
-                Ok(Ok(status)) => {
-                    println!("Server for task {} exited gracefully: {:?}", task_id, status);
-                }
-                _ => {
-                    println!("Graceful shutdown timed out for task {}, forcing kill...", task_id);
-                    server.child.kill().await?;
-                    let _ = server.child.wait().await;
-                }
-            }
-        }
-
-        #[cfg(not(unix))]
-        {
-            server.child.kill().await?;
-            let _ = server.child.wait().await;
-        }
+        server.child.kill().await?;
+        let _ = server.child.wait().await;
 
         let pid_file = self.get_pid_dir()?.join(format!("{}.pid", task_id));
         let _ = std::fs::remove_file(pid_file);
@@ -274,19 +248,9 @@ impl ServerManager {
                     .unwrap_or(false);
 
                 if is_opencode {
-                    println!("[cleanup] Killing orphaned opencode process (PID: {})", pid);
+                    println!("[cleanup] Force killing orphaned opencode process (PID: {})", pid);
                     unsafe {
-                        libc::kill(pid, libc::SIGTERM);
-                    }
-                    // Brief wait for graceful shutdown
-                    std::thread::sleep(std::time::Duration::from_millis(500));
-                    // Check if still running, force kill if needed
-                    let still_running = unsafe { libc::kill(pid, 0) == 0 };
-                    if still_running {
-                        println!("[cleanup] Force killing process (PID: {})", pid);
-                        unsafe {
-                            libc::kill(pid, libc::SIGKILL);
-                        }
+                        libc::kill(pid, libc::SIGKILL);
                     }
                 } else {
                     println!("[cleanup] PID {} is not opencode (PID reuse), removing stale file: {:?}", pid, path);
