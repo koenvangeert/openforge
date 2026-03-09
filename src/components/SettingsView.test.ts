@@ -36,6 +36,7 @@ vi.mock('../lib/stores', () => ({
       updated_at: Date.now(),
     },
   ]),
+  creaturesEnabled: writable(false),
 }))
 
 import SettingsView from './SettingsView.svelte'
