@@ -2,7 +2,7 @@
   import { onMount, tick } from 'svelte'
   import { selectedTaskId, activeSessions, currentView, projects, activeProjectId } from '../lib/stores'
   import { pushNavState } from '../lib/navigation'
-  import { matchesSearch, sortTasks } from '../lib/commandPalette'
+  import { matchesSearch, sortTasks, filterActiveTasks } from '../lib/commandPalette'
   import { getAllTasks, getLatestSessions } from '../lib/ipc'
   import type { Task } from '../lib/types'
 
@@ -48,7 +48,8 @@
   }
 
   let sortedAndFiltered = $derived.by(() => {
-    const sorted = sortTasks(allTasks, $activeSessions)
+    const active = filterActiveTasks(allTasks)
+    const sorted = sortTasks(active, $activeSessions)
     if (!searchQuery.trim()) return sorted
     return sorted.filter(t => matchesSearch(t, searchQuery.trim(), projectMap))
   })
