@@ -81,6 +81,20 @@
   }
 
   function handleTaskDetailKeydown(e: KeyboardEvent) {
+    // Cmd+number shortcuts work regardless of focus (even when terminal has focus)
+    if (e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey && worktreePath !== null) {
+      if (e.key === '1') {
+        e.preventDefault()
+        reviewMode = false
+        return
+      }
+      if (e.key === '2') {
+        e.preventDefault()
+        reviewMode = true
+        return
+      }
+    }
+
     if (isInputFocused()) return
     if (e.metaKey || e.ctrlKey || e.altKey) return
 
@@ -165,13 +179,13 @@
     {#if worktreePath !== null}
       <div class="flex items-center gap-1">
         <button
-          class="btn btn-ghost btn-xs {!reviewMode ? 'text-primary border border-primary' : 'text-base-content/50 border border-base-300'}"
+          class="btn btn-ghost btn-xs gap-1.5 {!reviewMode ? 'text-primary border border-primary' : 'text-base-content/50 border border-base-300'}"
           onclick={() => reviewMode = false}
-        >code_view</button>
+        >code_view <kbd class="kbd kbd-xs opacity-50">⌘1</kbd></button>
         <button
-          class="btn btn-ghost btn-xs {reviewMode ? 'text-primary border border-primary' : 'text-base-content/50 border border-base-300'}"
+          class="btn btn-ghost btn-xs gap-1.5 {reviewMode ? 'text-primary border border-primary' : 'text-base-content/50 border border-base-300'}"
           onclick={() => reviewMode = true}
-        >review_view</button>
+        >review_view <kbd class="kbd kbd-xs opacity-50">⌘2</kbd></button>
       </div>
     {/if}
   </div>
