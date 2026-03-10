@@ -170,19 +170,6 @@ describe('WorkQueueView', () => {
       expect(screen.getByText('Done')).toBeTruthy()
     })
   })
-
-  it('shows running status badge with correct label', async () => {
-    vi.mocked(getWorkQueueTasks).mockResolvedValue([
-      makeWorkQueueTask({ session_status: 'running' }),
-    ])
-
-    render(WorkQueueView)
-
-    await waitFor(() => {
-      expect(screen.getByText('Running')).toBeTruthy()
-    })
-  })
-
   it('does not show status badge when session_status is null', async () => {
     vi.mocked(getWorkQueueTasks).mockResolvedValue([
       makeWorkQueueTask({ session_status: null }),

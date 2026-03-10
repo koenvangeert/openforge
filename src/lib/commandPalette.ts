@@ -14,6 +14,10 @@ export function matchesSearch(task: Task, query: string, projectMap?: Map<string
   )
 }
 
+export function filterActiveTasks(tasks: Task[]): Task[] {
+  return tasks.filter(t => t.status !== 'done')
+}
+
 function getTaskSortPriority(task: Task, sessionStatus: string | null): number {
   if (sessionStatus === 'paused' || sessionStatus === 'interrupted') return 0
   if (task.status === 'doing') return 1

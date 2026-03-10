@@ -2,10 +2,11 @@
   import { onMount, onDestroy } from 'svelte'
   import { listen } from '@tauri-apps/api/event'
   import type { UnlistenFn, Event } from '@tauri-apps/api/event'
-  import { tasks, selectedTaskId, activeSessions, checkpointNotification, ciFailureNotification, ticketPrs, error, isLoading, projects, activeProjectId, currentView, reviewRequestCount, projectAttention, taskSpawned, selectedSkillName, runningTerminals, startingTasks, creaturesEnabled } from './lib/stores'
-  import { getProjects, getTasksForProject, getPullRequests, runAction, getSessionStatus, getLatestSession, getLatestSessions, forceGithubSync, createTask, updateTask, getProjectAttention, getAppMode, finalizeClaudeSession, getRunningPtyTaskIds, getConfig, getAgents, writePty, getReviewPrs } from './lib/ipc'
+  import { tasks, selectedTaskId, activeSessions, checkpointNotification, ciFailureNotification, ticketPrs, error, isLoading, projects, activeProjectId, currentView, reviewRequestCount, projectAttention, taskSpawned, selectedSkillName, runningTerminals, startingTasks, creaturesEnabled, codeCleanupTasksEnabled } from './lib/stores'
+  import { getProjects, getTasksForProject, getPullRequests, runAction, getSessionStatus, getLatestSession, getLatestSessions, forceGithubSync, createTask, updateTask, updateTaskStatus, deleteTask, getProjectAttention, getAppMode, finalizeClaudeSession, getRunningPtyTaskIds, getConfig, getAgents, getReviewPrs } from './lib/ipc'
+  import { writePtyWithSubmit } from './lib/ptySubmit'
   import SearchableSelect from './components/SearchableSelect.svelte'
-  import type { Task, PullRequestInfo, AgentEvent, ProjectAttention, AppView } from './lib/types'
+  import type { Task, PullRequestInfo, AgentEvent, ProjectAttention, AppView, PermissionMode } from './lib/types'
   import KanbanBoard from './components/KanbanBoard.svelte'
   import TaskDetailView from './components/TaskDetailView.svelte'
    import PromptInput from './components/PromptInput.svelte'
@@ -24,8 +25,11 @@
   import ProjectSetupDialog from './components/ProjectSetupDialog.svelte'
   import IconRail from './components/IconRail.svelte'
   import CommandPalette from './components/CommandPalette.svelte'
+  import ActionPalette from './components/ActionPalette.svelte'
 
   import { pushNavState, navigateBack } from './lib/navigation'
+  import { loadActions, getEnabledActions } from './lib/actions'
+  import type { Action } from './lib/types'
   import { release as releaseTerminal, isPtyActive, focusTerminal } from './lib/terminalPool'
   import { isInputFocused } from './lib/domUtils'
   import { resolveGotoKey } from './lib/vimGoto'
@@ -37,9 +41,11 @@
   let dialogAiProvider = $state<string | null>(null)
   let dialogAgents = $state<string[]>([])
   let dialogSelectedAgent = $state('')
+  let dialogSelectedPermissionMode = $state<PermissionMode>('default')
 
   async function loadDialogAgentInfo() {
     dialogSelectedAgent = ''
+    dialogSelectedPermissionMode = 'default'
     try {
       const provider = await getConfig('ai_provider')
       dialogAiProvider = provider ?? 'claude-code'
@@ -59,6 +65,8 @@
   let showShortcutsDialog = $state(false)
   let showProjectSwitcher = $state(false)
   let showCommandPalette = $state(false)
+  let showActionPalette = $state(false)
+  let actionPaletteActions = $state<Action[]>([])
   let workQueueRefreshTrigger = $state(0)
   let pendingGoto = $state(false)
   let gotoTimer: ReturnType<typeof setTimeout> | null = null
@@ -72,7 +80,7 @@
   }
 
   function isAnyModalOpen(): boolean {
-    return showAddDialog || showShortcutsDialog || showProjectSwitcher || showCommandPalette || showProjectSetup
+    return showAddDialog || showShortcutsDialog || showProjectSwitcher || showCommandPalette || showActionPalette || showProjectSetup
   }
 
   let selectedTask = $derived($tasks.find(t => t.id === $selectedTaskId) || null)
@@ -236,7 +244,7 @@
     // instead of starting a new session (like dictation does)
     if (isPtyActive(taskId)) {
       try {
-        await writePty(taskId, actionPrompt + '\r')
+        await writePtyWithSubmit(taskId, actionPrompt)
         focusTerminal(taskId)
       } catch (e) {
         console.error('[session] Failed to write action to PTY:', taskId, e)
@@ -274,6 +282,76 @@
     }
   }
 
+  async function openActionPalette() {
+    if (showActionPalette) {
+      showActionPalette = false
+      return
+    }
+    if ($activeProjectId) {
+      try {
+        const all = await loadActions($activeProjectId)
+        actionPaletteActions = getEnabledActions(all)
+      } catch {
+        actionPaletteActions = []
+      }
+    }
+    showActionPalette = true
+  }
+
+  async function executeAction(actionId: string) {
+    showActionPalette = false
+    const task = selectedTask
+
+    switch (actionId) {
+      case 'start-task':
+        if (task) await handleRunAction({ taskId: task.id, actionPrompt: '', agent: null })
+        break
+      case 'move-to-done':
+        if (task) {
+          await updateTaskStatus(task.id, 'done')
+          await loadTasks()
+        }
+        break
+      case 'delete-task':
+        if (task) {
+          await deleteTask(task.id)
+          $selectedTaskId = null
+          await loadTasks()
+        }
+        break
+      case 'go-back':
+        navigateBack()
+        break
+      case 'open-workqueue':
+        pushNavState()
+        $currentView = 'workqueue'
+        break
+      case 'search-tasks':
+        showCommandPalette = true
+        break
+      case 'new-task':
+        editingTask = null
+        showAddDialog = true
+        loadDialogAgentInfo()
+        break
+      case 'switch-project':
+        showProjectSwitcher = true
+        break
+      case 'refresh-github':
+        triggerGithubSync()
+        break
+      default:
+        if (actionId.startsWith('custom-action-') && task) {
+          const customId = actionId.replace('custom-action-', '')
+          const action = actionPaletteActions.find(a => a.id === customId)
+          if (action) {
+            await handleRunAction({ taskId: task.id, actionPrompt: action.prompt, agent: null })
+          }
+        }
+        break
+    }
+  }
+
   function handleProjectCreated() {
     showProjectSetup = false
     loadProjects()
@@ -291,7 +369,12 @@
       showShortcutsDialog = true
       return
     }
-    if (e.metaKey && e.key === 'p') {
+    if (e.metaKey && e.shiftKey && e.key === 'p') {
+      e.preventDefault()
+      openActionPalette()
+      return
+    }
+    if (e.metaKey && !e.shiftKey && e.key === 'p') {
       e.preventDefault()
       showProjectSwitcher = !showProjectSwitcher
       return
@@ -715,6 +798,13 @@
     } catch (e) {
       console.error('[App] Failed to load creatures_enabled config:', e)
     }
+
+    try {
+      const codeCleanupVal = await getConfig('code_cleanup_tasks_enabled')
+      $codeCleanupTasksEnabled = codeCleanupVal === 'true'
+    } catch (e) {
+      console.error('[App] Failed to load code_cleanup_tasks_enabled config:', e)
+    }
     loadProjectAttention()
 
     try {
@@ -836,7 +926,7 @@
                   if (editingTask) {
                     await updateTask(editingTask.id, prompt, jiraKey)
                   } else {
-                    await createTask(prompt, 'backlog', jiraKey, $activeProjectId, dialogSelectedAgent || null, null)
+                    await createTask(prompt, 'backlog', jiraKey, $activeProjectId, dialogSelectedAgent || null, dialogSelectedPermissionMode)
                   }
                   showAddDialog = false
                   editingTask = null
@@ -849,7 +939,7 @@
               onStartTask={editingTask ? undefined : async (prompt, jiraKey) => {
                 try {
                   const agent = dialogSelectedAgent || null
-                  const newTask = await createTask(prompt, 'backlog', jiraKey, $activeProjectId, agent, null)
+                  const newTask = await createTask(prompt, 'backlog', jiraKey, $activeProjectId, agent, dialogSelectedPermissionMode)
                   showAddDialog = false
                   editingTask = null
                   await loadTasks()
@@ -862,7 +952,21 @@
               onCancel={() => { showAddDialog = false; editingTask = null }}
             >
               {#snippet extras()}
-                {#if !editingTask && dialogAiProvider !== 'claude-code' && dialogAgents.length > 0}
+                {#if !editingTask && dialogAiProvider === 'claude-code'}
+                  <div class="flex items-center gap-2">
+                    <span class="text-xs text-base-content/50 font-medium shrink-0">Mode</span>
+                    <select
+                      class="select select-bordered select-xs flex-1"
+                      bind:value={dialogSelectedPermissionMode}
+                    >
+                      <option value="default">Default</option>
+                      <option value="acceptEdits">Accept Edits</option>
+                      <option value="plan">Plan</option>
+                      <option value="bypassPermissions">Bypass Permissions</option>
+                      <option value="dontAsk">Don't Ask (dangerous)</option>
+                    </select>
+                  </div>
+                {:else if !editingTask && dialogAiProvider !== 'claude-code' && dialogAgents.length > 0}
                   <div class="flex items-center gap-2">
                     <span class="text-xs text-base-content/50 font-medium shrink-0">Agent</span>
                     <div class="flex-1">
@@ -902,6 +1006,15 @@
   <CommandPalette onClose={() => showCommandPalette = false} />
 {/if}
 
+{#if showActionPalette}
+  <ActionPalette
+    task={selectedTask}
+    customActions={actionPaletteActions}
+    onClose={() => showActionPalette = false}
+    onExecute={executeAction}
+  />
+{/if}
+
 <!-- Keyboard shortcuts help dialog (global) -->
 {#if showShortcutsDialog}
   <Modal onClose={() => showShortcutsDialog = false} maxWidth="420px">
@@ -936,6 +1049,10 @@
           <div class="flex items-center justify-between">
             <span class="text-sm text-base-content">Search tasks</span>
             <kbd class="kbd kbd-sm">⌘K</kbd>
+          </div>
+          <div class="flex items-center justify-between">
+            <span class="text-sm text-base-content">Action palette</span>
+            <div class="flex gap-0.5"><kbd class="kbd kbd-sm">⌘</kbd><kbd class="kbd kbd-sm">⇧</kbd><kbd class="kbd kbd-sm">P</kbd></div>
           </div>
           <div class="flex items-center justify-between">
             <span class="text-sm text-base-content">Show shortcuts</span>

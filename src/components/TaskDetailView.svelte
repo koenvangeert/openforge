@@ -91,6 +91,20 @@
       return
     }
 
+    // Cmd+number shortcuts work regardless of focus (even when terminal has focus)
+    if (e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey && worktreePath !== null) {
+      if (e.key === '1') {
+        e.preventDefault()
+        reviewMode = false
+        return
+      }
+      if (e.key === '2') {
+        e.preventDefault()
+        reviewMode = true
+        return
+      }
+    }
+
     // Escape in fullscreen exits fullscreen (does not navigate back)
     if (e.key === 'Escape' && terminalFullscreen) {
       e.preventDefault()
@@ -116,6 +130,16 @@
       e.preventDefault()
       rightPanelMode = 'info'
       terminalFullscreen = false
+      return
+    }
+    if (e.key === 'h' && worktreePath !== null) {
+      e.preventDefault()
+      reviewMode = false
+      return
+    }
+    if (e.key === 'l' && worktreePath !== null) {
+      e.preventDefault()
+      reviewMode = true
       return
     }
   }
@@ -159,7 +183,7 @@
               <button
                 class="btn btn-soft btn-sm shadow-sm hover:shadow-md hover:btn-primary transition-all duration-200"
                 disabled={isStarting}
-                title={isStarting ? 'Task is starting' : action.name}
+                title={isStarting ? 'Task is starting' : (action.prompt || action.name)}
                 onclick={() => handleActionClick(action)}
               >
                 {action.name}
@@ -184,13 +208,13 @@
     {#if worktreePath !== null}
       <div class="flex items-center gap-1">
         <button
-          class="btn btn-ghost btn-xs {!reviewMode ? 'text-primary border border-primary' : 'text-base-content/50 border border-base-300'}"
+          class="btn btn-ghost btn-xs gap-1.5 {!reviewMode ? 'text-primary border border-primary' : 'text-base-content/50 border border-base-300'}"
           onclick={() => reviewMode = false}
-        >code_view</button>
+        >code_view <kbd class="kbd kbd-xs opacity-50">⌘1</kbd></button>
         <button
-          class="btn btn-ghost btn-xs {reviewMode ? 'text-primary border border-primary' : 'text-base-content/50 border border-base-300'}"
+          class="btn btn-ghost btn-xs gap-1.5 {reviewMode ? 'text-primary border border-primary' : 'text-base-content/50 border border-base-300'}"
           onclick={() => reviewMode = true}
-        >review_view</button>
+        >review_view <kbd class="kbd kbd-xs opacity-50">⌘2</kbd></button>
       </div>
     {/if}
   </div>

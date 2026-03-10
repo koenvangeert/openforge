@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte'
-  import { activeProjectId, projects, creaturesEnabled } from '../lib/stores'
+  import { activeProjectId, projects, creaturesEnabled, codeCleanupTasksEnabled } from '../lib/stores'
   import {
     getProjectConfig,
     setProjectConfig,
@@ -64,6 +64,7 @@
 
   // Feature flag state
   let isCreaturesEnabled = $state($creaturesEnabled)
+  let isCodeCleanupTasksEnabled = $state($codeCleanupTasksEnabled)
 
   // Theme state
   let isDarkMode = $state($themeMode === 'dark')
@@ -80,6 +81,11 @@
   function handleCreaturesToggle() {
     isCreaturesEnabled = !isCreaturesEnabled
     $creaturesEnabled = isCreaturesEnabled
+  }
+
+  function handleCodeCleanupTasksToggle() {
+    isCodeCleanupTasksEnabled = !isCodeCleanupTasksEnabled
+    $codeCleanupTasksEnabled = isCodeCleanupTasksEnabled
   }
 
   // UI state
@@ -147,7 +153,7 @@
   // Load global config once on mount
   onMount(async () => {
     // Global config
-    const [taskIdPrefixVal, jiraBaseUrlVal, jiraUsernameVal, jiraApiTokenVal, githubTokenVal, creaturesEnabledVal] =
+    const [taskIdPrefixVal, jiraBaseUrlVal, jiraUsernameVal, jiraApiTokenVal, githubTokenVal, creaturesEnabledVal, codeCleanupTasksEnabledVal] =
       await Promise.all([
         getConfig('task_id_prefix'),
         getConfig('jira_base_url'),
@@ -155,6 +161,7 @@
         getConfig('jira_api_token'),
         getConfig('github_token'),
         getConfig('creatures_enabled'),
+        getConfig('code_cleanup_tasks_enabled'),
       ])
 
     if (taskIdPrefixVal) taskIdPrefix = taskIdPrefixVal
@@ -164,6 +171,8 @@
     if (githubTokenVal) githubToken = githubTokenVal
     isCreaturesEnabled = creaturesEnabledVal === 'true'
     $creaturesEnabled = isCreaturesEnabled
+    isCodeCleanupTasksEnabled = codeCleanupTasksEnabledVal === 'true'
+    $codeCleanupTasksEnabled = isCodeCleanupTasksEnabled
 
     // Check installations
     const [opencodeResult, claudeResult] = await Promise.all([
@@ -256,6 +265,7 @@
       await setConfig('jira_api_token', jiraApiToken)
       await setConfig('github_token', githubToken)
       await setConfig('creatures_enabled', isCreaturesEnabled ? 'true' : 'false')
+      await setConfig('code_cleanup_tasks_enabled', isCodeCleanupTasksEnabled ? 'true' : 'false')
       saved = true
       setTimeout(() => {
         saved = false
@@ -413,6 +423,8 @@
           onThemeToggle={handleThemeToggle}
           creaturesEnabled={isCreaturesEnabled}
           onCreaturesToggle={handleCreaturesToggle}
+          codeCleanupTasksEnabled={isCodeCleanupTasksEnabled}
+          onCodeCleanupTasksToggle={handleCodeCleanupTasksToggle}
         />
 
         <SettingsAICard

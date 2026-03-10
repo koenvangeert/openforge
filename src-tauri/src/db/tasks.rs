@@ -90,7 +90,7 @@ impl super::Database {
                     GROUP BY ticket_id
                 ) latest_session ON latest_session.ticket_id = t.id
                 LEFT JOIN agent_sessions ls ON ls.ticket_id = latest_session.ticket_id AND ls.created_at = latest_session.latest_at AND ls.rowid = latest_session.latest_rowid
-                WHERE t.status = 'doing' AND t.project_id IS NOT NULL
+                WHERE t.status = 'doing' AND t.project_id IS NOT NULL AND (ls.status IS NULL OR ls.status != 'running')
                 ORDER BY ls.updated_at DESC",
             )
             .map_err(|e| format!("Failed to prepare get_work_queue_tasks query: {e}"))?;
@@ -935,8 +935,8 @@ mod tests {
     }
 
     #[test]
-    fn test_get_work_queue_tasks_includes_doing_with_running_session() {
-        let (db, path) = make_test_db("work_queue_includes_doing_with_running_session");
+    fn test_get_work_queue_tasks_excludes_doing_with_running_session() {
+        let (db, path) = make_test_db("work_queue_excludes_doing_with_running_session");
         let conn = db.connection();
         let conn = conn.lock().unwrap();
 
@@ -961,10 +961,7 @@ mod tests {
         drop(conn);
 
         let rows = db.get_work_queue_tasks().expect("query failed");
-        assert_eq!(rows.len(), 1);
-        assert_eq!(rows[0].id, "T-1");
-        assert_eq!(rows[0].session_completed_at, Some(1200));
-        assert_eq!(rows[0].session_status, Some("running".to_string()));
+        assert!(rows.is_empty());
 
         drop(db);
         let _ = fs::remove_file(&path);

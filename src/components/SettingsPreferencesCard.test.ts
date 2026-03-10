@@ -10,6 +10,8 @@ function defaultProps(overrides: Record<string, unknown> = {}) {
 		onThemeToggle: vi.fn(),
 		creaturesEnabled: false,
 		onCreaturesToggle: vi.fn(),
+		codeCleanupTasksEnabled: false,
+		onCodeCleanupTasksToggle: vi.fn(),
 		...overrides,
 	}
 }
@@ -108,6 +110,50 @@ describe('SettingsPreferencesCard', () => {
 			render(SettingsPreferencesCard, { props: defaultProps() })
 
 			expect(screen.getByText('Switch between light and dark theme')).toBeTruthy()
+		})
+	})
+
+	describe('code cleanup tasks experiment toggle', () => {
+		it('renders Code Cleanup Tasks label', () => {
+			render(SettingsPreferencesCard, { props: defaultProps() })
+
+			expect(screen.getByText('Code Cleanup Tasks')).toBeTruthy()
+		})
+
+		it('renders toggle unchecked when codeCleanupTasksEnabled is false', () => {
+			render(SettingsPreferencesCard, {
+				props: defaultProps({ codeCleanupTasksEnabled: false }),
+			})
+
+			const toggle = screen.getByTestId('code-cleanup-tasks-toggle') as HTMLInputElement
+			expect(toggle.checked).toBe(false)
+		})
+
+		it('renders toggle checked when codeCleanupTasksEnabled is true', () => {
+			render(SettingsPreferencesCard, {
+				props: defaultProps({ codeCleanupTasksEnabled: true }),
+			})
+
+			const toggle = screen.getByTestId('code-cleanup-tasks-toggle') as HTMLInputElement
+			expect(toggle.checked).toBe(true)
+		})
+
+		it('calls onCodeCleanupTasksToggle when toggle is clicked', async () => {
+			const onCodeCleanupTasksToggle = vi.fn()
+			render(SettingsPreferencesCard, {
+				props: defaultProps({ onCodeCleanupTasksToggle }),
+			})
+
+			const toggle = screen.getByTestId('code-cleanup-tasks-toggle')
+			await fireEvent.click(toggle)
+
+			expect(onCodeCleanupTasksToggle).toHaveBeenCalledOnce()
+		})
+
+		it('renders description text for code cleanup tasks toggle', () => {
+			render(SettingsPreferencesCard, { props: defaultProps() })
+
+			expect(screen.getByText('Agents create tasks for code that needs cleanup or splitting')).toBeTruthy()
 		})
 	})
 

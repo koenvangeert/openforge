@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import type { Task, AgentSession, Project } from '../lib/types'
-import { matchesSearch, sortTasks } from '../lib/commandPalette'
+import { matchesSearch, sortTasks, filterActiveTasks } from '../lib/commandPalette'
 
 function makeProject(overrides: Partial<Project> & { id: string; name: string }): Project {
   return {
@@ -122,6 +122,37 @@ describe('CommandPalette sorting', () => {
       'T-backlog',      // backlog, updated_at 400
       'T-done',         // done, updated_at 500
     ])
+  })
+})
+
+describe('CommandPalette filterActiveTasks', () => {
+  it('excludes tasks with status done', () => {
+    const tasks = [
+      makeTask({ id: 'T-1', status: 'doing' }),
+      makeTask({ id: 'T-2', status: 'done' }),
+      makeTask({ id: 'T-3', status: 'backlog' }),
+      makeTask({ id: 'T-4', status: 'done' }),
+    ]
+    const result = filterActiveTasks(tasks)
+    expect(result.map(t => t.id)).toEqual(['T-1', 'T-3'])
+  })
+
+  it('returns all tasks when none are done', () => {
+    const tasks = [
+      makeTask({ id: 'T-1', status: 'doing' }),
+      makeTask({ id: 'T-2', status: 'backlog' }),
+    ]
+    const result = filterActiveTasks(tasks)
+    expect(result.map(t => t.id)).toEqual(['T-1', 'T-2'])
+  })
+
+  it('returns empty array when all tasks are done', () => {
+    const tasks = [
+      makeTask({ id: 'T-1', status: 'done' }),
+      makeTask({ id: 'T-2', status: 'done' }),
+    ]
+    const result = filterActiveTasks(tasks)
+    expect(result).toEqual([])
   })
 })
 

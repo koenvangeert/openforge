@@ -57,6 +57,33 @@ vi.mock('../lib/useSessionHistory.svelte', () => ({
   })),
 }))
 
+vi.mock('../lib/useDiffLoader.svelte', () => ({
+  createDiffLoader: vi.fn(() => ({
+    get isLoading() { return false },
+    get error() { return null },
+    get prComments() { return [] },
+    get linkedPr() { return null },
+    loadDiff: vi.fn().mockResolvedValue(undefined),
+    refresh: vi.fn().mockResolvedValue(undefined),
+    cleanup: vi.fn(),
+  })),
+}))
+
+vi.mock('../lib/useCommentSelection.svelte', () => ({
+  createCommentSelection: vi.fn(() => ({
+    get selectedCount() { return 0 },
+    get unaddressedCount() { return 0 },
+    get addressedCount() { return 0 },
+    get selectedPrCommentIds() { return new Set() },
+    get unaddressedComments() { return [] },
+    get selectedPrComments() { return [] },
+    toggleSelected: vi.fn(),
+    selectAll: vi.fn(),
+    deselectAll: vi.fn(),
+    markAddressed: vi.fn(),
+  })),
+}))
+
 import { render, screen, waitFor, fireEvent } from '@testing-library/svelte'
 import { describe, it, expect, vi } from 'vitest'
 import { writable } from 'svelte/store'
@@ -68,6 +95,10 @@ vi.mock('../lib/stores', () => ({
   tasks: writable([]),
   activeProjectId: writable('project-1'),
   startingTasks: writable(new Set()),
+  selfReviewDiffFiles: writable([]),
+  selfReviewGeneralComments: writable([]),
+  selfReviewArchivedComments: writable([]),
+  pendingManualComments: writable([]),
 }))
 
 vi.mock('../lib/ipc', () => ({
@@ -92,6 +123,14 @@ vi.mock('../lib/ipc', () => ({
   transcribeAudio: vi.fn(),
   getWhisperModelStatus: vi.fn(),
   downloadWhisperModel: vi.fn(),
+  getTaskDiff: vi.fn().mockResolvedValue([]),
+  getActiveSelfReviewComments: vi.fn().mockResolvedValue([]),
+  getArchivedSelfReviewComments: vi.fn().mockResolvedValue([]),
+  getTaskFileContents: vi.fn().mockResolvedValue(['', '']),
+  getTaskBatchFileContents: vi.fn().mockResolvedValue([]),
+  archiveSelfReviewComments: vi.fn().mockResolvedValue(undefined),
+  addSelfReviewComment: vi.fn().mockResolvedValue(undefined),
+  deleteSelfReviewComment: vi.fn().mockResolvedValue(undefined),
 }))
 
 vi.mock('@tauri-apps/api/event', () => ({
@@ -115,6 +154,11 @@ vi.mock('../lib/terminalPool', () => ({
   attach: vi.fn(),
   detach: vi.fn(),
   release: vi.fn(),
+}))
+
+vi.mock('../lib/navigation', () => ({
+  navigateBack: vi.fn(() => false),
+  pushNavState: vi.fn(),
 }))
 
 vi.mock('../lib/actions', () => ({
@@ -559,4 +603,236 @@ describe('TaskDetailView', () => {
     expect(currentValue).toBe('T-42')
   })
 
+  it('shows action prompt as tooltip when prompt is set', async () => {
+    const { loadActions } = await import('../lib/actions')
+    vi.mocked(loadActions).mockResolvedValue([
+      { id: 'builtin-go', name: 'Go', prompt: 'Implement the task', builtin: true, enabled: true },
+    ])
+    const doingTask = { ...baseTask, status: 'doing' }
+    render(TaskDetailView, { props: { task: doingTask, onRunAction: mockOnRunAction } })
+    await vi.waitFor(() => {
+      const goButton = screen.getByText('Go')
+      expect(goButton.getAttribute('title')).toBe('Implement the task')
+    })
+  })
+
+  it('shows action name as tooltip when prompt is empty', async () => {
+    const { loadActions } = await import('../lib/actions')
+    vi.mocked(loadActions).mockResolvedValue([
+      { id: 'builtin-go', name: 'Go', prompt: '', builtin: true, enabled: true },
+    ])
+    const doingTask = { ...baseTask, status: 'doing' }
+    render(TaskDetailView, { props: { task: doingTask, onRunAction: mockOnRunAction } })
+    await vi.waitFor(() => {
+      const goButton = screen.getByText('Go')
+      expect(goButton.getAttribute('title')).toBe('Go')
+    })
+  })
+
+  describe('keyboard shortcuts', () => {
+    it('l key switches to review mode when worktree exists', async () => {
+      const { getWorktreeForTask } = await import('../lib/ipc')
+      vi.mocked(getWorktreeForTask).mockResolvedValue({ worktree_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' } as any)
+
+      render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+      await waitFor(() => {
+        expect(screen.getByText('review_view')).toBeTruthy()
+      })
+
+      const breadcrumb = screen.getByText('$ cd board').closest('div')
+      expect(breadcrumb?.textContent).toContain('code')
+
+      await fireEvent.keyDown(window, { key: 'l' })
+
+      await waitFor(() => {
+        expect(breadcrumb?.textContent).toContain('self_review')
+      })
+
+      vi.mocked(getWorktreeForTask).mockResolvedValue(null)
+    })
+
+    it('h key switches back to code mode from review', async () => {
+      const { getWorktreeForTask } = await import('../lib/ipc')
+      vi.mocked(getWorktreeForTask).mockResolvedValue({ worktree_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' } as any)
+
+      render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+      await waitFor(() => {
+        expect(screen.getByText('review_view')).toBeTruthy()
+      })
+
+      await fireEvent.keyDown(window, { key: 'l' })
+      const breadcrumb = screen.getByText('$ cd board').closest('div')
+      await waitFor(() => {
+        expect(breadcrumb?.textContent).toContain('self_review')
+      })
+
+      await fireEvent.keyDown(window, { key: 'h' })
+      await waitFor(() => {
+        expect(breadcrumb?.textContent).toContain('code')
+        expect(breadcrumb?.textContent).not.toContain('self_review')
+      })
+
+      vi.mocked(getWorktreeForTask).mockResolvedValue(null)
+    })
+
+    it('h and l keys are ignored when no worktree exists', async () => {
+      render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+
+      const breadcrumb = screen.getByText('$ cd board').closest('div')
+      expect(breadcrumb?.textContent).toContain('code')
+
+      await fireEvent.keyDown(window, { key: 'l' })
+      expect(breadcrumb?.textContent).toContain('code')
+      expect(breadcrumb?.textContent).not.toContain('self_review')
+    })
+
+    it('h and l keys are ignored when modifier keys are held', async () => {
+      const { getWorktreeForTask } = await import('../lib/ipc')
+      vi.mocked(getWorktreeForTask).mockResolvedValue({ worktree_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' } as any)
+
+      render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+      await waitFor(() => {
+        expect(screen.getByText('review_view')).toBeTruthy()
+      })
+
+      const breadcrumb = screen.getByText('$ cd board').closest('div')
+
+      await fireEvent.keyDown(window, { key: 'l', ctrlKey: true })
+      expect(breadcrumb?.textContent).toContain('code')
+
+      await fireEvent.keyDown(window, { key: 'l', metaKey: true })
+      expect(breadcrumb?.textContent).toContain('code')
+
+      await fireEvent.keyDown(window, { key: 'l', altKey: true })
+      expect(breadcrumb?.textContent).toContain('code')
+
+      vi.mocked(getWorktreeForTask).mockResolvedValue(null)
+    })
+
+    it('Cmd+2 switches to review mode when worktree exists', async () => {
+      const { getWorktreeForTask } = await import('../lib/ipc')
+      vi.mocked(getWorktreeForTask).mockResolvedValue({ worktree_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' } as any)
+
+      render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+      await waitFor(() => {
+        expect(screen.getByText('review_view')).toBeTruthy()
+      })
+
+      const breadcrumb = screen.getByText('$ cd board').closest('div')
+      expect(breadcrumb?.textContent).toContain('code')
+
+      await fireEvent.keyDown(window, { key: '2', metaKey: true })
+
+      await waitFor(() => {
+        expect(breadcrumb?.textContent).toContain('self_review')
+      })
+
+      vi.mocked(getWorktreeForTask).mockResolvedValue(null)
+    })
+
+    it('Cmd+1 switches back to code mode from review', async () => {
+      const { getWorktreeForTask } = await import('../lib/ipc')
+      vi.mocked(getWorktreeForTask).mockResolvedValue({ worktree_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' } as any)
+
+      render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+      await waitFor(() => {
+        expect(screen.getByText('review_view')).toBeTruthy()
+      })
+
+      await fireEvent.keyDown(window, { key: '2', metaKey: true })
+      const breadcrumb = screen.getByText('$ cd board').closest('div')
+      await waitFor(() => {
+        expect(breadcrumb?.textContent).toContain('self_review')
+      })
+
+      await fireEvent.keyDown(window, { key: '1', metaKey: true })
+      await waitFor(() => {
+        expect(breadcrumb?.textContent).toContain('code')
+        expect(breadcrumb?.textContent).not.toContain('self_review')
+      })
+
+      vi.mocked(getWorktreeForTask).mockResolvedValue(null)
+    })
+
+    it('Cmd+1/2 work even when an input element is focused', async () => {
+      const { getWorktreeForTask } = await import('../lib/ipc')
+      vi.mocked(getWorktreeForTask).mockResolvedValue({ worktree_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' } as any)
+
+      render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+      await waitFor(() => {
+        expect(screen.getByText('review_view')).toBeTruthy()
+      })
+
+      // Simulate terminal focus by focusing an input element
+      const input = document.createElement('input')
+      document.body.appendChild(input)
+
+      try {
+        input.focus()
+
+        const breadcrumb = screen.getByText('$ cd board').closest('div')
+
+        await fireEvent.keyDown(window, { key: '2', metaKey: true })
+        await waitFor(() => {
+          expect(breadcrumb?.textContent).toContain('self_review')
+        })
+
+        await fireEvent.keyDown(window, { key: '1', metaKey: true })
+        await waitFor(() => {
+          expect(breadcrumb?.textContent).toContain('code')
+        })
+      } finally {
+        document.body.removeChild(input)
+        vi.mocked(getWorktreeForTask).mockResolvedValue(null)
+      }
+    })
+
+    it('Cmd+1/2 are ignored when no worktree exists', async () => {
+      render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+
+      const breadcrumb = screen.getByText('$ cd board').closest('div')
+      expect(breadcrumb?.textContent).toContain('code')
+
+      await fireEvent.keyDown(window, { key: '2', metaKey: true })
+      expect(breadcrumb?.textContent).toContain('code')
+      expect(breadcrumb?.textContent).not.toContain('self_review')
+    })
+
+    it('shows shortcut hints on view toggle buttons', async () => {
+      const { getWorktreeForTask } = await import('../lib/ipc')
+      vi.mocked(getWorktreeForTask).mockResolvedValue({ worktree_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' } as any)
+
+      render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+      await waitFor(() => {
+        expect(screen.getByText('review_view')).toBeTruthy()
+      })
+
+      const codeBtn = screen.getByText('code_view').closest('button')
+      const reviewBtn = screen.getByText('review_view').closest('button')
+      expect(codeBtn?.textContent).toContain('⌘1')
+      expect(reviewBtn?.textContent).toContain('⌘2')
+
+      vi.mocked(getWorktreeForTask).mockResolvedValue(null)
+    })
+
+    it('Escape triggers navigate back', async () => {
+      const { navigateBack } = await import('../lib/navigation')
+      vi.mocked(navigateBack).mockClear()
+      render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+
+      await fireEvent.keyDown(window, { key: 'Escape' })
+
+      expect(navigateBack).toHaveBeenCalled()
+    })
+
+    it('q triggers navigate back', async () => {
+      const { navigateBack } = await import('../lib/navigation')
+      vi.mocked(navigateBack).mockClear()
+      render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+
+      await fireEvent.keyDown(window, { key: 'q' })
+
+      expect(navigateBack).toHaveBeenCalled()
+    })
+  })
 })
