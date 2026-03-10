@@ -250,7 +250,7 @@ pub async fn start_implementation(
     }
 
     let prompt = build_task_prompt(&task, "Implement this task. Create a branch, make the changes, and create a pull request when done.", additional_instructions.as_deref(), code_cleanup_enabled);
-    let result = provider.start(&task_id, &worktree_path, &prompt, None, None, &app).await?;
+    let result = provider.start(&task_id, &worktree_path, &prompt, task.agent.as_deref(), task.permission_mode.as_deref(), &app).await?;
 
     if provider_name != "claude-code" {
         let db = crate::db::acquire_db(&db);

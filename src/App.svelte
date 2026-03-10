@@ -6,7 +6,7 @@
   import { getProjects, getTasksForProject, getPullRequests, runAction, getSessionStatus, getLatestSession, getLatestSessions, forceGithubSync, createTask, updateTask, getProjectAttention, getAppMode, finalizeClaudeSession, getRunningPtyTaskIds, getConfig, getAgents, getReviewPrs } from './lib/ipc'
   import { writePtyWithSubmit } from './lib/ptySubmit'
   import SearchableSelect from './components/SearchableSelect.svelte'
-  import type { Task, PullRequestInfo, AgentEvent, ProjectAttention, AppView } from './lib/types'
+  import type { Task, PullRequestInfo, AgentEvent, ProjectAttention, AppView, PermissionMode } from './lib/types'
   import KanbanBoard from './components/KanbanBoard.svelte'
   import TaskDetailView from './components/TaskDetailView.svelte'
    import PromptInput from './components/PromptInput.svelte'
@@ -38,9 +38,11 @@
   let dialogAiProvider = $state<string | null>(null)
   let dialogAgents = $state<string[]>([])
   let dialogSelectedAgent = $state('')
+  let dialogSelectedPermissionMode = $state<PermissionMode>('default')
 
   async function loadDialogAgentInfo() {
     dialogSelectedAgent = ''
+    dialogSelectedPermissionMode = 'default'
     try {
       const provider = await getConfig('ai_provider')
       dialogAiProvider = provider ?? 'claude-code'
@@ -844,7 +846,7 @@
                   if (editingTask) {
                     await updateTask(editingTask.id, prompt, jiraKey)
                   } else {
-                    await createTask(prompt, 'backlog', jiraKey, $activeProjectId, dialogSelectedAgent || null, null)
+                    await createTask(prompt, 'backlog', jiraKey, $activeProjectId, dialogSelectedAgent || null, dialogSelectedPermissionMode)
                   }
                   showAddDialog = false
                   editingTask = null
@@ -857,7 +859,7 @@
               onStartTask={editingTask ? undefined : async (prompt, jiraKey) => {
                 try {
                   const agent = dialogSelectedAgent || null
-                  const newTask = await createTask(prompt, 'backlog', jiraKey, $activeProjectId, agent, null)
+                  const newTask = await createTask(prompt, 'backlog', jiraKey, $activeProjectId, agent, dialogSelectedPermissionMode)
                   showAddDialog = false
                   editingTask = null
                   await loadTasks()
@@ -870,7 +872,21 @@
               onCancel={() => { showAddDialog = false; editingTask = null }}
             >
               {#snippet extras()}
-                {#if !editingTask && dialogAiProvider !== 'claude-code' && dialogAgents.length > 0}
+                {#if !editingTask && dialogAiProvider === 'claude-code'}
+                  <div class="flex items-center gap-2">
+                    <span class="text-xs text-base-content/50 font-medium shrink-0">Mode</span>
+                    <select
+                      class="select select-bordered select-xs flex-1"
+                      bind:value={dialogSelectedPermissionMode}
+                    >
+                      <option value="default">Default</option>
+                      <option value="acceptEdits">Accept Edits</option>
+                      <option value="plan">Plan</option>
+                      <option value="bypassPermissions">Bypass Permissions</option>
+                      <option value="dontAsk">Don't Ask (dangerous)</option>
+                    </select>
+                  </div>
+                {:else if !editingTask && dialogAiProvider !== 'claude-code' && dialogAgents.length > 0}
                   <div class="flex items-center gap-2">
                     <span class="text-xs text-base-content/50 font-medium shrink-0">Agent</span>
                     <div class="flex-1">
