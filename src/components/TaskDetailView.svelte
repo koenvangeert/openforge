@@ -6,6 +6,7 @@
   import { navigateBack } from '../lib/navigation'
   import { isInputFocused } from '../lib/domUtils'
   import { loadActions, getEnabledActions } from '../lib/actions'
+  import { Maximize2, Minimize2 } from 'lucide-svelte'
   import AgentPanel from './AgentPanel.svelte'
   import TaskInfoPanel from './TaskInfoPanel.svelte'
   import ResizablePanel from './ResizablePanel.svelte'
@@ -21,6 +22,7 @@
 
   let reviewMode = $state(false)
   let rightPanelMode = $state<'info' | 'terminal'>('info')
+  let terminalFullscreen = $state(false)
   let worktreePath = $state<string | null>(null)
   let jiraBaseUrl = $state('')
   // Plain variable (not $state) so it's not tracked as a reactive dependency.
@@ -40,6 +42,7 @@
       lastTaskId = taskId
       reviewMode = false
       rightPanelMode = 'info'
+      terminalFullscreen = false
       worktreePath = null
       getWorktreeForTask(taskId).then((worktree) => {
         worktreePath = worktree?.worktree_path ?? null
@@ -81,6 +84,20 @@
   }
 
   function handleTaskDetailKeydown(e: KeyboardEvent) {
+    // Cmd+f toggles terminal fullscreen (works even when xterm has focus)
+    if ((e.metaKey || e.ctrlKey) && e.key === 'f' && rightPanelMode === 'terminal' && worktreePath !== null) {
+      e.preventDefault()
+      terminalFullscreen = !terminalFullscreen
+      return
+    }
+
+    // Escape in fullscreen exits fullscreen (does not navigate back)
+    if (e.key === 'Escape' && terminalFullscreen) {
+      e.preventDefault()
+      terminalFullscreen = false
+      return
+    }
+
     if (isInputFocused()) return
     if (e.metaKey || e.ctrlKey || e.altKey) return
 
@@ -89,14 +106,16 @@
       handleBack()
       return
     }
-    if (e.key === 'h' && worktreePath !== null) {
+    // ] / [ switches between Info and Terminal panels (vim-style prev/next)
+    if (e.key === ']' && worktreePath !== null) {
       e.preventDefault()
-      reviewMode = false
+      rightPanelMode = 'terminal'
       return
     }
-    if (e.key === 'l' && worktreePath !== null) {
+    if (e.key === '[' && worktreePath !== null) {
       e.preventDefault()
-      reviewMode = true
+      rightPanelMode = 'info'
+      terminalFullscreen = false
       return
     }
   }
@@ -179,6 +198,22 @@
   <div class="flex flex-1 overflow-hidden max-[800px]:flex-col">
     {#if reviewMode}
       <SelfReviewView {task} {agentStatus} onSendToAgent={handleSendToAgent} />
+    {:else if terminalFullscreen && worktreePath !== null}
+      <div class="flex flex-col flex-1 overflow-hidden">
+        <div class="flex items-center h-10 bg-base-200 border-b border-base-300 shrink-0 px-3">
+          <span class="text-xs font-mono text-base-content/50 flex-1">Terminal — {task.jira_key || task.id}</span>
+          <button
+            class="btn btn-ghost btn-xs"
+            aria-label="Exit fullscreen"
+            onclick={() => terminalFullscreen = false}
+          >
+            <Minimize2 size={14} />
+          </button>
+        </div>
+        <div class="flex-1 overflow-hidden">
+          <TaskTerminal taskId={task.id} {worktreePath} />
+        </div>
+      </div>
     {:else}
        <div class="flex-1 p-5 overflow-hidden max-[800px]:p-4">
          {#key task.id}
@@ -203,6 +238,16 @@
                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" x2="20" y1="19" y2="19"/></svg>
                  Terminal
                </button>
+               {#if rightPanelMode === 'terminal'}
+                 <button
+                   class="btn btn-ghost btn-xs ml-auto gap-1"
+                   aria-label="Fullscreen terminal"
+                   onclick={() => terminalFullscreen = true}
+                 >
+                   <Maximize2 size={14} />
+                   <kbd class="kbd kbd-xs text-base-content/40">⌘F</kbd>
+                 </button>
+               {/if}
              </div>
            {/if}
            <div class="flex-1 overflow-y-auto">

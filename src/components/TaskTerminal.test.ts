@@ -168,6 +168,24 @@ describe('TaskTerminal', () => {
     })
   })
 
+  it('does not override terminal theme on mount', async () => {
+    const { attach } = await import('../lib/terminalPool')
+
+    // Set a theme before mount to simulate pool's theme subscription
+    const originalTheme = { background: '#POOLBG', foreground: '#POOLFG' }
+    mockPoolEntry.terminal.options.theme = { ...originalTheme }
+
+    render(TaskTerminal, { props: { taskId: 'T-1', worktreePath: '/path/to/worktree' } })
+    await vi.waitFor(() => {
+      expect(attach).toHaveBeenCalled()
+    })
+
+    // Theme should remain unchanged — TaskTerminal must not override pool theme
+    const theme = mockPoolEntry.terminal.options.theme as Record<string, string>
+    expect(theme.background).toBe('#POOLBG')
+    expect(theme.foreground).toBe('#POOLFG')
+  })
+
   it('restart button calls killPty and spawnShellPty', async () => {
     const { killPty, spawnShellPty } = await import('../lib/ipc')
 

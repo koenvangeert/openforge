@@ -388,6 +388,165 @@ describe('TaskDetailView', () => {
     expect(vi.mocked(detach)).toHaveBeenCalled()
   })
 
+  it('shows fullscreen button when terminal tab is active and worktree exists', async () => {
+    const { getWorktreeForTask } = await import('../lib/ipc')
+    vi.mocked(getWorktreeForTask).mockResolvedValue({ worktree_path: '/path/to/worktree', repo_path: '/repo', branch_name: 'branch' } as any)
+
+    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+    await waitFor(() => {
+      expect(screen.getByText('Terminal')).toBeTruthy()
+    })
+    await fireEvent.click(screen.getByText('Terminal'))
+    await waitFor(() => {
+      expect(screen.getByLabelText('Fullscreen terminal')).toBeTruthy()
+    })
+    vi.mocked(getWorktreeForTask).mockResolvedValue(null)
+  })
+
+  it('hides fullscreen button when info tab is active', async () => {
+    const { getWorktreeForTask } = await import('../lib/ipc')
+    vi.mocked(getWorktreeForTask).mockResolvedValue({ worktree_path: '/path/to/worktree', repo_path: '/repo', branch_name: 'branch' } as any)
+
+    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+    await waitFor(() => {
+      expect(screen.getByText('Info')).toBeTruthy()
+    })
+    // Info tab is default — fullscreen button should not be visible
+    expect(screen.queryByLabelText('Fullscreen terminal')).toBeNull()
+    vi.mocked(getWorktreeForTask).mockResolvedValue(null)
+  })
+
+  it('clicking fullscreen hides AgentPanel and shows terminal filling content area', async () => {
+    const { getWorktreeForTask } = await import('../lib/ipc')
+    vi.mocked(getWorktreeForTask).mockResolvedValue({ worktree_path: '/path/to/worktree', repo_path: '/repo', branch_name: 'branch' } as any)
+
+    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+    await waitFor(() => {
+      expect(screen.getByText('Terminal')).toBeTruthy()
+    })
+    await fireEvent.click(screen.getByText('Terminal'))
+    await waitFor(() => {
+      expect(screen.getByLabelText('Fullscreen terminal')).toBeTruthy()
+    })
+    await fireEvent.click(screen.getByLabelText('Fullscreen terminal'))
+    await waitFor(() => {
+      // Fullscreen container should be visible with minimize button
+      expect(screen.getByLabelText('Exit fullscreen')).toBeTruthy()
+      // AgentPanel's empty state should not be visible
+      expect(screen.queryByText('No active agent session')).toBeNull()
+    })
+    vi.mocked(getWorktreeForTask).mockResolvedValue(null)
+  })
+
+  it('clicking minimize exits fullscreen and restores normal layout', async () => {
+    const { getWorktreeForTask } = await import('../lib/ipc')
+    vi.mocked(getWorktreeForTask).mockResolvedValue({ worktree_path: '/path/to/worktree', repo_path: '/repo', branch_name: 'branch' } as any)
+
+    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+    await waitFor(() => {
+      expect(screen.getByText('Terminal')).toBeTruthy()
+    })
+    await fireEvent.click(screen.getByText('Terminal'))
+    await waitFor(() => {
+      expect(screen.getByLabelText('Fullscreen terminal')).toBeTruthy()
+    })
+    await fireEvent.click(screen.getByLabelText('Fullscreen terminal'))
+    await waitFor(() => {
+      expect(screen.getByLabelText('Exit fullscreen')).toBeTruthy()
+    })
+    // Click minimize
+    await fireEvent.click(screen.getByLabelText('Exit fullscreen'))
+    await waitFor(() => {
+      // Should be back to normal layout with AgentPanel
+      expect(screen.getByText('No active agent session')).toBeTruthy()
+      // Fullscreen button should reappear (still on terminal tab)
+      expect(screen.getByLabelText('Fullscreen terminal')).toBeTruthy()
+    })
+    vi.mocked(getWorktreeForTask).mockResolvedValue(null)
+  })
+
+  it('Cmd+f toggles fullscreen when terminal tab is active', async () => {
+    const { getWorktreeForTask } = await import('../lib/ipc')
+    vi.mocked(getWorktreeForTask).mockResolvedValue({ worktree_path: '/path/to/worktree', repo_path: '/repo', branch_name: 'branch' } as any)
+
+    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+    await waitFor(() => {
+      expect(screen.getByText('Terminal')).toBeTruthy()
+    })
+    await fireEvent.click(screen.getByText('Terminal'))
+    await waitFor(() => {
+      expect(screen.getByLabelText('Fullscreen terminal')).toBeTruthy()
+    })
+
+    // Press Cmd+f to enter fullscreen
+    await fireEvent.keyDown(window, { key: 'f', metaKey: true })
+    await waitFor(() => {
+      expect(screen.getByLabelText('Exit fullscreen')).toBeTruthy()
+    })
+
+    // Press Cmd+f again to exit fullscreen
+    await fireEvent.keyDown(window, { key: 'f', metaKey: true })
+    await waitFor(() => {
+      expect(screen.getByLabelText('Fullscreen terminal')).toBeTruthy()
+      expect(screen.queryByLabelText('Exit fullscreen')).toBeNull()
+    })
+    vi.mocked(getWorktreeForTask).mockResolvedValue(null)
+  })
+
+  it('Cmd+f does nothing when no worktree or on info tab', async () => {
+    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+    // No worktree — Cmd+f should not create fullscreen elements
+    await fireEvent.keyDown(window, { key: 'f', metaKey: true })
+    expect(screen.queryByLabelText('Exit fullscreen')).toBeNull()
+    expect(screen.queryByLabelText('Fullscreen terminal')).toBeNull()
+  })
+
+  it('] switches from info to terminal tab', async () => {
+    const { getWorktreeForTask } = await import('../lib/ipc')
+    vi.mocked(getWorktreeForTask).mockResolvedValue({ worktree_path: '/path/to/worktree', repo_path: '/repo', branch_name: 'branch' } as any)
+
+    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+    await waitFor(() => {
+      expect(screen.getByText('Info')).toBeTruthy()
+    })
+    // Default is info tab — press ] to switch to terminal
+    await fireEvent.keyDown(window, { key: ']' })
+    await waitFor(() => {
+      const shellWrapper = document.querySelector('.shell-terminal-wrapper')
+      expect(shellWrapper).toBeTruthy()
+    })
+    vi.mocked(getWorktreeForTask).mockResolvedValue(null)
+  })
+
+  it('[ switches from terminal to info tab', async () => {
+    const { getWorktreeForTask } = await import('../lib/ipc')
+    vi.mocked(getWorktreeForTask).mockResolvedValue({ worktree_path: '/path/to/worktree', repo_path: '/repo', branch_name: 'branch' } as any)
+
+    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+    await waitFor(() => {
+      expect(screen.getByText('Terminal')).toBeTruthy()
+    })
+    // Switch to terminal first
+    await fireEvent.click(screen.getByText('Terminal'))
+    await waitFor(() => {
+      const shellWrapper = document.querySelector('.shell-terminal-wrapper')
+      expect(shellWrapper).toBeTruthy()
+    })
+    // Press [ to switch back to info
+    await fireEvent.keyDown(window, { key: '[' })
+    await waitFor(() => {
+      expect(screen.getByText('// INITIAL_PROMPT')).toBeTruthy()
+    })
+    vi.mocked(getWorktreeForTask).mockResolvedValue(null)
+  })
+
+  it('[/] does nothing when no worktree', async () => {
+    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+    // No worktree — ] should not cause errors or show terminal
+    await fireEvent.keyDown(window, { key: ']' })
+    expect(screen.queryByText('Terminal')).toBeNull()
+  })
+
   it('does not navigate away when task is moved to done', async () => {
     const doingTask: Task = { ...baseTask, status: 'doing' }
     selectedTaskId.set('T-42')

@@ -22,32 +22,6 @@
   onMount(async () => {
     poolEntry = await acquire(taskId + '-shell')
 
-    // Override terminal theme to dark for shell terminal
-    poolEntry.terminal.options.theme = {
-      background: '#1C1C1C',
-      foreground: '#E0E0E0',
-      cursor: '#E0E0E0',
-      cursorAccent: '#1C1C1C',
-      selectionBackground: '#404040',
-      selectionForeground: '#E0E0E0',
-      black: '#1C1C1C',
-      red: '#ff6b6b',
-      green: '#51cf66',
-      yellow: '#ffd43b',
-      blue: '#74c0fc',
-      magenta: '#da77f2',
-      cyan: '#66d9e8',
-      white: '#E0E0E0',
-      brightBlack: '#666666',
-      brightRed: '#ff8787',
-      brightGreen: '#69db7c',
-      brightYellow: '#ffe066',
-      brightBlue: '#91d5ff',
-      brightMagenta: '#e599f7',
-      brightCyan: '#99e9f2',
-      brightWhite: '#ffffff',
-    }
-
     attach(poolEntry, terminalEl)
 
     // Sync local ptyActive from pool entry
@@ -91,7 +65,7 @@
 
 <div class="flex flex-col h-full">
   <div class="flex-1 overflow-hidden min-h-0 relative">
-    <div class="shell-terminal-wrapper" bind:this={terminalEl}></div>
+    <div class="shell-terminal-wrapper w-full h-full p-3 bg-base-100" bind:this={terminalEl}></div>
     {#if shellExited}
       <div class="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-neutral/90 z-[1]">
         <span class="text-sm font-mono text-base-content/60">Shell exited</span>
@@ -104,13 +78,6 @@
 </div>
 
 <style>
-  .shell-terminal-wrapper {
-    width: 100%;
-    height: 100%;
-    padding: 12px;
-    background: #1C1C1C;
-  }
-
   :global(.shell-terminal-wrapper .xterm-viewport::-webkit-scrollbar) {
     width: 6px;
   }
