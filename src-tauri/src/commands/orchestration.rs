@@ -2,7 +2,7 @@ use std::sync::{Mutex, Arc};
 use tauri::{State, Emitter};
 use crate::{db, server_manager::ServerManager, sse_bridge::SseBridgeManager, git_worktree, pty_manager::PtyManager};
 
-pub fn build_task_prompt(task: &db::TaskRow, action_instruction: &str, additional_instructions: Option<&str>) -> String {
+pub fn build_task_prompt(task: &db::TaskRow, action_instruction: &str, additional_instructions: Option<&str>, code_cleanup_enabled: bool) -> String {
     let mut prompt = String::new();
 
     prompt.push_str(&format!(r#"<openforge_task_management>
@@ -26,24 +26,47 @@ Task is incomplete unless both updates were made. If blocked or abandoned, still
 
 "#, task_id = task.id));
 
+    if code_cleanup_enabled {
+        prompt.push_str(r#"<openforge_code_cleanup>
+As you work on this task, watch for code that doesn't meet project standards or that should be split into separate concerns. When you encounter such code — whether in files you're modifying or adjacent code you're reading — create a new task for it using openforge_create_task.
+
+Create a task when you find:
+- Code that violates the project's established patterns or conventions
+- Functions or modules that are doing too many things and should be split up
+- Duplicated logic that should be extracted into a shared utility
+- Missing or inadequate error handling that deserves its own fix
+- Technical debt like TODO/FIXME/HACK comments that represent real work
+- Dead code, unused imports, or stale abstractions that should be cleaned up
+
+How to create a cleanup task:
+- Call: openforge_create_task(title="...")
+- Write a clear, actionable title (e.g. "Extract shared validation logic from UserForm and AdminForm")
+- Do NOT fix these issues yourself — just log them as tasks and stay focused on your current task
+
+Only create tasks for genuine issues worth addressing. Do not create tasks for minor style preferences or trivial nitpicks.
+</openforge_code_cleanup>
+
+"#);
+    }
+
     if let Some(instructions) = additional_instructions {
         if !instructions.is_empty() {
             prompt.push_str(instructions);
             prompt.push_str("\n\n");
         }
     }
-    
+
     prompt.push_str(task.prompt.as_deref().unwrap_or(&task.title));
     prompt.push('\n');
-    
+
     if let Some(ref key) = task.jira_key {
         if !key.is_empty() {
             prompt.push_str(&format!("Jira: {}\n", key));
         }
     }
-    
+
     prompt.push('\n');
-    
+
     prompt.push_str(action_instruction);
 
     prompt
@@ -164,7 +187,7 @@ pub async fn start_implementation(
     task_id: String,
     repo_path: String,
 ) -> Result<serde_json::Value, String> {
-    let (task, project_id_owned, additional_instructions) = {
+    let (task, project_id_owned, additional_instructions, code_cleanup_enabled) = {
         let db = crate::db::acquire_db(&db);
         let task = db.get_task(&task_id)
             .map_err(|e| format!("Failed to get task: {}", e))?
@@ -173,7 +196,12 @@ pub async fn start_implementation(
         let instructions = db.get_project_config(&project_id, "additional_instructions")
             .ok()
             .flatten();
-        (task, project_id, instructions)
+        let cleanup = db.get_config("code_cleanup_tasks_enabled")
+            .ok()
+            .flatten()
+            .map(|v| v == "true")
+            .unwrap_or(false);
+        (task, project_id, instructions, cleanup)
     };
 
     let provider_name = {
@@ -221,7 +249,7 @@ pub async fn start_implementation(
         .map_err(|e| e.to_string())?;
     }
 
-    let prompt = build_task_prompt(&task, "Implement this task. Create a branch, make the changes, and create a pull request when done.", additional_instructions.as_deref());
+    let prompt = build_task_prompt(&task, "Implement this task. Create a branch, make the changes, and create a pull request when done.", additional_instructions.as_deref(), code_cleanup_enabled);
     let result = provider.start(&task_id, &worktree_path, &prompt, None, None, &app).await?;
 
     if provider_name != "claude-code" {
@@ -259,7 +287,7 @@ pub async fn run_action(
     action_prompt: String,
     agent: Option<String>,
 ) -> Result<serde_json::Value, String> {
-    let (task, project_id_owned, additional_instructions) = {
+    let (task, project_id_owned, additional_instructions, code_cleanup_enabled) = {
         let db = crate::db::acquire_db(&db);
         let task = db.get_task(&task_id)
             .map_err(|e| format!("Failed to get task: {}", e))?
@@ -268,7 +296,12 @@ pub async fn run_action(
         let instructions = db.get_project_config(&project_id, "additional_instructions")
             .ok()
             .flatten();
-        (task, project_id, instructions)
+        let cleanup = db.get_config("code_cleanup_tasks_enabled")
+            .ok()
+            .flatten()
+            .map(|v| v == "true")
+            .unwrap_or(false);
+        (task, project_id, instructions, cleanup)
     };
 
     let effective_agent = agent.or(task.agent.clone());
@@ -382,7 +415,7 @@ pub async fn run_action(
         .map_err(|e| e.to_string())?;
     }
 
-    let prompt = build_task_prompt(&task, &action_prompt, additional_instructions.as_deref());
+    let prompt = build_task_prompt(&task, &action_prompt, additional_instructions.as_deref(), code_cleanup_enabled);
     let result = provider.start(&task_id, &worktree_path, &prompt, effective_agent.as_deref(), task.permission_mode.as_deref(), &app).await?;
 
     if provider_name != "claude-code" {
@@ -470,8 +503,8 @@ mod tests {
             permission_mode: None,
         };
 
-        let prompt = build_task_prompt(&task, "Do the thing!", None);
-        
+        let prompt = build_task_prompt(&task, "Do the thing!", None, false);
+
         assert!(prompt.contains("Test Task"));
         assert!(!prompt.contains("Plan:"));
         assert!(prompt.contains("Do the thing!"));
@@ -500,7 +533,7 @@ mod tests {
             permission_mode: None,
         };
 
-        let prompt = build_task_prompt(&task, "Execute now!", None);
+        let prompt = build_task_prompt(&task, "Execute now!", None, false);
         
         assert!(prompt.contains("Minimal Task"));
         assert!(!prompt.contains("Plan:"));
@@ -529,7 +562,7 @@ mod tests {
             permission_mode: None,
         };
 
-        let prompt = build_task_prompt(&task, "Run test!", None);
+        let prompt = build_task_prompt(&task, "Run test!", None, false);
         
         assert!(prompt.contains("Empty Fields Task"));
         assert!(!prompt.contains("Plan:"));
@@ -557,7 +590,7 @@ mod tests {
             permission_mode: None,
         };
 
-        let prompt = build_task_prompt(&task, "Do the thing!", Some("Always use TypeScript strict mode.\nFollow the project coding standards."));
+        let prompt = build_task_prompt(&task, "Do the thing!", Some("Always use TypeScript strict mode.\nFollow the project coding standards."), false);
         
         assert!(prompt.starts_with("<openforge_task_management>"));
         assert!(prompt.contains("Always use TypeScript strict mode."));
@@ -588,8 +621,8 @@ mod tests {
             permission_mode: None,
         };
 
-        let prompt_with_empty = build_task_prompt(&task, "Do the thing!", Some(""));
-        let prompt_with_none = build_task_prompt(&task, "Do the thing!", None);
+        let prompt_with_empty = build_task_prompt(&task, "Do the thing!", Some(""), false);
+        let prompt_with_none = build_task_prompt(&task, "Do the thing!", None, false);
         
         assert_eq!(prompt_with_empty, prompt_with_none);
     }
@@ -614,8 +647,8 @@ mod tests {
             permission_mode: None,
         };
 
-        let prompt = build_task_prompt(&task, "Do the thing!", None);
-        
+        let prompt = build_task_prompt(&task, "Do the thing!", None, false);
+
         assert!(prompt.starts_with("<openforge_task_management>"));
     }
 
@@ -639,7 +672,7 @@ mod tests {
             permission_mode: None,
         };
 
-        let prompt = build_task_prompt(&task, "Implement this task.", None);
+        let prompt = build_task_prompt(&task, "Implement this task.", None, false);
 
         assert!(prompt.contains("Feature with Jira context"));
         assert!(prompt.contains("Jira: PROJ-42"));
@@ -671,7 +704,7 @@ mod tests {
             permission_mode: None,
         };
 
-        let prompt = build_task_prompt(&task, "Do it!", None);
+        let prompt = build_task_prompt(&task, "Do it!", None, false);
 
         assert!(prompt.contains("Task without jira"));
         assert!(!prompt.contains("Jira:"));
@@ -699,7 +732,7 @@ mod tests {
             permission_mode: None,
         };
 
-        let prompt = build_task_prompt(&task, "Go!", None);
+        let prompt = build_task_prompt(&task, "Go!", None, false);
 
         assert!(prompt.contains("T-555"));
         assert!(prompt.contains("Task with ID in prompt"));
@@ -727,7 +760,7 @@ mod tests {
             permission_mode: None,
         };
 
-        let prompt = build_task_prompt(&task, "Implement this task.", None);
+        let prompt = build_task_prompt(&task, "Implement this task.", None, false);
         
         assert!(prompt.contains("Fix auth bug"));
         assert!(!prompt.contains("Auth fix"));
@@ -756,7 +789,7 @@ mod tests {
             permission_mode: None,
         };
 
-        let prompt = build_task_prompt(&task, "Do it!", None);
+        let prompt = build_task_prompt(&task, "Do it!", None, false);
         
         assert!(prompt.contains("My task"));
         assert!(prompt.contains("Do it!"));
@@ -784,7 +817,7 @@ mod tests {
             permission_mode: None,
         };
 
-        let prompt = build_task_prompt(&task, "Implement this task.", None);
+        let prompt = build_task_prompt(&task, "Implement this task.", None, false);
 
         assert!(prompt.contains("<openforge_task_management>"));
         assert!(prompt.contains("</openforge_task_management>"));
@@ -820,7 +853,7 @@ mod tests {
             permission_mode: None,
         };
 
-        let prompt = build_task_prompt(&task, "Execute!", Some("Project rules here"));
+        let prompt = build_task_prompt(&task, "Execute!", Some("Project rules here"), false);
 
         let mgmt_pos = prompt.find("<openforge_task_management>").unwrap();
         let instructions_pos = prompt.find("Project rules here").unwrap();
@@ -917,6 +950,94 @@ mod tests {
 
         drop(db_arc);
         let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_build_task_prompt_without_code_cleanup() {
+        let task = db::TaskRow {
+            id: "T-800".to_string(),
+            title: "No cleanup".to_string(),
+            status: "backlog".to_string(),
+            jira_key: None,
+            jira_title: None,
+            jira_status: None,
+            jira_assignee: None,
+            jira_description: None,
+            project_id: None,
+            created_at: 0,
+            updated_at: 0,
+            prompt: None,
+            summary: None,
+            agent: None,
+            permission_mode: None,
+        };
+
+        let prompt = build_task_prompt(&task, "Go!", None, false);
+
+        assert!(!prompt.contains("<openforge_code_cleanup>"));
+        assert!(!prompt.contains("openforge_create_task"));
+        assert!(prompt.contains("openforge_update_task"));
+    }
+
+    #[test]
+    fn test_build_task_prompt_with_code_cleanup_enabled() {
+        let task = db::TaskRow {
+            id: "T-801".to_string(),
+            title: "With cleanup".to_string(),
+            status: "backlog".to_string(),
+            jira_key: None,
+            jira_title: None,
+            jira_status: None,
+            jira_assignee: None,
+            jira_description: None,
+            project_id: None,
+            created_at: 0,
+            updated_at: 0,
+            prompt: None,
+            summary: None,
+            agent: None,
+            permission_mode: None,
+        };
+
+        let prompt = build_task_prompt(&task, "Go!", None, true);
+
+        assert!(prompt.contains("<openforge_code_cleanup>"));
+        assert!(prompt.contains("</openforge_code_cleanup>"));
+        assert!(prompt.contains("openforge_create_task"));
+        assert!(prompt.contains("openforge_update_task"));
+    }
+
+    #[test]
+    fn test_build_task_prompt_code_cleanup_ordering() {
+        let task = db::TaskRow {
+            id: "T-802".to_string(),
+            title: "Cleanup ordering".to_string(),
+            status: "backlog".to_string(),
+            jira_key: None,
+            jira_title: None,
+            jira_status: None,
+            jira_assignee: None,
+            jira_description: None,
+            project_id: None,
+            created_at: 0,
+            updated_at: 0,
+            prompt: None,
+            summary: None,
+            agent: None,
+            permission_mode: None,
+        };
+
+        let prompt = build_task_prompt(&task, "Execute!", None, true);
+
+        let mgmt_pos = prompt.find("<openforge_task_management>").unwrap();
+        let cleanup_pos = prompt.find("<openforge_code_cleanup>").unwrap();
+        let task_prompt_pos = prompt.find("Cleanup ordering").unwrap();
+        let action_pos = prompt.find("Execute!").unwrap();
+
+        // Cleanup section should be after task management but before the task prompt
+        assert!(mgmt_pos < cleanup_pos, "Task management should come before code cleanup");
+        assert!(cleanup_pos < task_prompt_pos, "Code cleanup should come before task prompt");
+        assert!(task_prompt_pos < action_pos, "Task prompt should come before action");
     }
 
     #[test]

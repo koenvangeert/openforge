@@ -48,3 +48,4 @@ export const runningTerminals = writable<Set<string>>(new Set());
 export const startingTasks = writable<Set<string>>(new Set());
 
 export const creaturesEnabled = writable<boolean>(false);
+export const codeCleanupTasksEnabled = writable<boolean>(false);

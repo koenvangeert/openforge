@@ -37,6 +37,7 @@ vi.mock('../lib/stores', () => ({
     },
   ]),
   creaturesEnabled: writable(false),
+  codeCleanupTasksEnabled: writable(false),
 }))
 
 import SettingsView from './SettingsView.svelte'
