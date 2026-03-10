@@ -210,7 +210,7 @@
             {@const questionText = parseCheckpointQuestion(session?.checkpoint_data ?? null)}
             {@const isVimFocused = focusedRoom === 0 && vim.focusedIndex === i}
             <!-- svelte-ignore a11y_no_static_element_interactions -->
-            <div data-vim-creature oncontextmenu={(e: MouseEvent) => handleContextMenu(e, task.id)} class={isVimFocused ? 'ring-2 ring-primary rounded' : ''}>
+            <div data-vim-creature oncontextmenu={(e: MouseEvent) => handleContextMenu(e, task.id)} class={isVimFocused ? 'vim-focus' : ''}>
               <Creature {task} {state} {room} {questionText} onClick={onCreatureClick} onHover={handleHover} onHoverEnd={handleHoverEnd} onStart={onRunAction ? (taskId: string) => onRunAction({ taskId, actionPrompt: '', agent: null }) : undefined} />
             </div>
           {/each}
@@ -231,7 +231,7 @@
              {@const questionText = parseCheckpointQuestion(session?.checkpoint_data ?? null)}
              {@const isVimFocused = focusedRoom === 1 && vim.focusedIndex === i}
              <!-- svelte-ignore a11y_no_static_element_interactions -->
-             <div data-vim-creature oncontextmenu={(e: MouseEvent) => handleContextMenu(e, task.id)} class={isVimFocused ? 'ring-2 ring-primary rounded' : ''}>
+             <div data-vim-creature oncontextmenu={(e: MouseEvent) => handleContextMenu(e, task.id)} class={isVimFocused ? 'vim-focus' : ''}>
                <Creature {task} {state} {room} {questionText} onClick={onCreatureClick} onHover={handleHover} onHoverEnd={handleHoverEnd} />
              </div>
            {/each}
@@ -252,7 +252,7 @@
             {@const questionText = parseCheckpointQuestion(session?.checkpoint_data ?? null)}
             {@const isVimFocused = focusedRoom === 2 && vim.focusedIndex === i}
             <!-- svelte-ignore a11y_no_static_element_interactions -->
-            <div data-vim-creature oncontextmenu={(e: MouseEvent) => handleContextMenu(e, task.id)} class={isVimFocused ? 'ring-2 ring-primary rounded' : ''}>
+            <div data-vim-creature oncontextmenu={(e: MouseEvent) => handleContextMenu(e, task.id)} class={isVimFocused ? 'vim-focus' : ''}>
               <Creature {task} {state} {room} {questionText} onClick={onCreatureClick} onHover={handleHover} onHoverEnd={handleHoverEnd} />
             </div>
           {/each}

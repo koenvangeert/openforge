@@ -223,7 +223,7 @@ My question: ${askPrompt.trim()}`
               {@const flatIdx = filteredSkills.indexOf(skill)}
               <button
                 data-vim-skill
-                class="w-full text-left px-3 py-2.5 border-b border-base-200 hover:bg-base-200 transition-colors cursor-pointer {$selectedSkillName === skill.name ? 'bg-primary/10 border-l-2 border-l-primary' : ''} {flatIdx === vimSkills.focusedIndex ? 'ring-2 ring-primary' : ''}"
+                class="w-full text-left px-3 py-2.5 border-b border-base-200 hover:bg-base-200 transition-colors cursor-pointer {$selectedSkillName === skill.name ? 'bg-primary/10 border-l-2 border-l-primary' : ''} {flatIdx === vimSkills.focusedIndex ? 'vim-focus' : ''}"
                 onclick={() => selectSkill(skill)}
               >
                 <div class="flex items-center gap-2 min-w-0">
@@ -245,7 +245,7 @@ My question: ${askPrompt.trim()}`
               {@const flatIdx = filteredSkills.indexOf(skill)}
               <button
                 data-vim-skill
-                class="w-full text-left px-3 py-2.5 border-b border-base-200 hover:bg-base-200 transition-colors cursor-pointer {$selectedSkillName === skill.name ? 'bg-primary/10 border-l-2 border-l-primary' : ''} {flatIdx === vimSkills.focusedIndex ? 'ring-2 ring-primary' : ''}"
+                class="w-full text-left px-3 py-2.5 border-b border-base-200 hover:bg-base-200 transition-colors cursor-pointer {$selectedSkillName === skill.name ? 'bg-primary/10 border-l-2 border-l-primary' : ''} {flatIdx === vimSkills.focusedIndex ? 'vim-focus' : ''}"
                 onclick={() => selectSkill(skill)}
               >
                 <div class="flex items-center gap-2 min-w-0">

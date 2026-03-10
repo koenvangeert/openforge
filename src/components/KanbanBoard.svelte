@@ -191,7 +191,7 @@
         >
           {#each backlogTasks as task, i (task.id)}
             {@const isVimFocused = columns[focusedColumn]?.key === 'backlog' && vim.focusedIndex === i}
-            <div data-vim-item oncontextmenu={(e: MouseEvent) => handleContextMenu(e, task.id)} class={isVimFocused ? 'ring-2 ring-primary rounded' : ''}>
+            <div data-vim-item oncontextmenu={(e: MouseEvent) => handleContextMenu(e, task.id)} class={isVimFocused ? 'vim-focus' : ''}>
               <TaskCard {task} session={getSession($activeSessions, task.id)} pullRequests={$ticketPrs.get(task.id) || []} hasRunningTerminal={$runningTerminals.has(task.id)} isStarting={$startingTasks.has(task.id)} onSelect={handleSelect} />
             </div>
           {/each}
@@ -218,7 +218,7 @@
       >
         {#each doingTasks as task, i (task.id)}
           {@const isVimFocused = columns[focusedColumn]?.key === 'doing' && vim.focusedIndex === i}
-          <div data-vim-item oncontextmenu={(e: MouseEvent) => handleContextMenu(e, task.id)} class={isVimFocused ? 'ring-2 ring-primary rounded' : ''}>
+          <div data-vim-item oncontextmenu={(e: MouseEvent) => handleContextMenu(e, task.id)} class={isVimFocused ? 'vim-focus' : ''}>
             <TaskCard {task} session={getSession($activeSessions, task.id)} pullRequests={$ticketPrs.get(task.id) || []} hasRunningTerminal={$runningTerminals.has(task.id)} isStarting={$startingTasks.has(task.id)} onSelect={handleSelect} />
           </div>
         {/each}

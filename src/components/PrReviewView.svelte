@@ -438,7 +438,7 @@
               <div class="grid grid-cols-[repeat(auto-fill,minmax(340px,1fr))] gap-5 max-w-6xl">
                 {#each prs as pr}
                   {@const flatIdx = flatPrList.indexOf(pr)}
-                  <div data-vim-pr-item class={flatIdx === vimList.focusedIndex ? 'ring-2 ring-primary rounded' : ''}>
+                  <div data-vim-pr-item class={flatIdx === vimList.focusedIndex ? 'vim-focus' : ''}>
                     <ReviewPrCard
                       {pr}
                       selected={false}
