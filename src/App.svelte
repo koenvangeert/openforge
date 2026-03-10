@@ -3,7 +3,7 @@
   import { listen } from '@tauri-apps/api/event'
   import type { UnlistenFn, Event } from '@tauri-apps/api/event'
   import { tasks, selectedTaskId, activeSessions, checkpointNotification, ciFailureNotification, ticketPrs, error, isLoading, projects, activeProjectId, currentView, reviewRequestCount, projectAttention, taskSpawned, selectedSkillName, runningTerminals, startingTasks, creaturesEnabled, codeCleanupTasksEnabled } from './lib/stores'
-  import { getProjects, getTasksForProject, getPullRequests, runAction, getSessionStatus, getLatestSession, getLatestSessions, forceGithubSync, createTask, updateTask, getProjectAttention, getAppMode, finalizeClaudeSession, getRunningPtyTaskIds, getConfig, getAgents, getReviewPrs } from './lib/ipc'
+  import { getProjects, getTasksForProject, getPullRequests, runAction, getSessionStatus, getLatestSession, getLatestSessions, forceGithubSync, createTask, updateTask, updateTaskStatus, deleteTask, getProjectAttention, getAppMode, finalizeClaudeSession, getRunningPtyTaskIds, getConfig, getAgents, getReviewPrs } from './lib/ipc'
   import { writePtyWithSubmit } from './lib/ptySubmit'
   import SearchableSelect from './components/SearchableSelect.svelte'
   import type { Task, PullRequestInfo, AgentEvent, ProjectAttention, AppView } from './lib/types'
@@ -25,8 +25,11 @@
   import ProjectSetupDialog from './components/ProjectSetupDialog.svelte'
   import IconRail from './components/IconRail.svelte'
   import CommandPalette from './components/CommandPalette.svelte'
+  import ActionPalette from './components/ActionPalette.svelte'
 
   import { pushNavState, navigateBack } from './lib/navigation'
+  import { loadActions, getEnabledActions } from './lib/actions'
+  import type { Action } from './lib/types'
   import { release as releaseTerminal, isPtyActive, focusTerminal } from './lib/terminalPool'
   import { isInputFocused } from './lib/domUtils'
   import { resolveGotoKey } from './lib/vimGoto'
@@ -60,6 +63,8 @@
   let showShortcutsDialog = $state(false)
   let showProjectSwitcher = $state(false)
   let showCommandPalette = $state(false)
+  let showActionPalette = $state(false)
+  let actionPaletteActions = $state<Action[]>([])
   let workQueueRefreshTrigger = $state(0)
   let pendingGoto = $state(false)
   let gotoTimer: ReturnType<typeof setTimeout> | null = null
@@ -73,7 +78,7 @@
   }
 
   function isAnyModalOpen(): boolean {
-    return showAddDialog || showShortcutsDialog || showProjectSwitcher || showCommandPalette || showProjectSetup
+    return showAddDialog || showShortcutsDialog || showProjectSwitcher || showCommandPalette || showActionPalette || showProjectSetup
   }
 
   let selectedTask = $derived($tasks.find(t => t.id === $selectedTaskId) || null)
@@ -275,6 +280,76 @@
     }
   }
 
+  async function openActionPalette() {
+    if (showActionPalette) {
+      showActionPalette = false
+      return
+    }
+    if ($activeProjectId) {
+      try {
+        const all = await loadActions($activeProjectId)
+        actionPaletteActions = getEnabledActions(all)
+      } catch {
+        actionPaletteActions = []
+      }
+    }
+    showActionPalette = true
+  }
+
+  async function executeAction(actionId: string) {
+    showActionPalette = false
+    const task = selectedTask
+
+    switch (actionId) {
+      case 'start-task':
+        if (task) await handleRunAction({ taskId: task.id, actionPrompt: '', agent: null })
+        break
+      case 'move-to-done':
+        if (task) {
+          await updateTaskStatus(task.id, 'done')
+          await loadTasks()
+        }
+        break
+      case 'delete-task':
+        if (task) {
+          await deleteTask(task.id)
+          $selectedTaskId = null
+          await loadTasks()
+        }
+        break
+      case 'go-back':
+        navigateBack()
+        break
+      case 'open-workqueue':
+        pushNavState()
+        $currentView = 'workqueue'
+        break
+      case 'search-tasks':
+        showCommandPalette = true
+        break
+      case 'new-task':
+        editingTask = null
+        showAddDialog = true
+        loadDialogAgentInfo()
+        break
+      case 'switch-project':
+        showProjectSwitcher = true
+        break
+      case 'refresh-github':
+        triggerGithubSync()
+        break
+      default:
+        if (actionId.startsWith('custom-action-') && task) {
+          const customId = actionId.replace('custom-action-', '')
+          const action = actionPaletteActions.find(a => a.id === customId)
+          if (action) {
+            await handleRunAction({ taskId: task.id, actionPrompt: action.prompt, agent: null })
+          }
+        }
+        break
+    }
+  }
+
   function handleProjectCreated() {
     showProjectSetup = false
     loadProjects()
@@ -292,7 +367,12 @@
       showShortcutsDialog = true
       return
     }
-    if (e.metaKey && e.key === 'p') {
+    if (e.metaKey && e.shiftKey && e.key === 'p') {
+      e.preventDefault()
+      openActionPalette()
+      return
+    }
+    if (e.metaKey && !e.shiftKey && e.key === 'p') {
       e.preventDefault()
       showProjectSwitcher = !showProjectSwitcher
       return
@@ -910,6 +990,15 @@
   <CommandPalette onClose={() => showCommandPalette = false} />
 {/if}
 
+{#if showActionPalette}
+  <ActionPalette
+    task={selectedTask}
+    customActions={actionPaletteActions}
+    onClose={() => showActionPalette = false}
+    onExecute={executeAction}
+  />
+{/if}
+
 <!-- Keyboard shortcuts help dialog (global) -->
 {#if showShortcutsDialog}
   <Modal onClose={() => showShortcutsDialog = false} maxWidth="420px">
@@ -944,6 +1033,10 @@
           <div class="flex items-center justify-between">
             <span class="text-sm text-base-content">Search tasks</span>
             <kbd class="kbd kbd-sm">⌘K</kbd>
+          </div>
+          <div class="flex items-center justify-between">
+            <span class="text-sm text-base-content">Action palette</span>
+            <div class="flex gap-0.5"><kbd class="kbd kbd-sm">⌘</kbd><kbd class="kbd kbd-sm">⇧</kbd><kbd class="kbd kbd-sm">P</kbd></div>
           </div>
           <div class="flex items-center justify-between">
             <span class="text-sm text-base-content">Show shortcuts</span>
