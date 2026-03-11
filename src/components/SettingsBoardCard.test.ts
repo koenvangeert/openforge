@@ -82,4 +82,32 @@ describe('SettingsBoardCard', () => {
 
 		expect(onColumnsChange).toHaveBeenCalledWith(DEFAULT_BOARD_COLUMNS)
 	})
+
+	it('changing column name calls onColumnsChange with updated name', async () => {
+		const onColumnsChange = vi.fn()
+		render(SettingsBoardCard, { props: defaultProps({ onColumnsChange }) })
+		const nameInputs = screen.getAllByPlaceholderText('Column name')
+		await fireEvent.input(nameInputs[0], { target: { value: 'Todo' } })
+		expect(onColumnsChange).toHaveBeenCalledOnce()
+		const newColumns: BoardColumnConfig[] = onColumnsChange.mock.calls[0][0]
+		expect(newColumns[0].name).toBe('Todo')
+	})
+
+	it('toggling creature state checkbox calls onColumnsChange with updated statuses', async () => {
+		const onColumnsChange = vi.fn()
+		render(SettingsBoardCard, { props: defaultProps({ onColumnsChange }) })
+		// Find the 'Idle' checkbox label and click it
+		const idleCheckbox = screen.getAllByLabelText('Idle')[0]
+		await fireEvent.click(idleCheckbox)
+		expect(onColumnsChange).toHaveBeenCalledOnce()
+		const newColumns: BoardColumnConfig[] = onColumnsChange.mock.calls[0][0]
+		expect(newColumns[0].statuses).toContain('idle')
+	})
+
+	it('displays validation errors when config is invalid', async () => {
+		const { validateBoardColumns } = await import('../lib/boardColumns')
+		vi.mocked(validateBoardColumns).mockReturnValue({ valid: false, errors: ['Creature state "done" is missing from all columns.'] })
+		render(SettingsBoardCard, { props: defaultProps() })
+		expect(screen.getByText('Creature state "done" is missing from all columns.')).toBeTruthy()
+	})
 })

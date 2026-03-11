@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/svelte'
+import { render, screen, fireEvent, within } from '@testing-library/svelte'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import KanbanBoard from './KanbanBoard.svelte'
 import type { Task } from '../lib/types'
@@ -73,16 +73,24 @@ describe('KanbanBoard', () => {
     expect(await screen.findByText('Test task')).toBeTruthy()
   })
 
-  it('groups tasks by creature state', async () => {
+  it('groups tasks by creature state into correct columns', async () => {
     const doingTask: Task = { ...baseTask, id: 'T-2', initial_prompt: 'Doing task', status: 'doing' }
     const doneTask: Task = { ...baseTask, id: 'T-3', initial_prompt: 'Done task', status: 'done' }
     tasks.set([baseTask, doingTask, doneTask])
 
     render(KanbanBoard, { props: { onRunAction: mockOnRunAction } })
 
-    expect(await screen.findByText('Test task')).toBeTruthy()
-    expect(await screen.findByText('Doing task')).toBeTruthy()
-    expect(await screen.findByText('Done task')).toBeTruthy()
+    // Wait for columns to load
+    await screen.findByText('// backlog')
+
+    // Find column containers by data-vim-column attribute
+    const backlogCol = document.querySelector('[data-vim-column="col-backlog"]')!
+    const doingCol = document.querySelector('[data-vim-column="col-doing"]')!
+    const doneCol = document.querySelector('[data-vim-column="col-done"]')!
+
+    expect(within(backlogCol as HTMLElement).getByText('Test task')).toBeTruthy()
+    expect(within(doingCol as HTMLElement).getByText('Doing task')).toBeTruthy()
+    expect(within(doneCol as HTMLElement).getByText('Done task')).toBeTruthy()
   })
 
   it('shows empty state for columns with no tasks', async () => {
@@ -167,5 +175,36 @@ describe('KanbanBoard', () => {
     await fireEvent.click(screen.getByText('Move to Done'))
 
     expect(updateTaskStatus).toHaveBeenCalledWith('T-2', 'done')
+  })
+
+  it('renders N columns from custom config', async () => {
+    const { loadBoardColumns } = await import('../lib/boardColumns')
+    vi.mocked(loadBoardColumns).mockResolvedValueOnce([
+      { id: 'col-1', name: 'Todo', statuses: ['egg'], underlyingStatus: 'backlog' },
+      { id: 'col-2', name: 'In Progress', statuses: ['active'], underlyingStatus: 'doing' },
+      { id: 'col-3', name: 'Blocked', statuses: ['needs-input', 'sad', 'frozen'], underlyingStatus: 'doing' },
+      { id: 'col-4', name: 'Review', statuses: ['pr-draft', 'pr-open', 'ci-failed', 'changes-requested', 'ready-to-merge', 'pr-merged'], underlyingStatus: 'doing' },
+      { id: 'col-5', name: 'Complete', statuses: ['done', 'idle', 'resting', 'celebrating'], underlyingStatus: 'done' },
+    ])
+
+    render(KanbanBoard, { props: { onRunAction: mockOnRunAction } })
+
+    expect(await screen.findByText('// todo')).toBeTruthy()
+    expect(await screen.findByText('// in progress')).toBeTruthy()
+    expect(await screen.findByText('// blocked')).toBeTruthy()
+    expect(await screen.findByText('// review')).toBeTruthy()
+    expect(await screen.findByText('// complete')).toBeTruthy()
+  })
+
+  it('vim h/l navigation moves between columns', async () => {
+    const doingTask: Task = { ...baseTask, id: 'T-2', initial_prompt: 'Doing task', status: 'doing' }
+    tasks.set([baseTask, doingTask])
+
+    render(KanbanBoard, { props: { onRunAction: mockOnRunAction } })
+    await screen.findByText('// backlog')
+
+    await fireEvent.keyDown(window, { key: 'l' })
+    await fireEvent.keyDown(window, { key: 'l' })
+    await fireEvent.keyDown(window, { key: 'h' })
   })
 })
