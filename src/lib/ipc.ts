@@ -216,10 +216,6 @@ export async function getPtyBuffer(taskId: string): Promise<string | null> {
   return invoke<string | null>("get_pty_buffer", { taskId });
 }
 
-export async function getRunningPtyTaskIds(): Promise<string[]> {
-  return invoke<string[]>("get_running_pty_task_ids");
-}
-
 export async function getTaskDiff(taskId: string, includeUncommitted: boolean): Promise<PrFileDiff[]> {
   return invoke<PrFileDiff[]>("get_task_diff", { taskId, includeUncommitted });
 }

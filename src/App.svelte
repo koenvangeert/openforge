@@ -2,8 +2,8 @@
   import { onMount, onDestroy } from 'svelte'
   import { listen } from '@tauri-apps/api/event'
   import type { UnlistenFn, Event } from '@tauri-apps/api/event'
-  import { tasks, selectedTaskId, activeSessions, checkpointNotification, ciFailureNotification, ticketPrs, error, isLoading, projects, activeProjectId, currentView, reviewRequestCount, authoredPrCount, projectAttention, taskSpawned, selectedSkillName, runningTerminals, startingTasks, creaturesEnabled, codeCleanupTasksEnabled } from './lib/stores'
-  import { getProjects, getTasksForProject, getPullRequests, startImplementation, getSessionStatus, getLatestSession, getLatestSessions, forceGithubSync, createTask, updateTask, updateTaskStatus, deleteTask, getProjectAttention, getAppMode, finalizeClaudeSession, getRunningPtyTaskIds, getConfig, getProjectConfig, getAgents, getReviewPrs, getAuthoredPrs } from './lib/ipc'
+  import { tasks, selectedTaskId, activeSessions, checkpointNotification, ciFailureNotification, ticketPrs, error, isLoading, projects, activeProjectId, currentView, reviewRequestCount, authoredPrCount, projectAttention, taskSpawned, selectedSkillName, startingTasks, creaturesEnabled, codeCleanupTasksEnabled } from './lib/stores'
+  import { getProjects, getTasksForProject, getPullRequests, startImplementation, getSessionStatus, getLatestSession, getLatestSessions, forceGithubSync, createTask, updateTask, updateTaskStatus, deleteTask, getProjectAttention, getAppMode, finalizeClaudeSession, getConfig, getProjectConfig, getAgents, getReviewPrs, getAuthoredPrs } from './lib/ipc'
   import { writePtyWithSubmit } from './lib/ptySubmit'
   import SearchableSelect from './components/SearchableSelect.svelte'
   import type { Task, PullRequestInfo, AgentEvent, ProjectAttention, AppView, PermissionMode } from './lib/types'
@@ -161,7 +161,6 @@
     try {
       $tasks = await getTasksForProject($activeProjectId)
       await loadSessions()
-      loadRunningTerminals()
     } catch (e) {
       console.error('Failed to load tasks:', e)
       $error = String(e)
@@ -182,21 +181,6 @@
       $activeSessions = updated
     } catch (e) {
       console.error('Failed to load sessions:', e)
-    }
-  }
-
-  async function loadRunningTerminals() {
-    try {
-      const ids = await getRunningPtyTaskIds()
-      const shellTaskIds = new Set<string>()
-      for (const id of ids) {
-        if (id.endsWith('-shell')) {
-          shellTaskIds.add(id.slice(0, -6))
-        }
-      }
-      $runningTerminals = shellTaskIds
-    } catch (e) {
-      console.error('Failed to load running terminals:', e)
     }
   }
 
@@ -822,9 +806,6 @@
     // Phase 3: Safety net
     await loadTasks()
 
-    // Poll running terminals (PTY sessions start/stop outside task lifecycle)
-    const terminalPollInterval = setInterval(loadRunningTerminals, 5000)
-    unlisteners.push(() => clearInterval(terminalPollInterval))
   })
 
   onDestroy(() => {
