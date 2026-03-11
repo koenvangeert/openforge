@@ -248,6 +248,17 @@ impl super::Database {
         }
     }
 
+    pub fn get_task_id_for_pr(&self, pr_id: i64) -> Result<Option<String>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare("SELECT ticket_id FROM pull_requests WHERE id = ?1")?;
+        let mut rows = stmt.query([pr_id])?;
+        if let Some(row) = rows.next()? {
+            Ok(Some(row.get(0)?))
+        } else {
+            Ok(None)
+        }
+    }
+
     pub fn update_pr_review_status(&self, pr_id: i64, review_status: &str) -> Result<()> {
         let conn = self.conn.lock().unwrap();
         conn.execute(

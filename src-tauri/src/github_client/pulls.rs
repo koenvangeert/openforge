@@ -426,6 +426,113 @@ impl GitHubClient {
         Ok((results, search_item_count))
     }
 
+    pub async fn search_authored_prs(
+        &self,
+        username: &str,
+        token: &str,
+    ) -> Result<(Vec<SearchPrResult>, usize), GitHubError> {
+        let url = format!(
+            "https://api.github.com/search/issues?q=author:{}+type:pr+state:open&per_page=100",
+            username
+        );
+
+        let response = self
+            .client
+            .get(&url)
+            .header("Authorization", format!("token {}", token))
+            .header("User-Agent", "openforge")
+            .send()
+            .await
+            .map_err(|e| GitHubError::NetworkError(e.to_string()))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unable to read response body".to_string());
+            return Err(GitHubError::ApiError {
+                status: status.as_u16(),
+                message: body,
+            });
+        }
+
+        let search_response: SearchResponse = response
+            .json()
+            .await
+            .map_err(|e| GitHubError::ParseError(e.to_string()))?;
+
+        let search_item_count = search_response.items.len();
+
+        let items_with_coords: Vec<(SearchItem, String, String)> = search_response
+            .items
+            .into_iter()
+            .filter_map(|item| {
+                let parts: Vec<&str> = item.repository_url.split('/').collect();
+                if parts.len() < 2 {
+                    return None;
+                }
+                let owner = parts[parts.len() - 2].to_string();
+                let repo = parts[parts.len() - 1].to_string();
+                Some((item, owner, repo))
+            })
+            .collect();
+
+        let detail_futures: Vec<_> = items_with_coords
+            .iter()
+            .map(|(item, owner, repo)| self.get_pr_details(owner, repo, item.number, token))
+            .collect();
+
+        let detail_results = join_all(detail_futures).await;
+
+        let mut results = Vec::new();
+        for ((item, owner, repo), pr_result) in items_with_coords.into_iter().zip(detail_results) {
+            match pr_result {
+                Ok(pr_details) => {
+                    results.push(SearchPrResult {
+                        id: item.id,
+                        number: item.number,
+                        title: item.title,
+                        body: item.body,
+                        state: item.state,
+                        draft: item.draft.unwrap_or(false),
+                        html_url: item.html_url,
+                        user_login: item.user.login,
+                        user_avatar_url: item.user.avatar_url,
+                        repo_owner: owner,
+                        repo_name: repo,
+                        head_ref: pr_details.head.ref_name,
+                        base_ref: pr_details.extra.get("base")
+                            .and_then(|b| b.get("ref"))
+                            .and_then(|r| r.as_str())
+                            .unwrap_or("main")
+                            .to_string(),
+                        head_sha: pr_details.head.sha,
+                        additions: pr_details.extra.get("additions")
+                            .and_then(|a| a.as_i64())
+                            .unwrap_or(0),
+                        deletions: pr_details.extra.get("deletions")
+                            .and_then(|d| d.as_i64())
+                            .unwrap_or(0),
+                        changed_files: pr_details.extra.get("changed_files")
+                            .and_then(|c| c.as_i64())
+                            .unwrap_or(0),
+                        created_at: item.created_at,
+                        updated_at: item.updated_at,
+                    });
+                }
+                Err(e) => {
+                    eprintln!(
+                        "[GitHub] Failed to fetch PR details for {}/{} #{}: {}",
+                        owner, repo, item.number, e
+                    );
+                }
+            }
+        }
+
+        Ok((results, search_item_count))
+    }
+
     /// Get file diffs for a pull request
     pub async fn get_pr_files(
         &self,

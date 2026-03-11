@@ -196,6 +196,34 @@ export interface ImplementationStatus {
 // PR Review Types (cross-repo, not task-linked)
 // ============================================================================
 
+/** PR authored by the authenticated user — cached from GitHub Search API */
+export interface AuthoredPullRequest {
+  id: number;
+  number: number;
+  title: string;
+  body: string | null;
+  state: string;
+  draft: boolean;
+  html_url: string;
+  user_login: string;
+  user_avatar_url: string | null;
+  repo_owner: string;
+  repo_name: string;
+  head_ref: string;
+  base_ref: string;
+  head_sha: string;
+  additions: number;
+  deletions: number;
+  changed_files: number;
+  ci_status: string | null;
+  ci_check_runs: string | null;
+  review_status: string | null;
+  merged_at: number | null;
+  task_id: string | null;
+  created_at: number;
+  updated_at: number;
+}
+
 /** PR from GitHub Search API — review requested for the authenticated user */
 export interface ReviewPullRequest {
   id: number;
@@ -307,7 +335,7 @@ export interface AgentReviewComment {
 }
 
 /** App-level view for top-bar navigation */
-export type AppView = "board" | "pr_review" | "skills" | "creatures" | "settings" | "workqueue";
+export type AppView = "board" | "pr_review" | "my_prs" | "skills" | "creatures" | "settings" | "workqueue";
 
 export interface WorkQueueTask {
   id: string;

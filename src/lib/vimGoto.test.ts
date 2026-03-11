@@ -26,6 +26,10 @@ describe('resolveGotoKey', () => {
     expect(resolveGotoKey(',')).toBe('settings')
   })
 
+  it('maps "m" to my_prs', () => {
+    expect(resolveGotoKey('m')).toBe('my_prs')
+  })
+
   it('returns null for unknown keys', () => {
     expect(resolveGotoKey('z')).toBeNull()
     expect(resolveGotoKey('x')).toBeNull()

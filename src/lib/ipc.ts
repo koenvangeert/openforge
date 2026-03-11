@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { Task, AgentSession, PrComment, PollResult, PullRequestInfo, AgentInfo, Project, ProjectAttention, WorktreeInfo, ImplementationStatus, ReviewPullRequest, PrFileDiff, ReviewComment, ReviewSubmissionComment, SelfReviewComment, AgentReviewComment, CommandInfo, AutocompleteAgentInfo, PrOverviewComment, TranscriptionResult, WhisperModelStatus, WhisperModelSizeId, SkillInfo, WorkQueueTask } from "./types";
+import type { Task, AgentSession, PrComment, PollResult, PullRequestInfo, AgentInfo, Project, ProjectAttention, WorktreeInfo, ImplementationStatus, ReviewPullRequest, AuthoredPullRequest, PrFileDiff, ReviewComment, ReviewSubmissionComment, SelfReviewComment, AgentReviewComment, CommandInfo, AutocompleteAgentInfo, PrOverviewComment, TranscriptionResult, WhisperModelStatus, WhisperModelSizeId, SkillInfo, WorkQueueTask } from "./types";
 
 export async function createTask(initialPrompt: string, status: string, jiraKey: string | null, projectId: string | null, agent: string | null, permissionMode: string | null): Promise<Task> {
   return invoke<Task>("create_task", { initialPrompt, status, jiraKey, projectId, agent, permissionMode });
@@ -316,4 +316,12 @@ export async function setWhisperModel(modelSize: WhisperModelSizeId): Promise<vo
 
 export async function finalizeClaudeSession(taskId: string): Promise<void> {
   return invoke<void>("finalize_claude_session", { taskId });
+}
+
+export async function fetchAuthoredPrs(): Promise<AuthoredPullRequest[]> {
+  return invoke<AuthoredPullRequest[]>("fetch_authored_prs");
+}
+
+export async function getAuthoredPrs(): Promise<AuthoredPullRequest[]> {
+  return invoke<AuthoredPullRequest[]>("get_authored_prs");
 }

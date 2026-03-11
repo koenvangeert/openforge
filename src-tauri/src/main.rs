@@ -375,6 +375,8 @@ fn main() {
             commands::config::get_app_mode,
             commands::config::check_claude_installed,
             commands::review::get_github_username,
+            commands::authored_prs::fetch_authored_prs,
+            commands::authored_prs::get_authored_prs,
             commands::review::fetch_review_prs,
             commands::review::get_review_prs,
             commands::review::get_pr_file_diffs,

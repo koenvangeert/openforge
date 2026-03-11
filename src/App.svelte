@@ -2,8 +2,8 @@
   import { onMount, onDestroy } from 'svelte'
   import { listen } from '@tauri-apps/api/event'
   import type { UnlistenFn, Event } from '@tauri-apps/api/event'
-  import { tasks, selectedTaskId, activeSessions, checkpointNotification, ciFailureNotification, ticketPrs, error, isLoading, projects, activeProjectId, currentView, reviewRequestCount, projectAttention, taskSpawned, selectedSkillName, runningTerminals, startingTasks, creaturesEnabled, codeCleanupTasksEnabled } from './lib/stores'
-  import { getProjects, getTasksForProject, getPullRequests, startImplementation, getSessionStatus, getLatestSession, getLatestSessions, forceGithubSync, createTask, updateTask, updateTaskStatus, deleteTask, getProjectAttention, getAppMode, finalizeClaudeSession, getRunningPtyTaskIds, getConfig, getProjectConfig, getAgents, getReviewPrs } from './lib/ipc'
+  import { tasks, selectedTaskId, activeSessions, checkpointNotification, ciFailureNotification, ticketPrs, error, isLoading, projects, activeProjectId, currentView, reviewRequestCount, authoredPrCount, projectAttention, taskSpawned, selectedSkillName, runningTerminals, startingTasks, creaturesEnabled, codeCleanupTasksEnabled } from './lib/stores'
+  import { getProjects, getTasksForProject, getPullRequests, startImplementation, getSessionStatus, getLatestSession, getLatestSessions, forceGithubSync, createTask, updateTask, updateTaskStatus, deleteTask, getProjectAttention, getAppMode, finalizeClaudeSession, getRunningPtyTaskIds, getConfig, getProjectConfig, getAgents, getReviewPrs, getAuthoredPrs } from './lib/ipc'
   import { writePtyWithSubmit } from './lib/ptySubmit'
   import SearchableSelect from './components/SearchableSelect.svelte'
   import type { Task, PullRequestInfo, AgentEvent, ProjectAttention, AppView, PermissionMode } from './lib/types'
@@ -13,6 +13,7 @@
   import Modal from './components/Modal.svelte'
    import SettingsView from './components/SettingsView.svelte'
    import PrReviewView from './components/PrReviewView.svelte'
+   import MyPullRequestsView from './components/MyPullRequestsView.svelte'
    import SkillsView from './components/SkillsView.svelte'
    import CreaturesView from './components/CreaturesView.svelte'
    import WorkQueueView from './components/WorkQueueView.svelte'
@@ -92,6 +93,12 @@
   // Navigation logic - clear selected task when switching views
   $effect(() => {
     if ($currentView === 'pr_review') {
+      $selectedTaskId = null
+    }
+  })
+
+  $effect(() => {
+    if ($currentView === 'my_prs') {
       $selectedTaskId = null
     }
   })
@@ -805,6 +812,13 @@
       console.error('[App] Failed to initialize review PR count:', e)
     }
 
+    try {
+      const authoredPrList = await getAuthoredPrs()
+      $authoredPrCount = authoredPrList.filter(p => p.ci_status === 'failure' || p.review_status === 'changes_requested').length
+    } catch (e) {
+      console.error('[App] Failed to initialize authored PR count:', e)
+    }
+
     // Phase 3: Safety net
     await loadTasks()
 
@@ -819,7 +833,7 @@
 </script>
 
 <div class="flex h-screen overflow-hidden bg-base-200">
-  <IconRail currentView={$currentView} onNavigate={handleNavigate} reviewRequestCount={$reviewRequestCount} creaturesEnabled={$creaturesEnabled} />
+  <IconRail currentView={$currentView} onNavigate={handleNavigate} reviewRequestCount={$reviewRequestCount} authoredPrCount={$authoredPrCount} creaturesEnabled={$creaturesEnabled} />
 
   <div class="flex flex-col flex-1 min-w-0">
     <header class="bg-neutral text-neutral-content h-12 flex items-center justify-between px-6 shrink-0">
@@ -873,6 +887,8 @@
         <SettingsView onClose={() => { pushNavState(); $currentView = 'board' }} onProjectDeleted={loadProjects} />
       {:else if $currentView === 'pr_review'}
         <PrReviewView />
+       {:else if $currentView === 'my_prs'}
+         <MyPullRequestsView />
        {:else if $currentView === 'skills'}
          <SkillsView onRunAction={handleRunAction} />
        {:else if $currentView === 'creatures'}

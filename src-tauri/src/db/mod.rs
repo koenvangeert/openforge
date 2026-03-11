@@ -5,6 +5,7 @@ use std::sync::{Arc, Mutex};
 
 mod agent_review;
 mod agents;
+mod authored_prs;
 mod config;
 mod projects;
 mod pull_requests;
@@ -15,6 +16,7 @@ mod worktrees;
 
 pub use agent_review::AgentReviewCommentRow;
 pub use agents::AgentSessionRow;
+pub use authored_prs::AuthoredPrRow;
 pub use projects::{ProjectAttentionRow, ProjectRow};
 pub use pull_requests::{PrCommentRow, PrRow};
 pub use review::ReviewPrRow;
@@ -605,6 +607,39 @@ CREATE INDEX IF NOT EXISTS idx_agent_review_comments_session ON agent_review_com
         M::up("DROP TABLE IF EXISTS agent_logs;"),
         // V12: Rename tasks.title → tasks.initial_prompt
         M::up("ALTER TABLE tasks RENAME COLUMN title TO initial_prompt;"),
+        M::up(
+            r#"
+CREATE TABLE IF NOT EXISTS authored_prs (
+    id INTEGER PRIMARY KEY,
+    number INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    body TEXT,
+    state TEXT NOT NULL,
+    draft INTEGER NOT NULL DEFAULT 0,
+    html_url TEXT NOT NULL,
+    user_login TEXT NOT NULL,
+    user_avatar_url TEXT,
+    repo_owner TEXT NOT NULL,
+    repo_name TEXT NOT NULL,
+    head_ref TEXT NOT NULL,
+    base_ref TEXT NOT NULL,
+    head_sha TEXT NOT NULL,
+    additions INTEGER NOT NULL DEFAULT 0,
+    deletions INTEGER NOT NULL DEFAULT 0,
+    changed_files INTEGER NOT NULL DEFAULT 0,
+    ci_status TEXT,
+    ci_check_runs TEXT,
+    review_status TEXT,
+    merged_at INTEGER,
+    task_id TEXT,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_authored_prs_updated_at ON authored_prs(updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_authored_prs_repo ON authored_prs(repo_owner, repo_name);
+CREATE INDEX IF NOT EXISTS idx_authored_prs_state ON authored_prs(state);
+            "#,
+        ),
     ])
 }
 #[cfg(test)]
@@ -652,13 +687,13 @@ mod tests {
 
         let table_count: i32 = conn
             .query_row(
-                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('tasks', 'agent_sessions', 'pull_requests', 'pr_comments', 'config', 'projects', 'project_config', 'worktrees', 'review_prs', 'self_review_comments', 'agent_review_comments')",
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('tasks', 'agent_sessions', 'pull_requests', 'pr_comments', 'config', 'projects', 'project_config', 'worktrees', 'review_prs', 'self_review_comments', 'agent_review_comments', 'authored_prs')",
                 [],
                 |row| row.get(0),
             )
             .expect("Failed to count tables");
 
-        assert_eq!(table_count, 11, "All 11 tables should be created");
+        assert_eq!(table_count, 12, "All 12 tables should be created");
 
         let config_count: i32 = conn
             .query_row("SELECT COUNT(*) FROM config", [], |row| row.get(0))
@@ -876,8 +911,8 @@ mod tests {
             .query_row("PRAGMA user_version", [], |r| r.get(0))
             .unwrap();
         assert_eq!(
-            uv, 12,
-            "Fresh DB should have user_version=12 after migrations, got {}",
+            uv, 13,
+            "Fresh DB should have user_version=13 after migrations, got {}",
             uv
         );
 

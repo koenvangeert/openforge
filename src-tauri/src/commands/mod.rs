@@ -11,3 +11,4 @@ pub mod self_review;
 pub mod config;
 pub mod whisper;
 pub mod agent_review;
+pub mod authored_prs;
