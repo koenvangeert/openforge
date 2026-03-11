@@ -8,11 +8,11 @@ pub fn build_task_prompt(task: &db::TaskRow, action_instruction: &str, additiona
     prompt.push_str(&format!(r#"<openforge_task_management>
 This task is {task_id}. You MUST call `openforge_update_task` at both points below — the task is not complete without these updates.
 
-<title_update trigger="after_initial_analysis">
-Once you understand the scope, call: openforge_update_task(task_id="{task_id}", title="...")
-Write a concise title reflecting the actual work, not the original request verbatim.
+<initial_prompt_update trigger="after_initial_analysis">
+Once you understand the scope, call: openforge_update_task(task_id="{task_id}", initial_prompt="...")
+Write a concise description reflecting the actual work, not the original request verbatim.
 Good: "Add JWT refresh token rotation to auth middleware" — Bad: "implement the auth thing"
-</title_update>
+</initial_prompt_update>
 
 <summary_update trigger="before_finalizing">
 Before reporting completion, call: openforge_update_task(task_id="{task_id}", summary="...")
@@ -39,8 +39,8 @@ Create a task when you find:
 - Dead code, unused imports, or stale abstractions that should be cleaned up
 
 How to create a cleanup task:
-- Call: openforge_create_task(title="...")
-- Write a clear, actionable title (e.g. "Extract shared validation logic from UserForm and AdminForm")
+- Call: openforge_create_task(initial_prompt="...")
+- Write a clear, actionable prompt (e.g. "Extract shared validation logic from UserForm and AdminForm")
 - Do NOT fix these issues yourself — just log them as tasks and stay focused on your current task
 
 Only create tasks for genuine issues worth addressing. Do not create tasks for minor style preferences or trivial nitpicks.
@@ -56,7 +56,7 @@ Only create tasks for genuine issues worth addressing. Do not create tasks for m
         }
     }
 
-    prompt.push_str(task.prompt.as_deref().unwrap_or(&task.title));
+    prompt.push_str(task.prompt.as_deref().unwrap_or(&task.initial_prompt));
     prompt.push('\n');
 
     if let Some(ref key) = task.jira_key {
@@ -216,7 +216,7 @@ pub async fn start_implementation(
         sse_mgr.inner().clone(),
     ).map_err(|e| format!("Unknown provider: {}", e))?;
 
-    let branch = git_worktree::slugify_branch_name(&task_id, task.prompt.as_deref().unwrap_or(&task.title));
+    let branch = git_worktree::slugify_branch_name(&task_id, task.prompt.as_deref().unwrap_or(&task.initial_prompt));
     let home = dirs::home_dir().ok_or("Failed to get home directory")?;
     let repo_name = std::path::Path::new(&repo_path)
         .file_name()
@@ -382,7 +382,7 @@ pub async fn run_action(
         }
     }
 
-    let branch = git_worktree::slugify_branch_name(&task_id, task.prompt.as_deref().unwrap_or(&task.title));
+    let branch = git_worktree::slugify_branch_name(&task_id, task.prompt.as_deref().unwrap_or(&task.initial_prompt));
     let home = dirs::home_dir().ok_or("Failed to get home directory")?;
     let repo_name = std::path::Path::new(&repo_path)
         .file_name()
@@ -487,7 +487,7 @@ mod tests {
     fn test_build_task_prompt_all_fields() {
         let task = db::TaskRow {
             id: "T-123".to_string(),
-            title: "Test Task".to_string(),
+            initial_prompt: "Test Task".to_string(),
             status: "backlog".to_string(),
             jira_key: None,
             jira_title: None,
@@ -517,7 +517,7 @@ mod tests {
     fn test_build_task_prompt_minimal_fields() {
         let task = db::TaskRow {
             id: "T-456".to_string(),
-            title: "Minimal Task".to_string(),
+            initial_prompt: "Minimal Task".to_string(),
             status: "backlog".to_string(),
             jira_key: None,
             jira_title: None,
@@ -546,7 +546,7 @@ mod tests {
     fn test_build_task_prompt_empty_optional_fields() {
         let task = db::TaskRow {
             id: "T-789".to_string(),
-            title: "Empty Fields Task".to_string(),
+            initial_prompt: "Empty Fields Task".to_string(),
             status: "backlog".to_string(),
             jira_key: None,
             jira_title: None,
@@ -574,7 +574,7 @@ mod tests {
     fn test_build_task_prompt_with_additional_instructions() {
         let task = db::TaskRow {
             id: "T-999".to_string(),
-            title: "Instructions Task".to_string(),
+            initial_prompt: "Instructions Task".to_string(),
             status: "backlog".to_string(),
             jira_key: None,
             jira_title: None,
@@ -605,7 +605,7 @@ mod tests {
     fn test_build_task_prompt_with_empty_additional_instructions() {
         let task = db::TaskRow {
             id: "T-111".to_string(),
-            title: "Empty Instructions Task".to_string(),
+            initial_prompt: "Empty Instructions Task".to_string(),
             status: "backlog".to_string(),
             jira_key: None,
             jira_title: None,
@@ -631,7 +631,7 @@ mod tests {
     fn test_build_task_prompt_with_none_additional_instructions() {
         let task = db::TaskRow {
             id: "T-222".to_string(),
-            title: "None Instructions Task".to_string(),
+            initial_prompt: "None Instructions Task".to_string(),
             status: "backlog".to_string(),
             jira_key: None,
             jira_title: None,
@@ -656,7 +656,7 @@ mod tests {
     fn test_build_task_prompt_with_jira_key() {
         let task = db::TaskRow {
             id: "T-333".to_string(),
-            title: "Feature with Jira context".to_string(),
+            initial_prompt: "Feature with Jira context".to_string(),
             status: "backlog".to_string(),
             jira_key: Some("PROJ-42".to_string()),
             jira_title: Some("Add auth endpoint".to_string()),
@@ -688,7 +688,7 @@ mod tests {
     fn test_build_task_prompt_without_jira_key() {
         let task = db::TaskRow {
             id: "T-444".to_string(),
-            title: "Task without jira".to_string(),
+            initial_prompt: "Task without jira".to_string(),
             status: "backlog".to_string(),
             jira_key: None,
             jira_title: None,
@@ -716,7 +716,7 @@ mod tests {
     fn test_build_task_prompt_includes_task_id_in_management_section() {
         let task = db::TaskRow {
             id: "T-555".to_string(),
-            title: "Task with ID in prompt".to_string(),
+            initial_prompt: "Task with ID in prompt".to_string(),
             status: "backlog".to_string(),
             jira_key: None,
             jira_title: None,
@@ -744,7 +744,7 @@ mod tests {
     fn test_build_task_prompt_uses_prompt() {
         let task = db::TaskRow {
             id: "T-666".to_string(),
-            title: "Auth fix".to_string(),
+            initial_prompt: "Auth fix".to_string(),
             status: "backlog".to_string(),
             jira_key: None,
             jira_title: None,
@@ -773,7 +773,7 @@ mod tests {
     fn test_build_task_prompt_fallback_to_title() {
         let task = db::TaskRow {
             id: "T-777".to_string(),
-            title: "My task".to_string(),
+            initial_prompt: "My task".to_string(),
             status: "backlog".to_string(),
             jira_key: None,
             jira_title: None,
@@ -801,7 +801,7 @@ mod tests {
     fn test_build_task_prompt_task_management_section_structure() {
         let task = db::TaskRow {
             id: "T-42".to_string(),
-            title: "Test management section".to_string(),
+            initial_prompt: "Test management section".to_string(),
             status: "backlog".to_string(),
             jira_key: None,
             jira_title: None,
@@ -823,7 +823,7 @@ mod tests {
         assert!(prompt.contains("</openforge_task_management>"));
         assert!(prompt.contains("openforge_update_task"));
         assert!(prompt.contains("task_id=\"T-42\""));
-        assert!(prompt.contains("<title_update trigger=\"after_initial_analysis\">"));
+        assert!(prompt.contains("<initial_prompt_update trigger=\"after_initial_analysis\">"));
         assert!(prompt.contains("<summary_update trigger=\"before_finalizing\">"));
         assert!(prompt.contains("<completeness_check>"));
         assert!(prompt.contains("not complete without"));
@@ -837,7 +837,7 @@ mod tests {
     fn test_build_task_prompt_ordering() {
         let task = db::TaskRow {
             id: "T-99".to_string(),
-            title: "Ordering test".to_string(),
+            initial_prompt: "Ordering test".to_string(),
             status: "backlog".to_string(),
             jira_key: Some("PROJ-10".to_string()),
             jira_title: None,
@@ -956,7 +956,7 @@ mod tests {
     fn test_build_task_prompt_without_code_cleanup() {
         let task = db::TaskRow {
             id: "T-800".to_string(),
-            title: "No cleanup".to_string(),
+            initial_prompt: "No cleanup".to_string(),
             status: "backlog".to_string(),
             jira_key: None,
             jira_title: None,
@@ -983,7 +983,7 @@ mod tests {
     fn test_build_task_prompt_with_code_cleanup_enabled() {
         let task = db::TaskRow {
             id: "T-801".to_string(),
-            title: "With cleanup".to_string(),
+            initial_prompt: "With cleanup".to_string(),
             status: "backlog".to_string(),
             jira_key: None,
             jira_title: None,
@@ -1011,7 +1011,7 @@ mod tests {
     fn test_build_task_prompt_code_cleanup_ordering() {
         let task = db::TaskRow {
             id: "T-802".to_string(),
-            title: "Cleanup ordering".to_string(),
+            initial_prompt: "Cleanup ordering".to_string(),
             status: "backlog".to_string(),
             jira_key: None,
             jira_title: None,

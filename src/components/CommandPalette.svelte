@@ -216,7 +216,7 @@
                 {/if}
               </div>
               <div class="text-xs text-base-content/70 truncate mt-0.5">
-                {truncate(firstLine(task.title), 80)}
+                {truncate(firstLine(task.initial_prompt), 80)}
               </div>
             </div>
 

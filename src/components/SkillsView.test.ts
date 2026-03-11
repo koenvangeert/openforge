@@ -19,7 +19,7 @@ vi.mock('../lib/ipc', () => ({
   listOpenCodeSkills: vi.fn().mockResolvedValue([]),
   createTask: vi.fn().mockResolvedValue({
     id: 'T-99',
-    title: 'Test task',
+    initial_prompt: 'Test task',
     status: 'backlog',
     jira_key: null,
     jira_title: null,
@@ -74,7 +74,7 @@ describe('SkillsView', () => {
     vi.mocked(listOpenCodeSkills).mockResolvedValue([])
     vi.mocked(createTask).mockResolvedValue({
       id: 'T-99',
-      title: 'Test task',
+      initial_prompt: 'Test task',
       status: 'backlog',
       jira_key: null,
       jira_title: null,

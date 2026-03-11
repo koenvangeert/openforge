@@ -30,7 +30,7 @@
   let lastTaskId = ''
   let actions = $state<Action[]>([])
 
-  let displayTitle = $derived(task.title || (task.prompt ? task.prompt.split('\n')[0] : '') || task.id)
+  let displayTitle = $derived(task.initial_prompt || (task.prompt ? task.prompt.split('\n')[0] : '') || task.id)
 
   let currentSession = $derived($activeSessions.get(task.id))
   let agentStatus = $derived(currentSession?.status ?? null)

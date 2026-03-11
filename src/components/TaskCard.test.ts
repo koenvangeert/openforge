@@ -5,7 +5,7 @@ import type { Task, AgentSession, PullRequestInfo } from '../lib/types'
 
 const baseTask: Task = {
   id: 'T-42',
-  title: 'Implement auth middleware',
+  initial_prompt: 'Implement auth middleware',
   status: 'backlog',
   jira_key: 'PROJ-123',
   jira_title: 'Add JWT authentication to REST API',
@@ -330,7 +330,7 @@ describe('TaskCard', () => {
   })
 
   it('shows prompt first line as fallback title when title is empty', () => {
-    const taskWithPrompt = { ...baseTask, title: '', prompt: 'Fix the login bug\nMore details here' }
+    const taskWithPrompt = { ...baseTask, initial_prompt: '', prompt: 'Fix the login bug\nMore details here' }
     render(TaskCard, { props: { task: taskWithPrompt } })
     expect(screen.getByText('Fix the login bug')).toBeTruthy()
   })

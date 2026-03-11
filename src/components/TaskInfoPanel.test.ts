@@ -21,7 +21,7 @@ vi.mock('@tauri-apps/api/event', () => ({
 
 const baseTask: Task = {
   id: 'T-42',
-  title: 'Implement auth middleware',
+  initial_prompt: 'Implement auth middleware',
   status: 'backlog',
   jira_key: 'PROJ-123',
   jira_title: null,

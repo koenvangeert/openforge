@@ -1,6 +1,6 @@
 export interface Task {
   id: string;
-  title: string;
+  initial_prompt: string;
   status: string;
   jira_key: string | null;
   jira_title: string | null;
@@ -311,7 +311,7 @@ export type AppView = "board" | "pr_review" | "skills" | "creatures" | "settings
 
 export interface WorkQueueTask {
   id: string;
-  title: string;
+  initial_prompt: string;
   status: string;
   summary: string | null;
   project_id: string;

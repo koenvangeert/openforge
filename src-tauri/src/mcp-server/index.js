@@ -17,17 +17,17 @@ server.tool(
   'create_task',
   'Create a new task in Open Forge. Use this when you need to create follow-up work or break a task into subtasks. The task will be added to the backlog.',
   {
-    title: z.string().describe('Short, descriptive title for the new task'),
+    initial_prompt: z.string().describe('Initial instructions or prompt for the task'),
     project_id: z.string().optional().describe('Project ID to associate with (optional, e.g. "P-1")'),
   },
-  async ({ title, project_id }) => {
+  async ({ initial_prompt, project_id }) => {
     try {
       const res = await fetch(`${BASE_URL}/create_task`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ title, project_id }),
+        body: JSON.stringify({ initial_prompt, project_id }),
       });
 
       if (!res.ok) {
@@ -46,20 +46,20 @@ server.tool(
 
 server.tool(
   'update_task',
-  'Update the title and/or summary of a task. Call this to set a descriptive title based on what you\'ve discovered, and a TLDR summary of what you did and what needs attention.',
+  'Update the initial prompt and/or summary of a task. Call this to set a descriptive initial prompt based on what you\'ve discovered, and a TLDR summary of what you did and what needs attention.',
   {
     task_id: z.string().describe('ID of the task to update (e.g. "T-42")'),
-    title: z.string().optional().describe('New title for the task'),
+    initial_prompt: z.string().optional().describe('New initial prompt for the task'),
     summary: z.string().optional().describe('TLDR summary of what was done and what needs attention'),
   },
-  async ({ task_id, title, summary }) => {
+  async ({ task_id, initial_prompt, summary }) => {
     try {
       const res = await fetch(`${BASE_URL}/update_task`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ task_id, title, summary }),
+        body: JSON.stringify({ task_id, initial_prompt, summary }),
       });
 
       if (!res.ok) {
@@ -78,7 +78,7 @@ server.tool(
 
 server.tool(
   'get_task_info',
-  'Get current information about a task, including its prompt, title, and summary.',
+  'Get current information about a task, including its prompt, initial prompt, and summary.',
   {
     task_id: z.string().describe('ID of the task to retrieve (e.g. "T-42")'),
   },
@@ -96,7 +96,7 @@ server.tool(
       const data = await res.json();
       const lines = [
         `Task: ${data.id}`,
-        `Title: ${data.title}`,
+        `Initial Prompt: ${data.initial_prompt}`,
         `Status: ${data.status}`,
         data.prompt ? `Prompt: ${data.prompt}` : null,
         data.summary ? `Summary: ${data.summary}` : null,

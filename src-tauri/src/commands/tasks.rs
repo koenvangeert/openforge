@@ -34,7 +34,7 @@ pub async fn get_task_detail(
 pub async fn create_task(
     db: State<'_, Arc<Mutex<db::Database>>>,
     app: tauri::AppHandle,
-    title: String,
+    initial_prompt: String,
     status: String,
     jira_key: Option<String>,
     project_id: Option<String>,
@@ -43,7 +43,7 @@ pub async fn create_task(
     permission_mode: Option<String>,
 ) -> Result<db::TaskRow, String> {
     let db = crate::db::acquire_db(&db);
-    let task = db.create_task(&title, &status, jira_key.as_deref(), project_id.as_deref(), prompt.as_deref(), agent.as_deref(), permission_mode.as_deref())
+    let task = db.create_task(&initial_prompt, &status, jira_key.as_deref(), project_id.as_deref(), prompt.as_deref(), agent.as_deref(), permission_mode.as_deref())
         .map_err(|e| format!("Failed to create task: {}", e))?;
     let _ = app.emit("task-changed", serde_json::json!({ "action": "created", "task_id": task.id }));
     Ok(task)
@@ -54,27 +54,27 @@ pub async fn update_task(
     db: State<'_, Arc<Mutex<db::Database>>>,
     app: tauri::AppHandle,
     id: String,
-    title: String,
+    initial_prompt: String,
     jira_key: Option<String>,
 ) -> Result<(), String> {
     let db = crate::db::acquire_db(&db);
-    db.update_task(&id, &title, jira_key.as_deref())
+    db.update_task(&id, &initial_prompt, jira_key.as_deref())
         .map_err(|e| format!("Failed to update task: {}", e))?;
     let _ = app.emit("task-changed", serde_json::json!({ "action": "updated", "task_id": id }));
     Ok(())
 }
 
 #[tauri::command]
-pub async fn update_task_title_and_summary(
+pub async fn update_task_initial_prompt_and_summary(
     db: State<'_, Arc<Mutex<db::Database>>>,
     app: tauri::AppHandle,
     id: String,
-    title: Option<String>,
+    initial_prompt: Option<String>,
     summary: Option<String>,
 ) -> Result<(), String> {
     let db = crate::db::acquire_db(&db);
-    db.update_task_title_and_summary(&id, title.as_deref(), summary.as_deref())
-        .map_err(|e| format!("Failed to update task title and summary: {}", e))?;
+    db.update_task_title_and_summary(&id, initial_prompt.as_deref(), summary.as_deref())
+        .map_err(|e| format!("Failed to update task initial prompt and summary: {}", e))?;
     let _ = app.emit("task-changed", serde_json::json!({ "action": "updated", "task_id": id }));
     Ok(())
 }

@@ -1,16 +1,16 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { Task, AgentSession, PrComment, PollResult, PullRequestInfo, AgentInfo, Project, ProjectAttention, WorktreeInfo, ImplementationStatus, ReviewPullRequest, PrFileDiff, ReviewComment, ReviewSubmissionComment, SelfReviewComment, AgentReviewComment, CommandInfo, AutocompleteAgentInfo, PrOverviewComment, TranscriptionResult, WhisperModelStatus, WhisperModelSizeId, SkillInfo, WorkQueueTask } from "./types";
 
-export async function createTask(title: string, status: string, jiraKey: string | null, projectId: string | null, agent: string | null, permissionMode: string | null): Promise<Task> {
-  return invoke<Task>("create_task", { title, status, jiraKey, projectId, agent, permissionMode });
+export async function createTask(initialPrompt: string, status: string, jiraKey: string | null, projectId: string | null, agent: string | null, permissionMode: string | null): Promise<Task> {
+  return invoke<Task>("create_task", { initialPrompt, status, jiraKey, projectId, agent, permissionMode });
 }
 
-export async function updateTask(id: string, title: string, jiraKey: string | null): Promise<void> {
-  return invoke("update_task", { id, title, jiraKey });
+export async function updateTask(id: string, initialPrompt: string, jiraKey: string | null): Promise<void> {
+  return invoke("update_task", { id, initialPrompt, jiraKey });
 }
 
-export async function updateTaskTitleAndSummary(id: string, title: string | null, summary: string | null): Promise<void> {
-  return invoke("update_task_title_and_summary", { id, title, summary });
+export async function updateTaskInitialPromptAndSummary(id: string, initialPrompt: string | null, summary: string | null): Promise<void> {
+  return invoke("update_task_initial_prompt_and_summary", { id, initialPrompt, summary });
 }
 
 export async function updateTaskStatus(id: string, status: string): Promise<void> {

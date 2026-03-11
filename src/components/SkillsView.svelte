@@ -69,8 +69,8 @@
 
   async function handleEdit() {
     if (!selectedSkill || !$activeProjectId) return
-    const title = `Edit skill: ${selectedSkill.name}`
-    const task = await createTask(title, 'backlog', null, $activeProjectId)
+    const initialPrompt = `Edit skill: ${selectedSkill.name}`
+    const task = await createTask(initialPrompt, 'backlog', null, $activeProjectId)
     const prompt = `Edit the "${selectedSkill.name}" skill (${selectedSkill.level}-level).
 
 Current skill content:
@@ -87,8 +87,8 @@ Please review this skill and improve it. Focus on making it clearer, more action
 
   async function handleCreate() {
     if (!$activeProjectId) return
-    const title = 'Create new skill'
-    const task = await createTask(title, 'backlog', null, $activeProjectId)
+    const initialPrompt = 'Create new skill'
+    const task = await createTask(initialPrompt, 'backlog', null, $activeProjectId)
     const prompt = `Create a new OpenCode skill (SKILL.md file). 
 
 Use the "creating-skills" skill/guide if available. The skill should follow proper structure with:
@@ -106,8 +106,8 @@ Ask me what the skill should be about, then create it.`
 
   async function handleAsk() {
     if (!selectedSkill || !$activeProjectId || !askPrompt.trim()) return
-    const title = `Question about skill: ${selectedSkill.name}`
-    const task = await createTask(title, 'backlog', null, $activeProjectId)
+    const initialPrompt = `Question about skill: ${selectedSkill.name}`
+    const task = await createTask(initialPrompt, 'backlog', null, $activeProjectId)
     const prompt = `I have a question about the "${selectedSkill.name}" skill.
 
 Skill content:

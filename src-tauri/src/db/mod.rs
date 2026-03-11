@@ -105,7 +105,10 @@ fn ensure_tasks_columns(conn: &Connection) -> Result<()> {
         if !exists {
             conn.execute(&format!("ALTER TABLE tasks ADD COLUMN {} TEXT", col), [])?;
             if backfill {
-                conn.execute("UPDATE tasks SET prompt = title WHERE prompt IS NULL", [])?;
+                conn.execute(
+                    "UPDATE tasks SET prompt = initial_prompt WHERE prompt IS NULL",
+                    [],
+                )?;
             }
         }
     }
@@ -600,6 +603,8 @@ CREATE INDEX IF NOT EXISTS idx_agent_review_comments_session ON agent_review_com
         }),
         // V11: Drop unused agent_logs table
         M::up("DROP TABLE IF EXISTS agent_logs;"),
+        // V12: Rename tasks.title → tasks.initial_prompt
+        M::up("ALTER TABLE tasks RENAME COLUMN title TO initial_prompt;"),
     ])
 }
 #[cfg(test)]
@@ -618,7 +623,7 @@ pub mod test_helpers {
         let conn = db.connection();
         let conn = conn.lock().unwrap();
         conn.execute(
-            "INSERT INTO tasks (id, title, status, jira_key, jira_title, jira_status, jira_assignee, project_id, created_at, updated_at, jira_description, prompt, summary, agent, permission_mode) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+            "INSERT INTO tasks (id, initial_prompt, status, jira_key, jira_title, jira_status, jira_assignee, project_id, created_at, updated_at, jira_description, prompt, summary, agent, permission_mode) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
             rusqlite::params!["T-100", "Test task", "backlog", "PROJ-100", "Test task summary", "To Do", "alice", None::<String>, 1000, 1000, None::<String>, "Test task", None::<String>, None::<String>, None::<String>],
         ).expect("Failed to insert test task");
     }
@@ -871,8 +876,8 @@ mod tests {
             .query_row("PRAGMA user_version", [], |r| r.get(0))
             .unwrap();
         assert_eq!(
-            uv, 11,
-            "Fresh DB should have user_version=11 after migrations, got {}",
+            uv, 12,
+            "Fresh DB should have user_version=12 after migrations, got {}",
             uv
         );
 

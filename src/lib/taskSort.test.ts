@@ -4,7 +4,7 @@ import { sortBySessionActivity, sortForSearch } from './taskSort'
 
 function makeTask(overrides: Partial<Task> & { id: string }): Task {
   return {
-    title: overrides.id,
+    initial_prompt: overrides.id,
     status: 'doing',
     jira_key: null,
     jira_title: null,

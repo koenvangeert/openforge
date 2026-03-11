@@ -775,7 +775,7 @@
           }
         } else if (event.payload.action === 'created') {
           // Trigger toast for newly created task (spawned by agent)
-          $taskSpawned = { taskId: event.payload.task_id, title: event.payload.task_id }
+          $taskSpawned = { taskId: event.payload.task_id, initial_prompt: event.payload.task_id }
         }
         loadTasks()
         workQueueRefreshTrigger++
@@ -918,7 +918,7 @@
           <div class="p-4 overflow-visible">
             <PromptInput
               projectId={$activeProjectId}
-              value={editingTask ? editingTask.title : ''}
+              value={editingTask ? editingTask.initial_prompt : ''}
               jiraKey={editingTask ? (editingTask.jira_key || '') : ''}
               autofocus={true}
               onSubmit={async (prompt, jiraKey) => {

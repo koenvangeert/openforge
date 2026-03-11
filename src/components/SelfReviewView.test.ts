@@ -64,7 +64,7 @@ import { getTaskDiff, getActiveSelfReviewComments, getTaskBatchFileContents, get
 
 const baseTask: Task = {
   id: 'task-1',
-  title: 'Test Task',
+  initial_prompt: 'Test Task',
   status: 'doing',
   jira_key: null,
   jira_title: null,

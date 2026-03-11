@@ -97,7 +97,7 @@
     </div>
 
     <div class="font-mono text-xs font-semibold text-base-content leading-snug">
-      {task.title}
+      {task.initial_prompt}
     </div>
 
     <div class="border-t border-base-content/20"></div>

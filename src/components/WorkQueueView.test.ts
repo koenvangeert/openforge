@@ -29,7 +29,7 @@ const now = Math.floor(Date.now() / 1000)
 function makeWorkQueueTask(overrides: Partial<WorkQueueTask> = {}): WorkQueueTask {
   return {
     id: 'T-1',
-    title: 'Fix login bug',
+    initial_prompt: 'Fix login bug',
     status: 'doing',
     summary: 'Updated auth flow to handle edge case',
     project_id: 'proj-1',
@@ -54,8 +54,8 @@ describe('WorkQueueView', () => {
   it('renders grouped tasks by project', async () => {
     vi.mocked(getWorkQueueTasks).mockResolvedValue([
       makeWorkQueueTask({ id: 'T-1', project_name: 'Frontend App', project_id: 'proj-1' }),
-      makeWorkQueueTask({ id: 'T-2', project_name: 'Frontend App', project_id: 'proj-1', title: 'Fix button' }),
-      makeWorkQueueTask({ id: 'T-3', project_name: 'Backend API', project_id: 'proj-2', title: 'Add endpoint' }),
+      makeWorkQueueTask({ id: 'T-2', project_name: 'Frontend App', project_id: 'proj-1', initial_prompt: 'Fix button' }),
+      makeWorkQueueTask({ id: 'T-3', project_name: 'Backend API', project_id: 'proj-2', initial_prompt: 'Add endpoint' }),
     ])
 
     render(WorkQueueView)
@@ -241,7 +241,7 @@ describe('WorkQueueView', () => {
 
     vi.mocked(getWorkQueueTasks).mockResolvedValue([
       makeWorkQueueTask({ id: 'T-1' }),
-      makeWorkQueueTask({ id: 'T-2', title: 'New task' }),
+      makeWorkQueueTask({ id: 'T-2', initial_prompt: 'New task' }),
     ])
 
     await rerender({ refreshTrigger: 1 })
@@ -259,7 +259,7 @@ describe('WorkQueueView', () => {
       })
       vi.mocked(getWorkQueueTasks).mockResolvedValue([
         makeWorkQueueTask({ id: 'T-1', project_name: 'Frontend App', project_id: 'proj-1' }),
-        makeWorkQueueTask({ id: 'T-2', project_name: 'Backend API', project_id: 'proj-2', title: 'Add endpoint' }),
+        makeWorkQueueTask({ id: 'T-2', project_name: 'Backend API', project_id: 'proj-2', initial_prompt: 'Add endpoint' }),
       ])
 
       render(WorkQueueView)
@@ -278,7 +278,7 @@ describe('WorkQueueView', () => {
     it('renders columns with reorder arrow buttons', async () => {
       vi.mocked(getWorkQueueTasks).mockResolvedValue([
         makeWorkQueueTask({ id: 'T-1', project_name: 'Frontend App', project_id: 'proj-1' }),
-        makeWorkQueueTask({ id: 'T-2', project_name: 'Backend API', project_id: 'proj-2', title: 'Add endpoint' }),
+        makeWorkQueueTask({ id: 'T-2', project_name: 'Backend API', project_id: 'proj-2', initial_prompt: 'Add endpoint' }),
       ])
 
       render(WorkQueueView)
@@ -304,8 +304,8 @@ describe('WorkQueueView', () => {
     it('persists new column order after clicking move-right arrow', async () => {
       vi.mocked(getWorkQueueTasks).mockResolvedValue([
         makeWorkQueueTask({ id: 'T-1', project_name: 'Frontend App', project_id: 'proj-1' }),
-        makeWorkQueueTask({ id: 'T-2', project_name: 'Backend API', project_id: 'proj-2', title: 'Add endpoint' }),
-        makeWorkQueueTask({ id: 'T-3', project_name: 'Mobile App', project_id: 'proj-3', title: 'Fix crash' }),
+        makeWorkQueueTask({ id: 'T-2', project_name: 'Backend API', project_id: 'proj-2', initial_prompt: 'Add endpoint' }),
+        makeWorkQueueTask({ id: 'T-3', project_name: 'Mobile App', project_id: 'proj-3', initial_prompt: 'Fix crash' }),
       ])
 
       render(WorkQueueView)
@@ -337,7 +337,7 @@ describe('WorkQueueView', () => {
       })
       vi.mocked(getWorkQueueTasks).mockResolvedValue([
         makeWorkQueueTask({ id: 'T-1', project_name: 'Frontend App', project_id: 'proj-1' }),
-        makeWorkQueueTask({ id: 'T-2', project_name: 'Backend API', project_id: 'proj-2', title: 'Add endpoint' }),
+        makeWorkQueueTask({ id: 'T-2', project_name: 'Backend API', project_id: 'proj-2', initial_prompt: 'Add endpoint' }),
       ])
 
       render(WorkQueueView)
@@ -374,7 +374,7 @@ describe('WorkQueueView', () => {
     it('pins a task when pin button is clicked', async () => {
       vi.mocked(getWorkQueueTasks).mockResolvedValue([
         makeWorkQueueTask({ id: 'T-1' }),
-        makeWorkQueueTask({ id: 'T-2', title: 'Second task' }),
+        makeWorkQueueTask({ id: 'T-2', initial_prompt: 'Second task' }),
       ])
 
       render(WorkQueueView)
@@ -438,8 +438,8 @@ describe('WorkQueueView', () => {
       })
       vi.mocked(getWorkQueueTasks).mockResolvedValue([
         makeWorkQueueTask({ id: 'T-1', project_name: 'Frontend App', project_id: 'proj-1' }),
-        makeWorkQueueTask({ id: 'T-2', project_name: 'Frontend App', project_id: 'proj-1', title: 'Second' }),
-        makeWorkQueueTask({ id: 'T-3', project_name: 'Frontend App', project_id: 'proj-1', title: 'Third (pinned)' }),
+        makeWorkQueueTask({ id: 'T-2', project_name: 'Frontend App', project_id: 'proj-1', initial_prompt: 'Second' }),
+        makeWorkQueueTask({ id: 'T-3', project_name: 'Frontend App', project_id: 'proj-1', initial_prompt: 'Third (pinned)' }),
       ])
 
       render(WorkQueueView)

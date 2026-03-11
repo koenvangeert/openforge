@@ -23,7 +23,7 @@ vi.mock('./lib/stores', () => ({
   activeSessions: writable<Map<string, AgentSession>>(new Map()),
   checkpointNotification: writable<CheckpointNotification | null>(null),
   ciFailureNotification: writable<CiFailureNotification | null>(null),
-  taskSpawned: writable<{ taskId: string; title: string } | null>(null),
+  taskSpawned: writable<{ taskId: string; initial_prompt: string } | null>(null),
   ticketPrs: writable<Map<string, PullRequestInfo[]>>(new Map()),
   isLoading: writable(false),
   error: writable<string | null>(null),

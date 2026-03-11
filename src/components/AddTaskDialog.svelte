@@ -14,11 +14,11 @@
 
   let { mode = 'create', task = null, onClose, onTaskSaved }: Props = $props()
 
-  let title = $state('')
+  let initialPrompt = $state('')
   let jiraKey = $state('')
   let status = $state<KanbanColumn>('backlog')
   let isSubmitting = $state(false)
-  let titleInputEl = $state<HTMLInputElement | null>(null)
+  let inputEl = $state<HTMLInputElement | null>(null)
   let selectedAgent = $state('')
   let selectedPermissionMode = $state<PermissionMode>('default')
   let aiProvider = $state<string | null>(null)
@@ -26,8 +26,8 @@
 
   // Focus the title input after Modal's own focus effect has run
   $effect(() => {
-    if (titleInputEl) {
-      tick().then(() => titleInputEl?.focus())
+    if (inputEl) {
+      tick().then(() => inputEl?.focus())
     }
   })
 
@@ -46,19 +46,19 @@
 
   // Initialize form values from props
   $effect(() => {
-    title = mode === 'edit' && task ? task.title : ''
+    initialPrompt = mode === 'edit' && task ? task.initial_prompt : ''
     jiraKey = mode === 'edit' && task ? (task.jira_key || '') : ''
     status = mode === 'edit' && task ? (task.status as KanbanColumn) : 'backlog'
   })
 
   async function handleSubmit() {
-    if (!title.trim()) return
+    if (!initialPrompt.trim()) return
     
     isSubmitting = true
     try {
       if (mode === 'create') {
         const newTask = await createTask(
-          title.trim(),
+          initialPrompt.trim(),
           status,
           jiraKey.trim() || null,
           $activeProjectId,
@@ -69,7 +69,7 @@
       } else if (task) {
         await updateTask(
           task.id,
-          title.trim(),
+          initialPrompt.trim(),
           jiraKey.trim() || null
         )
         onTaskSaved?.()
@@ -99,8 +99,8 @@
         <input
           type="text"
           class="input input-bordered input-sm w-full"
-          bind:this={titleInputEl}
-          bind:value={title}
+          bind:this={inputEl}
+          bind:value={initialPrompt}
           placeholder="Describe what you want the agent to do"
           required
         />
@@ -155,7 +155,7 @@
       <button
         class="btn btn-primary btn-sm"
         type="submit"
-        disabled={!title.trim() || isSubmitting}
+        disabled={!initialPrompt.trim() || isSubmitting}
       >
         {isSubmitting ? 'Saving...' : mode === 'create' ? 'Create Task' : 'Save Changes'}
       </button>

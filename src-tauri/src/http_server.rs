@@ -12,9 +12,8 @@ use tauri::Emitter;
 /// Request to create a new task from OpenCode
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateTaskRequest {
-    pub title: String,
+    pub initial_prompt: String,
     pub project_id: Option<String>,
-    /// Worktree path of the calling session - used to deduce project_id if not provided
     pub worktree: Option<String>,
 }
 
@@ -32,11 +31,11 @@ pub struct CreateTaskResponse {
     pub status: String,
 }
 
-/// Request to update a task's title and/or summary
+/// Request to update a task's initial_prompt and/or summary
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UpdateTaskRequest {
     pub task_id: String,
-    pub title: Option<String>,
+    pub initial_prompt: Option<String>,
     pub summary: Option<String>,
 }
 
@@ -50,7 +49,7 @@ pub struct UpdateTaskResponse {
 #[derive(Debug, Clone, Serialize)]
 pub struct GetTaskInfoResponse {
     pub id: String,
-    pub title: String,
+    pub initial_prompt: String,
     pub prompt: Option<String>,
     pub summary: Option<String>,
     pub status: String,
@@ -97,7 +96,7 @@ pub async fn create_task_handler(
     };
 
     let task = db.create_task(
-        &request.title,
+        &request.initial_prompt,
         "backlog",
         None,
         project_id.as_deref(),
@@ -128,7 +127,7 @@ pub async fn update_task_handler(
     State(state): State<AppState>,
     Json(request): Json<UpdateTaskRequest>,
 ) -> Result<Json<UpdateTaskResponse>, StatusCode> {
-    if request.title.is_none() && request.summary.is_none() {
+    if request.initial_prompt.is_none() && request.summary.is_none() {
         return Err(StatusCode::BAD_REQUEST);
     }
 
@@ -136,7 +135,7 @@ pub async fn update_task_handler(
 
     db.update_task_title_and_summary(
         &request.task_id,
-        request.title.as_deref(),
+        request.initial_prompt.as_deref(),
         request.summary.as_deref(),
     ).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
@@ -165,7 +164,7 @@ pub async fn get_task_info_handler(
     match db.get_task(&id).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)? {
         Some(task) => Ok(Json(GetTaskInfoResponse {
             id: task.id,
-            title: task.title,
+            initial_prompt: task.initial_prompt,
             prompt: task.prompt,
             summary: task.summary,
             status: task.status,
@@ -358,12 +357,9 @@ mod tests {
 
     #[test]
     fn test_create_task_request_ignores_unknown_description_field() {
-        // Backward compat: old tool files may still send "description" field
-        // serde ignores unknown fields by default, so this should deserialize without error
-        let json = r#"{"title": "Test", "description": "old field still sent"}"#;
+        let json = r#"{"initial_prompt": "Test", "description": "old field still sent"}"#;
         let req: CreateTaskRequest = serde_json::from_str(json).unwrap();
-        assert_eq!(req.title, "Test");
-        // description field is silently ignored — no panic, no error
+        assert_eq!(req.initial_prompt, "Test");
     }
 
     // ========================================================================
@@ -434,78 +430,77 @@ mod tests {
     #[test]
     fn test_create_task_request_creation() {
         let request = CreateTaskRequest {
-            title: "Test Task".to_string(),
+            initial_prompt: "Test Task".to_string(),
             project_id: Some("PROJ-1".to_string()),
             worktree: Some("/path/to/wt".to_string()),
         };
-        assert_eq!(request.title, "Test Task");
+        assert_eq!(request.initial_prompt, "Test Task");
         assert_eq!(request.project_id, Some("PROJ-1".to_string()));
     }
 
     #[test]
     fn test_create_task_request_minimal_fields() {
         let request = CreateTaskRequest {
-            title: "Minimal Task".to_string(),
+            initial_prompt: "Minimal Task".to_string(),
             project_id: None,
             worktree: None,
         };
-        assert_eq!(request.title, "Minimal Task");
+        assert_eq!(request.initial_prompt, "Minimal Task");
         assert!(request.project_id.is_none());
     }
 
     #[test]
     fn test_create_task_request_deserialize_all_fields() {
-        let json = r#"{"title": "Implement Feature X", "project_id": "PROJ-42", "worktree": "/path/to/wt"}"#;
+        let json = r#"{"initial_prompt": "Implement Feature X", "project_id": "PROJ-42", "worktree": "/path/to/wt"}"#;
         let request: CreateTaskRequest = serde_json::from_str(json).expect("Failed to deserialize");
-        assert_eq!(request.title, "Implement Feature X");
+        assert_eq!(request.initial_prompt, "Implement Feature X");
         assert_eq!(request.project_id, Some("PROJ-42".to_string()));
         assert_eq!(request.worktree, Some("/path/to/wt".to_string()));
     }
 
     #[test]
     fn test_create_task_request_deserialize_only_required() {
-        let json = r#"{"title": "Simple Task"}"#;
+        let json = r#"{"initial_prompt": "Simple Task"}"#;
         let request: CreateTaskRequest = serde_json::from_str(json).expect("Failed to deserialize");
-        assert_eq!(request.title, "Simple Task");
+        assert_eq!(request.initial_prompt, "Simple Task");
         assert!(request.project_id.is_none());
     }
 
     #[test]
     fn test_create_task_request_deserialize_partial_optional() {
-        // Only project_id provided, no worktree
-        let json = r#"{"title": "Task with project", "project_id": "PROJ-99"}"#;
+        let json = r#"{"initial_prompt": "Task with project", "project_id": "PROJ-99"}"#;
         let request: CreateTaskRequest = serde_json::from_str(json).expect("Failed to deserialize");
-        assert_eq!(request.title, "Task with project");
+        assert_eq!(request.initial_prompt, "Task with project");
         assert_eq!(request.project_id, Some("PROJ-99".to_string()));
         assert!(request.worktree.is_none());
     }
 
     #[test]
     fn test_create_task_request_deserialize_empty_strings() {
-        let json = r#"{"title": "", "project_id": "", "worktree": ""}"#;
+        let json = r#"{"initial_prompt": "", "project_id": "", "worktree": ""}"#;
         let request: CreateTaskRequest = serde_json::from_str(json).expect("Failed to deserialize");
-        assert_eq!(request.title, "");
+        assert_eq!(request.initial_prompt, "");
         assert_eq!(request.project_id, Some("".to_string()));
         assert_eq!(request.worktree, Some("".to_string()));
     }
 
     #[test]
-    fn test_create_task_request_deserialize_missing_title_fails() {
+    fn test_create_task_request_deserialize_missing_initial_prompt_fails() {
         let json = r#"{"project_id": "PROJ-1"}"#;
         let result: Result<CreateTaskRequest, _> = serde_json::from_str(json);
-        assert!(result.is_err(), "Should fail without required title field");
+        assert!(result.is_err(), "Should fail without required initial_prompt field");
     }
 
     #[test]
     fn test_create_task_request_serialize_roundtrip() {
         let original = CreateTaskRequest {
-            title: "Roundtrip Test".to_string(),
+            initial_prompt: "Roundtrip Test".to_string(),
             project_id: Some("PROJ-99".to_string()),
             worktree: Some("/path/to/worktree".to_string()),
         };
         let json = serde_json::to_string(&original).expect("Failed to serialize");
         let deserialized: CreateTaskRequest = serde_json::from_str(&json).expect("Failed to deserialize");
-        assert_eq!(deserialized.title, original.title);
+        assert_eq!(deserialized.initial_prompt, original.initial_prompt);
         assert_eq!(deserialized.project_id, original.project_id);
         assert_eq!(deserialized.worktree, original.worktree);
     }
@@ -685,29 +680,29 @@ mod tests {
     fn test_update_task_request_creation() {
         let request = UpdateTaskRequest {
             task_id: "T-123".to_string(),
-            title: Some("New Title".to_string()),
+            initial_prompt: Some("New Title".to_string()),
             summary: Some("New Summary".to_string()),
         };
         assert_eq!(request.task_id, "T-123");
-        assert_eq!(request.title, Some("New Title".to_string()));
+        assert_eq!(request.initial_prompt, Some("New Title".to_string()));
         assert_eq!(request.summary, Some("New Summary".to_string()));
     }
 
     #[test]
     fn test_update_task_request_deserialize_all_fields() {
-        let json = r#"{"task_id": "T-456", "title": "Updated Title", "summary": "Updated Summary"}"#;
+        let json = r#"{"task_id": "T-456", "initial_prompt": "Updated Title", "summary": "Updated Summary"}"#;
         let request: UpdateTaskRequest = serde_json::from_str(json).expect("Failed to deserialize");
         assert_eq!(request.task_id, "T-456");
-        assert_eq!(request.title, Some("Updated Title".to_string()));
+        assert_eq!(request.initial_prompt, Some("Updated Title".to_string()));
         assert_eq!(request.summary, Some("Updated Summary".to_string()));
     }
 
     #[test]
     fn test_update_task_request_deserialize_title_only() {
-        let json = r#"{"task_id": "T-789", "title": "Only Title"}"#;
+        let json = r#"{"task_id": "T-789", "initial_prompt": "Only Title"}"#;
         let request: UpdateTaskRequest = serde_json::from_str(json).expect("Failed to deserialize");
         assert_eq!(request.task_id, "T-789");
-        assert_eq!(request.title, Some("Only Title".to_string()));
+        assert_eq!(request.initial_prompt, Some("Only Title".to_string()));
         assert!(request.summary.is_none());
     }
 
@@ -716,7 +711,7 @@ mod tests {
         let json = r#"{"task_id": "T-999", "summary": "Only Summary"}"#;
         let request: UpdateTaskRequest = serde_json::from_str(json).expect("Failed to deserialize");
         assert_eq!(request.task_id, "T-999");
-        assert!(request.title.is_none());
+        assert!(request.initial_prompt.is_none());
         assert_eq!(request.summary, Some("Only Summary".to_string()));
     }
 
@@ -725,13 +720,13 @@ mod tests {
         let json = r#"{"task_id": "T-111"}"#;
         let request: UpdateTaskRequest = serde_json::from_str(json).expect("Failed to deserialize");
         assert_eq!(request.task_id, "T-111");
-        assert!(request.title.is_none());
+        assert!(request.initial_prompt.is_none());
         assert!(request.summary.is_none());
     }
 
     #[test]
     fn test_update_task_request_deserialize_missing_task_id_fails() {
-        let json = r#"{"title": "No Task ID"}"#;
+        let json = r#"{"initial_prompt": "No Task ID"}"#;
         let result: Result<UpdateTaskRequest, _> = serde_json::from_str(json);
         assert!(result.is_err(), "Should fail without required task_id field");
     }
@@ -740,13 +735,13 @@ mod tests {
     fn test_update_task_request_serialize_roundtrip() {
         let original = UpdateTaskRequest {
             task_id: "T-555".to_string(),
-            title: Some("Roundtrip Title".to_string()),
+            initial_prompt: Some("Roundtrip Title".to_string()),
             summary: Some("Roundtrip Summary".to_string()),
         };
         let json = serde_json::to_string(&original).expect("Failed to serialize");
         let deserialized: UpdateTaskRequest = serde_json::from_str(&json).expect("Failed to deserialize");
         assert_eq!(deserialized.task_id, original.task_id);
-        assert_eq!(deserialized.title, original.title);
+        assert_eq!(deserialized.initial_prompt, original.initial_prompt);
         assert_eq!(deserialized.summary, original.summary);
     }
 
@@ -794,14 +789,14 @@ mod tests {
     fn test_get_task_info_response_creation_all_fields() {
         let response = GetTaskInfoResponse {
             id: "T-42".to_string(),
-            title: "My Task".to_string(),
+            initial_prompt: "My Task".to_string(),
             prompt: Some("Do something cool".to_string()),
             summary: Some("Did the thing".to_string()),
             status: "doing".to_string(),
             jira_key: Some("PROJ-1".to_string()),
         };
         assert_eq!(response.id, "T-42");
-        assert_eq!(response.title, "My Task");
+        assert_eq!(response.initial_prompt, "My Task");
         assert_eq!(response.prompt, Some("Do something cool".to_string()));
         assert_eq!(response.summary, Some("Did the thing".to_string()));
         assert_eq!(response.status, "doing");
@@ -812,7 +807,7 @@ mod tests {
     fn test_get_task_info_response_creation_nullable_fields_none() {
         let response = GetTaskInfoResponse {
             id: "T-1".to_string(),
-            title: "Simple Task".to_string(),
+            initial_prompt: "Simple Task".to_string(),
             prompt: None,
             summary: None,
             status: "backlog".to_string(),
@@ -827,7 +822,7 @@ mod tests {
     fn test_get_task_info_response_serialize_all_fields() {
         let response = GetTaskInfoResponse {
             id: "T-99".to_string(),
-            title: "Full Task".to_string(),
+            initial_prompt: "Full Task".to_string(),
             prompt: Some("Implement X".to_string()),
             summary: Some("Implemented X".to_string()),
             status: "done".to_string(),
@@ -835,7 +830,7 @@ mod tests {
         };
         let json = serde_json::to_string(&response).expect("Failed to serialize");
         assert!(json.contains("\"id\":\"T-99\""));
-        assert!(json.contains("\"title\":\"Full Task\""));
+        assert!(json.contains("\"initial_prompt\":\"Full Task\""));
         assert!(json.contains("\"prompt\":\"Implement X\""));
         assert!(json.contains("\"summary\":\"Implemented X\""));
         assert!(json.contains("\"status\":\"done\""));
@@ -846,7 +841,7 @@ mod tests {
     fn test_get_task_info_response_serialize_nulls() {
         let response = GetTaskInfoResponse {
             id: "T-1".to_string(),
-            title: "Minimal".to_string(),
+            initial_prompt: "Minimal".to_string(),
             prompt: None,
             summary: None,
             status: "backlog".to_string(),
@@ -854,7 +849,7 @@ mod tests {
         };
         let json_value = serde_json::to_value(&response).expect("Failed to serialize");
         assert_eq!(json_value["id"], "T-1");
-        assert_eq!(json_value["title"], "Minimal");
+        assert_eq!(json_value["initial_prompt"], "Minimal");
         assert!(json_value["prompt"].is_null());
         assert!(json_value["summary"].is_null());
         assert_eq!(json_value["status"], "backlog");
@@ -865,7 +860,7 @@ mod tests {
     fn test_get_task_info_response_json_structure() {
         let response = GetTaskInfoResponse {
             id: "T-7".to_string(),
-            title: "Structure Test".to_string(),
+            initial_prompt: "Structure Test".to_string(),
             prompt: Some("Test prompt".to_string()),
             summary: None,
             status: "doing".to_string(),
@@ -873,7 +868,7 @@ mod tests {
         };
         let json_value = serde_json::to_value(&response).expect("Failed to convert to JSON value");
         assert_eq!(json_value["id"], "T-7");
-        assert_eq!(json_value["title"], "Structure Test");
+        assert_eq!(json_value["initial_prompt"], "Structure Test");
         assert_eq!(json_value["prompt"], "Test prompt");
         assert!(json_value["summary"].is_null());
         assert_eq!(json_value["status"], "doing");

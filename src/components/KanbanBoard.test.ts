@@ -16,7 +16,7 @@ vi.mock('../lib/ipc', () => ({
 
 const baseTask: Task = {
   id: 'T-1',
-  title: 'Test task',
+  initial_prompt: 'Test task',
   status: 'backlog',
   jira_key: null,
   jira_title: null,
@@ -55,7 +55,7 @@ describe('KanbanBoard', () => {
   })
 
   it('shows done drawer when toggle button is clicked', async () => {
-    const doneTask: Task = { ...baseTask, id: 'T-2', title: 'Done task', status: 'done' }
+    const doneTask: Task = { ...baseTask, id: 'T-2', initial_prompt: 'Done task', status: 'done' }
     tasks.set([baseTask, doneTask])
 
     render(KanbanBoard, { props: { onRunAction: mockOnRunAction } })
@@ -99,7 +99,7 @@ describe('KanbanBoard', () => {
   })
 
   it('does not show Start Task in context menu for doing tasks', async () => {
-    const doingTask: Task = { ...baseTask, id: 'T-2', title: 'Active task', status: 'doing' }
+    const doingTask: Task = { ...baseTask, id: 'T-2', initial_prompt: 'Active task', status: 'doing' }
     tasks.set([doingTask])
 
     render(KanbanBoard, { props: { onRunAction: mockOnRunAction } })
@@ -121,7 +121,7 @@ describe('KanbanBoard', () => {
   })
 
   it('shows Move to submenu in context menu', async () => {
-    const doingTask: Task = { ...baseTask, id: 'T-2', title: 'Active task', status: 'doing' }
+    const doingTask: Task = { ...baseTask, id: 'T-2', initial_prompt: 'Active task', status: 'doing' }
     tasks.set([doingTask])
 
     render(KanbanBoard, { props: { onRunAction: mockOnRunAction } })
@@ -133,7 +133,7 @@ describe('KanbanBoard', () => {
   })
 
   it('shows all columns in Move to submenu when expanded', async () => {
-    const doingTask: Task = { ...baseTask, id: 'T-2', title: 'Active task', status: 'doing' }
+    const doingTask: Task = { ...baseTask, id: 'T-2', initial_prompt: 'Active task', status: 'doing' }
     tasks.set([doingTask])
 
     render(KanbanBoard, { props: { onRunAction: mockOnRunAction } })
@@ -149,7 +149,7 @@ describe('KanbanBoard', () => {
 
   it('calls updateTaskStatus when a move target is clicked', async () => {
     const { updateTaskStatus } = await import('../lib/ipc')
-    const doingTask: Task = { ...baseTask, id: 'T-2', title: 'Active task', status: 'doing' }
+    const doingTask: Task = { ...baseTask, id: 'T-2', initial_prompt: 'Active task', status: 'doing' }
     tasks.set([doingTask])
 
     render(KanbanBoard, { props: { onRunAction: mockOnRunAction } })

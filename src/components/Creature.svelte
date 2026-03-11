@@ -66,7 +66,7 @@
   )
 
   let truncatedTitle = $derived(
-    task.title.length > 45 ? task.title.slice(0, 45) + '...' : task.title
+    task.initial_prompt.length > 45 ? task.initial_prompt.slice(0, 45) + '...' : task.initial_prompt
   )
 
   // Hash task ID to a hue rotation for subtle color variation per creature
