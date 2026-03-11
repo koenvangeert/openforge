@@ -111,11 +111,11 @@
 }
 /* Vim navigation focus highlight */
 .vim-focus {
-  box-shadow: 0 0 0 2px var(--color-primary);
+  box-shadow: 0 0 0 2px color-mix(in oklch, var(--color-base-content) 40%, transparent);
   border-radius: var(--radius-box);
 }
 .vim-focus > * {
-  background-image: linear-gradient(to right, color-mix(in oklch, var(--color-primary) 10%, transparent), transparent 40%);
+  background-image: linear-gradient(to right, color-mix(in oklch, var(--color-base-content) 8%, transparent), transparent 40%);
 }
 @keyframes badge-pulse {
   0%, 100% { opacity: 1; }
