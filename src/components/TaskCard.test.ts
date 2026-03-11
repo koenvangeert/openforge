@@ -347,21 +347,6 @@ describe('TaskCard', () => {
     expect(screen.getByText('Fix the login bug')).toBeTruthy()
   })
 
-  it('shows terminal indicator when hasRunningTerminal is true', () => {
-    render(TaskCard, { props: { task: baseTask, hasRunningTerminal: true } })
-    expect(screen.getByTitle('Terminal running')).toBeTruthy()
-  })
-
-  it('hides terminal indicator when hasRunningTerminal is false', () => {
-    render(TaskCard, { props: { task: baseTask, hasRunningTerminal: false } })
-    expect(screen.queryByTitle('Terminal running')).toBeNull()
-  })
-
-  it('hides terminal indicator by default', () => {
-    render(TaskCard, { props: { task: baseTask } })
-    expect(screen.queryByTitle('Terminal running')).toBeNull()
-  })
-
   it('shows Starting badge when isStarting is true', () => {
     render(TaskCard, { props: { task: baseTask, isStarting: true } })
     expect(screen.getByText('Starting')).toBeTruthy()

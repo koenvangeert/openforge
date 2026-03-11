@@ -8,12 +8,11 @@
     task: Task
     session?: AgentSession | null
     pullRequests?: PullRequestInfo[]
-    hasRunningTerminal?: boolean
     isStarting?: boolean
     onSelect?: (taskId: string) => void
   }
 
-  let { task, session = null, pullRequests = [], hasRunningTerminal = false, isStarting = false, onSelect }: Props = $props()
+  let { task, session = null, pullRequests = [], isStarting = false, onSelect }: Props = $props()
 
   function handleClick() {
     onSelect?.(task.id)
@@ -48,9 +47,6 @@
       <span class="font-mono text-xs font-semibold text-primary">{task.id}</span>
       {#if task.jira_key}
         <span class="badge badge-ghost badge-xs font-mono">{task.jira_key}</span>
-      {/if}
-      {#if hasRunningTerminal}
-        <span class="font-mono text-[0.6rem] text-success/70" title="Terminal running">&#9646;</span>
       {/if}
       {#if needsInput}
         <span class="badge badge-warning badge-xs font-mono animate-pulse">Needs Input</span>
