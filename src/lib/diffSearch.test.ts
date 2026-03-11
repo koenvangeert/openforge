@@ -7,6 +7,7 @@ import {
   clearOccurrenceHighlights,
   getWordAtSelection,
   scrollToMatch,
+  countMatchesInPatch,
 } from './diffSearch'
 
 // ============================================================================
@@ -213,7 +214,7 @@ describe('applySearchHighlights', () => {
     const container = createDiffDOM('hello world', 'hello there')
     const matches = findMatchesInContainer(container, 'hello')
 
-    applySearchHighlights(matches, 0)
+    applySearchHighlights(matches, matches[0])
 
     expect(mockHighlights.has('diff-search-match')).toBe(true)
   })
@@ -222,37 +223,37 @@ describe('applySearchHighlights', () => {
     const container = createDiffDOM('hello world', 'hello there')
     const matches = findMatchesInContainer(container, 'hello')
 
-    applySearchHighlights(matches, 0)
+    applySearchHighlights(matches, matches[0])
 
     const matchHighlight = mockHighlights.get('diff-search-match') as MockHighlight
     expect(matchHighlight.ranges).toHaveLength(2)
   })
 
-  it('sets diff-search-current highlight for the given currentIndex', () => {
+  it('sets diff-search-current highlight for the given currentRange', () => {
     const container = createDiffDOM('hello world', 'hello there')
     const matches = findMatchesInContainer(container, 'hello')
 
-    applySearchHighlights(matches, 1)
+    applySearchHighlights(matches, matches[1])
 
     expect(mockHighlights.has('diff-search-current')).toBe(true)
   })
 
-  it('diff-search-current contains only the range at currentIndex', () => {
+  it('diff-search-current contains only the provided currentRange', () => {
     const container = createDiffDOM('hello world', 'hello there')
     const matches = findMatchesInContainer(container, 'hello')
 
-    applySearchHighlights(matches, 0)
+    applySearchHighlights(matches, matches[0])
 
     const currentHighlight = mockHighlights.get('diff-search-current') as MockHighlight
     expect(currentHighlight.ranges).toHaveLength(1)
     expect(currentHighlight.ranges[0]).toBe(matches[0])
   })
 
-  it('diff-search-current uses second match when currentIndex is 1', () => {
+  it('diff-search-current uses the provided range when it is the second match', () => {
     const container = createDiffDOM('hello world', 'hello there')
     const matches = findMatchesInContainer(container, 'hello')
 
-    applySearchHighlights(matches, 1)
+    applySearchHighlights(matches, matches[1])
 
     const currentHighlight = mockHighlights.get('diff-search-current') as MockHighlight
     expect(currentHighlight.ranges[0]).toBe(matches[1])
@@ -262,37 +263,27 @@ describe('applySearchHighlights', () => {
     mockHighlights.set('diff-search-match', {})
     mockHighlights.set('diff-search-current', {})
 
-    applySearchHighlights([], 0)
+    applySearchHighlights([], null)
 
     expect(mockHighlights.has('diff-search-match')).toBe(false)
     expect(mockHighlights.has('diff-search-current')).toBe(false)
   })
 
-  it('deletes diff-search-current when currentIndex is out of bounds (too high)', () => {
+  it('deletes diff-search-current when currentRange is null', () => {
     const container = createDiffDOM('hello world')
     const matches = findMatchesInContainer(container, 'hello')
     mockHighlights.set('diff-search-current', {})
 
-    applySearchHighlights(matches, 99)
+    applySearchHighlights(matches, null)
 
     expect(mockHighlights.has('diff-search-current')).toBe(false)
   })
 
-  it('deletes diff-search-current when currentIndex is negative', () => {
-    const container = createDiffDOM('hello world')
-    const matches = findMatchesInContainer(container, 'hello')
-    mockHighlights.set('diff-search-current', {})
-
-    applySearchHighlights(matches, -1)
-
-    expect(mockHighlights.has('diff-search-current')).toBe(false)
-  })
-
-  it('handles single match at index 0 correctly', () => {
+  it('handles single match with its range as current', () => {
     const container = createDiffDOM('hello world')
     const matches = findMatchesInContainer(container, 'hello')
 
-    applySearchHighlights(matches, 0)
+    applySearchHighlights(matches, matches[0])
 
     expect(mockHighlights.has('diff-search-match')).toBe(true)
     expect(mockHighlights.has('diff-search-current')).toBe(true)
@@ -587,6 +578,144 @@ describe('getWordAtSelection', () => {
     vi.spyOn(window, 'getSelection').mockReturnValue(mockSelection)
 
     expect(getWordAtSelection()).toBe('hello')
+  })
+})
+
+// ============================================================================
+// scrollToMatch Tests
+// ============================================================================
+
+// ============================================================================
+// countMatchesInPatch Tests
+// ============================================================================
+
+describe('countMatchesInPatch', () => {
+  // --- Basic / edge cases ---
+
+  it('returns 0 for null patch', () => {
+    expect(countMatchesInPatch(null, 'hello')).toBe(0)
+  })
+
+  it('returns 0 for empty string patch', () => {
+    expect(countMatchesInPatch('', 'hello')).toBe(0)
+  })
+
+  it('returns 0 for empty query', () => {
+    expect(countMatchesInPatch('+hello world', '')).toBe(0)
+  })
+
+  // --- Single line types ---
+
+  it('counts match in added line (+ prefix)', () => {
+    expect(countMatchesInPatch('+hello world', 'hello')).toBe(1)
+  })
+
+  it('counts match in removed line (- prefix)', () => {
+    expect(countMatchesInPatch('-hello world', 'hello')).toBe(1)
+  })
+
+  it('counts match in context line (space prefix) once in unified mode', () => {
+    expect(countMatchesInPatch(' hello world', 'hello')).toBe(1)
+  })
+
+  it('counts match in context line (space prefix) twice in split mode', () => {
+    expect(countMatchesInPatch(' hello world', 'hello', { isSplitMode: true })).toBe(2)
+  })
+
+  // --- Operator exclusion ---
+
+  it('does not match the operator prefix character itself', () => {
+    expect(countMatchesInPatch('+content', '+')).toBe(0)
+  })
+
+  it('matches operator characters inside content after the prefix', () => {
+    expect(countMatchesInPatch('+a + b', '+')).toBe(1)
+  })
+
+  // --- Multiple matches ---
+
+  it('counts multiple occurrences on a single line', () => {
+    expect(countMatchesInPatch('+foo foo foo', 'foo')).toBe(3)
+  })
+
+  it('counts matches across multiple lines', () => {
+    const patch = '+hello world\n-goodbye hello\n hello again'
+    expect(countMatchesInPatch(patch, 'hello')).toBe(3)
+  })
+
+  it('finds overlapping matches (e.g. "aa" in "aaa")', () => {
+    expect(countMatchesInPatch('+aaa', 'aa')).toBe(2)
+  })
+
+  // --- Skipped lines ---
+
+  it('skips hunk headers (@@ ... @@)', () => {
+    const patch = '@@ -1,3 +1,4 @@ some context\n+hello'
+    expect(countMatchesInPatch(patch, 'some')).toBe(0)
+    expect(countMatchesInPatch(patch, 'hello')).toBe(1)
+  })
+
+  it('skips no-newline-at-end-of-file markers (\\ prefix)', () => {
+    const patch = '+hello\n\\ No newline at end of file'
+    expect(countMatchesInPatch(patch, 'No newline')).toBe(0)
+    expect(countMatchesInPatch(patch, 'hello')).toBe(1)
+  })
+
+  // --- Case sensitivity ---
+
+  it('is case-insensitive by default', () => {
+    expect(countMatchesInPatch('+HELLO World', 'hello')).toBe(1)
+    expect(countMatchesInPatch('+hello World', 'HELLO')).toBe(1)
+  })
+
+  it('respects caseSensitive: true — does not match wrong case', () => {
+    expect(countMatchesInPatch('+HELLO World', 'hello', { caseSensitive: true })).toBe(0)
+  })
+
+  it('respects caseSensitive: true — matches exact case', () => {
+    expect(countMatchesInPatch('+Hello World', 'Hello', { caseSensitive: true })).toBe(1)
+  })
+
+  // --- Complex patches ---
+
+  it('handles multi-hunk patch correctly', () => {
+    const patch = [
+      '@@ -1,3 +1,4 @@ context',
+      ' unchanged',
+      '-removed line',
+      '+added line',
+      ' context',
+      '@@ -10,3 +11,4 @@ more context',
+      ' unchanged',
+      '+new line',
+    ].join('\n')
+    expect(countMatchesInPatch(patch, 'line')).toBe(3)
+  })
+
+  it('handles patch with mixed line types and split mode counting', () => {
+    const patch = [
+      '@@ -1,3 +1,3 @@',
+      ' context with target',
+      '-old target removed',
+      '+new target added',
+    ].join('\n')
+    expect(countMatchesInPatch(patch, 'target')).toBe(3)
+    expect(countMatchesInPatch(patch, 'target', { isSplitMode: true })).toBe(4)
+  })
+
+  it('handles lines with no content after operator (empty content)', () => {
+    const patch = '+\n-\n '
+    expect(countMatchesInPatch(patch, 'anything')).toBe(0)
+  })
+
+  it('handles lines that are only an operator character', () => {
+    expect(countMatchesInPatch('+', 'anything')).toBe(0)
+  })
+
+  it('skips empty lines in patch', () => {
+    const patch = '+hello\n\n+world'
+    expect(countMatchesInPatch(patch, 'hello')).toBe(1)
+    expect(countMatchesInPatch(patch, 'world')).toBe(1)
   })
 })
 

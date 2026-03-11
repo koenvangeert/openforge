@@ -153,6 +153,70 @@ function findMatchesInContentItem(
 }
 
 // ============================================================================
+// Text-based patch search (no DOM required)
+// ============================================================================
+
+/**
+ * Counts occurrences of `query` within a unified diff patch string by parsing
+ * diff lines and searching their content (after stripping the operator prefix).
+ *
+ * Mirrors the behavior of `findMatchesInContainer` but operates on raw text
+ * instead of DOM nodes, enabling accurate match counting without rendering.
+ *
+ * In split mode, context lines (space prefix) are counted twice because
+ * they render on both the old and new sides of the diff.
+ *
+ * @param patch - Raw unified diff patch string (may be null for binary files)
+ * @param query - The text to search for (empty string returns 0)
+ * @param options - Optional search configuration
+ * @param options.caseSensitive - If true, matching is case-sensitive (default: false)
+ * @param options.isSplitMode - If true, context lines count ×2 (default: false)
+ * @returns Total number of match occurrences
+ */
+export function countMatchesInPatch(
+  patch: string | null,
+  query: string,
+  options?: { caseSensitive?: boolean; isSplitMode?: boolean },
+): number {
+  if (!patch || query.length === 0) return 0
+
+  const caseSensitive = options?.caseSensitive ?? false
+  const isSplitMode = options?.isSplitMode ?? false
+  const compareQuery = caseSensitive ? query : query.toLowerCase()
+
+  let total = 0
+
+  for (const line of patch.split('\n')) {
+    if (line.length === 0) continue
+    if (line.startsWith('@@')) continue
+    if (line.startsWith('\\')) continue
+
+    const operator = line[0]
+    const content = line.slice(1)
+    if (content.length === 0) continue
+
+    const compareContent = caseSensitive ? content : content.toLowerCase()
+
+    let matchesInLine = 0
+    let searchFrom = 0
+    while (searchFrom < compareContent.length) {
+      const idx = compareContent.indexOf(compareQuery, searchFrom)
+      if (idx === -1) break
+      matchesInLine++
+      searchFrom = idx + 1
+    }
+
+    if (matchesInLine > 0 && isSplitMode && operator === ' ') {
+      matchesInLine *= 2
+    }
+
+    total += matchesInLine
+  }
+
+  return total
+}
+
+// ============================================================================
 // Public API
 // ============================================================================
 
@@ -203,9 +267,9 @@ export function findMatchesInContainer(
  * No-ops silently if the browser does not support the CSS Custom Highlight API.
  *
  * @param matches - Array of all match Range objects returned by findMatchesInContainer
- * @param currentIndex - Zero-based index of the currently focused match
+ * @param currentRange - The Range of the currently focused match, or null
  */
-export function applySearchHighlights(matches: Range[], currentIndex: number): void {
+export function applySearchHighlights(matches: Range[], currentRange: Range | null): void {
   if (!isHighlightSupported()) return
 
   if (matches.length === 0) {
@@ -216,8 +280,8 @@ export function applySearchHighlights(matches: Range[], currentIndex: number): v
 
   CSS.highlights.set(SEARCH_MATCH_HIGHLIGHT, new Highlight(...matches))
 
-  if (currentIndex >= 0 && currentIndex < matches.length) {
-    CSS.highlights.set(SEARCH_CURRENT_HIGHLIGHT, new Highlight(matches[currentIndex]))
+  if (currentRange !== null) {
+    CSS.highlights.set(SEARCH_CURRENT_HIGHLIGHT, new Highlight(currentRange))
   } else {
     CSS.highlights.delete(SEARCH_CURRENT_HIGHLIGHT)
   }
