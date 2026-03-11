@@ -11,6 +11,10 @@ const makeTask = (id: string, status: string): Task => ({
   jira_status: null,
   jira_assignee: null,
   jira_description: null,
+  prompt: null,
+  summary: null,
+  agent: null,
+  permission_mode: null,
   project_id: null,
   created_at: 1000,
   updated_at: 2000,
@@ -112,10 +116,24 @@ describe('computeCreatureState', () => {
     expect(result).toBe('frozen')
   })
 
-  it('returns idle as fallback for unknown task status', () => {
+  it('returns done when task status is done', () => {
     const task = makeTask('T-1', 'done')
     const result = computeCreatureState(task, null, [])
-    expect(result).toBe('idle')
+    expect(result).toBe('done')
+  })
+
+  it('returns done when task status is done with session', () => {
+    const task = makeTask('T-1', 'done')
+    const session = makeSession('T-1', 'running')
+    const result = computeCreatureState(task, session, [])
+    expect(result).toBe('done')
+  })
+
+  it('returns done when task status is done with PRs', () => {
+    const task = makeTask('T-1', 'done')
+    const prs = [makePr({ ci_status: 'failure' })]
+    const result = computeCreatureState(task, null, prs)
+    expect(result).toBe('done')
   })
 
   it('returns idle as fallback for unknown session status', () => {

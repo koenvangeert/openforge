@@ -1,7 +1,7 @@
 import type { Task, AgentSession, PullRequestInfo } from './types'
 
 export type CreatureState =
-  | 'egg' | 'idle' | 'active' | 'needs-input' | 'resting' | 'celebrating' | 'sad' | 'frozen'
+  | 'egg' | 'idle' | 'active' | 'needs-input' | 'resting' | 'celebrating' | 'sad' | 'frozen' | 'done'
   | 'pr-draft' | 'pr-open' | 'ci-failed' | 'changes-requested' | 'ready-to-merge' | 'pr-merged'
 
 export type CreatureRoom = 'forge' | 'warRoom' | 'nursery'
@@ -25,6 +25,11 @@ function getPrState(prs: PullRequestInfo[]): CreatureState | null {
 }
 
 export function computeCreatureState(task: Task, session: AgentSession | null, prs: PullRequestInfo[]): CreatureState {
+  // Done tasks are always done
+  if (task.status === 'done') {
+    return 'done'
+  }
+
   // Backlog tasks are always eggs
   if (task.status === 'backlog') {
     return 'egg'
