@@ -99,7 +99,8 @@
   }
 
   function handleKeydown(e: KeyboardEvent) {
-    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey || e.shiftKey)) {
+      e.preventDefault()
       handleAdd()
     }
   }
@@ -201,7 +202,7 @@
     <textarea
       bind:this={textareaEl}
       class="textarea textarea-bordered w-full text-xs leading-relaxed resize-y disabled:opacity-50 disabled:cursor-not-allowed"
-      placeholder="Add a testing note… (Cmd+Enter to submit)"
+      placeholder="Add a testing note… (⇧Enter to submit)"
       rows={3}
       bind:value={newCommentBody}
       disabled={isAdding}

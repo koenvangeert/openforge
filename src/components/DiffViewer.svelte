@@ -91,6 +91,19 @@
     node.focus()
   }
 
+  function submitInlineComment(filename: string, lineNumber: number, side: SplitSide, onClose: () => void) {
+    if (!commentText.trim()) return
+    const newComment: ReviewSubmissionComment = {
+      path: filename,
+      line: lineNumber,
+      side: side === SplitSide.old ? 'LEFT' : 'RIGHT',
+      body: commentText.trim()
+    }
+    $pendingManualComments = [...$pendingManualComments, newComment]
+    onClose()
+    commentText = ''
+  }
+
   // Large diff warning banner calculations
   const totalChanges = $derived(files.reduce((sum, f) => sum + f.additions + f.deletions, 0))
   const totalFiles = $derived(files.length)
@@ -334,10 +347,16 @@
                       <div class="p-3 mx-4 my-2 bg-base-100 border border-base-300 rounded-md">
                         <textarea
                           class="textarea textarea-bordered w-full min-h-[60px] text-[0.8rem] resize-y"
-                          placeholder="Leave a comment..."
+                          placeholder="Leave a comment… (⇧Enter to submit)"
                           rows="3"
                           bind:value={commentText}
                           use:autofocus
+                          onkeydown={(e: KeyboardEvent) => {
+                            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey || e.shiftKey)) {
+                              e.preventDefault()
+                              submitInlineComment(file.filename, lineNumber, side, onClose)
+                            }
+                          }}
                         ></textarea>
                         <div class="flex justify-end gap-2 mt-2">
                           <button
@@ -348,19 +367,7 @@
                           >Cancel</button>
                            <button
                              class="btn btn-primary btn-xs"
-                             onclick={() => {
-                               if (!commentText.trim()) return
-                               const path = file.filename
-                              const newComment: ReviewSubmissionComment = {
-                                path,
-                                line: lineNumber,
-                                side: side === SplitSide.old ? 'LEFT' : 'RIGHT',
-                                body: commentText.trim()
-                              }
-                              $pendingManualComments = [...$pendingManualComments, newComment]
-                              onClose()
-                              commentText = ''
-                            }}
+                             onclick={() => submitInlineComment(file.filename, lineNumber, side, onClose)}
                           >Add Comment</button>
                         </div>
                       </div>

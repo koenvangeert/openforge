@@ -282,6 +282,28 @@ describe('ReviewSubmitPanel', () => {
     })
   })
 
+  it('submits as COMMENT on Shift+Enter in textarea', async () => {
+    const mockSubmit = vi.mocked(submitPrReview).mockResolvedValue()
+
+    const { container } = render(ReviewSubmitPanel, {
+      props: {
+        repoOwner: 'acme',
+        repoName: 'repo',
+        prNumber: 42,
+        commitId: 'abc123',
+      },
+    })
+
+    const textarea = container.querySelector('textarea')
+    await fireEvent.input(textarea!, { target: { value: 'Quick comment' } })
+
+    await fireEvent.keyDown(textarea!, { key: 'Enter', shiftKey: true })
+
+    await waitFor(() => {
+      expect(mockSubmit).toHaveBeenCalledWith('acme', 'repo', 42, 'COMMENT', 'Quick comment', [], 'abc123')
+    })
+  })
+
   it('includes pending comments in submission', async () => {
     const mockSubmit = vi.mocked(submitPrReview).mockResolvedValue()
 

@@ -68,6 +68,13 @@
     selectedEvent = 'REQUEST_CHANGES'
     handleSubmit('REQUEST_CHANGES')
   }
+
+  function handleKeydown(e: KeyboardEvent) {
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey || e.shiftKey)) {
+      e.preventDefault()
+      handleCommentClick()
+    }
+  }
 </script>
 
 <div class="flex flex-col bg-base-200 border-t border-base-300">
@@ -81,10 +88,11 @@
   <div class="flex flex-col gap-3 px-6 py-4">
     <textarea
       class="textarea textarea-bordered w-full min-h-[70px] text-[0.85rem] leading-relaxed resize-y disabled:opacity-60 disabled:cursor-not-allowed"
-      placeholder="Leave a summary comment (optional)"
+      placeholder="Leave a summary comment… (⇧Enter to submit)"
       rows="3"
       bind:value={summary}
       disabled={isSubmitting}
+      onkeydown={handleKeydown}
     ></textarea>
 
     {#if error}
