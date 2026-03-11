@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Folder, Plug, FileText, Zap, Brain, KeyRound, Settings2 } from 'lucide-svelte'
+  import { Folder, Plug, FileText, Zap, Brain, KeyRound, Settings2, FlaskConical } from 'lucide-svelte'
 
   interface Props {
     activeSection: string
@@ -20,6 +20,7 @@
     { id: 'preferences', label: 'Preferences', Icon: Settings2 },
     { id: 'ai', label: 'Voice', Icon: Brain },
     { id: 'credentials', label: 'Credentials', Icon: KeyRound },
+    { id: 'experimental', label: 'Experimental', Icon: FlaskConical },
   ]
 
   function handleNavigate(sectionId: string) {

@@ -26,6 +26,7 @@
   import SettingsInstructionsCard from './SettingsInstructionsCard.svelte'
   import SettingsCredentialsCard from './SettingsCredentialsCard.svelte'
   import SettingsActionsCard from './SettingsActionsCard.svelte'
+  import SettingsExperimentalCard from './SettingsExperimentalCard.svelte'
 
   interface Props {
     onClose: () => void
@@ -98,7 +99,7 @@
   let scrollContainer = $state<HTMLDivElement | null>(null)
   let isNavigating = false
   const projectSections = ['general', 'integrations', 'instructions', 'actions']
-  const globalSections = ['preferences', 'ai', 'credentials']
+  const globalSections = ['preferences', 'ai', 'credentials', 'experimental']
 
   // Derived state
   const hasProject = $derived(!!$activeProjectId)
@@ -421,10 +422,6 @@
           onTaskIdPrefixChange={(v) => (taskIdPrefix = v)}
           {isDarkMode}
           onThemeToggle={handleThemeToggle}
-          creaturesEnabled={isCreaturesEnabled}
-          onCreaturesToggle={handleCreaturesToggle}
-          codeCleanupTasksEnabled={isCodeCleanupTasksEnabled}
-          onCodeCleanupTasksToggle={handleCodeCleanupTasksToggle}
         />
 
         <SettingsAICard
@@ -448,6 +445,13 @@
           onJiraUsernameChange={(v: string) => (jiraUsername = v)}
           onJiraApiTokenChange={(v: string) => (jiraApiToken = v)}
           onGithubTokenChange={(v: string) => (githubToken = v)}
+        />
+
+        <SettingsExperimentalCard
+          creaturesEnabled={isCreaturesEnabled}
+          onCreaturesToggle={handleCreaturesToggle}
+          codeCleanupTasksEnabled={isCodeCleanupTasksEnabled}
+          onCodeCleanupTasksToggle={handleCodeCleanupTasksToggle}
         />
       {/if}
     </div>
