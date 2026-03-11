@@ -104,7 +104,7 @@ describe('GeneralCommentsSidebar', () => {
 
     expect(mockGetActiveSelfReviewComments).not.toHaveBeenCalled()
 
-    const textarea = screen.getByPlaceholderText('Add a testing note… (Cmd+Enter to submit)') as HTMLTextAreaElement
+    const textarea = screen.getByPlaceholderText('Add a testing note… (⇧Enter to submit)') as HTMLTextAreaElement
     textarea.value = 'New comment'
     await fireEvent.input(textarea)
 
@@ -126,6 +126,35 @@ describe('GeneralCommentsSidebar', () => {
 
     await new Promise((r) => setTimeout(r, 100))
     expect(screen.getByText('No comments yet. Add notes from manual testing.')).toBeTruthy()
+  })
+
+  it('submits comment on Shift+Enter', async () => {
+    mockGetActiveSelfReviewComments.mockResolvedValue([mockComment])
+    mockGetArchivedSelfReviewComments.mockResolvedValue([mockArchivedComment])
+    mockAddSelfReviewComment.mockResolvedValue(1)
+
+    selfReviewGeneralComments.set([mockComment])
+    selfReviewArchivedComments.set([mockArchivedComment])
+
+    vi.clearAllMocks()
+
+    mockGetActiveSelfReviewComments.mockResolvedValue([mockComment])
+    mockGetArchivedSelfReviewComments.mockResolvedValue([mockArchivedComment])
+    mockAddSelfReviewComment.mockResolvedValue(1)
+
+    render(GeneralCommentsSidebar, { props: { taskId: 'task-1' } })
+
+    await new Promise((r) => setTimeout(r, 50))
+
+    const textarea = screen.getByPlaceholderText(/Add a testing note/) as HTMLTextAreaElement
+    textarea.value = 'Shift enter comment'
+    await fireEvent.input(textarea)
+
+    await fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: true })
+
+    await new Promise((r) => setTimeout(r, 100))
+
+    expect(mockAddSelfReviewComment).toHaveBeenCalledWith('task-1', 'general', null, null, 'Shift enter comment')
   })
 
   it('renders comments when stores have data', async () => {
