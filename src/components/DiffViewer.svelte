@@ -7,6 +7,8 @@
   import { updateAgentReviewCommentStatus } from '../lib/ipc'
   import { isTruncated, getTruncationStats, type FileContents } from '../lib/diffAdapter'
   import { buildExtendData, type CommentDisplayData } from '../lib/diffComments'
+  import { timeAgo } from '../lib/timeAgo'
+  import MarkdownContent from './MarkdownContent.svelte'
   import { diffHighlighter } from '../lib/diffHighlighter'
   import { createDiffSearch } from '../lib/useDiffSearch.svelte'
   import { createDiffWorker } from '../lib/useDiffWorker.svelte'
@@ -285,11 +287,19 @@
                     {#snippet renderExtendLine({ lineNumber: _ln, side: _side, data, diffFile: _df, onUpdate: _ou }: { lineNumber: number; side: SplitSide; data: CommentDisplayData; diffFile: import('@git-diff-view/core').DiffFile; onUpdate: () => void })}
                       <div class="w-full">
                         {#each data.comments as comment}
-                          <div class="px-4 py-2.5 mx-4 my-1.5 bg-base-100 border border-base-300 rounded-md text-[0.8rem] {comment.type === 'pending' ? 'border-l-4 border-l-warning' : comment.type === 'existing' ? 'border-l-4 border-l-primary' : comment.type === 'agent' ? 'border-l-4 border-l-success' : ''}">
+                          <div class="{comment.isReply ? 'ml-8' : ''} px-4 py-2.5 mx-4 {comment.isReply ? 'mt-0 mb-1.5 border-t-0 rounded-t-none' : 'my-1.5'} bg-base-100 border border-base-300 rounded-md text-[0.8rem] {comment.type === 'pending' ? 'border-l-4 border-l-warning' : comment.type === 'existing' ? 'border-l-4 border-l-primary' : comment.type === 'agent' ? 'border-l-4 border-l-success' : ''}">
                             <div class="flex items-center gap-2 mb-1.5">
                               {#if comment.type === 'existing'}
+                                <div class="w-5 h-5 rounded-full bg-primary/15 flex items-center justify-center text-[0.6rem] font-bold text-primary shrink-0">
+                                  {(comment.author ?? '?').charAt(0).toUpperCase()}
+                                </div>
                                 <strong class="text-base-content font-semibold text-xs">{comment.author}</strong>
-                                <span class="text-base-content/50 text-[0.7rem]">{comment.createdAt}</span>
+                                {#if comment.createdAt}
+                                  <span class="text-base-content/50 text-[0.7rem]">{timeAgo(new Date(comment.createdAt).getTime())}</span>
+                                {/if}
+                                {#if comment.isReply}
+                                  <span class="text-base-content/30 text-[0.65rem]">↩ reply</span>
+                                {/if}
                               {:else if comment.type === 'agent'}
                                 <span class="badge badge-success badge-sm">AI Review</span>
                                 {#if comment.status === 'approved'}
@@ -347,7 +357,9 @@
                                 >✕</button>
                               {/if}
                             </div>
-                            <div class="text-base-content leading-relaxed whitespace-pre-wrap">{comment.body}</div>
+                            <div class="text-base-content leading-relaxed text-[0.8rem] [&_p]:m-0 [&_p+p]:mt-1.5 [&_pre]:text-[0.75rem] [&_code]:text-[0.75rem] [&_pre]:bg-base-200 [&_pre]:rounded [&_pre]:p-2 [&_pre]:my-1.5 [&_code]:bg-base-200 [&_code]:px-1 [&_code]:rounded [&_ul]:my-1 [&_ol]:my-1 [&_li]:ml-4 [&_blockquote]:border-l-2 [&_blockquote]:border-base-300 [&_blockquote]:pl-3 [&_blockquote]:text-base-content/70 [&_a]:text-primary [&_a]:underline">
+                              <MarkdownContent content={comment.body} />
+                            </div>
                           </div>
                         {/each}
                       </div>

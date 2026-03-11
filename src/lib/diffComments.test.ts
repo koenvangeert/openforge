@@ -402,4 +402,227 @@ describe('buildExtendData', () => {
     expect(comment.lineNumber).toBe(20)
     expect(comment.commentSide).toBe('RIGHT')
   })
+
+  // ==========================================================================
+  // Threading Tests (in_reply_to_id)
+  // ==========================================================================
+
+  it('reply comments appear after their parent on the same line', () => {
+    const parent: ReviewComment = {
+      ...baseExistingComment,
+      id: 1,
+      line: 10,
+      body: 'Parent comment',
+      in_reply_to_id: null,
+    }
+    const reply: ReviewComment = {
+      ...baseExistingComment,
+      id: 2,
+      line: 10,
+      body: 'Reply comment',
+      in_reply_to_id: 1,
+    }
+
+    const result = buildExtendData('src/main.ts', [reply, parent], [])
+
+    expect(result.newFile['10'].data.comments).toHaveLength(2)
+    expect(result.newFile['10'].data.comments[0].body).toBe('Parent comment')
+    expect(result.newFile['10'].data.comments[0].isReply).toBeFalsy()
+    expect(result.newFile['10'].data.comments[1].body).toBe('Reply comment')
+    expect(result.newFile['10'].data.comments[1].isReply).toBe(true)
+  })
+
+  it('reply with null line inherits position from parent', () => {
+    const parent: ReviewComment = {
+      ...baseExistingComment,
+      id: 1,
+      line: 10,
+      body: 'Parent comment',
+      in_reply_to_id: null,
+    }
+    const reply: ReviewComment = {
+      ...baseExistingComment,
+      id: 2,
+      line: null,
+      body: 'Reply with no line',
+      in_reply_to_id: 1,
+    }
+
+    const result = buildExtendData('src/main.ts', [parent, reply], [])
+
+    expect(result.newFile['10'].data.comments).toHaveLength(2)
+    expect(result.newFile['10'].data.comments[1].body).toBe('Reply with no line')
+    expect(result.newFile['10'].data.comments[1].isReply).toBe(true)
+  })
+
+  it('reply with null line and null side inherits both from parent', () => {
+    const parent: ReviewComment = {
+      ...baseExistingComment,
+      id: 1,
+      line: 5,
+      side: 'LEFT',
+      body: 'Parent on old file',
+      in_reply_to_id: null,
+    }
+    const reply: ReviewComment = {
+      ...baseExistingComment,
+      id: 2,
+      line: null,
+      side: null,
+      body: 'Reply inherits old file position',
+      in_reply_to_id: 1,
+    }
+
+    const result = buildExtendData('src/main.ts', [parent, reply], [])
+
+    expect(result.oldFile['5'].data.comments).toHaveLength(2)
+    expect(result.oldFile['5'].data.comments[1].body).toBe('Reply inherits old file position')
+    expect(result.oldFile['5'].data.comments[1].isReply).toBe(true)
+    expect(result.newFile).toEqual({})
+  })
+
+  it('multiple reply threads on different lines stay separate', () => {
+    const parent1: ReviewComment = {
+      ...baseExistingComment,
+      id: 1,
+      line: 10,
+      body: 'Thread 1 parent',
+      in_reply_to_id: null,
+    }
+    const reply1: ReviewComment = {
+      ...baseExistingComment,
+      id: 2,
+      line: 10,
+      body: 'Thread 1 reply',
+      in_reply_to_id: 1,
+    }
+    const parent2: ReviewComment = {
+      ...baseExistingComment,
+      id: 3,
+      line: 20,
+      body: 'Thread 2 parent',
+      in_reply_to_id: null,
+    }
+    const reply2: ReviewComment = {
+      ...baseExistingComment,
+      id: 4,
+      line: null,
+      body: 'Thread 2 reply',
+      in_reply_to_id: 3,
+    }
+
+    const result = buildExtendData('src/main.ts', [parent1, reply1, parent2, reply2], [])
+
+    expect(result.newFile['10'].data.comments).toHaveLength(2)
+    expect(result.newFile['10'].data.comments[0].body).toBe('Thread 1 parent')
+    expect(result.newFile['10'].data.comments[1].body).toBe('Thread 1 reply')
+
+    expect(result.newFile['20'].data.comments).toHaveLength(2)
+    expect(result.newFile['20'].data.comments[0].body).toBe('Thread 2 parent')
+    expect(result.newFile['20'].data.comments[1].body).toBe('Thread 2 reply')
+  })
+
+  it('replies are sorted chronologically within a thread', () => {
+    const parent: ReviewComment = {
+      ...baseExistingComment,
+      id: 1,
+      line: 10,
+      body: 'Parent',
+      created_at: '2024-01-01T00:00:00Z',
+      in_reply_to_id: null,
+    }
+    const earlyReply: ReviewComment = {
+      ...baseExistingComment,
+      id: 2,
+      line: 10,
+      body: 'Early reply',
+      created_at: '2024-01-01T01:00:00Z',
+      in_reply_to_id: 1,
+    }
+    const lateReply: ReviewComment = {
+      ...baseExistingComment,
+      id: 3,
+      line: 10,
+      body: 'Late reply',
+      created_at: '2024-01-01T02:00:00Z',
+      in_reply_to_id: 1,
+    }
+
+    // Pass in reverse order to verify sorting
+    const result = buildExtendData('src/main.ts', [lateReply, parent, earlyReply], [])
+
+    expect(result.newFile['10'].data.comments).toHaveLength(3)
+    expect(result.newFile['10'].data.comments[0].body).toBe('Parent')
+    expect(result.newFile['10'].data.comments[1].body).toBe('Early reply')
+    expect(result.newFile['10'].data.comments[2].body).toBe('Late reply')
+  })
+
+  it('orphan reply with null line is dropped when parent not found', () => {
+    const orphan: ReviewComment = {
+      ...baseExistingComment,
+      id: 2,
+      line: null,
+      body: 'Orphan reply',
+      in_reply_to_id: 999,
+    }
+
+    const result = buildExtendData('src/main.ts', [orphan], [])
+
+    expect(result.oldFile).toEqual({})
+    expect(result.newFile).toEqual({})
+  })
+
+  it('reply with own line but different from parent uses parent line', () => {
+    const parent: ReviewComment = {
+      ...baseExistingComment,
+      id: 1,
+      line: 10,
+      body: 'Parent',
+      in_reply_to_id: null,
+    }
+    const reply: ReviewComment = {
+      ...baseExistingComment,
+      id: 2,
+      line: 15,
+      body: 'Reply (outdated line)',
+      in_reply_to_id: 1,
+    }
+
+    const result = buildExtendData('src/main.ts', [parent, reply], [])
+
+    // Reply should be grouped with parent at line 10, not at its own line 15
+    expect(result.newFile['10'].data.comments).toHaveLength(2)
+    expect(result.newFile['10'].data.comments[1].body).toBe('Reply (outdated line)')
+    expect(result.newFile['15']).toBeUndefined()
+  })
+
+  it('existing thread + pending comment coexist on the same line', () => {
+    const parent: ReviewComment = {
+      ...baseExistingComment,
+      id: 1,
+      line: 10,
+      body: 'Thread parent',
+      in_reply_to_id: null,
+    }
+    const reply: ReviewComment = {
+      ...baseExistingComment,
+      id: 2,
+      line: 10,
+      body: 'Thread reply',
+      in_reply_to_id: 1,
+    }
+    const pending: ReviewSubmissionComment[] = [
+      { ...basePendingComment, line: 10 },
+    ]
+
+    const result = buildExtendData('src/main.ts', [parent, reply], pending)
+
+    expect(result.newFile['10'].data.comments).toHaveLength(3)
+    // Thread first (parent, reply), then pending
+    expect(result.newFile['10'].data.comments[0].type).toBe('existing')
+    expect(result.newFile['10'].data.comments[0].body).toBe('Thread parent')
+    expect(result.newFile['10'].data.comments[1].type).toBe('existing')
+    expect(result.newFile['10'].data.comments[1].body).toBe('Thread reply')
+    expect(result.newFile['10'].data.comments[2].type).toBe('pending')
+  })
 })
