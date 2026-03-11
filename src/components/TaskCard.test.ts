@@ -34,6 +34,7 @@ const basePr: PullRequestInfo = {
   merged_at: null,
   created_at: 1000,
   updated_at: 2000,
+  draft: false,
   unaddressed_comment_count: 0,
 }
 
@@ -315,6 +316,17 @@ describe('TaskCard', () => {
   it('hides badge when no pull requests', () => {
     render(TaskCard, { props: { task: baseTask } })
     expect(screen.queryByText('unaddressed')).toBeNull()
+  })
+
+  it('shows Draft label when PR is draft', () => {
+    const pr = { ...basePr, draft: true }
+    render(TaskCard, { props: { task: baseTask, pullRequests: [pr] } })
+    expect(screen.getByText('Draft')).toBeTruthy()
+  })
+
+  it('hides Draft label when PR is not draft', () => {
+    render(TaskCard, { props: { task: baseTask, pullRequests: [basePr] } })
+    expect(screen.queryByText('Draft')).toBeNull()
   })
 
   it('shows summary subtitle when task has summary', () => {

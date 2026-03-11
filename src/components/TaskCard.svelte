@@ -106,6 +106,10 @@
           onkeydown={(e: KeyboardEvent) => { e.stopPropagation(); if (e.key === 'Enter') openUrl(pr.url) }}
         >
           $ pr #{pr.id}
+          {#if pr.draft && pr.state === 'open'}
+            <span class="text-base-content/30 mx-px">::</span>
+            <span class="font-mono text-base-content/50">Draft</span>
+          {/if}
           {#if pr.ci_status && pr.ci_status !== 'none' && pr.state === 'open'}
             <span class="text-base-content/30 mx-px">::</span>
             <span

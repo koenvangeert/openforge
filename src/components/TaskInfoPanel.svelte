@@ -151,6 +151,9 @@
               <span class="text-[0.65rem] font-semibold uppercase px-1.5 py-0.5 rounded tracking-wider {pr.state === 'open' ? 'bg-success text-success-content' : pr.state === 'merged' ? 'bg-secondary text-secondary-content' : 'bg-error text-error-content'}">
                 {pr.state}
               </span>
+              {#if pr.draft && pr.state === 'open'}
+                <span class="text-[0.65rem] font-semibold px-1.5 py-0.5 rounded text-base-content/50 bg-base-200 border border-base-300">Draft</span>
+              {/if}
               <span class="text-sm text-base-content font-medium">{pr.title}</span>
             </div>
             <button class="btn btn-link btn-xs p-0 h-auto min-h-0 text-primary no-underline hover:underline text-[0.7rem] break-all text-left justify-start" onclick={() => openUrl(pr.url)}>

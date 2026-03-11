@@ -109,6 +109,7 @@ describe('TaskInfoPanel', () => {
       merged_at: null,
       created_at: 1000,
       updated_at: 2000,
+      draft: false,
       unaddressed_comment_count: 0,
     }
 
@@ -120,6 +121,62 @@ describe('TaskInfoPanel', () => {
     expect(screen.getByText('// PIPELINE_STATUS')).toBeTruthy()
   })
 
+
+  it('renders Draft badge when PR is draft', async () => {
+    const draftPr: PullRequestInfo = {
+      id: 42,
+      ticket_id: 'T-42',
+      repo_owner: 'owner',
+      repo_name: 'repo',
+      title: 'Test PR',
+      url: 'https://github.com/owner/repo/pull/42',
+      state: 'open',
+      head_sha: 'abc123',
+      ci_status: null,
+      ci_check_runs: null,
+      review_status: null,
+      merged_at: null,
+      created_at: 1000,
+      updated_at: 2000,
+      draft: true,
+      unaddressed_comment_count: 0,
+    }
+
+    ticketPrs.set(new Map([['T-42', [draftPr]]]))
+
+    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null, jiraBaseUrl: '' } })
+
+    await new Promise((r) => setTimeout(r, 10))
+    expect(screen.getByText('Draft')).toBeTruthy()
+  })
+
+  it('hides Draft badge when PR is not draft', async () => {
+    const openPr: PullRequestInfo = {
+      id: 42,
+      ticket_id: 'T-42',
+      repo_owner: 'owner',
+      repo_name: 'repo',
+      title: 'Test PR',
+      url: 'https://github.com/owner/repo/pull/42',
+      state: 'open',
+      head_sha: 'abc123',
+      ci_status: null,
+      ci_check_runs: null,
+      review_status: null,
+      merged_at: null,
+      created_at: 1000,
+      updated_at: 2000,
+      draft: false,
+      unaddressed_comment_count: 0,
+    }
+
+    ticketPrs.set(new Map([['T-42', [openPr]]]))
+
+    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null, jiraBaseUrl: '' } })
+
+    await new Promise((r) => setTimeout(r, 10))
+    expect(screen.queryByText('Draft')).toBeNull()
+  })
 
   it('renders worktree path section when worktreePath is provided', () => {
     render(TaskInfoPanel, { props: { task: baseTask, worktreePath: '/home/user/worktrees/T-42', jiraBaseUrl: '' } })
