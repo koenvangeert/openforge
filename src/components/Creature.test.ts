@@ -6,7 +6,7 @@ import type { CreatureState, CreatureRoom } from '../lib/creatureState'
 
 const baseTask: Task = {
   id: 'T-99',
-  title: 'Test task for display purposes',
+  initial_prompt: 'Test task for display purposes',
   status: 'doing',
   jira_key: null,
   jira_title: null,

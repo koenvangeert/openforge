@@ -304,7 +304,7 @@
                     </div>
                   </div>
                   <div class="font-mono text-sm font-medium leading-relaxed text-base-content mb-1">
-                    {task.title.length > 80 ? task.title.slice(0, 80) + '...' : task.title}
+                    {task.initial_prompt.length > 80 ? task.initial_prompt.slice(0, 80) + '...' : task.initial_prompt}
                   </div>
                   {#if task.summary}
                     <div

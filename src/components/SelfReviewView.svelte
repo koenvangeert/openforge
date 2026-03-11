@@ -257,7 +257,7 @@
 
   <SendToAgentPanel
     taskId={task.id}
-    taskTitle={task.title}
+    taskTitle={task.initial_prompt}
     {agentStatus}
     {onSendToAgent}
     onRefresh={diffLoader.refresh}

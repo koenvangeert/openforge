@@ -11,7 +11,7 @@ vi.mock('../lib/ipc', () => ({
 
 const makeTask = (id: string, status: string): Task => ({
   id,
-  title: 'Test task',
+  initial_prompt: 'Test task',
   status,
   jira_key: null,
   jira_title: null,

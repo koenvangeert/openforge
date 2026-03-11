@@ -8,7 +8,7 @@ export default tool({
   name: "create_task",
   description: "Create a new task in Open Forge. Use this when you need to create follow-up work or break a task into subtasks. The task will be added to the backlog for later implementation.",
   args: {
-    title: tool.schema.string().describe("Short, descriptive title for the task (e.g., 'Implement user authentication')"),
+    initial_prompt: tool.schema.string().describe("Initial instructions or prompt for the task"),
     project_id: tool.schema.string().describe("Project ID to associate with (optional, e.g., 'P-1')").optional(),
   },
   async execute(args, context) {
@@ -19,7 +19,7 @@ export default tool({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          title: args.title,
+          initial_prompt: args.initial_prompt,
           project_id: args.project_id,
           calling_session_id: context.sessionID,
           worktree: context.worktree,

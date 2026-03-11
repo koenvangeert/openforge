@@ -4,7 +4,7 @@ import type { Task, AgentSession } from './types'
 
 const makeTask = (id: string, status: string): Task => ({
   id,
-  title: `Task ${id}`,
+  initial_prompt: `Task ${id}`,
   status,
   jira_key: null,
   jira_title: null,

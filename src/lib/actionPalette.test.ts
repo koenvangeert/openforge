@@ -5,7 +5,7 @@ import { getTaskActions, getGlobalActions, getAvailableActions, filterActions } 
 function makeTask(overrides: Partial<Task> = {}): Task {
   return {
     id: 'T-100',
-    title: 'Test task',
+    initial_prompt: 'Test task',
     status: 'backlog',
     jira_key: null,
     jira_title: null,

@@ -15,7 +15,7 @@ function makeProject(overrides: Partial<Project> & { id: string; name: string })
 
 function makeTask(overrides: Partial<Task> & { id: string }): Task {
   return {
-    title: 'Test task',
+    initial_prompt: 'Test task',
     status: 'doing',
     jira_key: null,
     jira_title: null,
@@ -160,13 +160,13 @@ describe('CommandPalette filterActiveTasks', () => {
 
 describe('CommandPalette search filtering', () => {
   it('matches by task ID', () => {
-    const task = makeTask({ id: 'T-42', title: 'Something' })
+    const task = makeTask({ id: 'T-42', initial_prompt: 'Something' })
     expect(matchesSearch(task, 't-42')).toBe(true)
     expect(matchesSearch(task, 'T-99')).toBe(false)
   })
 
   it('matches by title', () => {
-    const task = makeTask({ id: 'T-1', title: 'Fix the login bug' })
+    const task = makeTask({ id: 'T-1', initial_prompt: 'Fix the login bug' })
     expect(matchesSearch(task, 'login')).toBe(true)
     expect(matchesSearch(task, 'signup')).toBe(false)
   })
@@ -199,7 +199,7 @@ describe('CommandPalette search filtering', () => {
   })
 
   it('still matches other fields when projectMap is provided', () => {
-    const task = makeTask({ id: 'T-42', title: 'Fix login', project_id: 'P-1' })
+    const task = makeTask({ id: 'T-42', initial_prompt: 'Fix login', project_id: 'P-1' })
     const projectMap = new Map([['P-1', makeProject({ id: 'P-1', name: 'My App' })]])
     expect(matchesSearch(task, 't-42', projectMap)).toBe(true)
     expect(matchesSearch(task, 'login', projectMap)).toBe(true)

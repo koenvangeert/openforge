@@ -174,7 +174,7 @@ import { activeSessions, selectedTaskId } from '../lib/stores'
 
 const baseTask: Task = {
   id: 'T-42',
-  title: 'Implement auth middleware',
+  initial_prompt: 'Implement auth middleware',
   status: 'backlog',
   jira_key: 'PROJ-123',
   jira_title: null,
@@ -392,13 +392,13 @@ describe('TaskDetailView', () => {
   })
 
   it('falls back to first line of prompt when title is empty', () => {
-    const taskNoTitle = { ...baseTask, title: '', prompt: 'First prompt line\nSecond line' }
+    const taskNoTitle = { ...baseTask, initial_prompt: '', prompt: 'First prompt line\nSecond line' }
     render(TaskDetailView, { props: { task: taskNoTitle, onRunAction: mockOnRunAction } })
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('First prompt line')
   })
 
   it('falls back to task id when title and prompt are both empty/null', () => {
-    const taskNoTitleNoPrompt = { ...baseTask, title: '', prompt: null }
+    const taskNoTitleNoPrompt = { ...baseTask, initial_prompt: '', prompt: null }
     render(TaskDetailView, { props: { task: taskNoTitleNoPrompt, onRunAction: mockOnRunAction } })
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('T-42')
   })
@@ -420,7 +420,7 @@ describe('TaskDetailView', () => {
     vi.mocked(detach).mockClear()
 
     // Switch to a different task
-    const taskB = { ...baseTask, id: 'T-99', title: 'Another task' }
+    const taskB = { ...baseTask, id: 'T-99', initial_prompt: 'Another task' }
     await rerender({ task: taskB, onRunAction: mockOnRunAction })
 
     // Agent panel should be recreated, acquiring terminal for the new task

@@ -7,7 +7,7 @@ import { ticketPrs } from '../lib/stores'
 
 const baseTask: Task = {
   id: 'T-99',
-  title: 'Implement rate limiting middleware',
+  initial_prompt: 'Implement rate limiting middleware',
   status: 'doing',
   jira_key: null,
   jira_title: null,

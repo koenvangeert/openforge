@@ -6,7 +6,7 @@ import type { Task } from '../lib/types'
 vi.mock('../lib/ipc', () => ({
   createTask: vi.fn().mockResolvedValue({
     id: 'T-1',
-    title: 'New Task',
+    initial_prompt: 'New Task',
     status: 'backlog',
     jira_key: null,
     jira_title: null,
@@ -37,7 +37,7 @@ import { createTask, updateTask, getProjectConfig, getAgents } from '../lib/ipc'
 
 const mockTask: Task = {
   id: 'T-42',
-  title: 'Existing Task',
+  initial_prompt: 'Existing Task',
   status: 'doing',
   jira_key: 'PROJ-123',
   jira_title: null,
