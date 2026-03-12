@@ -377,7 +377,7 @@ describe('CreaturesView', () => {
       await fireEvent.contextMenu(button)
 
       expect(screen.getByText('Start Task')).toBeTruthy()
-      expect(screen.getByText('Move to... ›')).toBeTruthy()
+      expect(screen.queryByText('Move to Done')).toBeNull()
       expect(screen.getByText('Delete')).toBeTruthy()
     })
 
@@ -414,30 +414,28 @@ describe('CreaturesView', () => {
       expect(onRunAction).toHaveBeenCalledWith({ taskId: 'T-nursery', actionPrompt: '', agent: null })
     })
 
-    it('shows move submenu when Move to is clicked', async () => {
-      tasks.set([makeTask('T-nursery', 'backlog')])
+    it('shows Move to Done for doing creatures', async () => {
+      tasks.set([makeTask('T-forge', 'doing')])
+      activeSessions.set(new Map([['T-forge', makeSession('T-forge', 'running')]]))
       render(CreaturesView, { props: { onCreatureClick: vi.fn(), onRunAction: vi.fn() } })
 
-      const button = screen.getByText('T-nursery').closest('button')!
+      const button = screen.getByText('T-forge').closest('button')!
       await fireEvent.contextMenu(button)
-      await fireEvent.click(screen.getByText('Move to... ›'))
 
-      expect(screen.getByText('Backlog')).toBeTruthy()
-      expect(screen.getByText('Doing')).toBeTruthy()
-      expect(screen.getByText('Done')).toBeTruthy()
+      expect(screen.getByText('Move to Done')).toBeTruthy()
     })
 
-    it('calls updateTaskStatus when a move target is clicked', async () => {
+    it('calls updateTaskStatus with done when Move to Done is clicked', async () => {
       const { updateTaskStatus } = await import('../lib/ipc')
-      tasks.set([makeTask('T-nursery', 'backlog')])
+      tasks.set([makeTask('T-forge', 'doing')])
+      activeSessions.set(new Map([['T-forge', makeSession('T-forge', 'running')]]))
       render(CreaturesView, { props: { onCreatureClick: vi.fn(), onRunAction: vi.fn() } })
 
-      const button = screen.getByText('T-nursery').closest('button')!
+      const button = screen.getByText('T-forge').closest('button')!
       await fireEvent.contextMenu(button)
-      await fireEvent.click(screen.getByText('Move to... ›'))
-      await fireEvent.click(screen.getByText('Doing'))
+      await fireEvent.click(screen.getByText('Move to Done'))
 
-      expect(updateTaskStatus).toHaveBeenCalledWith('T-nursery', 'doing')
+      expect(updateTaskStatus).toHaveBeenCalledWith('T-forge', 'done')
     })
 
     it('calls deleteTask when Delete is clicked', async () => {

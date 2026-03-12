@@ -1,6 +1,5 @@
 <script lang="ts">
   import type { KanbanColumn } from '../lib/types'
-  import { COLUMNS, COLUMN_LABELS } from '../lib/types'
   import { tasks, error } from '../lib/stores'
   import { updateTaskStatus, deleteTask } from '../lib/ipc'
   import ContextMenu from './ContextMenu.svelte'
@@ -18,30 +17,18 @@
 
   let { visible, x, y, taskId, onClose, onStart, onDelete }: Props = $props()
 
-  let showMoveSubmenu = $state(false)
-
   let taskStatus = $derived(($tasks.find(t => t.id === taskId)?.status ?? '') as KanbanColumn | '')
-
-  $effect(() => {
-    if (visible) {
-      showMoveSubmenu = false
-    }
-  })
 
   function handleStart() {
     onClose()
     onStart?.(taskId)
   }
 
-  function toggleMoveSubmenu() {
-    showMoveSubmenu = !showMoveSubmenu
-  }
-
-  async function handleMoveTo(column: KanbanColumn) {
+  async function handleMoveToDone() {
     const id = taskId
     onClose()
     try {
-      await updateTaskStatus(id, column)
+      await updateTaskStatus(id, 'done')
     } catch (err: unknown) {
       console.error('Failed to move task:', err)
       $error = String(err)
@@ -65,13 +52,8 @@
   {#if taskStatus === 'backlog' && onStart}
     <ContextMenuItem label="Start Task" variant="primary" onclick={handleStart} />
   {/if}
-  <ContextMenuItem label="Move to... ›" onclick={(e: MouseEvent) => { e.stopPropagation(); toggleMoveSubmenu() }} />
-  {#if showMoveSubmenu}
-    <div class="border-t border-base-300 mt-0.5 pt-0.5">
-      {#each COLUMNS as col}
-        <ContextMenuItem label={COLUMN_LABELS[col]} onclick={() => handleMoveTo(col)} />
-      {/each}
-    </div>
+  {#if taskStatus === 'doing'}
+    <ContextMenuItem label="Move to Done" onclick={handleMoveToDone} />
   {/if}
   <ContextMenuItem label="Delete" variant="danger" onclick={handleDelete} />
 </ContextMenu>

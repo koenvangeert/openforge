@@ -69,21 +69,29 @@ describe('TaskContextMenu', () => {
     expect(onClose).toHaveBeenCalled()
   })
 
-  it('shows Move to submenu with all columns when clicked', async () => {
+  it('shows Move to Done for doing tasks', () => {
     tasks.set([makeTask('T-1', 'doing')])
     render(TaskContextMenu, { props: { visible: true, x: 0, y: 0, taskId: 'T-1', onClose: vi.fn() } })
-    await fireEvent.click(screen.getByText('Move to... ›'))
-    expect(screen.getByText('Backlog')).toBeTruthy()
-    expect(screen.getByText('Doing')).toBeTruthy()
-    expect(screen.getByText('Done')).toBeTruthy()
+    expect(screen.getByText('Move to Done')).toBeTruthy()
   })
 
-  it('calls updateTaskStatus when a move target is clicked', async () => {
+  it('does not show Move to Done for backlog tasks', () => {
+    tasks.set([makeTask('T-1', 'backlog')])
+    render(TaskContextMenu, { props: { visible: true, x: 0, y: 0, taskId: 'T-1', onClose: vi.fn() } })
+    expect(screen.queryByText('Move to Done')).toBeNull()
+  })
+
+  it('does not show Move to Done for done tasks', () => {
+    tasks.set([makeTask('T-1', 'done')])
+    render(TaskContextMenu, { props: { visible: true, x: 0, y: 0, taskId: 'T-1', onClose: vi.fn() } })
+    expect(screen.queryByText('Move to Done')).toBeNull()
+  })
+
+  it('calls updateTaskStatus with done when Move to Done is clicked', async () => {
     const { updateTaskStatus } = await import('../lib/ipc')
     tasks.set([makeTask('T-1', 'doing')])
     render(TaskContextMenu, { props: { visible: true, x: 0, y: 0, taskId: 'T-1', onClose: vi.fn() } })
-    await fireEvent.click(screen.getByText('Move to... ›'))
-    await fireEvent.click(screen.getByText('Done'))
+    await fireEvent.click(screen.getByText('Move to Done'))
     expect(updateTaskStatus).toHaveBeenCalledWith('T-1', 'done')
   })
 
@@ -119,19 +127,11 @@ describe('TaskContextMenu', () => {
     expect(onClose).toHaveBeenCalled()
   })
 
-  it('resets move submenu when menu is reopened', async () => {
+  it('does not show Move to submenu with all columns', () => {
     tasks.set([makeTask('T-1', 'doing')])
-    const { rerender } = render(TaskContextMenu, { props: { visible: true, x: 0, y: 0, taskId: 'T-1', onClose: vi.fn() } })
-
-    // Open submenu
-    await fireEvent.click(screen.getByText('Move to... ›'))
-    expect(screen.getByText('Backlog')).toBeTruthy()
-
-    // Close and reopen
-    await rerender({ visible: false, x: 0, y: 0, taskId: 'T-1', onClose: vi.fn() })
-    await rerender({ visible: true, x: 0, y: 0, taskId: 'T-1', onClose: vi.fn() })
-
-    // Submenu should be closed
+    render(TaskContextMenu, { props: { visible: true, x: 0, y: 0, taskId: 'T-1', onClose: vi.fn() } })
+    expect(screen.queryByText('Move to... ›')).toBeNull()
     expect(screen.queryByText('Backlog')).toBeNull()
+    expect(screen.queryByText('Doing')).toBeNull()
   })
 })

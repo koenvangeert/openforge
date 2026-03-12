@@ -119,7 +119,7 @@ describe('KanbanBoard', () => {
     expect(mockOnRunAction).toHaveBeenCalledWith({ taskId: 'T-1', actionPrompt: '', agent: null })
   })
 
-  it('shows Move to submenu in context menu', async () => {
+  it('shows Move to Done in context menu for doing tasks', async () => {
     const doingTask: Task = { ...baseTask, id: 'T-2', initial_prompt: 'Active task', status: 'doing' }
     tasks.set([doingTask])
 
@@ -128,25 +128,21 @@ describe('KanbanBoard', () => {
     const taskCard = screen.getByText('Active task')
     await fireEvent.contextMenu(taskCard)
 
-    expect(screen.getByText('Move to... ›')).toBeTruthy()
+    expect(screen.getByText('Move to Done')).toBeTruthy()
   })
 
-  it('shows all columns in Move to submenu when expanded', async () => {
-    const doingTask: Task = { ...baseTask, id: 'T-2', initial_prompt: 'Active task', status: 'doing' }
-    tasks.set([doingTask])
+  it('does not show Move to Done in context menu for backlog tasks', async () => {
+    tasks.set([baseTask])
 
     render(KanbanBoard, { props: { onRunAction: mockOnRunAction } })
 
-    const taskCard = screen.getByText('Active task')
+    const taskCard = screen.getByText('Test task')
     await fireEvent.contextMenu(taskCard)
-    await fireEvent.click(screen.getByText('Move to... ›'))
 
-    expect(screen.getByText('Backlog')).toBeTruthy()
-    expect(screen.getByText('Doing')).toBeTruthy()
-    expect(screen.getByText('Done')).toBeTruthy()
+    expect(screen.queryByText('Move to Done')).toBeNull()
   })
 
-  it('calls updateTaskStatus when a move target is clicked', async () => {
+  it('calls updateTaskStatus with done when Move to Done is clicked', async () => {
     const { updateTaskStatus } = await import('../lib/ipc')
     const doingTask: Task = { ...baseTask, id: 'T-2', initial_prompt: 'Active task', status: 'doing' }
     tasks.set([doingTask])
@@ -155,8 +151,7 @@ describe('KanbanBoard', () => {
 
     const taskCard = screen.getByText('Active task')
     await fireEvent.contextMenu(taskCard)
-    await fireEvent.click(screen.getByText('Move to... ›'))
-    await fireEvent.click(screen.getByText('Done'))
+    await fireEvent.click(screen.getByText('Move to Done'))
 
     expect(updateTaskStatus).toHaveBeenCalledWith('T-2', 'done')
   })
