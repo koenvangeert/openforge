@@ -114,6 +114,81 @@ impl ClaudeCodeProvider {
     pub fn provider_session_id(&self, session: &AgentSessionRow) -> Option<String> {
         session.claude_session_id.clone()
     }
+
+    pub fn list_commands(&self, project_path: Option<&str>) -> Vec<crate::opencode_client::CommandInfo> {
+        use std::collections::HashMap;
+        use crate::command_discovery::{
+            builtin_claude_commands, scan_commands_directory, scan_skills_directory,
+            resolve_active_plugins, scan_plugin_commands,
+        };
+
+        let mut commands_map = HashMap::<String, crate::opencode_client::CommandInfo>::new();
+
+        for cmd in builtin_claude_commands() {
+            commands_map.insert(cmd.name.clone(), cmd);
+        }
+
+        if let Some(home) = dirs::home_dir() {
+            let active_plugins = resolve_active_plugins(&home);
+            for cmd in scan_plugin_commands(&active_plugins) {
+                commands_map.insert(cmd.name.clone(), cmd);
+            }
+        }
+
+        if let Some(home) = dirs::home_dir() {
+            for cmd in scan_commands_directory(&home.join(".claude").join("commands")) {
+                commands_map.entry(cmd.name.clone()).or_insert(cmd);
+            }
+        }
+
+        if let Some(proj_path) = project_path {
+            let proj = std::path::Path::new(proj_path);
+            for cmd in scan_commands_directory(&proj.join(".claude").join("commands")) {
+                commands_map.insert(cmd.name.clone(), cmd);
+            }
+        }
+
+        if let Some(home) = dirs::home_dir() {
+            for skill in scan_skills_directory(&home.join(".claude").join("skills"), "user") {
+                commands_map.entry(skill.name.clone()).or_insert(crate::opencode_client::CommandInfo {
+                    name: skill.name,
+                    description: skill.description,
+                    source: Some("skill".to_string()),
+                    agent: skill.agent,
+                    extra: serde_json::Map::new(),
+                });
+            }
+        }
+
+        if let Some(proj_path) = project_path {
+            let proj = std::path::Path::new(proj_path);
+            for skill in scan_skills_directory(&proj.join(".claude").join("skills"), "project") {
+                commands_map.insert(skill.name.clone(), crate::opencode_client::CommandInfo {
+                    name: skill.name,
+                    description: skill.description,
+                    source: Some("skill".to_string()),
+                    agent: skill.agent,
+                    extra: serde_json::Map::new(),
+                });
+            }
+        }
+
+        let mut result: Vec<_> = commands_map.into_values().collect();
+        result.sort_by(|a, b| a.name.cmp(&b.name));
+        result
+    }
+
+    pub fn list_agents(&self, project_path: Option<&str>) -> Vec<crate::opencode_client::AgentInfo> {
+        use crate::command_discovery::{resolve_active_plugins, scan_plugin_agents};
+        let _ = project_path;
+        if let Some(home) = dirs::home_dir() {
+            let active_plugins = resolve_active_plugins(&home);
+            let mut agents = scan_plugin_agents(&active_plugins);
+            agents.sort_by(|a, b| a.name.cmp(&b.name));
+            return agents;
+        }
+        vec![]
+    }
 }
 
 #[cfg(test)]

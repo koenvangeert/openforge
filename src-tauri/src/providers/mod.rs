@@ -119,6 +119,22 @@ impl Provider {
             Provider::OpenCode(p) => p.provider_session_id(session),
         }
     }
+
+    /// List available commands for the project (provider-specific discovery).
+    pub fn list_commands(&self, project_path: Option<&str>) -> Vec<crate::opencode_client::CommandInfo> {
+        match self {
+            Provider::ClaudeCode(p) => p.list_commands(project_path),
+            Provider::OpenCode(p) => p.list_commands(project_path),
+        }
+    }
+
+    /// List available agents for the project (provider-specific discovery).
+    pub fn list_agents(&self, project_path: Option<&str>) -> Vec<crate::opencode_client::AgentInfo> {
+        match self {
+            Provider::ClaudeCode(p) => p.list_agents(project_path),
+            Provider::OpenCode(p) => p.list_agents(project_path),
+        }
+    }
 }
 
 // ============================================================================
@@ -283,5 +299,40 @@ mod tests {
         );
         assert!(result.is_err());
         assert!(result.err().unwrap().contains("Unknown provider"));
+    }
+
+    #[test]
+    fn test_provider_enum_list_commands_claude_code() {
+        let p = Provider::ClaudeCode(ClaudeCodeProvider::new(crate::pty_manager::PtyManager::new()));
+        let commands = p.list_commands(None);
+        assert!(commands.len() >= 10, "Expected built-in commands, got {}", commands.len());
+        assert!(commands.iter().any(|c| c.name == "compact"), "Should include 'compact' built-in");
+    }
+
+    #[test]
+    fn test_provider_enum_list_agents_claude_code() {
+        let p = Provider::ClaudeCode(ClaudeCodeProvider::new(crate::pty_manager::PtyManager::new()));
+        let agents = p.list_agents(None);
+        let _ = agents;
+    }
+
+    #[test]
+    fn test_provider_enum_list_commands_opencode() {
+        let p = Provider::OpenCode(OpenCodeProvider::new(
+            crate::server_manager::ServerManager::new(),
+            crate::sse_bridge::SseBridgeManager::new(),
+        ));
+        let commands = p.list_commands(None);
+        assert!(commands.is_empty(), "OpenCode list_commands should return empty vec");
+    }
+
+    #[test]
+    fn test_provider_enum_list_agents_opencode() {
+        let p = Provider::OpenCode(OpenCodeProvider::new(
+            crate::server_manager::ServerManager::new(),
+            crate::sse_bridge::SseBridgeManager::new(),
+        ));
+        let agents = p.list_agents(None);
+        assert!(agents.is_empty(), "OpenCode list_agents should return empty vec");
     }
 }
