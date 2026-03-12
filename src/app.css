@@ -85,8 +85,38 @@
 }
 
 /* Status border indicators — left-border accent, no gradients */
+/* Running: animated rotating border glow using conic-gradient pseudo-elements */
 .running {
-  border-left: 3px solid var(--color-success);
+  position: relative;
+  z-index: 0;
+  overflow: hidden;
+  border-color: transparent !important;
+  box-shadow: 0 0 12px -3px color-mix(in oklch, var(--color-success) 30%, transparent);
+}
+.running::before {
+  content: '';
+  position: absolute;
+  inset: -200%;
+  background: conic-gradient(
+    from 0deg,
+    var(--color-success),
+    color-mix(in oklch, var(--color-success) 50%, transparent) 10%,
+    transparent 25%,
+    transparent 75%,
+    color-mix(in oklch, var(--color-success) 50%, transparent) 90%,
+    var(--color-success)
+  );
+  animation: border-glow-spin 3s linear infinite;
+  z-index: -1;
+  will-change: transform;
+}
+.running::after {
+  content: '';
+  position: absolute;
+  inset: 2px;
+  background: var(--color-base-100);
+  border-radius: calc(0.25rem - 1px);
+  z-index: -1;
 }
 .completed {
   border-left: 3px solid var(--color-info);
@@ -116,6 +146,10 @@
 }
 .vim-focus > * {
   background-image: linear-gradient(to right, color-mix(in oklch, var(--color-base-content) 8%, transparent), transparent 40%);
+}
+@keyframes border-glow-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 @keyframes badge-pulse {
   0%, 100% { opacity: 1; }
