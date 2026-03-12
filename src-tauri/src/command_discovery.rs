@@ -13,6 +13,12 @@ pub struct ActivePlugin {
     pub cache_dir: PathBuf, // resolved install path directory
 }
 
+/// Cached result of a full command/agent discovery scan.
+pub struct CachedDiscovery {
+    pub commands: Vec<crate::opencode_client::CommandInfo>,
+    pub agents: Vec<crate::opencode_client::AgentInfo>,
+}
+
 /// Parse SKILL.md frontmatter to extract name and description.
 /// Frontmatter is YAML between `---` delimiters at the start of the file.
 pub fn parse_skill_frontmatter(content: &str) -> (Option<String>, Option<String>) {

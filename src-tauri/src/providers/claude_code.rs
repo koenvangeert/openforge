@@ -1,4 +1,5 @@
 use std::path::Path;
+use std::sync::{Arc, Mutex};
 use tauri::AppHandle;
 
 use crate::db::AgentSessionRow;
@@ -7,11 +8,15 @@ use super::ProviderSessionResult;
 
 pub struct ClaudeCodeProvider {
     pub pty_mgr: PtyManager,
+    pub discovery_cache: Arc<Mutex<Option<crate::command_discovery::CachedDiscovery>>>,
 }
 
 impl ClaudeCodeProvider {
     pub fn new(pty_mgr: PtyManager) -> Self {
-        Self { pty_mgr }
+        Self {
+            pty_mgr,
+            discovery_cache: Arc::new(Mutex::new(None)),
+        }
     }
 
     pub async fn start(
@@ -116,10 +121,15 @@ impl ClaudeCodeProvider {
     }
 
     pub fn list_commands(&self, project_path: Option<&str>) -> Vec<crate::opencode_client::CommandInfo> {
+        let mut cache = self.discovery_cache.lock().unwrap();
+        if let Some(ref cached) = *cache {
+            return cached.commands.clone();
+        }
+
         use std::collections::HashMap;
         use crate::command_discovery::{
             builtin_claude_commands, scan_commands_directory, scan_skills_directory,
-            resolve_active_plugins, scan_plugin_commands,
+            resolve_active_plugins, scan_plugin_commands, scan_plugin_agents,
         };
 
         let mut commands_map = HashMap::<String, crate::opencode_client::CommandInfo>::new();
@@ -128,11 +138,12 @@ impl ClaudeCodeProvider {
             commands_map.insert(cmd.name.clone(), cmd);
         }
 
-        if let Some(home) = dirs::home_dir() {
-            let active_plugins = resolve_active_plugins(&home);
-            for cmd in scan_plugin_commands(&active_plugins) {
-                commands_map.insert(cmd.name.clone(), cmd);
-            }
+        let active_plugins = dirs::home_dir()
+            .map(|home| resolve_active_plugins(&home))
+            .unwrap_or_default();
+
+        for cmd in scan_plugin_commands(&active_plugins) {
+            commands_map.insert(cmd.name.clone(), cmd);
         }
 
         if let Some(home) = dirs::home_dir() {
@@ -173,21 +184,41 @@ impl ClaudeCodeProvider {
             }
         }
 
-        let mut result: Vec<_> = commands_map.into_values().collect();
-        result.sort_by(|a, b| a.name.cmp(&b.name));
+        let mut commands: Vec<_> = commands_map.into_values().collect();
+        commands.sort_by(|a, b| a.name.cmp(&b.name));
+
+        let mut agents = scan_plugin_agents(&active_plugins);
+        agents.sort_by(|a, b| a.name.cmp(&b.name));
+
+        let result = commands.clone();
+        *cache = Some(crate::command_discovery::CachedDiscovery { commands, agents });
         result
     }
 
     pub fn list_agents(&self, project_path: Option<&str>) -> Vec<crate::opencode_client::AgentInfo> {
+        let mut cache = self.discovery_cache.lock().unwrap();
+        if let Some(ref cached) = *cache {
+            return cached.agents.clone();
+        }
+
         use crate::command_discovery::{resolve_active_plugins, scan_plugin_agents};
         let _ = project_path;
-        if let Some(home) = dirs::home_dir() {
+
+        let agents = if let Some(home) = dirs::home_dir() {
             let active_plugins = resolve_active_plugins(&home);
             let mut agents = scan_plugin_agents(&active_plugins);
             agents.sort_by(|a, b| a.name.cmp(&b.name));
-            return agents;
-        }
-        vec![]
+            agents
+        } else {
+            vec![]
+        };
+
+        let result = agents.clone();
+        *cache = Some(crate::command_discovery::CachedDiscovery {
+            commands: vec![],
+            agents,
+        });
+        result
     }
 }
 
@@ -233,5 +264,34 @@ mod tests {
         let provider = ClaudeCodeProvider::new(PtyManager::new());
         let session = make_session(None);
         assert_eq!(provider.provider_session_id(&session), None);
+    }
+
+    #[test]
+    fn test_list_commands_cache_populated_on_first_call() {
+        let provider = ClaudeCodeProvider::new(PtyManager::new());
+
+        assert!(provider.discovery_cache.lock().unwrap().is_none());
+
+        let first_result = provider.list_commands(None);
+        assert!(!first_result.is_empty(), "built-in commands should always be present");
+
+        assert!(provider.discovery_cache.lock().unwrap().is_some());
+
+        let second_result = provider.list_commands(None);
+        assert_eq!(first_result.len(), second_result.len());
+    }
+
+    #[test]
+    fn test_list_agents_shares_cache_with_list_commands() {
+        let provider = ClaudeCodeProvider::new(PtyManager::new());
+
+        let _commands = provider.list_commands(None);
+        assert!(provider.discovery_cache.lock().unwrap().is_some());
+
+        let agents = provider.list_agents(None);
+
+        let cache = provider.discovery_cache.lock().unwrap();
+        let cached = cache.as_ref().unwrap();
+        assert_eq!(agents.len(), cached.agents.len());
     }
 }
