@@ -2,26 +2,29 @@
   import { onMount, onDestroy } from 'svelte'
   import { listen } from '@tauri-apps/api/event'
   import type { UnlistenFn } from '@tauri-apps/api/event'
-  import { reviewPrs, selectedReviewPr, prFileDiffs, reviewRequestCount, reviewComments, pendingManualComments, prOverviewComments, agentReviewComments, agentReviewLoading, agentReviewError } from '../lib/stores'
-  import { fetchReviewPrs, getReviewPrs, getPrFileDiffs, openUrl, getReviewComments, getFileContent, getFileAtRef, markReviewPrViewed, startAgentReview, getAgentReviewComments, abortAgentReview } from '../lib/ipc'
+  import { reviewPrs, selectedReviewPr, prFileDiffs, reviewRequestCount, reviewComments, pendingManualComments, prOverviewComments, agentReviewComments, agentReviewLoading, agentReviewError, authoredPrs, authoredPrCount } from '../lib/stores'
+  import { fetchReviewPrs, getReviewPrs, fetchAuthoredPrs, getAuthoredPrs, getPrFileDiffs, openUrl, getReviewComments, getFileContent, getFileAtRef, markReviewPrViewed, startAgentReview, getAgentReviewComments, abortAgentReview } from '../lib/ipc'
   import { pushNavState } from '../lib/navigation'
   import { isInputFocused } from '../lib/domUtils'
   import { useVimNavigation } from '../lib/useVimNavigation.svelte'
   import { timeAgoFromSeconds } from '../lib/timeAgo'
   import ReviewPrCard from './ReviewPrCard.svelte'
+  import AuthoredPrCard from './AuthoredPrCard.svelte'
   import FileTree from './FileTree.svelte'
   import ResizablePanel from './ResizablePanel.svelte'
   import DiffViewer from './DiffViewer.svelte'
   import ReviewSubmitPanel from './ReviewSubmitPanel.svelte'
   import PrOverviewTab from './PrOverviewTab.svelte'
   import AgentReviewOutputModal from './AgentReviewOutputModal.svelte'
-  import type { ReviewPullRequest, PrFileDiff } from '../lib/types'
+  import type { ReviewPullRequest, AuthoredPullRequest, PrFileDiff } from '../lib/types'
   import type { FileContents } from '../lib/diffAdapter'
 
   type PrDetailTab = 'overview' | 'files'
 
   let isLoading = $state(false)
+  let isLoadingAuthored = $state(false)
   let error = $state<string | null>(null)
+  let authoredError = $state<string | null>(null)
   let diffViewer = $state<DiffViewer>()
   let fileTreeVisible = $state(true)
   let activeTab = $state<PrDetailTab>('overview')
@@ -81,6 +84,7 @@
   })
 
   let groupedPrs = $derived(groupByRepo($reviewPrs))
+  let groupedAuthoredPrs = $derived(groupAuthoredByRepo($authoredPrs))
 
   function groupByRepo(prs: ReviewPullRequest[]): Map<string, ReviewPullRequest[]> {
     const grouped = new Map<string, ReviewPullRequest[]>()
@@ -91,6 +95,21 @@
       grouped.set(key, existing)
     }
     return grouped
+  }
+
+  function groupAuthoredByRepo(prs: AuthoredPullRequest[]): Map<string, AuthoredPullRequest[]> {
+    const grouped = new Map<string, AuthoredPullRequest[]>()
+    for (const pr of prs) {
+      const key = `${pr.repo_owner}/${pr.repo_name}`
+      const existing = grouped.get(key) || []
+      existing.push(pr)
+      grouped.set(key, existing)
+    }
+    return grouped
+  }
+
+  function updateAuthoredCount(prs: AuthoredPullRequest[]) {
+    $authoredPrCount = prs.filter(p => p.ci_status === 'failure' || p.review_status === 'changes_requested').length
   }
 
   async function loadPrs() {
@@ -120,6 +139,36 @@
       error = 'Failed to refresh pull requests. Please try again.'
     } finally {
       isLoading = false
+    }
+  }
+
+  async function loadAuthoredPrs() {
+    isLoadingAuthored = true
+    authoredError = null
+    try {
+      const prs = await getAuthoredPrs()
+      $authoredPrs = prs
+      updateAuthoredCount(prs)
+    } catch (e) {
+      console.error('Failed to load authored PRs:', e)
+      authoredError = 'Failed to load pull requests. Please try again.'
+    } finally {
+      isLoadingAuthored = false
+    }
+  }
+
+  async function refreshAuthoredPrs() {
+    isLoadingAuthored = true
+    authoredError = null
+    try {
+      const prs = await fetchAuthoredPrs()
+      $authoredPrs = prs
+      updateAuthoredCount(prs)
+    } catch (e) {
+      console.error('Failed to refresh authored PRs:', e)
+      authoredError = 'Failed to refresh pull requests. Please try again.'
+    } finally {
+      isLoadingAuthored = false
     }
   }
 
@@ -235,6 +284,7 @@
 
   onMount(async () => {
     loadPrs()
+    loadAuthoredPrs()
     unlisteners.push(
       await listen<{ task_id: string; event_type: string; data: string }>('agent-event', async (event) => {
         const { task_id, event_type, data } = event.payload
@@ -405,51 +455,108 @@
   {:else}
     <div class="flex flex-col h-full overflow-hidden">
       <div class="flex items-center justify-between px-6 py-5 bg-base-200 border-b border-base-300 shrink-0">
-        <div class="flex items-center gap-3">
-          <h2 class="text-xl font-semibold text-base-content m-0">PRs Requesting Your Review</h2>
-          <span class="badge badge-primary badge-sm">{$reviewPrs.length} {$reviewPrs.length === 1 ? 'PR' : 'PRs'}</span>
-        </div>
-        <button class="btn btn-sm border border-base-300" onclick={refreshPrs} disabled={isLoading}>
-          {isLoading ? '⟳' : '↻'} Refresh
-        </button>
+        <h2 class="text-xl font-semibold text-base-content m-0">Pull Requests</h2>
       </div>
 
-      <div class="flex-1 overflow-y-auto p-6 pb-8">
-        {#if isLoading && $reviewPrs.length === 0}
-          <div class="flex flex-col items-center justify-center h-full gap-3 text-base-content/50 text-sm">
-            <span class="loading loading-spinner loading-md text-primary"></span>
-            <span>Loading PRs...</span>
-          </div>
-        {:else if error}
-          <div class="flex flex-col items-center justify-center h-full gap-3 text-error text-sm text-center p-5">
-            <span class="text-5xl">⚠</span>
-            <span>{error}</span>
-          </div>
-        {:else if $reviewPrs.length === 0}
-          <div class="flex flex-col items-center justify-center h-full gap-4 text-base-content/50 text-center">
-            <span class="text-6xl text-success">✓</span>
-            <h3 class="text-xl font-semibold text-base-content m-0">No PRs requesting your review</h3>
-            <p class="text-sm m-0">You're all caught up!</p>
-          </div>
-        {:else}
-          {#each [...groupedPrs.entries()] as [repo, prs]}
-            <div class="mb-8">
-              <h3 class="text-xs font-semibold text-base-content/50 m-0 mb-3 uppercase tracking-wider">{repo}</h3>
-              <div class="grid grid-cols-[repeat(auto-fill,minmax(340px,1fr))] gap-5 max-w-6xl">
-                {#each prs as pr}
-                  {@const flatIdx = flatPrList.indexOf(pr)}
-                  <div data-vim-pr-item class={flatIdx === vimList.focusedIndex ? 'vim-focus' : ''}>
-                    <ReviewPrCard
-                      {pr}
-                      selected={false}
-                      onClick={() => selectPr(pr)}
-                    />
-                  </div>
-                {/each}
-              </div>
+      <div class="flex flex-1 overflow-hidden">
+        <!-- Left column: Review Requests -->
+        <div class="flex-1 flex flex-col overflow-hidden border-r border-base-300">
+          <div class="flex items-center justify-between px-5 py-3 bg-base-200/50 border-b border-base-300 shrink-0">
+            <div class="flex items-center gap-2">
+              <h3 class="text-sm font-semibold text-base-content m-0">Review Requests</h3>
+              <span class="badge badge-primary badge-xs">{$reviewPrs.length}</span>
             </div>
-          {/each}
-        {/if}
+            <button class="btn btn-xs btn-ghost text-base-content/50" onclick={refreshPrs} disabled={isLoading}>
+              {isLoading ? '⟳' : '↻'}
+            </button>
+          </div>
+
+          <div class="flex-1 overflow-y-auto p-5 pb-8">
+            {#if isLoading && $reviewPrs.length === 0}
+              <div class="flex flex-col items-center justify-center h-full gap-3 text-base-content/50 text-sm">
+                <span class="loading loading-spinner loading-md text-primary"></span>
+                <span>Loading PRs...</span>
+              </div>
+            {:else if error}
+              <div class="flex flex-col items-center justify-center h-full gap-3 text-error text-sm text-center p-5">
+                <span class="text-5xl">⚠</span>
+                <span>{error}</span>
+              </div>
+            {:else if $reviewPrs.length === 0}
+              <div class="flex flex-col items-center justify-center h-full gap-4 text-base-content/50 text-center">
+                <span class="text-6xl text-success">✓</span>
+                <h3 class="text-xl font-semibold text-base-content m-0">No PRs requesting your review</h3>
+                <p class="text-sm m-0">You're all caught up!</p>
+              </div>
+            {:else}
+              {#each [...groupedPrs.entries()] as [repo, prs]}
+                <div class="mb-6">
+                  <h3 class="text-xs font-semibold text-base-content/50 m-0 mb-3 uppercase tracking-wider">{repo}</h3>
+                  <div class="flex flex-col gap-3">
+                    {#each prs as pr}
+                      {@const flatIdx = flatPrList.indexOf(pr)}
+                      <div data-vim-pr-item class={flatIdx === vimList.focusedIndex ? 'vim-focus' : ''}>
+                        <ReviewPrCard
+                          {pr}
+                          selected={false}
+                          onClick={() => selectPr(pr)}
+                        />
+                      </div>
+                    {/each}
+                  </div>
+                </div>
+              {/each}
+            {/if}
+          </div>
+        </div>
+
+        <!-- Right column: My Pull Requests -->
+        <div class="flex-1 flex flex-col overflow-hidden">
+          <div class="flex items-center justify-between px-5 py-3 bg-base-200/50 border-b border-base-300 shrink-0">
+            <div class="flex items-center gap-2">
+              <h3 class="text-sm font-semibold text-base-content m-0">My Pull Requests</h3>
+              <span class="badge badge-primary badge-xs">{$authoredPrs.length}</span>
+            </div>
+            <button class="btn btn-xs btn-ghost text-base-content/50" onclick={refreshAuthoredPrs} disabled={isLoadingAuthored}>
+              {isLoadingAuthored ? '⟳' : '↻'}
+            </button>
+          </div>
+
+          <div class="flex-1 overflow-y-auto p-5 pb-8">
+            {#if isLoadingAuthored && $authoredPrs.length === 0}
+              <div class="flex flex-col items-center justify-center h-full gap-3 text-base-content/50 text-sm">
+                <span class="loading loading-spinner loading-md text-primary"></span>
+                <span>Loading PRs...</span>
+              </div>
+            {:else if authoredError}
+              <div class="flex flex-col items-center justify-center h-full gap-3 text-error text-sm text-center p-5">
+                <span class="text-5xl">⚠</span>
+                <span>{authoredError}</span>
+              </div>
+            {:else if $authoredPrs.length === 0}
+              <div class="flex flex-col items-center justify-center h-full gap-4 text-base-content/50 text-center">
+                <span class="text-6xl">🚀</span>
+                <h3 class="text-xl font-semibold text-base-content m-0">No open pull requests</h3>
+                <p class="text-sm m-0">You don't have any open PRs right now.</p>
+              </div>
+            {:else}
+              {#each [...groupedAuthoredPrs.entries()] as [repo, prs]}
+                <div class="mb-6">
+                  <h3 class="text-xs font-semibold text-base-content/50 m-0 mb-3 uppercase tracking-wider">{repo}</h3>
+                  <div class="flex flex-col gap-3">
+                    {#each prs as pr}
+                      <AuthoredPrCard
+                        {pr}
+                        selected={false}
+                        onClick={() => openUrl(pr.html_url)}
+                      />
+                    {/each}
+                  </div>
+                </div>
+              {/each}
+            {/if}
+          </div>
+        </div>
       </div>
     </div>
   {/if}

@@ -1,7 +1,7 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/svelte'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { writable, get } from 'svelte/store'
-import type { ReviewPullRequest, PrFileDiff, ReviewSubmissionComment } from '../lib/types'
+import type { ReviewPullRequest, AuthoredPullRequest, PrFileDiff, ReviewSubmissionComment } from '../lib/types'
 
 vi.mock('../lib/stores', () => ({
   reviewPrs: writable([]),
@@ -14,6 +14,8 @@ vi.mock('../lib/stores', () => ({
   agentReviewComments: writable([]),
   agentReviewLoading: writable(false),
   agentReviewError: writable(null),
+  authoredPrs: writable([]),
+  authoredPrCount: writable(0),
 }))
 
 vi.mock('../lib/navigation', () => ({
@@ -30,6 +32,8 @@ vi.mock('../lib/useDiffWorker.svelte', () => ({
 vi.mock('../lib/ipc', () => ({
   fetchReviewPrs: vi.fn(),
   getReviewPrs: vi.fn().mockResolvedValue([]),
+  fetchAuthoredPrs: vi.fn(),
+  getAuthoredPrs: vi.fn().mockResolvedValue([]),
   getPrFileDiffs: vi.fn().mockResolvedValue([]),
   getReviewComments: vi.fn().mockResolvedValue([]),
   getPrOverviewComments: vi.fn().mockResolvedValue([]),
@@ -40,8 +44,8 @@ vi.mock('../lib/ipc', () => ({
 }))
 
 import PrReviewView from './PrReviewView.svelte'
-import { reviewPrs, selectedReviewPr, prFileDiffs, reviewComments, pendingManualComments, reviewRequestCount, agentReviewComments, agentReviewLoading, agentReviewError } from '../lib/stores'
-import { getReviewPrs, fetchReviewPrs, getPrFileDiffs, getReviewComments, markReviewPrViewed } from '../lib/ipc'
+import { reviewPrs, selectedReviewPr, prFileDiffs, reviewComments, pendingManualComments, reviewRequestCount, agentReviewComments, agentReviewLoading, agentReviewError, authoredPrs } from '../lib/stores'
+import { getReviewPrs, fetchReviewPrs, getAuthoredPrs, getPrFileDiffs, getReviewComments, markReviewPrViewed } from '../lib/ipc'
 
 const basePr: ReviewPullRequest = {
   id: 12345,
@@ -83,10 +87,11 @@ describe('PrReviewView', () => {
 
   it('shows list view by default', async () => {
     vi.mocked(getReviewPrs).mockResolvedValue([])
+    vi.mocked(getAuthoredPrs).mockResolvedValue([])
     render(PrReviewView)
 
     await waitFor(() => {
-      expect(screen.getByText('PRs Requesting Your Review')).toBeTruthy()
+      expect(screen.getByText('Review Requests')).toBeTruthy()
     })
   })
 
@@ -100,36 +105,40 @@ describe('PrReviewView', () => {
     })
   })
 
-  it('shows refresh button', async () => {
+  it('shows refresh buttons for both columns', async () => {
     vi.mocked(getReviewPrs).mockResolvedValue([])
+    vi.mocked(getAuthoredPrs).mockResolvedValue([])
     render(PrReviewView)
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /Refresh/i })).toBeTruthy()
+      expect(screen.getByText('Review Requests')).toBeTruthy()
+      expect(screen.getByText('My Pull Requests')).toBeTruthy()
     })
   })
 
-  it('shows PR count in list view', async () => {
+  it('shows review PR count badge in list view', async () => {
     vi.mocked(getReviewPrs).mockResolvedValue([basePr])
+    vi.mocked(getAuthoredPrs).mockResolvedValue([])
     render(PrReviewView)
 
     await waitFor(() => {
       reviewPrs.set([basePr])
     })
 
-    expect(screen.getByText('1 PR')).toBeTruthy()
+    expect(screen.getByText('1')).toBeTruthy()
   })
 
-  it('shows plural PR count for multiple PRs', async () => {
+  it('shows count badge for multiple review PRs', async () => {
     const secondPr = { ...basePr, id: 67890, number: 43 }
     vi.mocked(getReviewPrs).mockResolvedValue([basePr, secondPr])
+    vi.mocked(getAuthoredPrs).mockResolvedValue([])
     render(PrReviewView)
 
     await waitFor(() => {
       reviewPrs.set([basePr, secondPr])
     })
 
-    expect(screen.getByText('2 PRs')).toBeTruthy()
+    expect(screen.getByText('2')).toBeTruthy()
   })
 
   it('shows PR cards when reviewPrs store has data', async () => {
@@ -144,18 +153,19 @@ describe('PrReviewView', () => {
     })
   })
 
-  it('calls fetchReviewPrs when refresh button is clicked', async () => {
+  it('calls fetchReviewPrs when review refresh button is clicked', async () => {
     const mockFetch = vi.mocked(fetchReviewPrs).mockResolvedValue([])
     vi.mocked(getReviewPrs).mockResolvedValue([])
+    vi.mocked(getAuthoredPrs).mockResolvedValue([])
 
     render(PrReviewView)
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /Refresh/i })).toBeTruthy()
+      expect(screen.getByText('Review Requests')).toBeTruthy()
     })
 
-    const refreshBtn = screen.getByRole('button', { name: /Refresh/i })
-    await fireEvent.click(refreshBtn)
+    const refreshBtns = screen.getAllByRole('button', { name: /↻/ })
+    await fireEvent.click(refreshBtns[0])
 
     expect(mockFetch).toHaveBeenCalled()
   })
@@ -238,7 +248,7 @@ describe('PrReviewView', () => {
     await fireEvent.click(backBtn)
 
     await waitFor(() => {
-      expect(screen.getByText('PRs Requesting Your Review')).toBeTruthy()
+      expect(screen.getByText('Review Requests')).toBeTruthy()
     })
   })
 
@@ -397,6 +407,67 @@ describe('PrReviewView', () => {
 
     await waitFor(() => {
       expect(get(reviewRequestCount)).toBe(1)
+    })
+  })
+
+  it('shows My Pull Requests section in list mode', async () => {
+    vi.mocked(getReviewPrs).mockResolvedValue([])
+    vi.mocked(getAuthoredPrs).mockResolvedValue([])
+
+    render(PrReviewView)
+
+    await waitFor(() => {
+      expect(screen.getByText('My Pull Requests')).toBeTruthy()
+    })
+  })
+
+  it('shows authored PR cards when authoredPrs store has data', async () => {
+    const authoredPr: AuthoredPullRequest = {
+      id: 99999,
+      number: 100,
+      title: 'Add new feature',
+      body: null,
+      state: 'open',
+      draft: false,
+      html_url: 'https://github.com/acme/repo/pull/100',
+      user_login: 'me',
+      user_avatar_url: null,
+      repo_owner: 'acme',
+      repo_name: 'repo',
+      head_ref: 'feature/new',
+      base_ref: 'main',
+      head_sha: 'def456',
+      additions: 20,
+      deletions: 5,
+      changed_files: 2,
+      ci_status: 'success',
+      ci_check_runs: null,
+      review_status: 'approved',
+      merged_at: null,
+      task_id: null,
+      created_at: Math.floor(Date.now() / 1000) - 3600,
+      updated_at: Math.floor(Date.now() / 1000),
+    }
+
+    vi.mocked(getReviewPrs).mockResolvedValue([])
+    vi.mocked(getAuthoredPrs).mockResolvedValue([authoredPr])
+    authoredPrs.set([authoredPr])
+
+    render(PrReviewView)
+
+    await waitFor(() => {
+      expect(screen.getByText('Add new feature')).toBeTruthy()
+    })
+  })
+
+  it('shows authored PR empty state when no authored PRs', async () => {
+    vi.mocked(getReviewPrs).mockResolvedValue([])
+    vi.mocked(getAuthoredPrs).mockResolvedValue([])
+
+    render(PrReviewView)
+
+    await waitFor(() => {
+      expect(screen.getByText('No open pull requests')).toBeTruthy()
     })
   })
 
