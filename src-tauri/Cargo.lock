@@ -2743,6 +2743,7 @@ dependencies = [
  "sha1",
  "tauri",
  "tauri-build",
+ "tempfile",
  "tokio",
  "tokio-stream",
  "tower 0.4.13",

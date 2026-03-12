@@ -3,6 +3,10 @@ use tauri::State;
 use crate::opencode_client::OpenCodeClient;
 use crate::server_manager;
 use crate::db;
+use crate::command_discovery::{
+    scan_skills_directory,
+    search_project_files,
+};
 
 /// Get list of available agents from OpenCode server
 #[tauri::command]
@@ -47,6 +51,26 @@ pub async fn list_opencode_commands(
     server_mgr: State<'_, server_manager::ServerManager>,
     project_id: String,
 ) -> Result<Vec<crate::opencode_client::CommandInfo>, String> {
+    // Detect provider — branch to filesystem scanning for claude-code
+    let provider = {
+        let db = crate::db::acquire_db(&db);
+        db.resolve_ai_provider(&project_id)
+    };
+
+    if provider == "claude-code" {
+        let project_path = {
+            let db = crate::db::acquire_db(&db);
+            db.get_project(&project_id)
+                .map_err(|e| format!("Failed to get project: {}", e))?
+                .map(|p| p.path)
+        };
+
+        let provider = crate::providers::claude_code::ClaudeCodeProvider::new(
+            crate::pty_manager::PtyManager::new()
+        );
+        return Ok(provider.list_commands(project_path.as_deref()));
+    }
+
     // Get task IDs for the project
     let task_ids: Vec<String> = {
         let db = crate::db::acquire_db(&db);
@@ -77,6 +101,26 @@ pub async fn search_opencode_files(
     project_id: String,
     query: String,
 ) -> Result<Vec<String>, String> {
+    // Detect provider — branch to git index search for claude-code
+    let provider = {
+        let db = crate::db::acquire_db(&db);
+        db.resolve_ai_provider(&project_id)
+    };
+
+    if provider == "claude-code" {
+        let project_path = {
+            let db = crate::db::acquire_db(&db);
+            db.get_project(&project_id)
+                .map_err(|e| format!("Failed to get project: {}", e))?
+                .map(|p| p.path)
+        };
+
+        if let Some(path) = project_path {
+            return Ok(search_project_files(&path, &query, 10));
+        }
+        return Ok(vec![]);
+    }
+
     // Get task IDs for the project
     let task_ids: Vec<String> = {
         let db = crate::db::acquire_db(&db);
@@ -106,6 +150,26 @@ pub async fn list_opencode_agents(
     server_mgr: State<'_, server_manager::ServerManager>,
     project_id: String,
 ) -> Result<Vec<crate::opencode_client::AgentInfo>, String> {
+    // Detect provider — branch to filesystem scanning for claude-code
+    let provider = {
+        let db = crate::db::acquire_db(&db);
+        db.resolve_ai_provider(&project_id)
+    };
+
+    if provider == "claude-code" {
+        let project_path = {
+            let db = crate::db::acquire_db(&db);
+            db.get_project(&project_id)
+                .map_err(|e| format!("Failed to get project: {}", e))?
+                .map(|p| p.path)
+        };
+
+        let provider = crate::providers::claude_code::ClaudeCodeProvider::new(
+            crate::pty_manager::PtyManager::new()
+        );
+        return Ok(provider.list_agents(project_path.as_deref()));
+    }
+
     // Get task IDs for the project
     let task_ids: Vec<String> = {
         let db = crate::db::acquire_db(&db);
@@ -128,91 +192,7 @@ pub async fn list_opencode_agents(
         .map_err(|e| format!("Failed to list agents: {}", e))
 }
 
-/// Parse SKILL.md frontmatter to extract name and description.
-/// Frontmatter is YAML between `---` delimiters at the start of the file.
-fn parse_skill_frontmatter(content: &str) -> (Option<String>, Option<String>) {
-    let trimmed = content.trim_start();
-    if !trimmed.starts_with("---") {
-        return (None, None);
-    }
-    // Find the closing ---
-    let after_first = &trimmed[3..];
-    let end_idx = match after_first.find("\n---") {
-        Some(idx) => idx,
-        None => return (None, None),
-    };
-    let frontmatter = &after_first[..end_idx];
 
-    let mut name: Option<String> = None;
-    let mut description = String::new();
-    let mut in_description = false;
-
-    for line in frontmatter.lines() {
-        let trimmed_line = line.trim();
-        if trimmed_line.starts_with("name:") {
-            name = Some(trimmed_line.trim_start_matches("name:").trim().to_string());
-            in_description = false;
-        } else if trimmed_line.starts_with("description:") {
-            let val = trimmed_line.trim_start_matches("description:").trim();
-            if val == "|" || val == ">" || val.is_empty() {
-                // Multi-line description follows
-                in_description = true;
-            } else {
-                description = val.to_string();
-            }
-        } else if in_description {
-            if !trimmed_line.is_empty() && (line.starts_with(' ') || line.starts_with('\t')) {
-                if !description.is_empty() {
-                    description.push(' ');
-                }
-                description.push_str(trimmed_line);
-            } else {
-                in_description = false;
-            }
-        }
-    }
-
-    let desc = if description.is_empty() { None } else { Some(description) };
-    (name, desc)
-}
-
-/// Scan a skills directory (e.g. `.claude/skills/` or `.opencode/skills/`) for SKILL.md files.
-/// Returns a Vec of SkillInfo with the given level.
-fn scan_skills_directory(dir: &std::path::Path, level: &str) -> Vec<crate::opencode_client::SkillInfo> {
-    let mut skills = Vec::new();
-    let entries = match std::fs::read_dir(dir) {
-        Ok(e) => e,
-        Err(_) => return skills,
-    };
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if !path.is_dir() {
-            continue;
-        }
-        let skill_file = path.join("SKILL.md");
-        if !skill_file.exists() {
-            continue;
-        }
-        let content = match std::fs::read_to_string(&skill_file) {
-            Ok(c) => c,
-            Err(_) => continue,
-        };
-        let dir_name = match path.file_name().and_then(|n| n.to_str()) {
-            Some(n) => n.to_string(),
-            None => continue,
-        };
-        let (fm_name, fm_desc) = parse_skill_frontmatter(&content);
-        let name = fm_name.unwrap_or(dir_name);
-        skills.push(crate::opencode_client::SkillInfo {
-            name,
-            description: fm_desc,
-            agent: None,
-            template: Some(content),
-            level: level.to_string(),
-        });
-    }
-    skills
-}
 
 /// List skills from OpenCode API + filesystem (.opencode/skills/ and .claude/skills/).
 /// Merges results, deduplicating by name (API skills take precedence).
@@ -311,3 +291,10 @@ pub async fn list_opencode_skills(
 
     Ok(skills)
 }
+
+
+
+
+
+
+

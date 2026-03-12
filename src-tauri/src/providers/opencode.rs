@@ -153,6 +153,14 @@ impl OpenCodeProvider {
     pub fn provider_session_id(&self, session: &AgentSessionRow) -> Option<String> {
         session.opencode_session_id.clone()
     }
+
+    pub fn list_commands(&self, _project_path: Option<&str>) -> Vec<crate::opencode_client::CommandInfo> {
+        vec![]
+    }
+
+    pub fn list_agents(&self, _project_path: Option<&str>) -> Vec<crate::opencode_client::AgentInfo> {
+        vec![]
+    }
 }
 
 #[cfg(test)]

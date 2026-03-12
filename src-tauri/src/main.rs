@@ -23,6 +23,7 @@ mod commands;
 mod migration;
 mod secure_store;
 pub mod providers;
+pub mod command_discovery;
 use std::sync::{Mutex, Arc};
 use tauri::{Manager, Emitter};
 use jira_client::JiraClient;
