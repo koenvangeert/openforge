@@ -5,6 +5,7 @@
   import { timeAgo } from '../lib/timeAgo'
   import { createDiffLoader } from '../lib/useDiffLoader.svelte'
   import { createCommentSelection } from '../lib/useCommentSelection.svelte'
+  import { prCommentsToReviewComments } from '../lib/diffComments'
   import type { Task, PrFileDiff } from '../lib/types'
   import type { FileContents } from '../lib/diffAdapter'
   import FileTree from './FileTree.svelte'
@@ -41,6 +42,7 @@
     getPrComments: () => diffLoader.prComments,
   })
 
+  let inlineReviewComments = $derived(prCommentsToReviewComments(diffLoader.prComments))
   let visibleComments = $derived(showAddressed ? diffLoader.prComments : commentSelection.unaddressedComments)
 
   let hasAutoOpened = false
@@ -116,7 +118,7 @@
           <DiffViewer
             bind:this={diffViewer}
             files={$selfReviewDiffFiles}
-            existingComments={[]}
+            existingComments={inlineReviewComments}
             {fileTreeVisible}
             onToggleFileTree={() => { fileTreeVisible = !fileTreeVisible }}
             fetchFileContents={fetchTaskFileContents}

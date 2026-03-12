@@ -1,4 +1,4 @@
-import type { ReviewComment, ReviewSubmissionComment, AgentReviewComment } from './types'
+import type { ReviewComment, ReviewSubmissionComment, AgentReviewComment, PrComment } from './types'
 
 /**
  * Display data for comments on a single line.
@@ -145,4 +145,22 @@ export function buildExtendData(
   }
 
   return { oldFile, newFile }
+}
+
+export function prCommentsToReviewComments(prComments: PrComment[]): ReviewComment[] {
+  return prComments
+    .filter(c => c.file_path !== null && c.line_number !== null)
+    .map(c => ({
+      id: c.id,
+      pr_number: 0,
+      repo_owner: '',
+      repo_name: '',
+      path: c.file_path!,
+      line: c.line_number,
+      side: 'RIGHT' as string | null,
+      body: c.body,
+      author: c.author,
+      created_at: new Date(c.created_at * 1000).toISOString(),
+      in_reply_to_id: null,
+    }))
 }

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import type { ReviewComment, ReviewSubmissionComment, AgentReviewComment } from './types'
-import { sideToSplitSide, buildExtendData } from './diffComments'
+import type { ReviewComment, ReviewSubmissionComment, AgentReviewComment, PrComment } from './types'
+import { sideToSplitSide, buildExtendData, prCommentsToReviewComments } from './diffComments'
 
 // ============================================================================
 // Test Fixtures
@@ -624,5 +624,150 @@ describe('buildExtendData', () => {
     expect(result.newFile['10'].data.comments[1].type).toBe('existing')
     expect(result.newFile['10'].data.comments[1].body).toBe('Thread reply')
     expect(result.newFile['10'].data.comments[2].type).toBe('pending')
+  })
+})
+
+// ============================================================================
+// prCommentsToReviewComments Tests
+// ============================================================================
+
+const basePrComment: PrComment = {
+  id: 100,
+  pr_id: 1,
+  author: 'reviewer',
+  body: 'Looks good',
+  comment_type: 'review_comment',
+  file_path: 'src/main.ts',
+  line_number: 10,
+  addressed: 0,
+  created_at: 1704067200, // 2024-01-01T00:00:00Z
+}
+
+describe('prCommentsToReviewComments', () => {
+  it('converts a review_comment with file_path and line_number', () => {
+    const result = prCommentsToReviewComments([basePrComment])
+
+    expect(result).toHaveLength(1)
+    expect(result[0]).toEqual({
+      id: 100,
+      pr_number: 0,
+      repo_owner: '',
+      repo_name: '',
+      path: 'src/main.ts',
+      line: 10,
+      side: 'RIGHT',
+      body: 'Looks good',
+      author: 'reviewer',
+      created_at: new Date(1704067200 * 1000).toISOString(),
+      in_reply_to_id: null,
+    })
+  })
+
+  it('excludes comments without file_path', () => {
+    const comment: PrComment = {
+      ...basePrComment,
+      file_path: null,
+    }
+
+    const result = prCommentsToReviewComments([comment])
+
+    expect(result).toHaveLength(0)
+  })
+
+  it('excludes comments without line_number', () => {
+    const comment: PrComment = {
+      ...basePrComment,
+      line_number: null,
+    }
+
+    const result = prCommentsToReviewComments([comment])
+
+    expect(result).toHaveLength(0)
+  })
+
+  it('excludes issue_comment type', () => {
+    const comment: PrComment = {
+      ...basePrComment,
+      comment_type: 'issue_comment',
+      file_path: null,
+      line_number: null,
+    }
+
+    const result = prCommentsToReviewComments([comment])
+
+    expect(result).toHaveLength(0)
+  })
+
+  it('excludes review_body type', () => {
+    const comment: PrComment = {
+      ...basePrComment,
+      comment_type: 'review_body',
+      file_path: null,
+      line_number: null,
+    }
+
+    const result = prCommentsToReviewComments([comment])
+
+    expect(result).toHaveLength(0)
+  })
+
+  it('converts multiple inline comments', () => {
+    const comments: PrComment[] = [
+      basePrComment,
+      { ...basePrComment, id: 101, line_number: 20, body: 'Also this' },
+      { ...basePrComment, id: 102, file_path: 'src/other.ts', line_number: 5, body: 'And this' },
+    ]
+
+    const result = prCommentsToReviewComments(comments)
+
+    expect(result).toHaveLength(3)
+    expect(result[0].line).toBe(10)
+    expect(result[1].line).toBe(20)
+    expect(result[2].path).toBe('src/other.ts')
+  })
+
+  it('returns empty array for empty input', () => {
+    const result = prCommentsToReviewComments([])
+
+    expect(result).toHaveLength(0)
+  })
+
+  it('filters mix of inline and non-inline comments', () => {
+    const comments: PrComment[] = [
+      basePrComment,
+      { ...basePrComment, id: 101, comment_type: 'issue_comment', file_path: null, line_number: null },
+      { ...basePrComment, id: 102, comment_type: 'review_body', file_path: null, line_number: null },
+      { ...basePrComment, id: 103, line_number: 30, body: 'Another inline' },
+    ]
+
+    const result = prCommentsToReviewComments(comments)
+
+    expect(result).toHaveLength(2)
+    expect(result[0].id).toBe(100)
+    expect(result[1].id).toBe(103)
+  })
+
+  it('converts created_at from epoch seconds to ISO string', () => {
+    const comment: PrComment = {
+      ...basePrComment,
+      created_at: 1707993000, // 2024-02-15T10:30:00Z
+    }
+
+    const result = prCommentsToReviewComments([comment])
+
+    expect(result[0].created_at).toBe(new Date(1707993000 * 1000).toISOString())
+  })
+
+  it('result integrates correctly with buildExtendData', () => {
+    const prComments: PrComment[] = [basePrComment]
+    const reviewComments = prCommentsToReviewComments(prComments)
+
+    const extendData = buildExtendData('src/main.ts', reviewComments, [])
+
+    expect(extendData.newFile['10']).toBeDefined()
+    expect(extendData.newFile['10'].data.comments).toHaveLength(1)
+    expect(extendData.newFile['10'].data.comments[0].type).toBe('existing')
+    expect(extendData.newFile['10'].data.comments[0].author).toBe('reviewer')
+    expect(extendData.newFile['10'].data.comments[0].body).toBe('Looks good')
   })
 })
