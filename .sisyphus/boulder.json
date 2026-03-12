@@ -1,7 +1,7 @@
 {
-  "active_plan": "/Users/koen.vangeert/.openforge/worktrees/my-command-center/TCA-524/.sisyphus/plans/action-simplification.md",
-  "started_at": "2026-03-09T08:04:59.676Z",
-  "session_ids": ["ses_33bf2263effeOESSfXKbv3rShH"],
-  "plan_name": "action-simplification",
-  "worktree_path": "/Users/koen.vangeert/.openforge/worktrees/my-command-center/TCA-524"
+  "active_plan": "/Users/koen.vangeert/.openforge/worktrees/my-command-center/KVG-646/.sisyphus/plans/remove-vim-goto.md",
+  "started_at": "2026-03-12T17:13:28.355Z",
+  "session_ids": ["ses_31d0ecfecffedC73SBhdzLZqgC"],
+  "plan_name": "remove-vim-goto",
+  "worktree_path": "/Users/koen.vangeert/.openforge/worktrees/my-command-center/KVG-646"
 }

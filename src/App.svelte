@@ -31,7 +31,6 @@
   import type { Action } from './lib/types'
   import { release as releaseTerminal, isPtyActive, focusTerminal } from './lib/terminalPool'
   import { isInputFocused } from './lib/domUtils'
-  import { resolveGotoKey } from './lib/vimGoto'
 
   let unlisteners: UnlistenFn[] = []
   let showAddDialog = $state(false)
@@ -70,20 +69,6 @@
   let showActionPalette = $state(false)
   let actionPaletteActions = $state<Action[]>([])
   let workQueueRefreshTrigger = $state(0)
-  let pendingGoto = $state(false)
-  let gotoTimer: ReturnType<typeof setTimeout> | null = null
-
-  function clearPendingGoto() {
-    pendingGoto = false
-    if (gotoTimer) {
-      clearTimeout(gotoTimer)
-      gotoTimer = null
-    }
-  }
-
-  function isAnyModalOpen(): boolean {
-    return showAddDialog || showShortcutsDialog || showProjectSwitcher || showCommandPalette || showActionPalette || showProjectSetup
-  }
 
   let selectedTask = $derived($tasks.find(t => t.id === $selectedTaskId) || null)
 
@@ -374,30 +359,6 @@
       pushNavState()
       $currentView = 'workqueue'
       return
-    }
-
-    // Vim-style g-prefix view navigation (only when no input focused and no modals)
-    if (!isInputFocused() && !e.metaKey && !e.ctrlKey && !e.altKey) {
-      if (pendingGoto) {
-        clearPendingGoto()
-        // Don't resolve 'g' here — gg is handled by board's useVimNavigation
-        if (e.key !== 'g') {
-          const target = resolveGotoKey(e.key)
-          if (target) {
-            e.preventDefault()
-            handleNavigate(target)
-            return
-          }
-        }
-        return
-      }
-
-      if (e.key === 'g' && !isAnyModalOpen()) {
-        e.preventDefault()
-        pendingGoto = true
-        gotoTimer = setTimeout(clearPendingGoto, 500)
-        return
-      }
     }
   }
 
@@ -1022,10 +983,6 @@
       <div>
         <div class="font-mono text-xs text-secondary mb-3">// vim navigation</div>
         <div class="flex flex-col gap-2">
-          <div class="flex items-center justify-between">
-            <span class="text-sm text-base-content">Go to view</span>
-            <div class="flex gap-0.5"><kbd class="kbd kbd-sm">g</kbd><kbd class="kbd kbd-sm">b/p/s/c/w/,</kbd></div>
-          </div>
           <div class="flex items-center justify-between">
             <span class="text-sm text-base-content">Move down / up</span>
             <div class="flex gap-0.5"><kbd class="kbd kbd-sm">j</kbd><kbd class="kbd kbd-sm">k</kbd></div>
