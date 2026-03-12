@@ -91,7 +91,7 @@
   z-index: 0;
   overflow: hidden;
   border-color: transparent !important;
-  box-shadow: 0 0 12px -3px color-mix(in oklch, var(--color-success) 30%, transparent);
+  border-left: 3px solid var(--color-success) !important;
 }
 .running::before {
   content: '';
@@ -113,9 +113,11 @@
 .running::after {
   content: '';
   position: absolute;
-  inset: 2px;
+  top: 2px;
+  right: 0;
+  bottom: 0;
+  left: 0;
   background: var(--color-base-100);
-  border-radius: calc(0.25rem - 1px);
   z-index: -1;
 }
 .completed {
