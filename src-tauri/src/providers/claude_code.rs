@@ -148,7 +148,7 @@ impl ClaudeCodeProvider {
 
         if let Some(home) = dirs::home_dir() {
             for cmd in scan_commands_directory(&home.join(".claude").join("commands")) {
-                commands_map.entry(cmd.name.clone()).or_insert(cmd);
+                commands_map.insert(cmd.name.clone(), cmd);
             }
         }
 
@@ -196,29 +196,11 @@ impl ClaudeCodeProvider {
     }
 
     pub fn list_agents(&self, project_path: Option<&str>) -> Vec<crate::opencode_client::AgentInfo> {
-        let mut cache = self.discovery_cache.lock().unwrap();
-        if let Some(ref cached) = *cache {
-            return cached.agents.clone();
-        }
-
-        use crate::command_discovery::{resolve_active_plugins, scan_plugin_agents};
-        let _ = project_path;
-
-        let agents = if let Some(home) = dirs::home_dir() {
-            let active_plugins = resolve_active_plugins(&home);
-            let mut agents = scan_plugin_agents(&active_plugins);
-            agents.sort_by(|a, b| a.name.cmp(&b.name));
-            agents
-        } else {
-            vec![]
-        };
-
-        let result = agents.clone();
-        *cache = Some(crate::command_discovery::CachedDiscovery {
-            commands: vec![],
-            agents,
-        });
-        result
+        // Populate cache via list_commands (which scans both commands and agents together),
+        // then return agents from the now-populated cache.
+        let _ = self.list_commands(project_path);
+        let cache = self.discovery_cache.lock().unwrap();
+        cache.as_ref().map(|c| c.agents.clone()).unwrap_or_default()
     }
 }
 
