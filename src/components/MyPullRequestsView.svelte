@@ -120,7 +120,7 @@
       {#each [...groupedPrs.entries()] as [repo, prs]}
         <div class="mb-8">
           <h3 class="text-xs font-semibold text-base-content/50 m-0 mb-3 uppercase tracking-wider">{repo}</h3>
-          <div class="grid grid-cols-[repeat(auto-fill,minmax(340px,1fr))] gap-5 max-w-6xl">
+          <div class="grid grid-cols-[repeat(auto-fill,minmax(340px,1fr))] gap-5">
             {#each prs as pr}
               {@const flatIdx = flatPrList.indexOf(pr)}
               <div data-vim-authored-pr-item class={flatIdx === vim.focusedIndex ? 'vim-focus' : ''}>

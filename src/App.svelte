@@ -863,7 +863,7 @@
       </div>
     </header>
 
-    <main class="flex-1 overflow-hidden flex">
+    <main class="flex-1 overflow-hidden flex flex-col">
       {#if $currentView === 'settings'}
         <SettingsView onClose={() => { pushNavState(); $currentView = 'board' }} onProjectDeleted={loadProjects} />
       {:else if $currentView === 'pr_review'}
