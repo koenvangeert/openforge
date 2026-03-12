@@ -3,7 +3,6 @@ import type { AppView } from './types'
 const GOTO_MAP: Record<string, AppView> = {
   b: 'board',
   p: 'pr_review',
-  m: 'my_prs',
   s: 'skills',
   c: 'creatures',
   w: 'workqueue',

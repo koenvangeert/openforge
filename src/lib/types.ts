@@ -335,7 +335,7 @@ export interface AgentReviewComment {
 }
 
 /** App-level view for top-bar navigation */
-export type AppView = "board" | "pr_review" | "my_prs" | "skills" | "creatures" | "settings" | "workqueue";
+export type AppView = "board" | "pr_review" | "skills" | "creatures" | "settings" | "workqueue";
 
 export interface WorkQueueTask {
   id: string;
