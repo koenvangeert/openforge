@@ -371,7 +371,7 @@
       $currentView = 'workqueue'
       return
     }
-    if (e.metaKey && !e.shiftKey && e.key === 'b') {
+    if (e.metaKey && !e.shiftKey && e.key === 'h') {
       e.preventDefault()
       handleNavigate('board')
       return

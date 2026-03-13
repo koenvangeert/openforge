@@ -76,7 +76,7 @@ describe('IconRail', () => {
       commandHeld.set(true)
       render(IconRail, { props: { currentView: 'board' as AppView, onNavigate: vi.fn(), authoredPrCount: 0 } })
 
-      expect(screen.getByText('B')).toBeTruthy()
+      expect(screen.getByText('H')).toBeTruthy()
       expect(screen.getByText('G')).toBeTruthy()
       expect(screen.getByText('L')).toBeTruthy()
       expect(screen.getByText('R')).toBeTruthy()
@@ -89,7 +89,7 @@ describe('IconRail', () => {
       commandHeld.set(false)
       render(IconRail, { props: { currentView: 'board' as AppView, onNavigate: vi.fn(), authoredPrCount: 0 } })
 
-      expect(screen.queryByText('B')).toBeNull()
+      expect(screen.queryByText('H')).toBeNull()
       expect(screen.queryByText('G')).toBeNull()
     })
 
@@ -97,7 +97,7 @@ describe('IconRail', () => {
       commandHeld.set(true)
       render(IconRail, { props: { currentView: 'board' as AppView, onNavigate: vi.fn(), authoredPrCount: 0 } })
 
-      expect(screen.getByText('B')).toBeTruthy()  // board
+      expect(screen.getByText('H')).toBeTruthy()  // board (Home)
       expect(screen.getByText('G')).toBeTruthy()  // pr_review (Git)
       expect(screen.getByText('L')).toBeTruthy()  // skiLLs
       expect(screen.getByText('R')).toBeTruthy()  // woRkqueue
@@ -110,7 +110,7 @@ describe('IconRail', () => {
       commandHeld.set(true)
       render(IconRail, { props: { currentView: 'board' as AppView, onNavigate: vi.fn(), authoredPrCount: 0, modalsOpen: true } })
 
-      expect(screen.queryByText('B')).toBeNull()
+      expect(screen.queryByText('H')).toBeNull()
       expect(screen.queryByText('G')).toBeNull()
       expect(screen.queryByText('L')).toBeNull()
       expect(screen.queryByText('R')).toBeNull()

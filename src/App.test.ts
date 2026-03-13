@@ -239,14 +239,14 @@ describe('App onMount initialization order', () => {
       document.body.innerHTML = ''
     })
 
-    it('CMD+B navigates to board view', async () => {
+    it('CMD+H navigates to board view', async () => {
       const App = (await import('./App.svelte')).default
       const stores = await import('./lib/stores')
       const { get } = await import('svelte/store')
 
       render(App)
 
-      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'b', metaKey: true, bubbles: true }))
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'h', metaKey: true, bubbles: true }))
       expect(get(stores.currentView)).toBe('board')
     })
 

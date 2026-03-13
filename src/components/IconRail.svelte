@@ -14,7 +14,7 @@
   let { currentView, onNavigate, reviewRequestCount = 0, authoredPrCount = 0, modalsOpen = false }: Props = $props()
 
   const navItems: { view: AppView; Icon: typeof LayoutDashboard; shortcut: string }[] = [
-    { view: 'board', Icon: LayoutDashboard, shortcut: 'B' },
+    { view: 'board', Icon: LayoutDashboard, shortcut: 'H' },
     { view: 'pr_review', Icon: GitPullRequest, shortcut: 'G' },
     { view: 'skills', Icon: Sparkles, shortcut: 'L' },
     { view: 'workqueue', Icon: ListChecks, shortcut: 'R' },
