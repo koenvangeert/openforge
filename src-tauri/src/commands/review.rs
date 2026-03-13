@@ -235,7 +235,7 @@ pub async fn get_file_at_ref(
 
     let decoded = base64::Engine::decode(
         &base64::engine::general_purpose::STANDARD,
-        &content_b64.replace('\n', "")
+        content_b64.replace('\n', "")
     ).map_err(|e| format!("Base64 decode error: {}", e))?;
 
     String::from_utf8(decoded)
@@ -319,6 +319,7 @@ pub async fn get_pr_overview_comments(
 }
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub async fn submit_pr_review(
     _db: State<'_, Arc<Mutex<db::Database>>>,
     github_client: State<'_, GitHubClient>,

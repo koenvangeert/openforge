@@ -4,7 +4,7 @@ version = "0.0.1"
 description = "Open Forge - Desktop application for managing AI workflows"
 authors = ["OpenCode"]
 edition = "2021"
-rust-version = "1.60"
+rust-version = "1.77"
 
 [build-dependencies]
 tauri-build = { version = "2.5", features = [] }

@@ -56,7 +56,7 @@ Open Forge is a command center for AI-assisted development. You define coding ta
 
 ## Prerequisites
 
-- [Rust](https://rustup.rs/) (1.60+)
+- [Rust](https://rustup.rs/) (1.77+)
 - [Node.js](https://nodejs.org/) (20+) and [pnpm](https://pnpm.io/) (10+)
 - macOS with Xcode Command Line Tools (for Metal/Whisper support)
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) or [OpenCode](https://github.com/opencode-ai/opencode) installed

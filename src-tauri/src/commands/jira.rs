@@ -9,7 +9,7 @@ pub async fn refresh_jira_info(
     jira_client: State<'_, JiraClient>,
 ) -> Result<usize, String> {
     let jira_api_token = crate::secure_store::get_secret("jira_api_token")
-        .map_err(|e| format!("{}", e))?
+        .map_err(|e| e.to_string())?
         .ok_or("jira_api_token not configured".to_string())?;
     let (jira_base_url, jira_username) = {
         let db_lock = crate::db::acquire_db(&db);

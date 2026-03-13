@@ -47,7 +47,8 @@ pub async fn fetch_authored_prs(
 
     let current_ids: Vec<i64> = prs.iter().map(|pr| pr.id).collect();
 
-    let mut enriched: HashMap<i64, (i64, Option<String>, Option<String>, Option<String>)> =
+    type EnrichedPrData = (i64, Option<String>, Option<String>, Option<String>);
+    let mut enriched: HashMap<i64, EnrichedPrData> =
         HashMap::with_capacity(prs.len());
 
     for pr in &prs {

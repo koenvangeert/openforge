@@ -74,7 +74,6 @@ impl WhisperModelSize {
     pub fn spec(&self) -> ModelSpec {
         match self {
             WhisperModelSize::Tiny => ModelSpec {
-                size: *self,
                 display_name: "Tiny",
                 filename: "ggml-tiny.bin",
                 url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin",
@@ -83,7 +82,6 @@ impl WhisperModelSize {
                 ram_usage_mb: 390,
             },
             WhisperModelSize::Base => ModelSpec {
-                size: *self,
                 display_name: "Base",
                 filename: "ggml-base.bin",
                 url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin",
@@ -92,7 +90,6 @@ impl WhisperModelSize {
                 ram_usage_mb: 500,
             },
             WhisperModelSize::Small => ModelSpec {
-                size: *self,
                 display_name: "Small",
                 filename: "ggml-small.bin",
                 url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin",
@@ -101,7 +98,6 @@ impl WhisperModelSize {
                 ram_usage_mb: 1000,
             },
             WhisperModelSize::Medium => ModelSpec {
-                size: *self,
                 display_name: "Medium",
                 filename: "ggml-medium.bin",
                 url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium.bin",
@@ -135,7 +131,6 @@ impl fmt::Display for WhisperModelSize {
 
 /// Metadata for a specific Whisper model variant.
 pub struct ModelSpec {
-    pub size: WhisperModelSize,
     pub display_name: &'static str,
     pub filename: &'static str,
     pub url: &'static str,
@@ -207,8 +202,6 @@ pub enum WhisperError {
     InferenceError(String),
     /// Loading the WhisperContext from the model file failed.
     ContextLoadError(String),
-    /// Invalid model size string.
-    InvalidModelSize(String),
 }
 
 impl fmt::Display for WhisperError {
@@ -232,9 +225,6 @@ impl fmt::Display for WhisperError {
             }
             WhisperError::ContextLoadError(msg) => {
                 write!(f, "Failed to load Whisper context: {}", msg)
-            }
-            WhisperError::InvalidModelSize(s) => {
-                write!(f, "Invalid model size: {}", s)
             }
         }
     }
@@ -268,11 +258,6 @@ pub struct WhisperManager {
 }
 
 impl WhisperManager {
-    /// Create a new `WhisperManager` with "small" as the default active model.
-    pub fn new() -> Self {
-        Self::with_active_model(WhisperModelSize::Small)
-    }
-
     /// Create a new `WhisperManager` with a specific active model.
     pub fn with_active_model(size: WhisperModelSize) -> Self {
         Self {
@@ -625,12 +610,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_manager_new() {
-        let mgr = WhisperManager::new();
-        assert_eq!(mgr.get_active_model(), WhisperModelSize::Small);
-    }
-
-    #[test]
     fn test_manager_with_active_model() {
         let mgr = WhisperManager::with_active_model(WhisperModelSize::Tiny);
         assert_eq!(mgr.get_active_model(), WhisperModelSize::Tiny);
@@ -711,7 +690,7 @@ mod tests {
 
     #[test]
     fn test_get_model_status_returns_correct_info() {
-        let mgr = WhisperManager::new();
+        let mgr = WhisperManager::with_active_model(WhisperModelSize::Small);
         let status = mgr.get_model_status();
         assert_eq!(status.size, "small");
         assert_eq!(status.display_name, "Small");
@@ -721,7 +700,7 @@ mod tests {
 
     #[test]
     fn test_get_all_model_statuses() {
-        let mgr = WhisperManager::new();
+        let mgr = WhisperManager::with_active_model(WhisperModelSize::Small);
         let statuses = mgr.get_all_model_statuses();
         assert_eq!(statuses.len(), 4);
         assert_eq!(statuses[0].size, "tiny");
@@ -737,7 +716,7 @@ mod tests {
 
     #[test]
     fn test_set_active_model() {
-        let mgr = WhisperManager::new();
+        let mgr = WhisperManager::with_active_model(WhisperModelSize::Small);
         assert_eq!(mgr.get_active_model(), WhisperModelSize::Small);
 
         mgr.set_active_model(WhisperModelSize::Tiny);
@@ -783,14 +762,8 @@ mod tests {
     }
 
     #[test]
-    fn test_error_display_invalid_model_size() {
-        let e = WhisperError::InvalidModelSize("huge".to_string());
-        assert!(e.to_string().contains("huge"));
-    }
-
-    #[test]
     fn test_ensure_loaded_returns_not_found_when_missing() {
-        let mgr = WhisperManager::new();
+        let mgr = WhisperManager::with_active_model(WhisperModelSize::Small);
         // If the model is not on disk, ensure_loaded should return ModelNotFound.
         // (This test only passes in CI where the model is absent.)
         if WhisperManager::model_file_path_for(WhisperModelSize::Small)
@@ -814,7 +787,7 @@ mod tests {
             } else {
                 false
             };
-            let mgr = WhisperManager::new();
+            let mgr = WhisperManager::with_active_model(WhisperModelSize::Small);
             let status = mgr.get_model_status();
             assert!(status.downloaded);
             assert!(status.model_size_bytes.is_some());

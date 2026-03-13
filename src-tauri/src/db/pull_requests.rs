@@ -156,6 +156,7 @@ impl super::Database {
 
     /// Insert or update a pull request in the database
     /// Uses ON CONFLICT to preserve CI status columns (head_sha, ci_status, ci_check_runs)
+    #[allow(clippy::too_many_arguments)]
     pub fn insert_pull_request(
         &self,
         id: i64,

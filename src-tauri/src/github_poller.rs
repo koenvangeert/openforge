@@ -487,10 +487,10 @@ pub fn find_matching_task_ids(
     let mut seen = HashSet::new();
 
     for task_id in task_ids {
-        if contains_task_id(pr_title, task_id.as_str()) || contains_task_id(pr_branch, task_id.as_str()) {
-            if seen.insert(task_id.clone()) {
-                matched.push(task_id.clone());
-            }
+        if (contains_task_id(pr_title, task_id.as_str()) || contains_task_id(pr_branch, task_id.as_str()))
+            && seen.insert(task_id.clone())
+        {
+            matched.push(task_id.clone());
         }
     }
 
@@ -661,7 +661,8 @@ async fn poll_prs_for_project(
         return (0, 0, 0, 0);
     }
 
-    let pr_metadata: Vec<(i64, Option<i64>, Option<String>, Option<String>)> = {
+    type PrMetadata = (i64, Option<i64>, Option<String>, Option<String>);
+    let pr_metadata: Vec<PrMetadata> = {
         let db_lock = db.lock().unwrap();
         open_prs
             .iter()
@@ -792,7 +793,7 @@ async fn poll_prs_for_project(
                 let created_at = review
                     .submitted_at
                     .as_deref()
-                    .and_then(|ts| parse_github_timestamp(ts))
+                    .and_then(parse_github_timestamp)
                     .unwrap_or(now);
 
                 if let Err(e) = db_lock.insert_pr_comment(

@@ -3,6 +3,7 @@ use std::fmt;
 
 /// GitHub API error types
 #[derive(Debug)]
+#[allow(clippy::enum_variant_names)]
 pub enum GitHubError {
     /// Network error (connection failure, timeout, etc.)
     NetworkError(String),
@@ -33,10 +34,7 @@ mod tests {
     #[test]
     fn test_error_display() {
         let network_err = GitHubError::NetworkError("Connection timeout".to_string());
-        assert_eq!(
-            network_err.to_string(),
-            "Network error: Connection timeout"
-        );
+        assert_eq!(network_err.to_string(), "Network error: Connection timeout");
 
         let api_err = GitHubError::ApiError {
             status: 404,

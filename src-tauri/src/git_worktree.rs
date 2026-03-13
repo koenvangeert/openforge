@@ -1,8 +1,6 @@
 use dashmap::DashMap;
-use dirs;
 use once_cell::sync::Lazy;
 use regex::Regex;
-use serde::Serialize;
 use std::fmt;
 use std::io;
 use std::path::Path;
@@ -16,7 +14,6 @@ use tokio::sync::Mutex;
 
 #[derive(Debug)]
 pub enum GitWorktreeError {
-    NotARepository,
     WorktreeAddFailed(String),
     WorktreeRemoveFailed(String),
     CommandFailed(String),
@@ -26,9 +23,6 @@ pub enum GitWorktreeError {
 impl fmt::Display for GitWorktreeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            GitWorktreeError::NotARepository => {
-                write!(f, "Not a git repository")
-            }
             GitWorktreeError::WorktreeAddFailed(msg) => {
                 write!(f, "Failed to add worktree: {}", msg)
             }
@@ -56,13 +50,6 @@ impl From<io::Error> for GitWorktreeError {
 // ============================================================================
 // Data Structures
 // ============================================================================
-
-#[derive(Debug, Clone, Serialize)]
-pub struct WorktreeListEntry {
-    pub path: String,
-    pub branch: Option<String>,
-    pub head: Option<String>,
-}
 
 // ============================================================================
 // Per-Path Locking
@@ -409,68 +396,6 @@ pub async fn remove_worktree_with_branch(
     }
 
     Ok(())
-}
-
-/// Lists all worktrees for a given repository.
-/// Parses the output of `git worktree list --porcelain`.
-///
-/// # Arguments
-/// * `repo_path` - Path to the main git repository
-///
-/// # Returns
-/// A vector of `WorktreeListEntry` structs for each worktree
-pub async fn list_worktrees(repo_path: &Path) -> Result<Vec<WorktreeListEntry>, GitWorktreeError> {
-    let output = Command::new("git")
-        .arg("-C")
-        .arg(repo_path)
-        .arg("worktree")
-        .arg("list")
-        .arg("--porcelain")
-        .output()
-        .await?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(GitWorktreeError::CommandFailed(stderr.to_string()));
-    }
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let mut worktrees = Vec::new();
-    let mut current_entry = WorktreeListEntry {
-        path: String::new(),
-        branch: None,
-        head: None,
-    };
-
-    for line in stdout.lines() {
-        if line.starts_with("worktree ") {
-            if !current_entry.path.is_empty() {
-                worktrees.push(current_entry.clone());
-            }
-            current_entry = WorktreeListEntry {
-                path: line.strip_prefix("worktree ").unwrap_or("").to_string(),
-                branch: None,
-                head: None,
-            };
-        } else if line.starts_with("branch ") {
-            current_entry.branch = Some(line.strip_prefix("branch ").unwrap_or("").to_string());
-        } else if line.starts_with("HEAD ") {
-            current_entry.head = Some(line.strip_prefix("HEAD ").unwrap_or("").to_string());
-        } else if line.is_empty() && !current_entry.path.is_empty() {
-            worktrees.push(current_entry.clone());
-            current_entry = WorktreeListEntry {
-                path: String::new(),
-                branch: None,
-                head: None,
-            };
-        }
-    }
-
-    if !current_entry.path.is_empty() {
-        worktrees.push(current_entry);
-    }
-
-    Ok(worktrees)
 }
 
 // ============================================================================

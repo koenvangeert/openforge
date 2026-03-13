@@ -16,7 +16,6 @@ mod review_prompt;
 mod diff_parser;
 mod whisper_manager;
 mod http_server;
-mod plugin_installer;
 mod mcp_installer;
 mod claude_hooks;
 mod commands;

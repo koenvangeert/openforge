@@ -35,12 +35,6 @@ impl RingBuffer {
         }
     }
 
-    fn drain(&mut self) -> String {
-        let result = String::from_utf8_lossy(&self.data).to_string();
-        self.data.clear();
-        result
-    }
-
     fn snapshot(&self) -> String {
         String::from_utf8_lossy(&self.data).to_string()
     }
@@ -88,7 +82,6 @@ impl From<std::io::Error> for PtyError {
 // ============================================================================
 
 struct PtySession {
-    instance_id: u64,
     #[allow(dead_code)]
     child: Box<dyn portable_pty::Child + Send + Sync>,
     #[allow(dead_code)]
@@ -214,7 +207,6 @@ impl PtyManager {
         sessions.insert(
             task_id.to_string(),
             PtySession {
-                instance_id,
                 child,
                 master: pair.master,
                 writer,
@@ -385,6 +377,7 @@ impl PtyManager {
     ///
     /// # Returns
     /// The unique instance ID for this PTY session
+    #[allow(clippy::too_many_arguments)]
     pub async fn spawn_claude_pty(
         &self,
         task_id: &str,
@@ -472,7 +465,6 @@ impl PtyManager {
         sessions.insert(
             task_id.to_string(),
             PtySession {
-                instance_id,
                 child,
                 master: pair.master,
                 writer,
@@ -574,18 +566,16 @@ impl PtyManager {
                         match msg {
                             Some(Some(text)) => {
                                 buffer.push_str(&text);
-                                if buffer.len() >= MAX_BUFFER_SIZE {
-                                    if !buffer.is_empty() {
-                                        if let Ok(mut buf) = ring_buffer_emitter.lock() {
-                                            buf.push(buffer.as_bytes());
-                                        }
-                                        let event_name = format!("pty-output-{}", task_id_emitter);
-                                        let payload = serde_json::json!({ "task_id": &task_id_emitter, "data": &buffer });
-                                        if let Err(e) = app_handle.emit(&event_name, &payload) {
-                                            eprintln!("[PTY] Failed to emit {}: {}", event_name, e);
-                                        }
-                                        buffer.clear();
+                                if buffer.len() >= MAX_BUFFER_SIZE && !buffer.is_empty() {
+                                    if let Ok(mut buf) = ring_buffer_emitter.lock() {
+                                        buf.push(buffer.as_bytes());
                                     }
+                                    let event_name = format!("pty-output-{}", task_id_emitter);
+                                    let payload = serde_json::json!({ "task_id": &task_id_emitter, "data": &buffer });
+                                    if let Err(e) = app_handle.emit(&event_name, &payload) {
+                                        eprintln!("[PTY] Failed to emit {}: {}", event_name, e);
+                                    }
+                                    buffer.clear();
                                 }
                             }
                             Some(None) | None => {
@@ -700,7 +690,6 @@ impl PtyManager {
         sessions.insert(
             key.clone(),
             PtySession {
-                instance_id,
                 child,
                 master: pair.master,
                 writer,
@@ -802,18 +791,16 @@ impl PtyManager {
                         match msg {
                             Some(Some(text)) => {
                                 buffer.push_str(&text);
-                                if buffer.len() >= MAX_BUFFER_SIZE {
-                                    if !buffer.is_empty() {
-                                        if let Ok(mut buf) = ring_buffer_emitter.lock() {
-                                            buf.push(buffer.as_bytes());
-                                        }
-                                        let event_name = format!("pty-output-{}", key_emitter);
-                                        let payload = serde_json::json!({ "task_id": &key_emitter, "data": &buffer });
-                                        if let Err(e) = app_handle.emit(&event_name, &payload) {
-                                            eprintln!("[PTY] Failed to emit {}: {}", event_name, e);
-                                        }
-                                        buffer.clear();
+                                if buffer.len() >= MAX_BUFFER_SIZE && !buffer.is_empty() {
+                                    if let Ok(mut buf) = ring_buffer_emitter.lock() {
+                                        buf.push(buffer.as_bytes());
                                     }
+                                    let event_name = format!("pty-output-{}", key_emitter);
+                                    let payload = serde_json::json!({ "task_id": &key_emitter, "data": &buffer });
+                                    if let Err(e) = app_handle.emit(&event_name, &payload) {
+                                        eprintln!("[PTY] Failed to emit {}: {}", event_name, e);
+                                    }
+                                    buffer.clear();
                                 }
                             }
                             Some(None) | None => {
@@ -897,7 +884,7 @@ impl PtyManager {
         session
             .master
             .resize(size)
-            .map_err(|e| PtyError::IoError(io::Error::new(io::ErrorKind::Other, e.to_string())))?;
+            .map_err(|e| PtyError::IoError(io::Error::other(e.to_string())))?;
 
         Ok(())
     }
@@ -1290,7 +1277,7 @@ mod tests {
         let mut buf = RingBuffer::new(100);
         buf.push(b"hello");
         buf.push(b" world");
-        assert_eq!(buf.drain(), "hello world");
+        assert_eq!(buf.snapshot(), "hello world");
     }
 
     #[test]
@@ -1298,25 +1285,9 @@ mod tests {
         let mut buf = RingBuffer::new(5);
         buf.push(b"hello");
         buf.push(b"world");
-        let result = buf.drain();
+        let result = buf.snapshot();
         assert_eq!(result.len(), 5);
         assert_eq!(result, "world");
-    }
-
-    #[test]
-    fn test_ring_buffer_drain_clears() {
-        let mut buf = RingBuffer::new(100);
-        buf.push(b"data");
-        let first = buf.drain();
-        assert_eq!(first, "data");
-        let second = buf.drain();
-        assert_eq!(second, "");
-    }
-
-    #[test]
-    fn test_ring_buffer_empty_drain() {
-        let mut buf = RingBuffer::new(100);
-        assert_eq!(buf.drain(), "");
     }
 
     #[tokio::test]
@@ -1570,44 +1541,6 @@ mod tests {
     }
 
     #[test]
-    fn test_ring_buffer_concurrent_write_and_drain() {
-        use std::sync::{Arc, Mutex as StdMutex};
-        use std::thread;
-
-        let buffer = Arc::new(StdMutex::new(RingBuffer::new(1024)));
-        let mut write_handles = vec![];
-
-        for i in 0..4 {
-            let buf_clone = Arc::clone(&buffer);
-            let handle = thread::spawn(move || {
-                for j in 0..25 {
-                    let data = format!("t{}-c{} ", i, j);
-                    let mut buf = buf_clone.lock().unwrap();
-                    buf.push(data.as_bytes());
-                }
-            });
-            write_handles.push(handle);
-        }
-
-        let buf_drain = Arc::clone(&buffer);
-        let drain_handle = thread::spawn(move || {
-            for _ in 0..5 {
-                let mut buf = buf_drain.lock().unwrap();
-                buf.drain();
-            }
-        });
-
-        for handle in write_handles {
-            handle.join().expect("writer thread panicked");
-        }
-        drain_handle.join().expect("drain thread panicked");
-
-        let mut buf = buffer.lock().unwrap();
-        let remaining = buf.drain();
-        assert!(remaining.len() <= 1024, "Ring buffer must not exceed capacity");
-    }
-
-    #[test]
     fn test_freeze_detection_with_ring_buffer() {
         let mut ring_buf = RingBuffer::new(512);
         ring_buf.push(b"Claude is processing...\n");
@@ -1619,14 +1552,12 @@ mod tests {
         let frozen = frozen_seconds(last_output_ms, now_ms);
         assert_eq!(frozen, Some(20));
 
-        let buffered = ring_buf.drain();
+        let buffered = ring_buf.snapshot();
         assert!(buffered.contains("Claude is processing"));
         assert!(buffered.contains("Tool call: bash"));
 
-        assert_eq!(ring_buf.drain(), "", "Ring buffer empty after drain");
-
         let still_frozen = frozen_seconds(last_output_ms, now_ms);
-        assert_eq!(still_frozen, Some(20), "Freeze detection unaffected by ring buffer drain");
+        assert_eq!(still_frozen, Some(20), "Freeze detection unaffected by ring buffer snapshot");
 
         let recent_output = now_ms - 5_000;
         assert!(frozen_seconds(recent_output, now_ms).is_none());
@@ -1677,10 +1608,6 @@ mod tests {
         assert_eq!(snap1, "hello world");
         let snap2 = buf.snapshot();
         assert_eq!(snap2, "hello world", "snapshot must not clear buffer");
-        let drained = buf.drain();
-        assert_eq!(drained, "hello world");
-        let snap3 = buf.snapshot();
-        assert_eq!(snap3, "", "snapshot after drain should be empty");
     }
 
     #[test]

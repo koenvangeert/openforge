@@ -51,6 +51,7 @@ impl ClaudeCodeProvider {
         Ok(ProviderSessionResult { port: 0, opencode_session_id: None })
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn resume(
         &self,
         task_id: &str,

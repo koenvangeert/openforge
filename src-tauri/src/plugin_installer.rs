@@ -2,6 +2,7 @@ use std::fs;
 use std::path::PathBuf;
 
 /// The create_task tool source code as a constant
+#[allow(dead_code)]
 const CREATE_TASK_TOOL: &str = r#"import { tool } from "@opencode-ai/plugin"
 
 export default tool({
@@ -42,6 +43,7 @@ export default tool({
 "#;
 
 /// Get the global OpenCode tools directory
+#[allow(dead_code)]
 fn get_opencode_tools_dir() -> Option<PathBuf> {
     dirs::config_dir().map(|config| config.join("opencode").join("tools"))
 }
@@ -50,6 +52,7 @@ fn get_opencode_tools_dir() -> Option<PathBuf> {
 ///
 /// This function checks if the create_task tool is already installed.
 /// If not, it creates the directory structure and writes the tool file.
+#[allow(dead_code)]
 pub fn install_create_task_plugin() -> Result<(), Box<dyn std::error::Error>> {
     let tools_dir = get_opencode_tools_dir().ok_or("Could not determine config directory")?;
 

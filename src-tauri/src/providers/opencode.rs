@@ -54,6 +54,7 @@ impl OpenCodeProvider {
         })
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn resume(
         &self,
         task_id: &str,

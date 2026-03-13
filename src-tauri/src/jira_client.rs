@@ -105,203 +105,6 @@ impl JiraClient {
         Ok(search_response.issues)
     }
 
-    /// Get detailed information about a specific issue
-    ///
-    /// # Arguments
-    /// * `base_url` - JIRA instance base URL
-    /// * `email` - JIRA account email
-    /// * `api_token` - JIRA API token
-    /// * `key` - Issue key (e.g., "PROJ-123")
-    ///
-    /// # Returns
-    /// JiraIssue with full details on success
-    ///
-    /// # Example
-    /// ```no_run
-    /// # use jira_client::JiraClient;
-    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let client = JiraClient::new();
-    /// let issue = client.get_ticket_details(
-    ///     "https://example.atlassian.net",
-    ///     "user@example.com",
-    ///     "api_token_here",
-    ///     "PROJ-123"
-    /// ).await?;
-    /// # Ok(())
-    /// # }
-    /// ```
-    pub async fn get_ticket_details(
-        &self,
-        base_url: &str,
-        email: &str,
-        api_token: &str,
-        key: &str,
-    ) -> Result<JiraIssue, JiraError> {
-        let url = format!("{}/rest/api/3/issue/{}", base_url, key);
-        let auth_header = create_basic_auth_header(email, api_token);
-
-        let response = self
-            .client
-            .get(&url)
-            .header("Authorization", auth_header)
-            .query(&[("expand", "renderedFields")])
-            .send()
-            .await
-            .map_err(|e| JiraError::NetworkError(e.to_string()))?;
-
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response
-                .text()
-                .await
-                .unwrap_or_else(|_| "Unable to read response body".to_string());
-            return Err(JiraError::ApiError {
-                status: status.as_u16(),
-                message: body,
-            });
-        }
-
-        let issue: JiraIssue = response
-            .json()
-            .await
-            .map_err(|e| JiraError::ParseError(e.to_string()))?;
-
-        Ok(issue)
-    }
-
-    /// Transition an issue to a new status
-    ///
-    /// # Arguments
-    /// * `base_url` - JIRA instance base URL
-    /// * `email` - JIRA account email
-    /// * `api_token` - JIRA API token
-    /// * `key` - Issue key (e.g., "PROJ-123")
-    /// * `transition_id` - Transition ID (get from get_available_transitions)
-    ///
-    /// # Returns
-    /// Ok(()) on success
-    ///
-    /// # Example
-    /// ```no_run
-    /// # use jira_client::JiraClient;
-    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let client = JiraClient::new();
-    /// client.transition_ticket(
-    ///     "https://example.atlassian.net",
-    ///     "user@example.com",
-    ///     "api_token_here",
-    ///     "PROJ-123",
-    ///     "31"  // Transition ID for "In Progress"
-    /// ).await?;
-    /// # Ok(())
-    /// # }
-    /// ```
-    pub async fn transition_ticket(
-        &self,
-        base_url: &str,
-        email: &str,
-        api_token: &str,
-        key: &str,
-        transition_id: &str,
-    ) -> Result<(), JiraError> {
-        let url = format!("{}/rest/api/3/issue/{}/transitions", base_url, key);
-        let auth_header = create_basic_auth_header(email, api_token);
-
-        let request_body = TransitionRequest {
-            transition: TransitionId {
-                id: transition_id.to_string(),
-            },
-        };
-
-        let response = self
-            .client
-            .post(&url)
-            .header("Authorization", auth_header)
-            .json(&request_body)
-            .send()
-            .await
-            .map_err(|e| JiraError::NetworkError(e.to_string()))?;
-
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response
-                .text()
-                .await
-                .unwrap_or_else(|_| "Unable to read response body".to_string());
-            return Err(JiraError::ApiError {
-                status: status.as_u16(),
-                message: body,
-            });
-        }
-
-        Ok(())
-    }
-
-    /// Get available transitions for an issue
-    ///
-    /// # Arguments
-    /// * `base_url` - JIRA instance base URL
-    /// * `email` - JIRA account email
-    /// * `api_token` - JIRA API token
-    /// * `key` - Issue key (e.g., "PROJ-123")
-    ///
-    /// # Returns
-    /// Vector of available transitions with their IDs and names
-    ///
-    /// # Example
-    /// ```no_run
-    /// # use jira_client::JiraClient;
-    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let client = JiraClient::new();
-    /// let transitions = client.get_available_transitions(
-    ///     "https://example.atlassian.net",
-    ///     "user@example.com",
-    ///     "api_token_here",
-    ///     "PROJ-123"
-    /// ).await?;
-    /// for t in transitions {
-    ///     println!("Transition: {} (ID: {})", t.name, t.id);
-    /// }
-    /// # Ok(())
-    /// # }
-    /// ```
-    pub async fn get_available_transitions(
-        &self,
-        base_url: &str,
-        email: &str,
-        api_token: &str,
-        key: &str,
-    ) -> Result<Vec<JiraTransition>, JiraError> {
-        let url = format!("{}/rest/api/3/issue/{}/transitions", base_url, key);
-        let auth_header = create_basic_auth_header(email, api_token);
-
-        let response = self
-            .client
-            .get(&url)
-            .header("Authorization", auth_header)
-            .send()
-            .await
-            .map_err(|e| JiraError::NetworkError(e.to_string()))?;
-
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response
-                .text()
-                .await
-                .unwrap_or_else(|_| "Unable to read response body".to_string());
-            return Err(JiraError::ApiError {
-                status: status.as_u16(),
-                message: body,
-            });
-        }
-
-        let transitions_response: TransitionsResponse = response
-            .json()
-            .await
-            .map_err(|e| JiraError::ParseError(e.to_string()))?;
-
-        Ok(transitions_response.transitions)
-    }
 }
 
 impl Default for JiraClient {
@@ -318,8 +121,6 @@ impl Default for JiraClient {
 #[derive(Debug, Deserialize)]
 pub struct SearchResponse {
     pub issues: Vec<JiraIssue>,
-    #[serde(flatten)]
-    pub extra: serde_json::Value,
 }
 
 /// JIRA issue representation
@@ -385,39 +186,13 @@ pub struct JiraPriority {
     pub extra: serde_json::Value,
 }
 
-/// Request body for transitioning an issue
-#[derive(Debug, Serialize)]
-struct TransitionRequest {
-    transition: TransitionId,
-}
-
-/// Transition ID wrapper
-#[derive(Debug, Serialize)]
-struct TransitionId {
-    id: String,
-}
-
-/// Response from get transitions endpoint
-#[derive(Debug, Deserialize)]
-struct TransitionsResponse {
-    transitions: Vec<JiraTransition>,
-}
-
-/// Available transition for an issue
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct JiraTransition {
-    pub id: String,
-    pub name: String,
-    #[serde(flatten)]
-    pub extra: serde_json::Value,
-}
-
 // ============================================================================
 // Error Types
 // ============================================================================
 
 /// JIRA API error types
 #[derive(Debug)]
+#[allow(clippy::enum_variant_names)]
 pub enum JiraError {
     /// Network error (connection failure, timeout, etc.)
     NetworkError(String),
@@ -488,18 +263,6 @@ mod tests {
         let encoded = base64_encode(input);
         // Verify it's valid base64 (should not contain invalid chars)
         assert!(encoded.chars().all(|c| c.is_alphanumeric() || c == '+' || c == '/' || c == '='));
-    }
-
-    #[test]
-    fn test_transition_request_serialization() {
-        let request = TransitionRequest {
-            transition: TransitionId {
-                id: "31".to_string(),
-            },
-        };
-        let json = serde_json::to_string(&request).unwrap();
-        assert!(json.contains("\"transition\""));
-        assert!(json.contains("\"id\":\"31\""));
     }
 
     #[test]

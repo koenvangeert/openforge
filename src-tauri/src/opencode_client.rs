@@ -15,12 +15,11 @@
 //! Default: http://localhost:4096
 //! Configurable via OpenCodeClient::with_base_url(base_url)
 
-use reqwest::{Client, Response};
+use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::error::Error as StdError;
 use std::fmt;
-use tokio_stream::Stream;
 
 /// Default OpenCode server base URL
 pub const DEFAULT_BASE_URL: &str = "http://localhost:4096";
@@ -152,49 +151,6 @@ impl OpenCodeClient {
             .map_err(|e| OpenCodeError::ParseError(e.to_string()))?;
 
         Ok(json_response)
-    }
-
-    /// Subscribe to server-sent events
-    ///
-    /// # Returns
-    /// Stream of bytes from the SSE endpoint
-    ///
-    /// # Example
-    /// ```no_run
-    /// # use opencode_client::OpenCodeClient;
-    /// # use tokio_stream::StreamExt;
-    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let client = OpenCodeClient::new();
-    /// let mut stream = client.subscribe_events().await?;
-    /// while let Some(chunk) = stream.next().await {
-    ///     // Process SSE chunk
-    /// }
-    /// # Ok(())
-    /// # }
-    /// ```
-    pub async fn subscribe_events(&self) -> Result<EventStream, OpenCodeError> {
-        let url = format!("{}/event", self.base_url);
-
-        let response = self
-            .client
-            .get(&url)
-            .send()
-            .await
-            .map_err(|e| OpenCodeError::NetworkError(e.to_string()))?;
-
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response
-                .text()
-                .await
-                .unwrap_or_else(|_| "Unable to read response body".to_string());
-            return Err(OpenCodeError::ApiError {
-                status: status.as_u16(),
-                message: body,
-            });
-        }
-
-        Ok(EventStream { response })
     }
 
     /// Send a prompt asynchronously (fire-and-forget)
@@ -424,43 +380,6 @@ impl OpenCodeClient {
         Ok(messages)
     }
 
-    /// Get session information
-    ///
-    /// # Arguments
-    /// * `session_id` - Session ID
-    ///
-    /// # Returns
-    /// Session information including status
-    pub async fn get_session(&self, session_id: &str) -> Result<SessionInfo, OpenCodeError> {
-        let url = format!("{}/session/{}", self.base_url, session_id);
-
-        let response = self
-            .client
-            .get(&url)
-            .send()
-            .await
-            .map_err(|e| OpenCodeError::NetworkError(e.to_string()))?;
-
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response
-                .text()
-                .await
-                .unwrap_or_else(|_| "Unable to read response body".to_string());
-            return Err(OpenCodeError::ApiError {
-                status: status.as_u16(),
-                message: body,
-            });
-        }
-
-        let session: SessionInfo = response
-            .json()
-            .await
-            .map_err(|e| OpenCodeError::ParseError(e.to_string()))?;
-
-        Ok(session)
-    }
-
     /// Get child sessions of a parent session
     ///
     /// # Arguments
@@ -536,18 +455,6 @@ impl OpenCodeClient {
 impl Default for OpenCodeClient {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-/// Server-sent events stream wrapper
-pub struct EventStream {
-    response: Response,
-}
-
-impl EventStream {
-    /// Get the underlying byte stream
-    pub fn into_stream(self) -> impl Stream<Item = Result<bytes::Bytes, reqwest::Error>> {
-        self.response.bytes_stream()
     }
 }
 
@@ -652,6 +559,7 @@ pub struct SessionStatusInfo {
 
 /// OpenCode API errors
 #[derive(Debug)]
+#[allow(clippy::enum_variant_names)]
 pub enum OpenCodeError {
     /// Network error (connection failed, timeout, etc.)
     NetworkError(String),

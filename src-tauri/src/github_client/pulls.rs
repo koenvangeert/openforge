@@ -279,61 +279,6 @@ impl GitHubClient {
         Ok(all_comments)
     }
 
-    /// Post a comment on a pull request
-    pub async fn post_pr_comment(
-        &self,
-        owner: &str,
-        repo: &str,
-        pr_number: i64,
-        body: &str,
-        token: &str,
-    ) -> Result<(), GitHubError> {
-        let url = format!(
-            "https://api.github.com/repos/{}/{}/issues/{}/comments",
-            owner, repo, pr_number
-        );
-
-        let request_body = CommentRequest {
-            body: body.to_string(),
-        };
-
-        let response = self
-            .client
-            .post(&url)
-            .header("Authorization", format!("token {}", token))
-            .header("User-Agent", "openforge")
-            .json(&request_body)
-            .send()
-            .await
-            .map_err(|e| GitHubError::NetworkError(e.to_string()))?;
-
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response
-                .text()
-                .await
-                .unwrap_or_else(|_| "Unable to read response body".to_string());
-            return Err(GitHubError::ApiError {
-                status: status.as_u16(),
-                message: body,
-            });
-        }
-
-        Ok(())
-    }
-
-    /// Get pull request status
-    pub async fn get_pr_status(
-        &self,
-        owner: &str,
-        repo: &str,
-        pr_number: i64,
-        token: &str,
-    ) -> Result<String, GitHubError> {
-        let pr = self.get_pr_details(owner, repo, pr_number, token).await?;
-        Ok(pr.state)
-    }
-
     /// List all open pull requests for a repository
     pub async fn list_open_prs(
         &self,
@@ -651,7 +596,7 @@ impl GitHubClient {
 
         // Decode base64 content
         let decoded = general_purpose::STANDARD
-            .decode(&blob.content.replace('\n', ""))
+            .decode(blob.content.replace('\n', ""))
             .map_err(|e| GitHubError::ParseError(format!("Base64 decode error: {}", e)))?;
 
         let content = String::from_utf8(decoded)

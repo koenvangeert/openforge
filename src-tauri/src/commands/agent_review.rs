@@ -3,6 +3,7 @@ use tauri::State;
 use crate::{db, opencode_client::OpenCodeClient, server_manager::ServerManager, sse_bridge::SseBridgeManager, git_worktree, review_prompt};
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub async fn start_agent_review(
     db: State<'_, Arc<Mutex<db::Database>>>,
     server_mgr: State<'_, ServerManager>,

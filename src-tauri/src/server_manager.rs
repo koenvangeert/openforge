@@ -58,7 +58,6 @@ struct ManagedServer {
     child: Child,
     port: u16,
     pid: u32,
-    worktree_path: PathBuf,
 }
 
 // ============================================================================
@@ -129,7 +128,6 @@ impl ServerManager {
                 child,
                 port,
                 pid,
-                worktree_path: worktree_path.to_path_buf(),
             },
         );
 

@@ -68,6 +68,7 @@ impl Provider {
     }
 
     /// Resume an existing session (used at startup to re-attach to in-progress agents).
+    #[allow(clippy::too_many_arguments)]
     pub async fn resume(
         &self,
         task_id: &str,
