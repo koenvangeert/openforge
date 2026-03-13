@@ -1,7 +1,7 @@
 <script lang="ts">
   import { tick, onMount } from 'svelte'
-  import type { Task, KanbanColumn, PermissionMode } from '../lib/types'
-  import { createTask, updateTask, getProjectConfig, getAgents } from '../lib/ipc'
+  import type { Task, KanbanColumn, PermissionMode, AutocompleteAgentInfo } from '../lib/types'
+  import { createTask, updateTask, getProjectConfig, listOpenCodeAgents } from '../lib/ipc'
   import { activeProjectId } from '../lib/stores'
   import Modal from './Modal.svelte'
 
@@ -22,7 +22,7 @@
   let selectedAgent = $state('')
   let selectedPermissionMode = $state<PermissionMode>('default')
   let aiProvider = $state<string | null>(null)
-  let availableAgents = $state<string[]>([])
+  let availableAgents = $state<AutocompleteAgentInfo[]>([])
 
   // Focus the title input after Modal's own focus effect has run
   $effect(() => {
@@ -35,12 +35,14 @@
     if ($activeProjectId) {
       const provider = await getProjectConfig($activeProjectId, 'ai_provider')
       aiProvider = provider ?? 'claude-code'
+      try {
+        const agents = await listOpenCodeAgents($activeProjectId)
+        availableAgents = agents.filter(a => !a.hidden)
+      } catch {
+        availableAgents = []
+      }
     } else {
       aiProvider = 'claude-code'
-    }
-    if (aiProvider !== 'claude-code') {
-      const agents = await getAgents()
-      availableAgents = agents.map(a => a.name)
     }
   })
 
@@ -131,7 +133,9 @@
               <option value="dontAsk" class="text-error">Don't Ask (dangerous)</option>
             </select>
           </label>
-        {:else if aiProvider !== null}
+        {/if}
+
+        {#if aiProvider !== null && (aiProvider !== 'claude-code' || availableAgents.length > 0)}
           <label class="flex flex-col gap-1.5">
             <span class="text-xs text-base-content/60 font-medium">Agent</span>
             <select
@@ -140,7 +144,7 @@
             >
               <option value="">Default</option>
               {#each availableAgents as agent}
-                <option value={agent}>{agent}</option>
+                <option value={agent.name}>{agent.name}</option>
               {/each}
             </select>
           </label>

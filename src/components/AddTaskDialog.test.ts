@@ -23,7 +23,10 @@ vi.mock('../lib/ipc', () => ({
   } as Task),
   updateTask: vi.fn().mockResolvedValue(undefined),
   getProjectConfig: vi.fn().mockResolvedValue('claude-code'),
-  getAgents: vi.fn().mockResolvedValue([{ name: 'agent-1' }, { name: 'agent-2' }]),
+  listOpenCodeAgents: vi.fn().mockResolvedValue([
+    { name: 'agent-1', hidden: false, mode: null },
+    { name: 'agent-2', hidden: false, mode: null },
+  ]),
 }))
 
 vi.mock('../lib/stores', () => {
@@ -33,7 +36,7 @@ vi.mock('../lib/stores', () => {
   }
 })
 
-import { createTask, updateTask, getProjectConfig, getAgents } from '../lib/ipc'
+import { createTask, updateTask, getProjectConfig, listOpenCodeAgents } from '../lib/ipc'
 
 const mockTask: Task = {
   id: 'T-42',
@@ -57,7 +60,10 @@ describe('AddTaskDialog', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(getProjectConfig).mockResolvedValue('claude-code')
-    vi.mocked(getAgents).mockResolvedValue([{ name: 'agent-1' }, { name: 'agent-2' }])
+    vi.mocked(listOpenCodeAgents).mockResolvedValue([
+      { name: 'agent-1', hidden: false, mode: null },
+      { name: 'agent-2', hidden: false, mode: null },
+    ])
   })
 
   it('renders in create mode with empty fields', () => {
@@ -140,11 +146,25 @@ describe('AddTaskDialog', () => {
     })
   })
 
-  it('hides agent dropdown when ai_provider is claude-code', async () => {
+  it('shows agent dropdown when ai_provider is claude-code and agents exist', async () => {
     vi.mocked(getProjectConfig).mockResolvedValue('claude-code')
+    vi.mocked(listOpenCodeAgents).mockResolvedValue([
+      { name: 'agent-1', hidden: false, mode: null },
+    ])
     render(AddTaskDialog, { props: { mode: 'create' } })
 
     await waitFor(() => {
+      expect(screen.queryByLabelText('Agent')).toBeTruthy()
+    })
+  })
+
+  it('hides agent dropdown when ai_provider is claude-code and no agents', async () => {
+    vi.mocked(getProjectConfig).mockResolvedValue('claude-code')
+    vi.mocked(listOpenCodeAgents).mockResolvedValue([])
+    render(AddTaskDialog, { props: { mode: 'create' } })
+
+    await waitFor(() => {
+      expect(screen.queryByLabelText('Permission Mode')).toBeTruthy()
       expect(screen.queryByLabelText('Agent')).toBeNull()
     })
   })
@@ -164,6 +184,34 @@ describe('AddTaskDialog', () => {
 
     await waitFor(() => {
       expect(screen.queryByLabelText('Permission Mode')).toBeNull()
+    })
+  })
+
+  it('filters out hidden agents from the dropdown', async () => {
+    vi.mocked(getProjectConfig).mockResolvedValue('opencode')
+    vi.mocked(listOpenCodeAgents).mockResolvedValue([
+      { name: 'visible-agent', hidden: false, mode: null },
+      { name: 'hidden-agent', hidden: true, mode: null },
+      { name: 'null-hidden-agent', hidden: null, mode: null },
+    ])
+    render(AddTaskDialog, { props: { mode: 'create' } })
+
+    await waitFor(() => {
+      expect(screen.queryByLabelText('Agent')).toBeTruthy()
+    })
+    const agentSelect = screen.getByLabelText('Agent') as HTMLSelectElement
+    const options = Array.from(agentSelect.options).map(o => o.textContent)
+    expect(options).toContain('visible-agent')
+    expect(options).toContain('null-hidden-agent')
+    expect(options).not.toContain('hidden-agent')
+  })
+
+  it('uses listOpenCodeAgents with project ID', async () => {
+    vi.mocked(getProjectConfig).mockResolvedValue('opencode')
+    render(AddTaskDialog, { props: { mode: 'create' } })
+
+    await waitFor(() => {
+      expect(listOpenCodeAgents).toHaveBeenCalledWith('test-project-id')
     })
   })
 })

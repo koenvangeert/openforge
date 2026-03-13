@@ -3,7 +3,7 @@
   import { listen } from '@tauri-apps/api/event'
   import type { UnlistenFn, Event } from '@tauri-apps/api/event'
   import { tasks, selectedTaskId, activeSessions, checkpointNotification, ciFailureNotification, ticketPrs, error, isLoading, projects, activeProjectId, currentView, reviewRequestCount, authoredPrCount, projectAttention, taskSpawned, selectedSkillName, startingTasks, codeCleanupTasksEnabled } from './lib/stores'
-  import { getProjects, getTasksForProject, getPullRequests, startImplementation, getSessionStatus, getLatestSession, getLatestSessions, forceGithubSync, createTask, updateTask, updateTaskStatus, deleteTask, getProjectAttention, getAppMode, finalizeClaudeSession, getConfig, getProjectConfig, getAgents, getReviewPrs, getAuthoredPrs } from './lib/ipc'
+  import { getProjects, getTasksForProject, getPullRequests, startImplementation, getSessionStatus, getLatestSession, getLatestSessions, forceGithubSync, createTask, updateTask, updateTaskStatus, deleteTask, getProjectAttention, getAppMode, finalizeClaudeSession, getConfig, getProjectConfig, listOpenCodeAgents, getReviewPrs, getAuthoredPrs } from './lib/ipc'
   import { writePtyWithSubmit } from './lib/ptySubmit'
   import SearchableSelect from './components/SearchableSelect.svelte'
   import type { Task, PullRequestInfo, AgentEvent, ProjectAttention, AppView, PermissionMode } from './lib/types'
@@ -50,9 +50,9 @@
         provider = await getProjectConfig($activeProjectId, 'ai_provider')
       }
       dialogAiProvider = provider ?? 'claude-code'
-      if (dialogAiProvider !== 'claude-code') {
-        const agents = await getAgents()
-        dialogAgents = agents.map(a => a.name)
+      if ($activeProjectId) {
+        const agents = await listOpenCodeAgents($activeProjectId)
+        dialogAgents = agents.filter(a => !a.hidden).map(a => a.name)
       } else {
         dialogAgents = []
       }
@@ -880,7 +880,8 @@
                       <option value="dontAsk">Don't Ask (dangerous)</option>
                     </select>
                   </div>
-                {:else if !editingTask && dialogAiProvider !== 'claude-code' && dialogAgents.length > 0}
+                {/if}
+                {#if !editingTask && dialogAgents.length > 0}
                   <div class="flex items-center gap-2">
                     <span class="text-xs text-base-content/50 font-medium shrink-0">Agent</span>
                     <div class="flex-1">
