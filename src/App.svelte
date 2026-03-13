@@ -2,7 +2,7 @@
   import { onMount, onDestroy } from 'svelte'
   import { listen } from '@tauri-apps/api/event'
   import type { UnlistenFn, Event } from '@tauri-apps/api/event'
-  import { tasks, selectedTaskId, activeSessions, checkpointNotification, ciFailureNotification, ticketPrs, error, isLoading, projects, activeProjectId, currentView, reviewRequestCount, authoredPrCount, projectAttention, taskSpawned, selectedSkillName, startingTasks, codeCleanupTasksEnabled } from './lib/stores'
+  import { tasks, selectedTaskId, activeSessions, checkpointNotification, ciFailureNotification, ticketPrs, error, isLoading, projects, activeProjectId, currentView, reviewRequestCount, authoredPrCount, projectAttention, taskSpawned, startingTasks, codeCleanupTasksEnabled } from './lib/stores'
   import { getProjects, getTasksForProject, getPullRequests, startImplementation, getSessionStatus, getLatestSession, getLatestSessions, forceGithubSync, createTask, updateTask, updateTaskStatus, deleteTask, getProjectAttention, getAppMode, finalizeClaudeSession, getConfig, getProjectConfig, getAgents, getReviewPrs, getAuthoredPrs } from './lib/ipc'
   import { writePtyWithSubmit } from './lib/ptySubmit'
   import SearchableSelect from './components/SearchableSelect.svelte'
@@ -19,7 +19,7 @@
   import CheckpointToast from './components/CheckpointToast.svelte'
   import CiFailureToast from './components/CiFailureToast.svelte'
   import TaskSpawnedToast from './components/TaskSpawnedToast.svelte'
-  import ProjectSwitcher from './components/ProjectSwitcher.svelte'
+  import ProjectSidebar from './components/ProjectSidebar.svelte'
   import ProjectSwitcherModal from './components/ProjectSwitcherModal.svelte'
   import ProjectSetupDialog from './components/ProjectSetupDialog.svelte'
   import IconRail from './components/IconRail.svelte'
@@ -30,7 +30,6 @@
   import { loadActions, getEnabledActions } from './lib/actions'
   import type { Action } from './lib/types'
   import { release as releaseTerminal, isPtyActive, focusTerminal } from './lib/terminalPool'
-  import { isInputFocused } from './lib/domUtils'
 
   let unlisteners: UnlistenFn[] = []
   let showAddDialog = $state(false)
@@ -752,6 +751,7 @@
 
 <div class="flex h-screen overflow-hidden bg-base-200">
   <IconRail currentView={$currentView} onNavigate={handleNavigate} reviewRequestCount={$reviewRequestCount} authoredPrCount={$authoredPrCount} />
+  <ProjectSidebar onNewProject={() => showProjectSetup = true} />
 
   <div class="flex flex-col flex-1 min-w-0">
     <header class="bg-neutral text-neutral-content h-12 flex items-center justify-between px-6 shrink-0">
@@ -763,7 +763,6 @@
         {#if appMode === 'dev'}
           <span class="badge badge-sm bg-primary text-black font-mono">DEV</span>
         {/if}
-        <ProjectSwitcher onNewProject={() => showProjectSetup = true} />
         <button
           type="button"
           class="btn btn-sm bg-primary text-black hover:bg-primary/80 font-mono"
