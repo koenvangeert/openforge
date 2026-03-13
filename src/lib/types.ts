@@ -131,6 +131,7 @@ export interface SkillInfo {
   agent: string | null;
   template: string | null;
   level: "project" | "user";
+  source_dir: string;
 }
 
 /** Extended agent info from OpenCode GET /agent endpoint — used for @ autocomplete */

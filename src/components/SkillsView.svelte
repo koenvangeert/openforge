@@ -34,6 +34,32 @@
   let projectSkills = $derived(filteredSkills.filter(s => s.level === 'project'))
   let userSkills = $derived(filteredSkills.filter(s => s.level === 'user'))
 
+  // Group skills by source_dir within each level
+  const SOURCE_DIRS = ['.agents', '.claude', '.opencode'] as const
+
+  function groupBySource(skills: SkillInfo[]): { source: string; skills: SkillInfo[] }[] {
+    const groups: { source: string; skills: SkillInfo[] }[] = []
+    for (const src of SOURCE_DIRS) {
+      const matching = skills.filter(s => s.source_dir === src)
+      if (matching.length > 0) {
+        groups.push({ source: src, skills: matching })
+      }
+    }
+    // Catch any skills with unknown source_dir
+    const known = new Set<string>(SOURCE_DIRS)
+    const other = skills.filter(s => !known.has(s.source_dir))
+    if (other.length > 0) {
+      groups.push({ source: 'other', skills: other })
+    }
+    return groups
+  }
+
+  let projectGroups = $derived(groupBySource(projectSkills))
+  let userGroups = $derived(groupBySource(userSkills))
+
+  // Collapsible state: track collapsed sections by key like "project" / "user" / "project:.claude"
+  let collapsed = $state(new Map<string, boolean>())
+
   // Auto-select first filtered skill when current selection is filtered out
   $effect(() => {
     if ($selectedSkillName && filteredSkills.length > 0 && !filteredSkills.find(s => s.name === $selectedSkillName)) {
@@ -216,47 +242,85 @@ My question: ${askPrompt.trim()}`
           </div>
         {:else}
           {#if projectSkills.length > 0}
-            <div class="px-3 pt-3 pb-1">
-              <span class="text-xs font-semibold text-base-content/50 uppercase tracking-wider">Project</span>
-            </div>
-            {#each projectSkills as skill}
-              {@const flatIdx = filteredSkills.indexOf(skill)}
-              <button
-                data-vim-skill
-                class="w-full text-left px-3 py-2.5 border-b border-base-200 hover:bg-base-200 transition-colors cursor-pointer {$selectedSkillName === skill.name ? 'bg-primary/10 border-l-2 border-l-primary' : ''} {flatIdx === vimSkills.focusedIndex ? 'vim-focus' : ''}"
-                onclick={() => selectSkill(skill)}
-              >
-                <div class="flex items-center gap-2 min-w-0">
-                  <span class="text-sm font-medium text-base-content truncate flex-1">{skill.name}</span>
-                  <span class="badge badge-outline badge-xs shrink-0">project</span>
-                </div>
-                {#if skill.description}
-                  <p class="text-xs text-base-content/50 m-0 mt-1 line-clamp-2">{skill.description}</p>
+            {@const levelCollapsed = collapsed.get('project') ?? false}
+            <button
+              class="w-full flex items-center gap-1.5 px-3 pt-3 pb-1 cursor-pointer hover:bg-base-200/50"
+              onclick={() => { collapsed = new Map(collapsed).set('project', !levelCollapsed) }}
+            >
+              <span class="text-xs text-base-content/40 transition-transform {levelCollapsed ? '' : 'rotate-90'}">&rsaquo;</span>
+              <span class="text-xs font-semibold text-base-content/50 uppercase tracking-wider">Repository</span>
+              <span class="text-xs text-base-content/30 ml-auto">{projectSkills.length}</span>
+            </button>
+            {#if !levelCollapsed}
+              {#each projectGroups as group}
+                {@const groupKey = `project:${group.source}`}
+                {@const groupCollapsed = collapsed.get(groupKey) ?? false}
+                <button
+                  class="w-full flex items-center gap-1.5 pl-5 pr-3 pt-2 pb-1 cursor-pointer hover:bg-base-200/50"
+                  onclick={() => { collapsed = new Map(collapsed).set(groupKey, !groupCollapsed) }}
+                >
+                  <span class="text-xs text-base-content/40 transition-transform {groupCollapsed ? '' : 'rotate-90'}">&rsaquo;</span>
+                  <span class="text-xs font-medium text-base-content/40">{group.source}/skills</span>
+                  <span class="text-xs text-base-content/30 ml-auto">{group.skills.length}</span>
+                </button>
+                {#if !groupCollapsed}
+                  {#each group.skills as skill}
+                    {@const flatIdx = filteredSkills.indexOf(skill)}
+                    <button
+                      data-vim-skill
+                      class="w-full text-left pl-8 pr-3 py-2 border-b border-base-200 hover:bg-base-200 transition-colors cursor-pointer {$selectedSkillName === skill.name ? 'bg-primary/10 border-l-2 border-l-primary' : ''} {flatIdx === vimSkills.focusedIndex ? 'vim-focus' : ''}"
+                      onclick={() => selectSkill(skill)}
+                    >
+                      <span class="text-sm font-medium text-base-content truncate block">{skill.name}</span>
+                      {#if skill.description}
+                        <p class="text-xs text-base-content/50 m-0 mt-0.5 line-clamp-1">{skill.description}</p>
+                      {/if}
+                    </button>
+                  {/each}
                 {/if}
-              </button>
-            {/each}
+              {/each}
+            {/if}
           {/if}
 
           {#if userSkills.length > 0}
-            <div class="px-3 pt-3 pb-1">
-              <span class="text-xs font-semibold text-base-content/50 uppercase tracking-wider">User</span>
-            </div>
-            {#each userSkills as skill}
-              {@const flatIdx = filteredSkills.indexOf(skill)}
-              <button
-                data-vim-skill
-                class="w-full text-left px-3 py-2.5 border-b border-base-200 hover:bg-base-200 transition-colors cursor-pointer {$selectedSkillName === skill.name ? 'bg-primary/10 border-l-2 border-l-primary' : ''} {flatIdx === vimSkills.focusedIndex ? 'vim-focus' : ''}"
-                onclick={() => selectSkill(skill)}
-              >
-                <div class="flex items-center gap-2 min-w-0">
-                  <span class="text-sm font-medium text-base-content truncate flex-1">{skill.name}</span>
-                  <span class="badge badge-outline badge-xs shrink-0">user</span>
-                </div>
-                {#if skill.description}
-                  <p class="text-xs text-base-content/50 m-0 mt-1 line-clamp-2">{skill.description}</p>
+            {@const levelCollapsed = collapsed.get('user') ?? false}
+            <button
+              class="w-full flex items-center gap-1.5 px-3 pt-3 pb-1 cursor-pointer hover:bg-base-200/50"
+              onclick={() => { collapsed = new Map(collapsed).set('user', !levelCollapsed) }}
+            >
+              <span class="text-xs text-base-content/40 transition-transform {levelCollapsed ? '' : 'rotate-90'}">&rsaquo;</span>
+              <span class="text-xs font-semibold text-base-content/50 uppercase tracking-wider">Personal</span>
+              <span class="text-xs text-base-content/30 ml-auto">{userSkills.length}</span>
+            </button>
+            {#if !levelCollapsed}
+              {#each userGroups as group}
+                {@const groupKey = `user:${group.source}`}
+                {@const groupCollapsed = collapsed.get(groupKey) ?? false}
+                <button
+                  class="w-full flex items-center gap-1.5 pl-5 pr-3 pt-2 pb-1 cursor-pointer hover:bg-base-200/50"
+                  onclick={() => { collapsed = new Map(collapsed).set(groupKey, !groupCollapsed) }}
+                >
+                  <span class="text-xs text-base-content/40 transition-transform {groupCollapsed ? '' : 'rotate-90'}">&rsaquo;</span>
+                  <span class="text-xs font-medium text-base-content/40">~/{group.source}/skills</span>
+                  <span class="text-xs text-base-content/30 ml-auto">{group.skills.length}</span>
+                </button>
+                {#if !groupCollapsed}
+                  {#each group.skills as skill}
+                    {@const flatIdx = filteredSkills.indexOf(skill)}
+                    <button
+                      data-vim-skill
+                      class="w-full text-left pl-8 pr-3 py-2 border-b border-base-200 hover:bg-base-200 transition-colors cursor-pointer {$selectedSkillName === skill.name ? 'bg-primary/10 border-l-2 border-l-primary' : ''} {flatIdx === vimSkills.focusedIndex ? 'vim-focus' : ''}"
+                      onclick={() => selectSkill(skill)}
+                    >
+                      <span class="text-sm font-medium text-base-content truncate block">{skill.name}</span>
+                      {#if skill.description}
+                        <p class="text-xs text-base-content/50 m-0 mt-0.5 line-clamp-1">{skill.description}</p>
+                      {/if}
+                    </button>
+                  {/each}
                 {/if}
-              </button>
-            {/each}
+              {/each}
+            {/if}
           {/if}
         {/if}
       </div>
@@ -269,7 +333,8 @@ My question: ${askPrompt.trim()}`
         <div class="flex items-center justify-between px-6 py-3 border-b border-base-300 bg-base-200 shrink-0">
           <div class="flex items-center gap-3 min-w-0">
             <h3 class="text-base font-semibold text-base-content m-0 truncate">{selectedSkill.name}</h3>
-            <span class="badge badge-sm {selectedSkill.level === 'project' ? 'badge-primary' : 'badge-secondary'} shrink-0">{selectedSkill.level}</span>
+            <span class="badge badge-sm {selectedSkill.level === 'project' ? 'badge-primary' : 'badge-secondary'} shrink-0">{selectedSkill.level === 'project' ? 'repository' : 'personal'}</span>
+            <span class="text-xs text-base-content/40 shrink-0">{selectedSkill.source_dir}/skills</span>
           </div>
           <div class="flex items-center gap-2 shrink-0">
             <button

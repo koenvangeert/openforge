@@ -234,18 +234,29 @@ pub async fn list_opencode_skills(
                     .and_then(|v| v.as_str())
                     .map(|s| s.to_string());
 
-                let level = if let Some(ref proj_path) = project_path {
-                    let project_skill_path = std::path::Path::new(proj_path)
-                        .join(".opencode")
-                        .join("skills")
-                        .join(&cmd.name);
-                    if project_skill_path.exists() {
-                        "project".to_string()
+                let (level, source_dir) = if let Some(ref proj_path) = project_path {
+                    let proj = std::path::Path::new(proj_path);
+                    // Check project-level directories to determine level and source
+                    if proj.join(".agents").join("skills").join(&cmd.name).exists() {
+                        ("project".to_string(), ".agents".to_string())
+                    } else if proj.join(".claude").join("skills").join(&cmd.name).exists() {
+                        ("project".to_string(), ".claude".to_string())
+                    } else if proj.join(".opencode").join("skills").join(&cmd.name).exists() {
+                        ("project".to_string(), ".opencode".to_string())
                     } else {
-                        "user".to_string()
+                        // Skill is user-level; detect source from home dirs
+                        let home_source = dirs::home_dir().and_then(|home| {
+                            for src in &[".agents", ".claude", ".opencode"] {
+                                if home.join(src).join("skills").join(&cmd.name).exists() {
+                                    return Some(src.to_string());
+                                }
+                            }
+                            None
+                        });
+                        ("user".to_string(), home_source.unwrap_or_else(|| ".opencode".to_string()))
                     }
                 } else {
-                    "user".to_string()
+                    ("user".to_string(), ".opencode".to_string())
                 };
 
                 skills_map.insert(cmd.name.clone(), crate::opencode_client::SkillInfo {
@@ -254,20 +265,22 @@ pub async fn list_opencode_skills(
                     agent: cmd.agent,
                     template,
                     level,
+                    source_dir,
                 });
             }
         }
     }
 
-    // Scan .claude/skills/ and .opencode/skills/ on the filesystem
+    // Scan skills directories on the filesystem
     // Project-level directories
     if let Some(ref proj_path) = project_path {
         let proj = std::path::Path::new(proj_path);
-        for skills_dir in &[
-            proj.join(".claude").join("skills"),
-            proj.join(".opencode").join("skills"),
+        for (dir, source) in &[
+            (proj.join(".agents").join("skills"), ".agents"),
+            (proj.join(".claude").join("skills"), ".claude"),
+            (proj.join(".opencode").join("skills"), ".opencode"),
         ] {
-            for skill in scan_skills_directory(skills_dir, "project") {
+            for skill in scan_skills_directory(dir, "project", source) {
                 skills_map.entry(skill.name.clone()).or_insert(skill);
             }
         }
@@ -275,11 +288,12 @@ pub async fn list_opencode_skills(
 
     // User-level directories
     if let Some(home) = dirs::home_dir() {
-        for skills_dir in &[
-            home.join(".claude").join("skills"),
-            home.join(".opencode").join("skills"),
+        for (dir, source) in &[
+            (home.join(".agents").join("skills"), ".agents"),
+            (home.join(".claude").join("skills"), ".claude"),
+            (home.join(".opencode").join("skills"), ".opencode"),
         ] {
-            for skill in scan_skills_directory(skills_dir, "user") {
+            for skill in scan_skills_directory(dir, "user", source) {
                 skills_map.entry(skill.name.clone()).or_insert(skill);
             }
         }

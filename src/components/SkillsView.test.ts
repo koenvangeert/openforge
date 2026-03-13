@@ -43,6 +43,7 @@ const projectSkill: SkillInfo = {
   agent: null,
   template: '# Git Master\n\nUse this skill for git operations.',
   level: 'project',
+  source_dir: '.claude',
 }
 
 const userSkill: SkillInfo = {
@@ -51,6 +52,7 @@ const userSkill: SkillInfo = {
   agent: null,
   template: '# Creating Skills\n\nHow to create SKILL.md files.',
   level: 'user',
+  source_dir: '.claude',
 }
 
 const userSkill2: SkillInfo = {
@@ -59,6 +61,7 @@ const userSkill2: SkillInfo = {
   agent: null,
   template: '# TypeScript Advanced\n\nAdvanced type patterns.',
   level: 'user',
+  source_dir: '.agents',
 }
 
 describe('SkillsView', () => {
@@ -146,8 +149,8 @@ describe('SkillsView', () => {
     render(SkillsView, { props: { onRunAction: mockOnRunAction } })
 
     await waitFor(() => {
-      expect(screen.getByText('Project')).toBeTruthy()
-      expect(screen.getByText('User')).toBeTruthy()
+      expect(screen.getByText('Repository')).toBeTruthy()
+      expect(screen.getByText('Personal')).toBeTruthy()
       // git-master appears in both list and detail (auto-selected)
       expect(screen.getAllByText('git-master').length).toBeGreaterThanOrEqual(1)
       expect(screen.getAllByText('creating-skills').length).toBeGreaterThanOrEqual(1)
@@ -179,8 +182,8 @@ describe('SkillsView', () => {
     render(SkillsView, { props: { onRunAction: mockOnRunAction } })
 
     await waitFor(() => {
-      // 'project' badge appears in list item and detail header
-      expect(screen.getAllByText('project').length).toBeGreaterThanOrEqual(1)
+      // 'repository' badge appears in detail header
+      expect(screen.getAllByText('repository').length).toBeGreaterThanOrEqual(1)
     })
   })
 
@@ -415,8 +418,8 @@ describe('SkillsView', () => {
     render(SkillsView, { props: { onRunAction: mockOnRunAction } })
 
     await waitFor(() => {
-      expect(screen.getByText('Project')).toBeTruthy()
-      expect(screen.queryByText('User')).toBeFalsy()
+      expect(screen.getByText('Repository')).toBeTruthy()
+      expect(screen.queryByText('Personal')).toBeFalsy()
     })
   })
 
@@ -425,8 +428,8 @@ describe('SkillsView', () => {
     render(SkillsView, { props: { onRunAction: mockOnRunAction } })
 
     await waitFor(() => {
-      expect(screen.queryByText('Project')).toBeFalsy()
-      expect(screen.getByText('User')).toBeTruthy()
+      expect(screen.queryByText('Repository')).toBeFalsy()
+      expect(screen.getByText('Personal')).toBeTruthy()
     })
   })
 

@@ -72,8 +72,8 @@ pub fn parse_skill_frontmatter(content: &str) -> (Option<String>, Option<String>
 }
 
 /// Scan a skills directory (e.g. `.claude/skills/` or `.opencode/skills/`) for SKILL.md files.
-/// Returns a Vec of SkillInfo with the given level.
-pub fn scan_skills_directory(dir: &Path, level: &str) -> Vec<crate::opencode_client::SkillInfo> {
+/// Returns a Vec of SkillInfo with the given level and source_dir.
+pub fn scan_skills_directory(dir: &Path, level: &str, source_dir: &str) -> Vec<crate::opencode_client::SkillInfo> {
     let mut skills = Vec::new();
     let entries = match std::fs::read_dir(dir) {
         Ok(e) => e,
@@ -104,6 +104,7 @@ pub fn scan_skills_directory(dir: &Path, level: &str) -> Vec<crate::opencode_cli
             agent: None,
             template: Some(content),
             level: level.to_string(),
+            source_dir: source_dir.to_string(),
         });
     }
     skills
