@@ -30,10 +30,88 @@ jobs:
         run: pnpm install
 
       - name: Type check
-        run: pnpm exec tsc --noEmit
+        id: typecheck
+        continue-on-error: true
+        run: pnpm exec tsc --noEmit 2>&1 | tee /tmp/typecheck.log
 
       - name: Run tests
-        run: pnpm test
+        id: tests
+        continue-on-error: true
+        run: pnpm test 2>&1 | tee /tmp/tests.log
+
+      - name: Comment on PR with failures
+        if: github.event_name == 'pull_request' && (steps.typecheck.outcome == 'failure' || steps.tests.outcome == 'failure')
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+
+            let body = '## ❌ Frontend CI Failures\n\n';
+
+            if ('${{ steps.typecheck.outcome }}' === 'failure') {
+              const log = fs.readFileSync('/tmp/typecheck.log', 'utf8');
+              const errors = log.split('\n').filter(l => l.includes('error TS')).join('\n');
+              body += '### Type Check\n\n```\n' + (errors || log).slice(0, 30000) + '\n```\n\n';
+            }
+
+            if ('${{ steps.tests.outcome }}' === 'failure') {
+              const log = fs.readFileSync('/tmp/tests.log', 'utf8');
+              // Keep the last 200 lines which contain the failure summary
+              const lines = log.split('\n');
+              const tail = lines.slice(Math.max(0, lines.length - 200)).join('\n');
+              body += '### Tests\n\n```\n' + tail.slice(0, 30000) + '\n```\n\n';
+            }
+
+            // Find and update existing comment or create new one
+            const marker = '<!-- ci-frontend-failures -->';
+            body = marker + '\n' + body;
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const existing = comments.find(c => c.body.startsWith(marker));
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
+
+      - name: Delete success comment
+        if: github.event_name == 'pull_request' && steps.typecheck.outcome == 'success' && steps.tests.outcome == 'success'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const marker = '<!-- ci-frontend-failures -->';
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const existing = comments.find(c => c.body.startsWith(marker));
+            if (existing) {
+              await github.rest.issues.deleteComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+              });
+            }
+
+      - name: Fail if checks failed
+        if: steps.typecheck.outcome == 'failure' || steps.tests.outcome == 'failure'
+        run: exit 1
 
   rust:
     name: Rust Tests
@@ -50,5 +128,74 @@ jobs:
           workspaces: src-tauri -> target
 
       - name: Run tests
+        id: tests
+        continue-on-error: true
         working-directory: src-tauri
-        run: cargo test
+        run: cargo test 2>&1 | tee /tmp/rust-tests.log
+
+      - name: Comment on PR with failures
+        if: github.event_name == 'pull_request' && steps.tests.outcome == 'failure'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const log = fs.readFileSync('/tmp/rust-tests.log', 'utf8');
+
+            // Extract errors: compilation errors + test failures
+            const lines = log.split('\n');
+            const errorLines = lines.filter(l =>
+              l.includes('error[') || l.includes('error:') ||
+              l.includes('FAILED') || l.includes('panicked')
+            );
+            const tail = lines.slice(Math.max(0, lines.length - 100)).join('\n');
+            const errors = errorLines.length > 0 ? errorLines.join('\n') + '\n\n---\n\n' + tail : tail;
+
+            const marker = '<!-- ci-rust-failures -->';
+            let body = marker + '\n## ❌ Rust CI Failures\n\n```\n' + errors.slice(0, 30000) + '\n```\n';
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const existing = comments.find(c => c.body.startsWith(marker));
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
+
+      - name: Delete success comment
+        if: github.event_name == 'pull_request' && steps.tests.outcome == 'success'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const marker = '<!-- ci-rust-failures -->';
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const existing = comments.find(c => c.body.startsWith(marker));
+            if (existing) {
+              await github.rest.issues.deleteComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+              });
+            }
+
+      - name: Fail if tests failed
+        if: steps.tests.outcome == 'failure'
+        run: exit 1
