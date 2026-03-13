@@ -1,12 +1,11 @@
 <script lang="ts">
   import { onMount } from 'svelte'
-  import { activeProjectId, projects, codeCleanupTasksEnabled } from '../lib/stores'
+  import { activeProjectId, projects, codeCleanupTasksEnabled, error } from '../lib/stores'
   import {
     getProjectConfig,
     setProjectConfig,
     updateProject,
     deleteProject,
-    getAgents,
     getConfig,
     setConfig,
     checkOpenCodeInstalled,
@@ -18,7 +17,7 @@
   import { loadBoardColumns, saveBoardColumns } from '../lib/boardColumns'
   import { themeMode, applyTheme } from '../lib/theme'
   import type { ThemeMode } from '../lib/theme'
-  import type { Action, AgentInfo, WhisperModelStatus, WhisperModelSizeId, BoardColumnConfig } from '../lib/types'
+  import type { Action, WhisperModelStatus, WhisperModelSizeId, BoardColumnConfig } from '../lib/types'
   import SettingsSidebar from './SettingsSidebar.svelte'
   import SettingsGeneralCard from './SettingsGeneralCard.svelte'
   import SettingsBoardCard from './SettingsBoardCard.svelte'
@@ -64,8 +63,6 @@
 
   // Actions state
   let actions = $state<Action[]>([])
-  let availableAgents = $state<AgentInfo[]>([])
-
   // Board state
   let boardColumns = $state<BoardColumnConfig[]>([])
 
@@ -201,9 +198,6 @@
     // Load model statuses
     modelStatuses = await getAllWhisperModelStatuses().catch(() => [])
 
-    // Load agents
-    availableAgents = await getAgents().catch(() => [])
-
   })
 
   // Scroll spy: re-observe whenever conditional sections mount/unmount
@@ -241,7 +235,9 @@
       }
     )
 
-    container.querySelectorAll('[id^="section-"]').forEach((s) => obs.observe(s))
+    container.querySelectorAll('[id^="section-"]').forEach((s) => {
+      obs.observe(s)
+    })
 
     return () => obs.disconnect()
   })
@@ -278,6 +274,9 @@
       setTimeout(() => {
         saved = false
       }, 2000)
+    } catch (e) {
+      console.error('Failed to save settings:', e)
+      $error = e instanceof Error ? e.message : String(e)
     } finally {
       isSaving = false
     }
