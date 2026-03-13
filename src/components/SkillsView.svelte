@@ -1,24 +1,20 @@
 <script lang="ts">
   import { onMount } from 'svelte'
-  import { skills, selectedSkillName, activeProjectId, currentView, selectedTaskId } from '../lib/stores'
-  import { listOpenCodeSkills, createTask } from '../lib/ipc'
+  import { skills, selectedSkillName, activeProjectId } from '../lib/stores'
+  import { listOpenCodeSkills, saveSkillContent } from '../lib/ipc'
   import { pushNavState } from '../lib/navigation'
   import { isInputFocused } from '../lib/domUtils'
   import { useVimNavigation } from '../lib/useVimNavigation.svelte'
   import MarkdownContent from './MarkdownContent.svelte'
   import type { SkillInfo } from '../lib/types'
 
-  interface Props {
-    onRunAction: (data: { taskId: string; actionPrompt: string; agent: string | null }) => void
-  }
-
-  let { onRunAction }: Props = $props()
-
   let isLoading = $state(false)
   let error = $state<string | null>(null)
   let searchFilter = $state('')
-  let askPrompt = $state('')
-  let showAskInput = $state(false)
+  let editMode = $state(false)
+  let editContent = $state('')
+  let isSaving = $state(false)
+  let saveError = $state<string | null>(null)
 
   let selectedSkill = $derived($skills.find(s => s.name === $selectedSkillName) || null)
 
@@ -33,6 +29,32 @@
 
   let projectSkills = $derived(filteredSkills.filter(s => s.level === 'project'))
   let userSkills = $derived(filteredSkills.filter(s => s.level === 'user'))
+
+  // Group skills by source_dir within each level
+  const SOURCE_DIRS = ['.agents', '.claude', '.opencode'] as const
+
+  function groupBySource(skills: SkillInfo[]): { source: string; skills: SkillInfo[] }[] {
+    const groups: { source: string; skills: SkillInfo[] }[] = []
+    for (const src of SOURCE_DIRS) {
+      const matching = skills.filter(s => s.source_dir === src)
+      if (matching.length > 0) {
+        groups.push({ source: src, skills: matching })
+      }
+    }
+    // Catch any skills with unknown source_dir
+    const known = new Set<string>(SOURCE_DIRS)
+    const other = skills.filter(s => !known.has(s.source_dir))
+    if (other.length > 0) {
+      groups.push({ source: 'other', skills: other })
+    }
+    return groups
+  }
+
+  let projectGroups = $derived(groupBySource(projectSkills))
+  let userGroups = $derived(groupBySource(userSkills))
+
+  // Collapsible state: track collapsed sections by key like "project" / "user" / "project:.claude"
+  let collapsed = $state(new Map<string, boolean>())
 
   // Auto-select first filtered skill when current selection is filtered out
   $effect(() => {
@@ -63,75 +85,46 @@
   function selectSkill(skill: SkillInfo) {
     pushNavState()
     $selectedSkillName = skill.name
-    showAskInput = false
-    askPrompt = ''
+    editMode = false
+    saveError = null
   }
 
-  async function handleEdit() {
+  function enterEditMode() {
+    if (!selectedSkill) return
+    editContent = selectedSkill.template || ''
+    editMode = true
+    saveError = null
+  }
+
+  function cancelEdit() {
+    editMode = false
+    saveError = null
+  }
+
+  async function saveEdit() {
     if (!selectedSkill || !$activeProjectId) return
-    const initialPrompt = `Edit skill: ${selectedSkill.name}`
-    const task = await createTask(initialPrompt, 'backlog', null, $activeProjectId)
-    const prompt = `Edit the "${selectedSkill.name}" skill (${selectedSkill.level}-level).
-
-Current skill content:
-\`\`\`markdown
-${selectedSkill.template || '(no content)'}
-\`\`\`
-
-Please review this skill and improve it. Focus on making it clearer, more actionable, and better structured.`
-    onRunAction({ taskId: task.id, actionPrompt: prompt, agent: null })
-    pushNavState()
-    $currentView = 'board'
-    $selectedTaskId = task.id
-  }
-
-  async function handleCreate() {
-    if (!$activeProjectId) return
-    const initialPrompt = 'Create new skill'
-    const task = await createTask(initialPrompt, 'backlog', null, $activeProjectId)
-    const prompt = `Create a new OpenCode skill (SKILL.md file). 
-
-Use the "creating-skills" skill/guide if available. The skill should follow proper structure with:
-- Clear name and description
-- Progressive disclosure (overview → details)
-- Concrete workflows and examples
-- Proper frontmatter
-
-Ask me what the skill should be about, then create it.`
-    onRunAction({ taskId: task.id, actionPrompt: prompt, agent: null })
-    pushNavState()
-    $currentView = 'board'
-    $selectedTaskId = task.id
-  }
-
-  async function handleAsk() {
-    if (!selectedSkill || !$activeProjectId || !askPrompt.trim()) return
-    const initialPrompt = `Question about skill: ${selectedSkill.name}`
-    const task = await createTask(initialPrompt, 'backlog', null, $activeProjectId)
-    const prompt = `I have a question about the "${selectedSkill.name}" skill.
-
-Skill content:
-\`\`\`markdown
-${selectedSkill.template || '(no content)'}
-\`\`\`
-
-My question: ${askPrompt.trim()}`
-    onRunAction({ taskId: task.id, actionPrompt: prompt, agent: null })
-    askPrompt = ''
-    showAskInput = false
-    pushNavState()
-    $currentView = 'board'
-    $selectedTaskId = task.id
-  }
-
-  function handleAskKeydown(e: KeyboardEvent) {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      handleAsk()
-    }
-    if (e.key === 'Escape') {
-      showAskInput = false
-      askPrompt = ''
+    isSaving = true
+    saveError = null
+    try {
+      await saveSkillContent(
+        $activeProjectId,
+        selectedSkill.name,
+        selectedSkill.level,
+        selectedSkill.source_dir,
+        editContent,
+      )
+      // Update the local skill data with new content
+      $skills = $skills.map(s =>
+        s.name === selectedSkill!.name && s.level === selectedSkill!.level && s.source_dir === selectedSkill!.source_dir
+          ? { ...s, template: editContent }
+          : s
+      )
+      editMode = false
+    } catch (e) {
+      console.error('Failed to save skill:', e)
+      saveError = String(e)
+    } finally {
+      isSaving = false
     }
   }
 
@@ -172,7 +165,6 @@ My question: ${askPrompt.trim()}`
       <span class="badge badge-primary badge-sm">{$skills.length} {$skills.length === 1 ? 'skill' : 'skills'}</span>
     </div>
     <div class="flex items-center gap-2">
-      <button class="btn btn-sm btn-primary" onclick={handleCreate}>+ New Skill</button>
       <button class="btn btn-sm border border-base-300" onclick={loadSkills} disabled={isLoading}>
         {isLoading ? '⟳' : '↻'} Refresh
       </button>
@@ -216,47 +208,85 @@ My question: ${askPrompt.trim()}`
           </div>
         {:else}
           {#if projectSkills.length > 0}
-            <div class="px-3 pt-3 pb-1">
-              <span class="text-xs font-semibold text-base-content/50 uppercase tracking-wider">Project</span>
-            </div>
-            {#each projectSkills as skill}
-              {@const flatIdx = filteredSkills.indexOf(skill)}
-              <button
-                data-vim-skill
-                class="w-full text-left px-3 py-2.5 border-b border-base-200 hover:bg-base-200 transition-colors cursor-pointer {$selectedSkillName === skill.name ? 'bg-primary/10 border-l-2 border-l-primary' : ''} {flatIdx === vimSkills.focusedIndex ? 'vim-focus' : ''}"
-                onclick={() => selectSkill(skill)}
-              >
-                <div class="flex items-center gap-2 min-w-0">
-                  <span class="text-sm font-medium text-base-content truncate flex-1">{skill.name}</span>
-                  <span class="badge badge-outline badge-xs shrink-0">project</span>
-                </div>
-                {#if skill.description}
-                  <p class="text-xs text-base-content/50 m-0 mt-1 line-clamp-2">{skill.description}</p>
+            {@const levelCollapsed = collapsed.get('project') ?? false}
+            <button
+              class="w-full flex items-center gap-1.5 px-3 pt-3 pb-1 cursor-pointer hover:bg-base-200/50"
+              onclick={() => { collapsed = new Map(collapsed).set('project', !levelCollapsed) }}
+            >
+              <span class="text-xs text-base-content/40 transition-transform {levelCollapsed ? '' : 'rotate-90'}">&rsaquo;</span>
+              <span class="text-xs font-semibold text-base-content/50 uppercase tracking-wider">Repository</span>
+              <span class="text-xs text-base-content/30 ml-auto">{projectSkills.length}</span>
+            </button>
+            {#if !levelCollapsed}
+              {#each projectGroups as group}
+                {@const groupKey = `project:${group.source}`}
+                {@const groupCollapsed = collapsed.get(groupKey) ?? false}
+                <button
+                  class="w-full flex items-center gap-1.5 pl-5 pr-3 pt-2 pb-1 cursor-pointer hover:bg-base-200/50"
+                  onclick={() => { collapsed = new Map(collapsed).set(groupKey, !groupCollapsed) }}
+                >
+                  <span class="text-xs text-base-content/40 transition-transform {groupCollapsed ? '' : 'rotate-90'}">&rsaquo;</span>
+                  <span class="text-xs font-medium text-base-content/40">{group.source}/skills</span>
+                  <span class="text-xs text-base-content/30 ml-auto">{group.skills.length}</span>
+                </button>
+                {#if !groupCollapsed}
+                  {#each group.skills as skill}
+                    {@const flatIdx = filteredSkills.indexOf(skill)}
+                    <button
+                      data-vim-skill
+                      class="w-full text-left pl-8 pr-3 py-2 border-b border-base-200 hover:bg-base-200 transition-colors cursor-pointer {$selectedSkillName === skill.name ? 'bg-primary/10 border-l-2 border-l-primary' : ''} {flatIdx === vimSkills.focusedIndex ? 'vim-focus' : ''}"
+                      onclick={() => selectSkill(skill)}
+                    >
+                      <span class="text-sm font-medium text-base-content truncate block">{skill.name}</span>
+                      {#if skill.description}
+                        <p class="text-xs text-base-content/50 m-0 mt-0.5 line-clamp-1">{skill.description}</p>
+                      {/if}
+                    </button>
+                  {/each}
                 {/if}
-              </button>
-            {/each}
+              {/each}
+            {/if}
           {/if}
 
           {#if userSkills.length > 0}
-            <div class="px-3 pt-3 pb-1">
-              <span class="text-xs font-semibold text-base-content/50 uppercase tracking-wider">User</span>
-            </div>
-            {#each userSkills as skill}
-              {@const flatIdx = filteredSkills.indexOf(skill)}
-              <button
-                data-vim-skill
-                class="w-full text-left px-3 py-2.5 border-b border-base-200 hover:bg-base-200 transition-colors cursor-pointer {$selectedSkillName === skill.name ? 'bg-primary/10 border-l-2 border-l-primary' : ''} {flatIdx === vimSkills.focusedIndex ? 'vim-focus' : ''}"
-                onclick={() => selectSkill(skill)}
-              >
-                <div class="flex items-center gap-2 min-w-0">
-                  <span class="text-sm font-medium text-base-content truncate flex-1">{skill.name}</span>
-                  <span class="badge badge-outline badge-xs shrink-0">user</span>
-                </div>
-                {#if skill.description}
-                  <p class="text-xs text-base-content/50 m-0 mt-1 line-clamp-2">{skill.description}</p>
+            {@const levelCollapsed = collapsed.get('user') ?? false}
+            <button
+              class="w-full flex items-center gap-1.5 px-3 pt-3 pb-1 cursor-pointer hover:bg-base-200/50"
+              onclick={() => { collapsed = new Map(collapsed).set('user', !levelCollapsed) }}
+            >
+              <span class="text-xs text-base-content/40 transition-transform {levelCollapsed ? '' : 'rotate-90'}">&rsaquo;</span>
+              <span class="text-xs font-semibold text-base-content/50 uppercase tracking-wider">Personal</span>
+              <span class="text-xs text-base-content/30 ml-auto">{userSkills.length}</span>
+            </button>
+            {#if !levelCollapsed}
+              {#each userGroups as group}
+                {@const groupKey = `user:${group.source}`}
+                {@const groupCollapsed = collapsed.get(groupKey) ?? false}
+                <button
+                  class="w-full flex items-center gap-1.5 pl-5 pr-3 pt-2 pb-1 cursor-pointer hover:bg-base-200/50"
+                  onclick={() => { collapsed = new Map(collapsed).set(groupKey, !groupCollapsed) }}
+                >
+                  <span class="text-xs text-base-content/40 transition-transform {groupCollapsed ? '' : 'rotate-90'}">&rsaquo;</span>
+                  <span class="text-xs font-medium text-base-content/40">~/{group.source}/skills</span>
+                  <span class="text-xs text-base-content/30 ml-auto">{group.skills.length}</span>
+                </button>
+                {#if !groupCollapsed}
+                  {#each group.skills as skill}
+                    {@const flatIdx = filteredSkills.indexOf(skill)}
+                    <button
+                      data-vim-skill
+                      class="w-full text-left pl-8 pr-3 py-2 border-b border-base-200 hover:bg-base-200 transition-colors cursor-pointer {$selectedSkillName === skill.name ? 'bg-primary/10 border-l-2 border-l-primary' : ''} {flatIdx === vimSkills.focusedIndex ? 'vim-focus' : ''}"
+                      onclick={() => selectSkill(skill)}
+                    >
+                      <span class="text-sm font-medium text-base-content truncate block">{skill.name}</span>
+                      {#if skill.description}
+                        <p class="text-xs text-base-content/50 m-0 mt-0.5 line-clamp-1">{skill.description}</p>
+                      {/if}
+                    </button>
+                  {/each}
                 {/if}
-              </button>
-            {/each}
+              {/each}
+            {/if}
           {/if}
         {/if}
       </div>
@@ -269,60 +299,65 @@ My question: ${askPrompt.trim()}`
         <div class="flex items-center justify-between px-6 py-3 border-b border-base-300 bg-base-200 shrink-0">
           <div class="flex items-center gap-3 min-w-0">
             <h3 class="text-base font-semibold text-base-content m-0 truncate">{selectedSkill.name}</h3>
-            <span class="badge badge-sm {selectedSkill.level === 'project' ? 'badge-primary' : 'badge-secondary'} shrink-0">{selectedSkill.level}</span>
+            <span class="badge badge-sm {selectedSkill.level === 'project' ? 'badge-primary' : 'badge-secondary'} shrink-0">{selectedSkill.level === 'project' ? 'repository' : 'personal'}</span>
+            <span class="text-xs text-base-content/40 shrink-0">{selectedSkill.source_dir}/skills</span>
           </div>
           <div class="flex items-center gap-2 shrink-0">
-            <button
-              class="btn btn-ghost btn-sm text-base-content/70"
-              onclick={() => { showAskInput = !showAskInput; if (!showAskInput) askPrompt = '' }}
-              title="Ask a question about this skill"
-            >Ask</button>
-            <button
-              class="btn btn-ghost btn-sm text-base-content/70"
-              onclick={handleEdit}
-              title="Create a task to edit this skill"
-            >Edit</button>
+            {#if editMode}
+              <button
+                class="btn btn-ghost btn-sm text-base-content/70"
+                onclick={cancelEdit}
+                disabled={isSaving}
+              >Cancel</button>
+              <button
+                class="btn btn-primary btn-sm"
+                onclick={saveEdit}
+                disabled={isSaving}
+              >{isSaving ? 'Saving...' : 'Save'}</button>
+            {:else}
+              <button
+                class="btn btn-ghost btn-sm text-base-content/70"
+                onclick={enterEditMode}
+              >Manually Edit</button>
+            {/if}
           </div>
         </div>
 
-        <!-- Ask input (collapsible) -->
-        {#if showAskInput}
-          <div class="px-6 py-3 border-b border-base-300 bg-base-200/50 shrink-0">
-            <div class="flex gap-2">
-              <input
-                type="text"
-                placeholder="Ask a question about this skill..."
-                class="input input-sm input-bordered flex-1"
-                bind:value={askPrompt}
-                onkeydown={handleAskKeydown}
-              />
-              <button
-                class="btn btn-sm btn-primary"
-                onclick={handleAsk}
-                disabled={!askPrompt.trim()}
-              >Send</button>
-            </div>
+        {#if saveError}
+          <div class="px-6 py-2 bg-error/10 border-b border-error/20 shrink-0">
+            <p class="text-xs text-error m-0">{saveError}</p>
           </div>
         {/if}
 
         <!-- Description -->
-        {#if selectedSkill.description}
+        {#if selectedSkill.description && !editMode}
           <div class="px-6 py-3 border-b border-base-300 shrink-0">
             <p class="text-sm text-base-content/70 m-0">{selectedSkill.description}</p>
           </div>
         {/if}
 
-        <!-- Markdown content -->
-        <div class="flex-1 overflow-y-auto px-6 py-4">
-          {#if selectedSkill.template}
-            <MarkdownContent content={selectedSkill.template} />
-          {:else}
-            <div class="flex flex-col items-center justify-center h-full gap-3 text-base-content/50 text-center">
-              <span class="text-3xl">📄</span>
-              <p class="text-sm m-0">No content available for this skill.</p>
-            </div>
-          {/if}
-        </div>
+        {#if editMode}
+          <!-- Edit mode: raw markdown textarea -->
+          <div class="flex-1 overflow-hidden flex flex-col">
+            <textarea
+              class="flex-1 w-full p-4 font-mono text-sm bg-base-100 text-base-content resize-none border-none outline-none"
+              bind:value={editContent}
+              spellcheck="false"
+            ></textarea>
+          </div>
+        {:else}
+          <!-- Read mode: rendered markdown -->
+          <div class="flex-1 overflow-y-auto px-6 py-4">
+            {#if selectedSkill.template}
+              <MarkdownContent content={selectedSkill.template} />
+            {:else}
+              <div class="flex flex-col items-center justify-center h-full gap-3 text-base-content/50 text-center">
+                <span class="text-3xl">📄</span>
+                <p class="text-sm m-0">No content available for this skill.</p>
+              </div>
+            {/if}
+          </div>
+        {/if}
       {:else}
         <!-- No skill selected -->
         <div class="flex flex-col items-center justify-center h-full gap-4 text-base-content/50 text-center">
@@ -333,8 +368,7 @@ My question: ${askPrompt.trim()}`
           {:else if !isLoading && !error}
             <span class="text-5xl">📝</span>
             <h3 class="text-lg font-semibold text-base-content/70 m-0">No skills yet</h3>
-            <p class="text-sm m-0">Create your first skill to get started.</p>
-            <button class="btn btn-primary btn-sm mt-2" onclick={handleCreate}>+ New Skill</button>
+            <p class="text-sm m-0">Add skills to your project or personal directories to see them here.</p>
           {/if}
         </div>
       {/if}

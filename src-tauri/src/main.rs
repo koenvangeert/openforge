@@ -404,6 +404,7 @@ fn main() {
             commands::self_review::archive_self_review_comments,
             commands::opencode::list_opencode_commands,
             commands::opencode::list_opencode_skills,
+            commands::opencode::save_skill_content,
             commands::opencode::search_opencode_files,
             commands::whisper::transcribe_audio,
             commands::whisper::get_whisper_model_status,

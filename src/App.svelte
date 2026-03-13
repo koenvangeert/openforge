@@ -848,7 +848,7 @@
       {:else if $currentView === 'pr_review'}
         <PrReviewView />
        {:else if $currentView === 'skills'}
-         <SkillsView onRunAction={handleRunAction} />
+         <SkillsView />
        {:else if $currentView === 'workqueue'}
          <WorkQueueView refreshTrigger={workQueueRefreshTrigger} />
        {:else if selectedTask}

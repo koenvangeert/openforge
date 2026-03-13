@@ -282,6 +282,16 @@ export async function listOpenCodeSkills(projectId: string): Promise<SkillInfo[]
   return invoke<SkillInfo[]>("list_opencode_skills", { projectId });
 }
 
+export async function saveSkillContent(
+  projectId: string,
+  skillName: string,
+  level: string,
+  sourceDir: string,
+  content: string,
+): Promise<void> {
+  return invoke<void>("save_skill_content", { projectId, skillName, level, sourceDir, content });
+}
+
 export async function searchOpenCodeFiles(projectId: string, query: string): Promise<string[]> {
   return invoke<string[]>("search_opencode_files", { projectId, query });
 }

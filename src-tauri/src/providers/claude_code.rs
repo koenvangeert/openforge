@@ -146,41 +146,67 @@ impl ClaudeCodeProvider {
             commands_map.insert(cmd.name.clone(), cmd);
         }
 
+        // User-level commands
         if let Some(home) = dirs::home_dir() {
-            for cmd in scan_commands_directory(&home.join(".claude").join("commands")) {
-                commands_map.insert(cmd.name.clone(), cmd);
+            for commands_dir in &[
+                home.join(".claude").join("commands"),
+                home.join(".opencode").join("commands"),
+            ] {
+                for cmd in scan_commands_directory(commands_dir) {
+                    commands_map.insert(cmd.name.clone(), cmd);
+                }
             }
         }
 
+        // Project-level commands
         if let Some(proj_path) = project_path {
             let proj = std::path::Path::new(proj_path);
-            for cmd in scan_commands_directory(&proj.join(".claude").join("commands")) {
-                commands_map.insert(cmd.name.clone(), cmd);
+            for commands_dir in &[
+                proj.join(".claude").join("commands"),
+                proj.join(".opencode").join("commands"),
+            ] {
+                for cmd in scan_commands_directory(commands_dir) {
+                    commands_map.insert(cmd.name.clone(), cmd);
+                }
             }
         }
 
+        // User-level skills
         if let Some(home) = dirs::home_dir() {
-            for skill in scan_skills_directory(&home.join(".claude").join("skills"), "user") {
-                commands_map.entry(skill.name.clone()).or_insert(crate::opencode_client::CommandInfo {
-                    name: skill.name,
-                    description: skill.description,
-                    source: Some("skill".to_string()),
-                    agent: skill.agent,
-                    extra: serde_json::Map::new(),
-                });
+            for (dir, source) in &[
+                (home.join(".agents").join("skills"), ".agents"),
+                (home.join(".claude").join("skills"), ".claude"),
+                (home.join(".opencode").join("skills"), ".opencode"),
+            ] {
+                for skill in scan_skills_directory(dir, "user", source) {
+                    commands_map.entry(skill.name.clone()).or_insert(crate::opencode_client::CommandInfo {
+                        name: skill.name,
+                        description: skill.description,
+                        source: Some("skill".to_string()),
+                        agent: skill.agent,
+                        extra: serde_json::Map::new(),
+                    });
+                }
             }
         }
 
+        // Project-level skills
         if let Some(proj_path) = project_path {
             let proj = std::path::Path::new(proj_path);
-            for skill in scan_skills_directory(&proj.join(".claude").join("skills"), "project") {
-                commands_map.insert(skill.name.clone(), crate::opencode_client::CommandInfo {
-                    name: skill.name,
-                    description: skill.description,
-                    source: Some("skill".to_string()),
-                    agent: skill.agent,
-                    extra: serde_json::Map::new(),
-                });
+            for (dir, source) in &[
+                (proj.join(".agents").join("skills"), ".agents"),
+                (proj.join(".claude").join("skills"), ".claude"),
+                (proj.join(".opencode").join("skills"), ".opencode"),
+            ] {
+                for skill in scan_skills_directory(dir, "project", source) {
+                    commands_map.insert(skill.name.clone(), crate::opencode_client::CommandInfo {
+                        name: skill.name,
+                        description: skill.description,
+                        source: Some("skill".to_string()),
+                        agent: skill.agent,
+                        extra: serde_json::Map::new(),
+                    });
+                }
             }
         }
 

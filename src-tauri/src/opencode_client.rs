@@ -624,7 +624,8 @@ pub struct SkillInfo {
     pub description: Option<String>,
     pub agent: Option<String>,
     pub template: Option<String>,
-    pub level: String, // "project" or "user"
+    pub level: String,      // "project" or "user"
+    pub source_dir: String, // ".agents", ".claude", or ".opencode"
 }
 
 /// Session information from OpenCode API
