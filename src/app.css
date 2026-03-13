@@ -138,6 +138,12 @@
 .ci-failed {
   border: 2px solid var(--color-error);
 }
+.ci-running {
+  border-left: 3px solid var(--color-info);
+}
+.review-pending {
+  border-left: 3px solid var(--color-success);
+}
 .ready-to-merge {
   border-left: 3px solid var(--color-info);
 }

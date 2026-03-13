@@ -25,8 +25,8 @@ describe('boardColumns', () => {
   })
 
   describe('constants', () => {
-    it('defines all 13 task states', () => {
-      expect(ALL_TASK_STATES).toHaveLength(13)
+    it('defines all 15 task states', () => {
+      expect(ALL_TASK_STATES).toHaveLength(15)
       expect(ALL_TASK_STATES).toEqual([
         'idle',
         'active',
@@ -37,6 +37,8 @@ describe('boardColumns', () => {
         'frozen',
         'pr-draft',
         'pr-open',
+        'ci-running',
+        'review-pending',
         'ci-failed',
         'changes-requested',
         'ready-to-merge',
@@ -66,6 +68,8 @@ describe('boardColumns', () => {
       expect(TASK_STATE_LABELS['egg']).toBe('New')
       expect(TASK_STATE_LABELS['needs-input']).toBe('Needs Input')
       expect(TASK_STATE_LABELS['pr-draft']).toBe('PR Draft')
+      expect(TASK_STATE_LABELS['ci-running']).toBe('CI Running')
+      expect(TASK_STATE_LABELS['review-pending']).toBe('Awaiting Review')
       expect(TASK_STATE_LABELS['ci-failed']).toBe('CI Failed')
       expect(TASK_STATE_LABELS['ready-to-merge']).toBe('Ready to Merge')
     })
@@ -86,6 +90,8 @@ describe('boardColumns', () => {
             'frozen',
             'pr-draft',
             'pr-open',
+            'ci-running',
+            'review-pending',
             'ci-failed',
             'changes-requested',
             'ready-to-merge',
@@ -199,6 +205,8 @@ describe('boardColumns', () => {
             'frozen',
             'pr-draft',
             'pr-open',
+            'ci-running',
+            'review-pending',
             'ci-failed',
             'changes-requested',
             'ready-to-merge',
@@ -229,13 +237,13 @@ describe('boardColumns', () => {
       )
     })
 
-    it('falls back to defaults when stored config is invalid', async () => {
+    it('falls back to defaults when stored config is invalid (no doing column)', async () => {
       const invalidColumns = [
         {
-          id: 'col-doing',
-          name: 'Doing',
+          id: 'col-other',
+          name: 'Other',
           statuses: ['idle'],
-          underlyingStatus: 'doing',
+          underlyingStatus: 'other',
         },
       ]
       vi.mocked(getProjectConfig).mockResolvedValue(JSON.stringify(invalidColumns))
@@ -248,6 +256,76 @@ describe('boardColumns', () => {
         'board_columns',
         JSON.stringify(DEFAULT_BOARD_COLUMNS),
       )
+    })
+
+    it('migrates old config with 13 states to 15 states', async () => {
+      const oldColumns: BoardColumnConfig[] = [
+        {
+          id: 'col-doing',
+          name: 'Doing',
+          statuses: [
+            'idle',
+            'active',
+            'needs-input',
+            'resting',
+            'celebrating',
+            'sad',
+            'frozen',
+            'pr-draft',
+            'pr-open',
+            'ci-failed',
+            'changes-requested',
+            'ready-to-merge',
+            'pr-merged',
+          ],
+          underlyingStatus: 'doing',
+        },
+      ]
+
+      vi.mocked(getProjectConfig).mockResolvedValue(JSON.stringify(oldColumns))
+
+      const result = await loadBoardColumns('project-1')
+
+      expect(result).toHaveLength(1)
+      expect(result[0].statuses).toHaveLength(15)
+      expect(result[0].statuses).toContain('ci-running')
+      expect(result[0].statuses).toContain('review-pending')
+      expect(result[0].name).toBe('Doing')
+      expect(setProjectConfig).not.toHaveBeenCalled()
+    })
+
+    it('returns config unchanged when already migrated', async () => {
+      const migratedColumns: BoardColumnConfig[] = [
+        {
+          id: 'col-doing',
+          name: 'Doing',
+          statuses: [
+            'idle',
+            'active',
+            'needs-input',
+            'resting',
+            'celebrating',
+            'sad',
+            'frozen',
+            'pr-draft',
+            'pr-open',
+            'ci-running',
+            'review-pending',
+            'ci-failed',
+            'changes-requested',
+            'ready-to-merge',
+            'pr-merged',
+          ],
+          underlyingStatus: 'doing',
+        },
+      ]
+
+      vi.mocked(getProjectConfig).mockResolvedValue(JSON.stringify(migratedColumns))
+
+      const result = await loadBoardColumns('project-1')
+
+      expect(result).toEqual(migratedColumns)
+      expect(setProjectConfig).not.toHaveBeenCalled()
     })
   })
 

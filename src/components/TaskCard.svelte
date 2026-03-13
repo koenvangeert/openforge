@@ -33,13 +33,14 @@
   let hasCiFailure = $derived(pullRequests.some(pr => pr.ci_status === 'failure' && pr.state === 'open'))
   let hasPendingCi = $derived(pullRequests.some(pr => pr.ci_status === 'pending' && pr.state === 'open'))
   let hasReadyToMerge = $derived(pullRequests.some(pr => isReadyToMerge(pr)))
+  let hasReviewPending = $derived(pullRequests.some(pr => pr.ci_status === 'success' && pr.review_status === 'review_required' && pr.state === 'open'))
   let totalUnaddressed = $derived(
     pullRequests.reduce((sum, pr) => sum + (pr.unaddressed_comment_count || 0), 0)
   )
 </script>
 
 <Card
-  class="block px-3.5 py-3 {hasCiFailure && !hasPendingCi && statusClass !== 'running' && !needsInput ? 'ci-failed' : ''} {isStarting ? 'starting' : ''} {statusClass === 'running' ? 'running' : ''} {statusClass === 'paused' && !needsInput ? 'paused' : ''} {statusClass === 'failed' ? 'failed' : ''} {statusClass === 'interrupted' ? 'interrupted' : ''} {statusClass === 'completed' ? 'completed' : ''} {needsInput ? 'needs-input' : ''} {hasReadyToMerge && statusClass !== 'running' ? 'ready-to-merge' : ''}"
+  class="block px-3.5 py-3 {hasCiFailure && !hasPendingCi && statusClass !== 'running' && !needsInput ? 'ci-failed' : ''} {isStarting ? 'starting' : ''} {statusClass === 'running' ? 'running' : ''} {statusClass === 'paused' && !needsInput ? 'paused' : ''} {statusClass === 'failed' ? 'failed' : ''} {statusClass === 'interrupted' ? 'interrupted' : ''} {statusClass === 'completed' ? 'completed' : ''} {needsInput ? 'needs-input' : ''} {hasReadyToMerge && statusClass !== 'running' ? 'ready-to-merge' : ''} {hasPendingCi && statusClass !== 'running' && !needsInput && !hasCiFailure ? 'ci-running' : ''} {hasReviewPending && statusClass !== 'running' && !needsInput && !hasCiFailure && !hasPendingCi ? 'review-pending' : ''}"
   onclick={handleClick}
 >
   <div class="flex items-center justify-between mb-1">

@@ -15,6 +15,8 @@ export const ALL_TASK_STATES: TaskState[] = [
   'frozen',
   'pr-draft',
   'pr-open',
+  'ci-running',
+  'review-pending',
   'ci-failed',
   'changes-requested',
   'ready-to-merge',
@@ -49,6 +51,8 @@ export const TASK_STATE_LABELS: Record<TaskState, string> = {
   done: 'Done',
   'pr-draft': 'PR Draft',
   'pr-open': 'PR Open',
+  'ci-running': 'CI Running',
+  'review-pending': 'Awaiting Review',
   'ci-failed': 'CI Failed',
   'changes-requested': 'Changes Requested',
   'ready-to-merge': 'Ready to Merge',
@@ -69,6 +73,8 @@ export const DEFAULT_BOARD_COLUMNS: BoardColumnConfig[] = [
       'frozen',
       'pr-draft',
       'pr-open',
+      'ci-running',
+      'review-pending',
       'ci-failed',
       'changes-requested',
       'ready-to-merge',
@@ -135,6 +141,18 @@ export async function loadBoardColumns(projectId: string): Promise<BoardColumnCo
     const parsed = JSON.parse(stored)
 
     if (Array.isArray(parsed)) {
+      // Migrate: inject any new states missing from stored config
+      for (const column of parsed as BoardColumnConfig[]) {
+        if (column.underlyingStatus === 'doing') {
+          for (const state of ALL_TASK_STATES) {
+            if (!column.statuses.includes(state)) {
+              column.statuses.push(state)
+            }
+          }
+          break
+        }
+      }
+
       const validation = validateBoardColumns(parsed as BoardColumnConfig[])
       if (validation.valid) {
         return parsed as BoardColumnConfig[]
