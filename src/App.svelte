@@ -26,6 +26,7 @@
   import CommandPalette from './components/CommandPalette.svelte'
   import ActionPalette from './components/ActionPalette.svelte'
 
+  import { PanelLeft } from 'lucide-svelte'
   import { pushNavState, navigateBack } from './lib/navigation'
   import { loadActions, getEnabledActions } from './lib/actions'
   import type { Action } from './lib/types'
@@ -64,6 +65,7 @@
   let appMode = $state<string | null>(null)
   let showShortcutsDialog = $state(false)
   let showProjectSwitcher = $state(false)
+  let showProjectSidebar = $state(localStorage.getItem('projectSidebarVisible') !== 'false')
   let showCommandPalette = $state(false)
   let showActionPalette = $state(false)
   let actionPaletteActions = $state<Action[]>([])
@@ -326,6 +328,12 @@
     if (e.metaKey && !e.shiftKey && e.key === 'p') {
       e.preventDefault()
       showProjectSwitcher = !showProjectSwitcher
+      return
+    }
+    if (e.metaKey && e.key === 'b') {
+      e.preventDefault()
+      showProjectSidebar = !showProjectSidebar
+      localStorage.setItem('projectSidebarVisible', String(showProjectSidebar))
       return
     }
     if (e.metaKey && e.key === 't') {
@@ -751,7 +759,9 @@
 
 <div class="flex h-screen overflow-hidden bg-base-200">
   <IconRail currentView={$currentView} onNavigate={handleNavigate} reviewRequestCount={$reviewRequestCount} authoredPrCount={$authoredPrCount} />
-  <ProjectSidebar onNewProject={() => showProjectSetup = true} />
+  {#if showProjectSidebar}
+    <ProjectSidebar onNewProject={() => showProjectSetup = true} />
+  {/if}
 
   <div class="flex flex-col flex-1 min-w-0">
     <header class="bg-neutral text-neutral-content h-12 flex items-center justify-between px-6 shrink-0">
@@ -777,6 +787,14 @@
       </div>
 
       <div class="flex items-center gap-2">
+        <button
+          type="button"
+          class="btn btn-ghost btn-sm btn-square {showProjectSidebar ? 'text-primary' : 'text-neutral-content/40 hover:text-neutral-content'}"
+          onclick={() => { showProjectSidebar = !showProjectSidebar; localStorage.setItem('projectSidebarVisible', String(showProjectSidebar)) }}
+          title={showProjectSidebar ? 'Hide project sidebar (⌘B)' : 'Show project sidebar (⌘B)'}
+        >
+          <PanelLeft size={16} />
+        </button>
         <button
           type="button"
           class="btn btn-ghost btn-sm text-neutral-content/60 hover:text-neutral-content font-mono text-xs gap-1"

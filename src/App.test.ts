@@ -173,6 +173,7 @@ vi.mock('./lib/terminalPool', () => ({
 
 vi.mock('lucide-svelte', () => ({
   RefreshCw: vi.fn(),
+  PanelLeft: vi.fn(),
 }))
 
 describe('App onMount initialization order', () => {
