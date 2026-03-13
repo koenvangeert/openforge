@@ -2,8 +2,8 @@
   import { onMount, onDestroy } from 'svelte'
   import { listen } from '@tauri-apps/api/event'
   import type { UnlistenFn } from '@tauri-apps/api/event'
-  import { reviewPrs, selectedReviewPr, prFileDiffs, reviewRequestCount, reviewComments, pendingManualComments, prOverviewComments, agentReviewComments, agentReviewLoading, agentReviewError, authoredPrs, authoredPrCount } from '../lib/stores'
-  import { fetchReviewPrs, getReviewPrs, fetchAuthoredPrs, getAuthoredPrs, getPrFileDiffs, openUrl, getReviewComments, getFileContent, getFileAtRef, markReviewPrViewed, startAgentReview, getAgentReviewComments, abortAgentReview } from '../lib/ipc'
+  import { reviewPrs, selectedReviewPr, prFileDiffs, reviewRequestCount, reviewComments, pendingManualComments, prOverviewComments, agentReviewComments, agentReviewLoading, agentReviewError, authoredPrs, authoredPrCount, activeProjectId } from '../lib/stores'
+  import { fetchReviewPrs, getReviewPrs, fetchAuthoredPrs, getAuthoredPrs, getPrFileDiffs, openUrl, getReviewComments, getFileContent, getFileAtRef, markReviewPrViewed, startAgentReview, getAgentReviewComments, abortAgentReview, getProjectConfig, setProjectConfig } from '../lib/ipc'
   import { pushNavState } from '../lib/navigation'
   import { isInputFocused } from '../lib/domUtils'
   import { useVimNavigation } from '../lib/useVimNavigation.svelte'
@@ -32,8 +32,65 @@
   let showOutputModal = $state(false)
   let unlisteners: UnlistenFn[] = []
 
+  // Repo filtering
+  let excludedRepos = $state<Set<string>>(new Set())
+  let showFilterDropdown = $state(false)
+
+  // Load excluded repos when project changes
+  $effect(() => {
+    const pid = $activeProjectId
+    if (pid) {
+      getProjectConfig(pid, 'pr_excluded_repos').then((val) => {
+        if (val) {
+          try {
+            const parsed = JSON.parse(val)
+            excludedRepos = new Set(Array.isArray(parsed) ? parsed : [])
+          } catch {
+            excludedRepos = new Set()
+          }
+        } else {
+          excludedRepos = new Set()
+        }
+      }).catch(() => {
+        excludedRepos = new Set()
+      })
+    } else {
+      excludedRepos = new Set()
+    }
+  })
+
+  function isRepoExcluded(repoOwner: string, repoName: string): boolean {
+    return excludedRepos.has(`${repoOwner}/${repoName}`)
+  }
+
+  let filteredReviewPrs = $derived($reviewPrs.filter(pr => !isRepoExcluded(pr.repo_owner, pr.repo_name)))
+  let filteredAuthoredPrs = $derived($authoredPrs.filter(pr => !isRepoExcluded(pr.repo_owner, pr.repo_name)))
+
+  // All unique repos from both PR lists (for filter dropdown)
+  let allRepos = $derived(() => {
+    const repos = new Set<string>()
+    for (const pr of $reviewPrs) repos.add(`${pr.repo_owner}/${pr.repo_name}`)
+    for (const pr of $authoredPrs) repos.add(`${pr.repo_owner}/${pr.repo_name}`)
+    return [...repos].sort()
+  })
+
+  async function toggleRepoFilter(repo: string) {
+    const newExcluded = new Set(excludedRepos)
+    if (newExcluded.has(repo)) {
+      newExcluded.delete(repo)
+    } else {
+      newExcluded.add(repo)
+    }
+    excludedRepos = newExcluded
+
+    if ($activeProjectId) {
+      const arr = [...newExcluded].sort()
+      await setProjectConfig($activeProjectId, 'pr_excluded_repos', JSON.stringify(arr))
+    }
+  }
+
   // Flat PR list for vim navigation
-  let flatPrList = $derived($reviewPrs)
+  let flatPrList = $derived(filteredReviewPrs)
 
   const vimList = useVimNavigation({
     getItemCount: () => $selectedReviewPr ? 0 : flatPrList.length,
@@ -47,6 +104,11 @@
   })
 
   function handlePrReviewKeydown(e: KeyboardEvent) {
+    if (e.key === 'Escape' && showFilterDropdown) {
+      e.preventDefault()
+      showFilterDropdown = false
+      return
+    }
     if (isInputFocused()) return
     if (e.metaKey || e.ctrlKey || e.altKey) return
 
@@ -83,8 +145,8 @@
     el?.scrollIntoView?.({ block: 'nearest' })
   })
 
-  let groupedPrs = $derived(groupByRepo($reviewPrs))
-  let groupedAuthoredPrs = $derived(groupAuthoredByRepo($authoredPrs))
+  let groupedPrs = $derived(groupByRepo(filteredReviewPrs))
+  let groupedAuthoredPrs = $derived(groupAuthoredByRepo(filteredAuthoredPrs))
 
   function groupByRepo(prs: ReviewPullRequest[]): Map<string, ReviewPullRequest[]> {
     const grouped = new Map<string, ReviewPullRequest[]>()
@@ -108,9 +170,19 @@
     return grouped
   }
 
-  function updateAuthoredCount(prs: AuthoredPullRequest[]) {
-    $authoredPrCount = prs.filter(p => p.ci_status === 'failure' || p.review_status === 'changes_requested').length
+  function updateAuthoredCount() {
+    $authoredPrCount = filteredAuthoredPrs.filter(p => p.ci_status === 'failure' || p.review_status === 'changes_requested').length
   }
+
+  // Update authored PR count whenever filtered authored PRs change
+  $effect(() => {
+    updateAuthoredCount()
+  })
+
+  // Update review request count whenever filtered PRs change
+  $effect(() => {
+    $reviewRequestCount = filteredReviewPrs.filter(p => p.viewed_at === null).length
+  })
 
   async function loadPrs() {
     isLoading = true
@@ -118,7 +190,6 @@
     try {
       const prs = await getReviewPrs()
       $reviewPrs = prs
-      $reviewRequestCount = prs.filter(p => p.viewed_at === null).length
     } catch (e) {
       console.error('Failed to load PRs:', e)
       error = 'Failed to load pull requests. Please try again.'
@@ -133,7 +204,6 @@
     try {
       const prs = await fetchReviewPrs()
       $reviewPrs = prs
-      $reviewRequestCount = prs.filter(p => p.viewed_at === null).length
     } catch (e) {
       console.error('Failed to refresh PRs:', e)
       error = 'Failed to refresh pull requests. Please try again.'
@@ -148,7 +218,7 @@
     try {
       const prs = await getAuthoredPrs()
       $authoredPrs = prs
-      updateAuthoredCount(prs)
+      // count is updated reactively via $effect
     } catch (e) {
       console.error('Failed to load authored PRs:', e)
       authoredError = 'Failed to load pull requests. Please try again.'
@@ -163,7 +233,7 @@
     try {
       const prs = await fetchAuthoredPrs()
       $authoredPrs = prs
-      updateAuthoredCount(prs)
+      // count is updated reactively via $effect
     } catch (e) {
       console.error('Failed to refresh authored PRs:', e)
       authoredError = 'Failed to refresh pull requests. Please try again.'
@@ -178,7 +248,6 @@
     const updatedPr = { ...pr, viewed_at: now, viewed_head_sha: pr.head_sha }
     $selectedReviewPr = updatedPr
     $reviewPrs = $reviewPrs.map(p => p.id === pr.id ? updatedPr : p)
-    $reviewRequestCount = $reviewPrs.filter(p => p.viewed_at === null).length
     // Fire-and-forget IPC
     markReviewPrViewed(pr.id, pr.head_sha).catch(e => console.error('Failed to mark viewed:', e))
     isLoading = true
@@ -456,6 +525,38 @@
     <div class="flex flex-col h-full overflow-hidden">
       <div class="flex items-center justify-between px-6 py-5 bg-base-200 border-b border-base-300 shrink-0">
         <h2 class="text-xl font-semibold text-base-content m-0">Pull Requests</h2>
+        <div class="relative">
+          <button
+            class="btn btn-ghost btn-sm gap-1 {excludedRepos.size > 0 ? 'text-warning' : 'text-base-content/50'}"
+            title="Filter repositories"
+            onclick={() => { showFilterDropdown = !showFilterDropdown }}
+          >
+            {#if excludedRepos.size > 0}
+              <span class="badge badge-warning badge-xs">{excludedRepos.size}</span>
+            {/if}
+            Filter
+          </button>
+          {#if showFilterDropdown}
+            <div class="absolute right-0 top-full mt-1 z-50 bg-base-100 border border-base-300 rounded-lg shadow-lg min-w-[240px] p-2">
+              <div class="text-xs font-semibold text-base-content/50 px-2 py-1 mb-1">Repositories</div>
+              {#if allRepos().length === 0}
+                <div class="text-xs text-base-content/40 px-2 py-1">No repositories found</div>
+              {:else}
+                {#each allRepos() as repo}
+                  <label class="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer hover:bg-base-200 text-sm">
+                    <input
+                      type="checkbox"
+                      class="checkbox checkbox-xs checkbox-primary"
+                      checked={!excludedRepos.has(repo)}
+                      onchange={() => toggleRepoFilter(repo)}
+                    />
+                    <span class="text-base-content">{repo}</span>
+                  </label>
+                {/each}
+              {/if}
+            </div>
+          {/if}
+        </div>
       </div>
 
       <div class="flex flex-1 overflow-hidden">
@@ -464,7 +565,7 @@
           <div class="flex items-center justify-between px-5 py-3 bg-base-200/50 border-b border-base-300 shrink-0">
             <div class="flex items-center gap-2">
               <h3 class="text-sm font-semibold text-base-content m-0">Review Requests</h3>
-              <span class="badge badge-primary badge-xs">{$reviewPrs.length}</span>
+              <span class="badge badge-primary badge-xs">{filteredReviewPrs.length}</span>
             </div>
             <button class="btn btn-xs btn-ghost text-base-content/50" onclick={refreshPrs} disabled={isLoading}>
               {isLoading ? '⟳' : '↻'}
@@ -472,7 +573,7 @@
           </div>
 
           <div class="flex-1 overflow-y-auto p-5 pb-8">
-            {#if isLoading && $reviewPrs.length === 0}
+            {#if isLoading && filteredReviewPrs.length === 0}
               <div class="flex flex-col items-center justify-center h-full gap-3 text-base-content/50 text-sm">
                 <span class="loading loading-spinner loading-md text-primary"></span>
                 <span>Loading PRs...</span>
@@ -482,7 +583,7 @@
                 <span class="text-5xl">⚠</span>
                 <span>{error}</span>
               </div>
-            {:else if $reviewPrs.length === 0}
+            {:else if filteredReviewPrs.length === 0}
               <div class="flex flex-col items-center justify-center h-full gap-4 text-base-content/50 text-center">
                 <span class="text-6xl text-success">✓</span>
                 <h3 class="text-xl font-semibold text-base-content m-0">No PRs requesting your review</h3>
@@ -515,7 +616,7 @@
           <div class="flex items-center justify-between px-5 py-3 bg-base-200/50 border-b border-base-300 shrink-0">
             <div class="flex items-center gap-2">
               <h3 class="text-sm font-semibold text-base-content m-0">My Pull Requests</h3>
-              <span class="badge badge-primary badge-xs">{$authoredPrs.length}</span>
+              <span class="badge badge-primary badge-xs">{filteredAuthoredPrs.length}</span>
             </div>
             <button class="btn btn-xs btn-ghost text-base-content/50" onclick={refreshAuthoredPrs} disabled={isLoadingAuthored}>
               {isLoadingAuthored ? '⟳' : '↻'}
@@ -523,7 +624,7 @@
           </div>
 
           <div class="flex-1 overflow-y-auto p-5 pb-8">
-            {#if isLoadingAuthored && $authoredPrs.length === 0}
+            {#if isLoadingAuthored && filteredAuthoredPrs.length === 0}
               <div class="flex flex-col items-center justify-center h-full gap-3 text-base-content/50 text-sm">
                 <span class="loading loading-spinner loading-md text-primary"></span>
                 <span>Loading PRs...</span>
@@ -533,7 +634,7 @@
                 <span class="text-5xl">⚠</span>
                 <span>{authoredError}</span>
               </div>
-            {:else if $authoredPrs.length === 0}
+            {:else if filteredAuthoredPrs.length === 0}
               <div class="flex flex-col items-center justify-center h-full gap-4 text-base-content/50 text-center">
                 <span class="text-6xl">🚀</span>
                 <h3 class="text-xl font-semibold text-base-content m-0">No open pull requests</h3>
