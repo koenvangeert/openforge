@@ -1,0 +1,211 @@
+name: CI Comment
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  comment:
+    name: Post CI Results
+    runs-on: ubuntu-latest
+    if: github.event.workflow_run.event == 'pull_request'
+    steps:
+      - name: Get PR number
+        id: pr
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const runs = await github.rest.actions.listWorkflowRunArtifacts({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: context.payload.workflow_run.id,
+            });
+            // Also get the PR number from the workflow run
+            const prs = context.payload.workflow_run.pull_requests;
+            if (!prs || prs.length === 0) {
+              console.log('No PR associated with this workflow run');
+              return;
+            }
+            core.setOutput('number', prs[0].number);
+
+      - name: Download frontend logs
+        if: steps.pr.outputs.number
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const artifacts = await github.rest.actions.listWorkflowRunArtifacts({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: context.payload.workflow_run.id,
+            });
+
+            for (const name of ['frontend-logs', 'frontend-results', 'rust-logs', 'rust-results']) {
+              const artifact = artifacts.data.artifacts.find(a => a.name === name);
+              if (artifact) {
+                const download = await github.rest.actions.downloadArtifact({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  artifact_id: artifact.id,
+                  archive_format: 'zip',
+                });
+                fs.writeFileSync(`/tmp/${name}.zip`, Buffer.from(download.data));
+              }
+            }
+
+      - name: Extract artifacts
+        if: steps.pr.outputs.number
+        run: |
+          mkdir -p /tmp/frontend-logs /tmp/frontend-results /tmp/rust-logs /tmp/rust-results
+          for name in frontend-logs frontend-results rust-logs rust-results; do
+            if [ -f "/tmp/${name}.zip" ]; then
+              unzip -o "/tmp/${name}.zip" -d "/tmp/${name}" || true
+            fi
+          done
+
+      - name: Post or clean frontend comment
+        if: steps.pr.outputs.number
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const prNumber = parseInt('${{ steps.pr.outputs.number }}');
+            const marker = '<!-- ci-frontend-failures -->';
+
+            // Read exit codes
+            let typecheckFailed = false;
+            let testsFailed = false;
+            try {
+              typecheckFailed = fs.readFileSync('/tmp/frontend-results/typecheck-exit-code', 'utf8').trim() !== '0';
+            } catch {}
+            try {
+              testsFailed = fs.readFileSync('/tmp/frontend-results/tests-exit-code', 'utf8').trim() !== '0';
+            } catch {}
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+            });
+            const existing = comments.find(c => c.body.startsWith(marker));
+
+            if (!typecheckFailed && !testsFailed) {
+              if (existing) {
+                await github.rest.issues.deleteComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  comment_id: existing.id,
+                });
+              }
+              return;
+            }
+
+            let body = '## ❌ Frontend CI Failures\n\n';
+
+            if (typecheckFailed) {
+              try {
+                const log = fs.readFileSync('/tmp/frontend-logs/typecheck.log', 'utf8');
+                const errors = log.split('\n').filter(l => l.includes('error TS')).join('\n');
+                body += '### Type Check\n\n```\n' + (errors || log).slice(0, 30000) + '\n```\n\n';
+              } catch {
+                body += '### Type Check\n\n_Failed (logs unavailable)_\n\n';
+              }
+            }
+
+            if (testsFailed) {
+              try {
+                const log = fs.readFileSync('/tmp/frontend-logs/tests.log', 'utf8');
+                const lines = log.split('\n');
+                const tail = lines.slice(Math.max(0, lines.length - 200)).join('\n');
+                body += '### Tests\n\n```\n' + tail.slice(0, 30000) + '\n```\n\n';
+              } catch {
+                body += '### Tests\n\n_Failed (logs unavailable)_\n\n';
+              }
+            }
+
+            body = marker + '\n' + body;
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                body,
+              });
+            }
+
+      - name: Post or clean rust comment
+        if: steps.pr.outputs.number
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const prNumber = parseInt('${{ steps.pr.outputs.number }}');
+            const marker = '<!-- ci-rust-failures -->';
+
+            let testsFailed = false;
+            try {
+              testsFailed = fs.readFileSync('/tmp/rust-results/tests-exit-code', 'utf8').trim() !== '0';
+            } catch {}
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+            });
+            const existing = comments.find(c => c.body.startsWith(marker));
+
+            if (!testsFailed) {
+              if (existing) {
+                await github.rest.issues.deleteComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  comment_id: existing.id,
+                });
+              }
+              return;
+            }
+
+            let body = '## ❌ Rust CI Failures\n\n';
+            try {
+              const log = fs.readFileSync('/tmp/rust-logs/rust-tests.log', 'utf8');
+              const lines = log.split('\n');
+              const errorLines = lines.filter(l =>
+                l.includes('error[') || l.includes('error:') ||
+                l.includes('FAILED') || l.includes('panicked')
+              );
+              const tail = lines.slice(Math.max(0, lines.length - 100)).join('\n');
+              const errors = errorLines.length > 0 ? errorLines.join('\n') + '\n\n---\n\n' + tail : tail;
+              body += '```\n' + errors.slice(0, 30000) + '\n```\n';
+            } catch {
+              body += '_Failed (logs unavailable)_\n';
+            }
+
+            body = marker + '\n' + body;
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                body,
+              });
+            }
