@@ -14,6 +14,8 @@ const baseTask: Task = {
   jira_description: null,
   prompt: null,
   summary: null,
+  agent: null,
+  permission_mode: null,
   project_id: null,
   created_at: 1000,
   updated_at: 2000,
@@ -366,5 +368,19 @@ describe('TaskCard', () => {
     render(TaskCard, { props: { task: baseTask, isStarting: true, session: null } })
     expect(screen.getByText('Starting')).toBeTruthy()
     expect(screen.queryByText('Running')).toBeNull()
+  })
+
+  it('shows last status change time from updated_at', () => {
+    const fiveMinutesAgoSeconds = Math.floor(Date.now() / 1000) - 300
+    const recentTask = { ...baseTask, updated_at: fiveMinutesAgoSeconds }
+    render(TaskCard, { props: { task: recentTask } })
+    expect(screen.getByText('5m ago')).toBeTruthy()
+  })
+
+  it('shows "just now" for very recent updated_at', () => {
+    const justNowSeconds = Math.floor(Date.now() / 1000) - 10
+    const recentTask = { ...baseTask, updated_at: justNowSeconds }
+    render(TaskCard, { props: { task: recentTask } })
+    expect(screen.getByText('just now')).toBeTruthy()
   })
 })
