@@ -1,5 +1,4 @@
 use dashmap::DashMap;
-use dirs;
 use once_cell::sync::Lazy;
 use regex::Regex;
 use serde::Serialize;
@@ -16,6 +15,7 @@ use tokio::sync::Mutex;
 
 #[derive(Debug)]
 pub enum GitWorktreeError {
+    #[allow(dead_code)]
     NotARepository,
     WorktreeAddFailed(String),
     WorktreeRemoveFailed(String),
@@ -57,6 +57,7 @@ impl From<io::Error> for GitWorktreeError {
 // Data Structures
 // ============================================================================
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize)]
 pub struct WorktreeListEntry {
     pub path: String,
@@ -419,6 +420,7 @@ pub async fn remove_worktree_with_branch(
 ///
 /// # Returns
 /// A vector of `WorktreeListEntry` structs for each worktree
+#[allow(dead_code)]
 pub async fn list_worktrees(repo_path: &Path) -> Result<Vec<WorktreeListEntry>, GitWorktreeError> {
     let output = Command::new("git")
         .arg("-C")

@@ -135,6 +135,7 @@ impl fmt::Display for WhisperModelSize {
 
 /// Metadata for a specific Whisper model variant.
 pub struct ModelSpec {
+    #[allow(dead_code)]
     pub size: WhisperModelSize,
     pub display_name: &'static str,
     pub filename: &'static str,
@@ -208,6 +209,7 @@ pub enum WhisperError {
     /// Loading the WhisperContext from the model file failed.
     ContextLoadError(String),
     /// Invalid model size string.
+    #[allow(dead_code)]
     InvalidModelSize(String),
 }
 
@@ -269,6 +271,7 @@ pub struct WhisperManager {
 
 impl WhisperManager {
     /// Create a new `WhisperManager` with "small" as the default active model.
+    #[allow(dead_code)]
     pub fn new() -> Self {
         Self::with_active_model(WhisperModelSize::Small)
     }

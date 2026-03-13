@@ -58,6 +58,7 @@ struct ManagedServer {
     child: Child,
     port: u16,
     pid: u32,
+    #[allow(dead_code)]
     worktree_path: PathBuf,
 }
 

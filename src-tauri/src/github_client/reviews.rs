@@ -50,6 +50,7 @@ impl GitHubClient {
 
     /// Submit a PR review with inline comments
     /// event: "APPROVE", "REQUEST_CHANGES", or "COMMENT"
+    #[allow(clippy::too_many_arguments)]
     pub async fn submit_review(
         &self,
         owner: &str,

@@ -31,6 +31,7 @@ pub async fn get_task_detail(
 }
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub async fn create_task(
     db: State<'_, Arc<Mutex<db::Database>>>,
     app: tauri::AppHandle,

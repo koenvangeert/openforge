@@ -172,6 +172,7 @@ impl OpenCodeClient {
     /// # Ok(())
     /// # }
     /// ```
+    #[allow(dead_code)]
     pub async fn subscribe_events(&self) -> Result<EventStream, OpenCodeError> {
         let url = format!("{}/event", self.base_url);
 
@@ -431,6 +432,7 @@ impl OpenCodeClient {
     ///
     /// # Returns
     /// Session information including status
+    #[allow(dead_code)]
     pub async fn get_session(&self, session_id: &str) -> Result<SessionInfo, OpenCodeError> {
         let url = format!("{}/session/{}", self.base_url, session_id);
 
@@ -540,12 +542,14 @@ impl Default for OpenCodeClient {
 }
 
 /// Server-sent events stream wrapper
+#[allow(dead_code)]
 pub struct EventStream {
     response: Response,
 }
 
 impl EventStream {
     /// Get the underlying byte stream
+    #[allow(dead_code)]
     pub fn into_stream(self) -> impl Stream<Item = Result<bytes::Bytes, reqwest::Error>> {
         self.response.bytes_stream()
     }
@@ -652,6 +656,7 @@ pub struct SessionStatusInfo {
 
 /// OpenCode API errors
 #[derive(Debug)]
+#[allow(clippy::enum_variant_names)]
 pub enum OpenCodeError {
     /// Network error (connection failed, timeout, etc.)
     NetworkError(String),

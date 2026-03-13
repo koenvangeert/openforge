@@ -21,6 +21,7 @@ pub struct AgentReviewCommentRow {
 
 impl super::Database {
     /// Insert an agent review comment
+    #[allow(clippy::too_many_arguments)]
     pub fn insert_agent_review_comment(
         &self,
         review_pr_id: i64,

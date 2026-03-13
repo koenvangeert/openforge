@@ -35,6 +35,7 @@ impl RingBuffer {
         }
     }
 
+    #[allow(dead_code)]
     fn drain(&mut self) -> String {
         let result = String::from_utf8_lossy(&self.data).to_string();
         self.data.clear();
@@ -88,6 +89,7 @@ impl From<std::io::Error> for PtyError {
 // ============================================================================
 
 struct PtySession {
+    #[allow(dead_code)]
     instance_id: u64,
     #[allow(dead_code)]
     child: Box<dyn portable_pty::Child + Send + Sync>,
@@ -385,6 +387,7 @@ impl PtyManager {
     ///
     /// # Returns
     /// The unique instance ID for this PTY session
+    #[allow(clippy::too_many_arguments)]
     pub async fn spawn_claude_pty(
         &self,
         task_id: &str,
@@ -574,18 +577,16 @@ impl PtyManager {
                         match msg {
                             Some(Some(text)) => {
                                 buffer.push_str(&text);
-                                if buffer.len() >= MAX_BUFFER_SIZE {
-                                    if !buffer.is_empty() {
-                                        if let Ok(mut buf) = ring_buffer_emitter.lock() {
-                                            buf.push(buffer.as_bytes());
-                                        }
-                                        let event_name = format!("pty-output-{}", task_id_emitter);
-                                        let payload = serde_json::json!({ "task_id": &task_id_emitter, "data": &buffer });
-                                        if let Err(e) = app_handle.emit(&event_name, &payload) {
-                                            eprintln!("[PTY] Failed to emit {}: {}", event_name, e);
-                                        }
-                                        buffer.clear();
+                                if buffer.len() >= MAX_BUFFER_SIZE && !buffer.is_empty() {
+                                    if let Ok(mut buf) = ring_buffer_emitter.lock() {
+                                        buf.push(buffer.as_bytes());
                                     }
+                                    let event_name = format!("pty-output-{}", task_id_emitter);
+                                    let payload = serde_json::json!({ "task_id": &task_id_emitter, "data": &buffer });
+                                    if let Err(e) = app_handle.emit(&event_name, &payload) {
+                                        eprintln!("[PTY] Failed to emit {}: {}", event_name, e);
+                                    }
+                                    buffer.clear();
                                 }
                             }
                             Some(None) | None => {
@@ -802,18 +803,16 @@ impl PtyManager {
                         match msg {
                             Some(Some(text)) => {
                                 buffer.push_str(&text);
-                                if buffer.len() >= MAX_BUFFER_SIZE {
-                                    if !buffer.is_empty() {
-                                        if let Ok(mut buf) = ring_buffer_emitter.lock() {
-                                            buf.push(buffer.as_bytes());
-                                        }
-                                        let event_name = format!("pty-output-{}", key_emitter);
-                                        let payload = serde_json::json!({ "task_id": &key_emitter, "data": &buffer });
-                                        if let Err(e) = app_handle.emit(&event_name, &payload) {
-                                            eprintln!("[PTY] Failed to emit {}: {}", event_name, e);
-                                        }
-                                        buffer.clear();
+                                if buffer.len() >= MAX_BUFFER_SIZE && !buffer.is_empty() {
+                                    if let Ok(mut buf) = ring_buffer_emitter.lock() {
+                                        buf.push(buffer.as_bytes());
                                     }
+                                    let event_name = format!("pty-output-{}", key_emitter);
+                                    let payload = serde_json::json!({ "task_id": &key_emitter, "data": &buffer });
+                                    if let Err(e) = app_handle.emit(&event_name, &payload) {
+                                        eprintln!("[PTY] Failed to emit {}: {}", event_name, e);
+                                    }
+                                    buffer.clear();
                                 }
                             }
                             Some(None) | None => {
@@ -897,7 +896,7 @@ impl PtyManager {
         session
             .master
             .resize(size)
-            .map_err(|e| PtyError::IoError(io::Error::new(io::ErrorKind::Other, e.to_string())))?;
+            .map_err(|e| PtyError::IoError(io::Error::other(e.to_string())))?;
 
         Ok(())
     }

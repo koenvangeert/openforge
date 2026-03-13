@@ -280,6 +280,7 @@ impl GitHubClient {
     }
 
     /// Post a comment on a pull request
+    #[allow(dead_code)]
     pub async fn post_pr_comment(
         &self,
         owner: &str,
@@ -323,6 +324,7 @@ impl GitHubClient {
     }
 
     /// Get pull request status
+    #[allow(dead_code)]
     pub async fn get_pr_status(
         &self,
         owner: &str,
@@ -651,7 +653,7 @@ impl GitHubClient {
 
         // Decode base64 content
         let decoded = general_purpose::STANDARD
-            .decode(&blob.content.replace('\n', ""))
+            .decode(blob.content.replace('\n', ""))
             .map_err(|e| GitHubError::ParseError(format!("Base64 decode error: {}", e)))?;
 
         let content = String::from_utf8(decoded)

@@ -113,6 +113,7 @@ pub(crate) struct ReviewComment {
     pub path: String,
     pub line: Option<i32>,
     pub created_at: String,
+    #[allow(dead_code)]
     #[serde(flatten)]
     pub extra: serde_json::Value,
 }
@@ -124,11 +125,13 @@ pub(crate) struct IssueComment {
     pub body: String,
     pub user: GitHubUser,
     pub created_at: String,
+    #[allow(dead_code)]
     #[serde(flatten)]
     pub extra: serde_json::Value,
 }
 
 /// Request body for posting a comment
+#[allow(dead_code)]
 #[derive(Debug, Serialize)]
 pub(crate) struct CommentRequest {
     pub body: String,
@@ -153,6 +156,7 @@ pub struct ReviewSubmitComment {
 #[derive(Debug, Deserialize)]
 pub(crate) struct AuthenticatedUser {
     pub login: String,
+    #[allow(dead_code)]
     #[serde(flatten)]
     pub extra: serde_json::Value,
 }
@@ -160,6 +164,7 @@ pub(crate) struct AuthenticatedUser {
 #[derive(Debug, Deserialize)]
 pub(crate) struct SearchResponse {
     pub items: Vec<SearchItem>,
+    #[allow(dead_code)]
     #[serde(flatten)]
     pub extra: serde_json::Value,
 }
@@ -177,6 +182,7 @@ pub(crate) struct SearchItem {
     pub repository_url: String,
     pub created_at: String,
     pub updated_at: String,
+    #[allow(dead_code)]
     #[serde(flatten)]
     pub extra: serde_json::Value,
 }
@@ -185,6 +191,7 @@ pub(crate) struct SearchItem {
 pub(crate) struct SearchUser {
     pub login: String,
     pub avatar_url: Option<String>,
+    #[allow(dead_code)]
     #[serde(flatten)]
     pub extra: serde_json::Value,
 }
@@ -192,7 +199,9 @@ pub(crate) struct SearchUser {
 #[derive(Debug, Deserialize)]
 pub(crate) struct BlobResponse {
     pub content: String,
+    #[allow(dead_code)]
     pub encoding: String,
+    #[allow(dead_code)]
     #[serde(flatten)]
     pub extra: serde_json::Value,
 }
@@ -280,6 +289,7 @@ pub(crate) struct RequiredStatusChecksResponse {
     /// Required checks with context name and optional app_id
     #[serde(default)]
     pub checks: Vec<RequiredCheckEntry>,
+    #[allow(dead_code)]
     #[serde(flatten)]
     pub extra: serde_json::Value,
 }
@@ -289,6 +299,7 @@ pub(crate) struct RequiredStatusChecksResponse {
 pub(crate) struct RequiredCheckEntry {
     /// Check context name (matches CheckRun.name or CommitStatusEntry.context)
     pub context: String,
+    #[allow(dead_code)]
     #[serde(flatten)]
     pub extra: serde_json::Value,
 }
@@ -312,6 +323,7 @@ pub(crate) struct RequiredPullRequestReviewsResponse {
     /// Number of approving reviews required
     #[serde(default)]
     pub required_approving_review_count: usize,
+    #[allow(dead_code)]
     #[serde(flatten)]
     pub extra: serde_json::Value,
 }

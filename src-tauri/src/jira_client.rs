@@ -130,6 +130,7 @@ impl JiraClient {
     /// # Ok(())
     /// # }
     /// ```
+    #[allow(dead_code)]
     pub async fn get_ticket_details(
         &self,
         base_url: &str,
@@ -196,6 +197,7 @@ impl JiraClient {
     /// # Ok(())
     /// # }
     /// ```
+    #[allow(dead_code)]
     pub async fn transition_ticket(
         &self,
         base_url: &str,
@@ -265,6 +267,7 @@ impl JiraClient {
     /// # Ok(())
     /// # }
     /// ```
+    #[allow(dead_code)]
     pub async fn get_available_transitions(
         &self,
         base_url: &str,
@@ -318,6 +321,7 @@ impl Default for JiraClient {
 #[derive(Debug, Deserialize)]
 pub struct SearchResponse {
     pub issues: Vec<JiraIssue>,
+    #[allow(dead_code)]
     #[serde(flatten)]
     pub extra: serde_json::Value,
 }
@@ -386,24 +390,28 @@ pub struct JiraPriority {
 }
 
 /// Request body for transitioning an issue
+#[allow(dead_code)]
 #[derive(Debug, Serialize)]
 struct TransitionRequest {
     transition: TransitionId,
 }
 
 /// Transition ID wrapper
+#[allow(dead_code)]
 #[derive(Debug, Serialize)]
 struct TransitionId {
     id: String,
 }
 
 /// Response from get transitions endpoint
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct TransitionsResponse {
     transitions: Vec<JiraTransition>,
 }
 
 /// Available transition for an issue
+#[allow(dead_code)]
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct JiraTransition {
     pub id: String,
@@ -418,6 +426,7 @@ pub struct JiraTransition {
 
 /// JIRA API error types
 #[derive(Debug)]
+#[allow(clippy::enum_variant_names)]
 pub enum JiraError {
     /// Network error (connection failure, timeout, etc.)
     NetworkError(String),

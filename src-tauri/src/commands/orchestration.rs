@@ -143,7 +143,7 @@ pub(crate) fn build_start_response(
     task_id: &str,
 ) -> Result<(), String> {
     let (provider_name, session) = {
-        let db_lock = crate::db::acquire_db(&db);
+        let db_lock = crate::db::acquire_db(db);
         let session = db_lock.get_latest_session_for_ticket(task_id).ok().flatten();
         let provider = session.as_ref().map(|s| s.provider.clone()).unwrap_or_else(|| "claude-code".to_string());
         (provider, session)
@@ -164,13 +164,13 @@ pub(crate) fn build_start_response(
     }
 
     if let Some(ref s) = session {
-        let db_lock = crate::db::acquire_db(&db);
+        let db_lock = crate::db::acquire_db(db);
         let status = if provider_name == "claude-code" { "interrupted" } else { "failed" };
         let _ = db_lock.update_agent_session(&s.id, &s.stage, status, None, Some("Aborted by user"));
     }
 
     if provider_name != "claude-code" {
-        let db = crate::db::acquire_db(&db);
+        let db = crate::db::acquire_db(db);
         let _ = db.update_worktree_status(task_id, "stopped");
     }
 

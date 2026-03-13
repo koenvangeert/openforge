@@ -118,6 +118,7 @@ impl super::Database {
         Ok(result)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn create_task(
         &self,
         initial_prompt: &str,
