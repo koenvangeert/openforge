@@ -159,6 +159,52 @@ describe('AgentPanel (router)', () => {
   })
 })
 
+describe('AgentPanel starting animation', () => {
+  beforeEach(() => {
+    activeSessions.set(new Map())
+  })
+
+  it('shows starting animation when isStarting=true and no session', async () => {
+    render(AgentPanel, { props: { taskId: 'T-1', isStarting: true } })
+    await vi.waitFor(() => {
+      expect(screen.getByText('Starting agent session...')).toBeTruthy()
+      expect(screen.getByText('Creating worktree and launching agent')).toBeTruthy()
+      expect(screen.queryByText('No active agent session')).toBeNull()
+    })
+  })
+
+  it('shows idle state when isStarting=false and no session', async () => {
+    render(AgentPanel, { props: { taskId: 'T-1', isStarting: false } })
+    await vi.waitFor(() => {
+      expect(screen.getByText('No active agent session')).toBeTruthy()
+      expect(screen.queryByText('Starting agent session...')).toBeNull()
+    })
+  })
+
+  it('hides starting animation when session exists', async () => {
+    const session: AgentSession = {
+      id: 'ses-1',
+      ticket_id: 'T-1',
+      opencode_session_id: 'oc-sess-1',
+      stage: 'implement',
+      status: 'running',
+      checkpoint_data: null,
+      error_message: null,
+      created_at: 1000,
+      updated_at: 2000,
+      provider: 'opencode',
+      claude_session_id: null,
+    }
+
+    const sessions = new Map<string, AgentSession>()
+    sessions.set('T-1', session)
+    activeSessions.set(sessions)
+
+    render(AgentPanel, { props: { taskId: 'T-1', isStarting: true } })
+    expect(screen.queryByText('Starting agent session...')).toBeNull()
+  })
+})
+
 describe('OpenCodeAgentPanel (via router)', () => {
   beforeEach(() => {
     activeSessions.set(new Map())

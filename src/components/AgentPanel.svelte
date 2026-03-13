@@ -7,9 +7,10 @@
 
   interface Props {
     taskId: string
+    isStarting?: boolean
   }
 
-  let { taskId }: Props = $props()
+  let { taskId, isStarting = false }: Props = $props()
 
   // Check the store first; if absent, try loading from DB once on mount.
   let session = $derived($activeSessions.get(taskId) || null)
@@ -37,7 +38,7 @@
 </script>
 
 {#if provider === 'claude-code'}
-  <ClaudeAgentPanel {taskId} />
+  <ClaudeAgentPanel {taskId} {isStarting} />
 {:else if provider || checkedDb}
-  <OpenCodeAgentPanel {taskId} />
+  <OpenCodeAgentPanel {taskId} {isStarting} />
 {/if}

@@ -10,9 +10,10 @@
 
   interface Props {
     taskId: string
+    isStarting?: boolean
   }
 
-  let { taskId }: Props = $props()
+  let { taskId, isStarting = false }: Props = $props()
 
   let terminalEl: HTMLDivElement
   let unlisteners: UnlistenFn[] = []
@@ -147,13 +148,19 @@
     <div class="terminal-wrapper" bind:this={terminalEl}></div>
     {#if !session && !ptyActive}
       <div class="absolute inset-0 flex flex-col items-center justify-center p-16 gap-4 bg-base-100 z-[1] pointer-events-none">
-        <svg class="w-16 h-16 text-base-content/40" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-          <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-          <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-        <div class="text-base font-semibold text-base-content">No active agent session</div>
-        <div class="text-sm text-base-content/50 text-center max-w-[320px] leading-relaxed">Use the action buttons in the header to get started</div>
+        {#if isStarting}
+          <span class="loading loading-spinner loading-lg text-primary"></span>
+          <div class="text-base font-semibold text-base-content" style="animation: badge-pulse 2s ease-in-out infinite;">Starting agent session...</div>
+          <div class="text-sm text-base-content/50 text-center max-w-[320px] leading-relaxed">Creating worktree and launching agent</div>
+        {:else}
+          <svg class="w-16 h-16 text-base-content/40" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <div class="text-base font-semibold text-base-content">No active agent session</div>
+          <div class="text-sm text-base-content/50 text-center max-w-[320px] leading-relaxed">Use the action buttons in the header to get started</div>
+        {/if}
       </div>
     {/if}
   </div>

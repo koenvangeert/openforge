@@ -225,6 +225,24 @@ describe('ClaudeAgentPanel', () => {
     expect(screen.queryByText('COMPLETED')).toBeNull()
   })
 
+  it('shows starting animation when isStarting=true and no session', async () => {
+    render(ClaudeAgentPanel, { props: { taskId: 'T-1', isStarting: true } })
+    await vi.waitFor(() => {
+      expect(screen.getByText('Starting agent session...')).toBeTruthy()
+      expect(screen.getByText('Creating worktree and launching agent')).toBeTruthy()
+      expect(screen.queryByText('No active agent session')).toBeNull()
+    })
+  })
+
+  it('hides starting animation when session exists even if isStarting=true', () => {
+    const sessions = new Map<string, AgentSession>()
+    sessions.set('T-1', baseSession)
+    activeSessions.set(sessions)
+
+    render(ClaudeAgentPanel, { props: { taskId: 'T-1', isStarting: true } })
+    expect(screen.queryByText('Starting agent session...')).toBeNull()
+  })
+
   it('test_abort_button_visible_only_when_running', async () => {
     const runningSessions = new Map<string, AgentSession>()
     runningSessions.set('T-1', { ...baseSession, status: 'running' })
