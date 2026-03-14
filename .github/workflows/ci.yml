@@ -1,0 +1,123 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    name: Frontend Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Type check
+        id: typecheck
+        run: |
+          set +e -o pipefail
+          pnpm exec tsc --noEmit 2>&1 | tee /tmp/typecheck.log
+          echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+
+      - name: Run tests
+        id: tests
+        run: |
+          set +e -o pipefail
+          pnpm test 2>&1 | tee /tmp/tests.log
+          echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+
+      - name: Upload failure logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-logs
+          path: |
+            /tmp/typecheck.log
+            /tmp/tests.log
+          retention-days: 1
+          if-no-files-found: ignore
+
+      - name: Save results
+        if: always()
+        run: |
+          mkdir -p /tmp/ci-results
+          echo "${{ steps.typecheck.outputs.exit_code }}" > /tmp/ci-results/typecheck-exit-code
+          echo "${{ steps.tests.outputs.exit_code }}" > /tmp/ci-results/tests-exit-code
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-results
+          path: /tmp/ci-results/
+          retention-days: 1
+
+      - name: Fail if checks failed
+        if: steps.typecheck.outputs.exit_code != '0' || steps.tests.outputs.exit_code != '0'
+        run: exit 1
+
+  rust:
+    name: Rust Tests
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Run tests
+        id: tests
+        working-directory: src-tauri
+        run: |
+          set +e -o pipefail
+          cargo test 2>&1 | tee /tmp/rust-tests.log
+          echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+
+      - name: Upload failure logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rust-logs
+          path: /tmp/rust-tests.log
+          retention-days: 1
+          if-no-files-found: ignore
+
+      - name: Save results
+        if: always()
+        run: |
+          mkdir -p /tmp/ci-results
+          echo "${{ steps.tests.outputs.exit_code }}" > /tmp/ci-results/tests-exit-code
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rust-results
+          path: /tmp/ci-results/
+          retention-days: 1
+
+      - name: Fail if tests failed
+        if: steps.tests.outputs.exit_code != '0'
+        run: exit 1
