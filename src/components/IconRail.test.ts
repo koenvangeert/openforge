@@ -10,10 +10,10 @@ describe('IconRail', () => {
     expect(screen.getByText('>_')).toBeTruthy()
   })
 
-  it('renders 5 navigation buttons', () => {
+  it('renders 6 navigation buttons (3 project + separator + 2 global)', () => {
     render(IconRail, { props: { currentView: 'board' as AppView, onNavigate: vi.fn(), authoredPrCount: 0 } })
     const buttons = screen.getAllByRole('button')
-    expect(buttons).toHaveLength(5)
+    expect(buttons).toHaveLength(6)
   })
 
   it('clicking first button (dashboard) calls onNavigate with "board"', () => {
@@ -40,20 +40,28 @@ describe('IconRail', () => {
     expect(onNavigate).toHaveBeenCalledWith('skills')
   })
 
-  it('clicking fourth button calls onNavigate with "workqueue"', () => {
+  it('clicking fourth button (project settings) calls onNavigate with "settings"', () => {
     const onNavigate = vi.fn()
     render(IconRail, { props: { currentView: 'board' as AppView, onNavigate, authoredPrCount: 0 } })
     const buttons = screen.getAllByRole('button')
     fireEvent.click(buttons[3])
-    expect(onNavigate).toHaveBeenCalledWith('workqueue')
+    expect(onNavigate).toHaveBeenCalledWith('settings')
   })
 
-  it('clicking fifth button calls onNavigate with "settings"', () => {
+  it('clicking fifth button (workqueue) calls onNavigate with "workqueue"', () => {
     const onNavigate = vi.fn()
     render(IconRail, { props: { currentView: 'board' as AppView, onNavigate, authoredPrCount: 0 } })
     const buttons = screen.getAllByRole('button')
     fireEvent.click(buttons[4])
-    expect(onNavigate).toHaveBeenCalledWith('settings')
+    expect(onNavigate).toHaveBeenCalledWith('workqueue')
+  })
+
+  it('clicking sixth button (global settings) calls onNavigate with "global_settings"', () => {
+    const onNavigate = vi.fn()
+    render(IconRail, { props: { currentView: 'board' as AppView, onNavigate, authoredPrCount: 0 } })
+    const buttons = screen.getAllByRole('button')
+    fireEvent.click(buttons[5])
+    expect(onNavigate).toHaveBeenCalledWith('global_settings')
   })
 
   it('shows review request count badge when reviewRequestCount > 0', () => {

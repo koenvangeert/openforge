@@ -32,9 +32,10 @@
   interface Props {
     onClose: () => void
     onProjectDeleted: () => void
+    mode: 'project' | 'global'
   }
 
-  let { onClose, onProjectDeleted }: Props = $props()
+  let { onClose, onProjectDeleted, mode }: Props = $props()
 
   // Project state
   let projectName = $state('')
@@ -89,7 +90,7 @@
   // UI state
   let isSaving = $state(false)
   let saved = $state(false)
-  let activeSection = $state('general')
+  let activeSection = $state(mode === 'global' ? 'preferences' : 'general')
   let isDeleting = $state(false)
 
   // Scroll spy
@@ -100,7 +101,7 @@
 
   // Derived state
   const hasProject = $derived(!!$activeProjectId)
-  const activePage = $derived(globalSections.includes(activeSection) ? 'global' : 'project')
+  const activePage = $derived(mode === 'global' ? 'global' : mode === 'project' ? 'project' : (globalSections.includes(activeSection) ? 'global' : 'project'))
 
   // Load project config on activeProjectId change
   $effect(() => {
@@ -150,10 +151,14 @@
     }
   })
 
-  // Default to global page when no project is active
+  // Default to global page when no project is active, or when in global mode
   $effect(() => {
-    if (!hasProject && projectSections.includes(activeSection)) {
-      activeSection = 'ai'
+    if (mode === 'global' && projectSections.includes(activeSection)) {
+      activeSection = 'preferences'
+    } else if (mode === 'project' && globalSections.includes(activeSection)) {
+      activeSection = 'general'
+    } else if (!hasProject && projectSections.includes(activeSection)) {
+      activeSection = 'preferences'
     }
   })
 
@@ -340,7 +345,7 @@
 </script>
 
 <div class="flex h-full w-full">
-  <SettingsSidebar {activeSection} onNavigate={handleNavigate} {hasProject} />
+  <SettingsSidebar {activeSection} onNavigate={handleNavigate} {hasProject} {mode} />
 
   <div bind:this={scrollContainer} class="flex-1 overflow-y-auto bg-base-200">
     <div class="px-6 py-6 flex flex-col gap-6">

@@ -86,7 +86,7 @@
   })
 
   $effect(() => {
-    if ($currentView === 'settings') {
+    if ($currentView === 'settings' || $currentView === 'global_settings') {
       $selectedTaskId = null
     }
   })
@@ -849,7 +849,9 @@
 
     <main class="flex-1 overflow-hidden flex flex-col">
       {#if $currentView === 'settings'}
-        <SettingsView onClose={() => { pushNavState(); $currentView = 'board' }} onProjectDeleted={loadProjects} />
+        <SettingsView mode="project" onClose={() => { pushNavState(); $currentView = 'board' }} onProjectDeleted={loadProjects} />
+      {:else if $currentView === 'global_settings'}
+        <SettingsView mode="global" onClose={() => { pushNavState(); $currentView = 'board' }} onProjectDeleted={loadProjects} />
       {:else if $currentView === 'pr_review'}
         <PrReviewView />
        {:else if $currentView === 'skills'}
