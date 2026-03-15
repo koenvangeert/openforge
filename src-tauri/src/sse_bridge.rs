@@ -1,10 +1,10 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager};
 use crate::db;
-use crate::opencode_client::OpenCodeClient;
+use crate::opencode_client::{OpenCodeClient, OpenCodeError, SessionInfo, SessionStatusInfo};
 use eventsource_client::{self as es, Client};
 use futures::TryStreamExt;
 
@@ -16,6 +16,7 @@ use futures::TryStreamExt;
 const CHILD_CHECK_INTERVAL_SECS: u64 = 5;
 /// Maximum time to wait for child sessions to complete (seconds)
 const CHILD_CHECK_TIMEOUT_SECS: u64 = 600; // 10 minutes
+const DESCENDANT_IDLE_CONFIRMATION_POLLS: u64 = 2;
 
 // ============================================================================
 // Error Types
@@ -79,6 +80,88 @@ fn persist_session_completed(app: &AppHandle, task_id: &str) {
             }
         }
     };
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DescendantPollOutcome {
+    AllIdle,
+    LookupFailed,
+    MissingRootSessionId,
+    TimedOut,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CompletionAction {
+    EmitComplete,
+    KeepRunning,
+}
+
+fn completion_action_for_descendant_outcome(outcome: DescendantPollOutcome) -> CompletionAction {
+    match outcome {
+        DescendantPollOutcome::AllIdle => CompletionAction::EmitComplete,
+        DescendantPollOutcome::LookupFailed | DescendantPollOutcome::MissingRootSessionId | DescendantPollOutcome::TimedOut => CompletionAction::KeepRunning,
+    }
+}
+
+fn should_persist_completed_status(spawned_child_poll: bool, child_poll_in_progress: bool) -> bool {
+    !spawned_child_poll && !child_poll_in_progress
+}
+
+fn collect_descendant_ids(
+    root_session_id: &str,
+    children_by_parent: &HashMap<String, Vec<SessionInfo>>,
+) -> HashSet<String> {
+    let mut descendants = HashSet::new();
+    let mut stack = vec![root_session_id.to_string()];
+
+    while let Some(parent_id) = stack.pop() {
+        if let Some(children) = children_by_parent.get(&parent_id) {
+            for child in children {
+                if descendants.insert(child.id.clone()) {
+                    stack.push(child.id.clone());
+                }
+            }
+        }
+    }
+
+    descendants
+}
+
+fn has_active_descendants(
+    descendant_ids: &HashSet<String>,
+    statuses: &HashMap<String, SessionStatusInfo>,
+) -> bool {
+    descendant_ids.iter().any(|id| {
+        statuses
+            .get(id)
+            .map(|status| status.status_type != "idle")
+            .unwrap_or(false)
+    })
+}
+
+fn descendant_snapshot_is_idle_candidate(
+    descendant_ids: &HashSet<String>,
+    statuses: &HashMap<String, SessionStatusInfo>,
+) -> bool {
+    descendant_ids.is_empty() || !has_active_descendants(descendant_ids, statuses)
+}
+
+async fn fetch_descendant_session_ids(
+    client: &OpenCodeClient,
+    root_session_id: &str,
+) -> Result<HashSet<String>, OpenCodeError> {
+    let mut children_by_parent: HashMap<String, Vec<SessionInfo>> = HashMap::new();
+    let mut pending = vec![root_session_id.to_string()];
+
+    while let Some(parent_id) = pending.pop() {
+        let children = client.get_session_children(&parent_id).await?;
+        for child in &children {
+            pending.push(child.id.clone());
+        }
+        children_by_parent.insert(parent_id, children);
+    }
+
+    Ok(collect_descendant_ids(root_session_id, &children_by_parent))
 }
 
 // ============================================================================
@@ -282,9 +365,14 @@ impl SseBridgeManager {
                                             let our_session_id = match our_session_id_opt {
                                                 Some(ref id) => id.clone(),
                                                 None => {
-                                                    println!("[SSE] No session ID — emitting action-complete for task {}", task_id_for_poll);
-                                                    emit_complete(&app_for_poll, &task_id_for_poll);
-                                                    persist_session_completed(&app_for_poll, &task_id_for_poll);
+                                                    eprintln!("[SSE] No session ID available for task {} — keeping task running", task_id_for_poll);
+                                                    match completion_action_for_descendant_outcome(DescendantPollOutcome::MissingRootSessionId) {
+                                                        CompletionAction::EmitComplete => {
+                                                            emit_complete(&app_for_poll, &task_id_for_poll);
+                                                            persist_session_completed(&app_for_poll, &task_id_for_poll);
+                                                        }
+                                                        CompletionAction::KeepRunning => {}
+                                                    }
                                                     poll_flag.store(false, Ordering::SeqCst);
                                                     return;
                                                 }
@@ -294,57 +382,54 @@ impl SseBridgeManager {
                                                 format!("http://127.0.0.1:{}", server_port)
                                             );
 
-                                            let children = match oc_client.get_session_children(&our_session_id).await {
-                                                Ok(c) => c,
-                                                Err(e) => {
-                                                    eprintln!("[SSE] get_session_children failed for task {}: {} — completing immediately", task_id_for_poll, e);
-                                                    emit_complete(&app_for_poll, &task_id_for_poll);
-                                                    persist_session_completed(&app_for_poll, &task_id_for_poll);
-                                                    poll_flag.store(false, Ordering::SeqCst);
-                                                    return;
-                                                }
-                                            };
-
-                                            if children.is_empty() {
-                                                println!("[SSE] No children — emitting action-complete for task {}", task_id_for_poll);
-                                                emit_complete(&app_for_poll, &task_id_for_poll);
-                                                persist_session_completed(&app_for_poll, &task_id_for_poll);
-                                                poll_flag.store(false, Ordering::SeqCst);
-                                                return;
-                                            }
-
-                                            let child_ids: Vec<String> = children.iter().map(|c| c.id.clone()).collect();
-                                            println!("[SSE] {} child session(s) found for task {} — polling until idle", child_ids.len(), task_id_for_poll);
-
                                             let max_iterations = CHILD_CHECK_TIMEOUT_SECS / CHILD_CHECK_INTERVAL_SECS;
+                                            let mut poll_outcome = DescendantPollOutcome::TimedOut;
+                                            let mut consecutive_idle_snapshots = 0;
+
                                             for iteration in 0..max_iterations {
-                                                let statuses = match oc_client.get_all_session_statuses().await {
-                                                    Ok(s) => s,
+                                                let descendant_ids = match fetch_descendant_session_ids(&oc_client, &our_session_id).await {
+                                                    Ok(ids) => ids,
                                                     Err(e) => {
-                                                        eprintln!("[SSE] get_all_session_statuses failed (task {}, iter {}): {} — completing", task_id_for_poll, iteration, e);
-                                                        emit_complete(&app_for_poll, &task_id_for_poll);
-                                                        persist_session_completed(&app_for_poll, &task_id_for_poll);
-                                                        poll_flag.store(false, Ordering::SeqCst);
-                                                        return;
+                                                        eprintln!("[SSE] fetch_descendant_session_ids failed for task {} (iter {}): {}", task_id_for_poll, iteration + 1, e);
+                                                        poll_outcome = DescendantPollOutcome::LookupFailed;
+                                                        break;
                                                     }
                                                 };
 
-                                                let any_busy = child_ids.iter().any(|id| statuses.contains_key(id));
-                                                if !any_busy {
-                                                    println!("[SSE] All children idle — emitting action-complete for task {}", task_id_for_poll);
-                                                    emit_complete(&app_for_poll, &task_id_for_poll);
-                                                    persist_session_completed(&app_for_poll, &task_id_for_poll);
-                                                    poll_flag.store(false, Ordering::SeqCst);
-                                                    return;
+                                                let statuses = match oc_client.get_all_session_statuses().await {
+                                                    Ok(s) => s,
+                                                    Err(e) => {
+                                                        eprintln!("[SSE] get_all_session_statuses failed (task {}, iter {}): {}", task_id_for_poll, iteration + 1, e);
+                                                        poll_outcome = DescendantPollOutcome::LookupFailed;
+                                                        break;
+                                                    }
+                                                };
+
+                                                if descendant_snapshot_is_idle_candidate(&descendant_ids, &statuses) {
+                                                    consecutive_idle_snapshots += 1;
+                                                    if consecutive_idle_snapshots >= DESCENDANT_IDLE_CONFIRMATION_POLLS {
+                                                        println!("[SSE] All descendants idle — emitting action-complete for task {}", task_id_for_poll);
+                                                        poll_outcome = DescendantPollOutcome::AllIdle;
+                                                        break;
+                                                    }
+                                                } else {
+                                                    consecutive_idle_snapshots = 0;
                                                 }
 
-                                                println!("[SSE] Children still busy (iter {}/{}) for task {} — waiting {}s", iteration + 1, max_iterations, task_id_for_poll, CHILD_CHECK_INTERVAL_SECS);
+                                                println!("[SSE] Descendants still busy (iter {}/{}) for task {} — waiting {}s", iteration + 1, max_iterations, task_id_for_poll, CHILD_CHECK_INTERVAL_SECS);
                                                 tokio::time::sleep(tokio::time::Duration::from_secs(CHILD_CHECK_INTERVAL_SECS)).await;
                                             }
 
-                                            eprintln!("[SSE] Child-check timeout ({}s) for task {} — emitting action-complete anyway", CHILD_CHECK_TIMEOUT_SECS, task_id_for_poll);
-                                            emit_complete(&app_for_poll, &task_id_for_poll);
-                                            persist_session_completed(&app_for_poll, &task_id_for_poll);
+                                            match completion_action_for_descendant_outcome(poll_outcome) {
+                                                CompletionAction::EmitComplete => {
+                                                    emit_complete(&app_for_poll, &task_id_for_poll);
+                                                    persist_session_completed(&app_for_poll, &task_id_for_poll);
+                                                }
+                                                CompletionAction::KeepRunning => {
+                                                    eprintln!("[SSE] Descendant polling ended without confirmed completion for task {} ({:?})", task_id_for_poll, poll_outcome);
+                                                }
+                                            }
+
                                             poll_flag.store(false, Ordering::SeqCst);
                                         });
                                     } else {
@@ -361,8 +446,10 @@ impl SseBridgeManager {
                                     }
                                 }
 
+                                let child_poll_active = child_poll_in_progress.load(Ordering::SeqCst);
+
                                 let new_session_status = if real_event_type == "session.idle" {
-                                    if spawned_child_poll { None } else { Some("completed") }
+                                    if should_persist_completed_status(spawned_child_poll, child_poll_active) { Some("completed") } else { None }
                                 } else if real_event_type == "session.status" {
                                     match parsed.as_ref()
                                         .and_then(|v| v.get("properties"))
@@ -370,7 +457,7 @@ impl SseBridgeManager {
                                         .and_then(|s| s.get("type"))
                                         .and_then(|t| t.as_str())
                                     {
-                                        Some("idle") => if spawned_child_poll { None } else { Some("completed") },
+                                        Some("idle") => if should_persist_completed_status(spawned_child_poll, child_poll_active) { Some("completed") } else { None },
                                         Some("busy") => Some("running"),
                                         Some("retry") => Some("running"),
                                         _ => None,
@@ -468,6 +555,16 @@ impl SseBridgeManager {
 mod tests {
     use super::*;
     use crate::opencode_client::SessionStatusInfo;
+    use std::collections::HashSet;
+
+    fn make_session(id: &str, parent_id: Option<&str>) -> crate::opencode_client::SessionInfo {
+        crate::opencode_client::SessionInfo {
+            id: id.to_string(),
+            title: id.to_string(),
+            parent_id: parent_id.map(str::to_string),
+            extra: serde_json::Map::new(),
+        }
+    }
 
     #[test]
     fn test_extract_session_id_from_event() {
@@ -521,6 +618,92 @@ mod tests {
             _ => false,
         };
         assert!(!should_skip);
+    }
+
+    #[test]
+    fn test_collect_descendant_ids_includes_grandchildren() {
+        let mut children_by_parent = HashMap::new();
+        children_by_parent.insert(
+            "ses_root".to_string(),
+            vec![make_session("ses_child", Some("ses_root"))],
+        );
+        children_by_parent.insert(
+            "ses_child".to_string(),
+            vec![make_session("ses_grandchild", Some("ses_child"))],
+        );
+
+        let descendants = collect_descendant_ids("ses_root", &children_by_parent);
+
+        assert_eq!(
+            descendants,
+            HashSet::from([
+                "ses_child".to_string(),
+                "ses_grandchild".to_string(),
+            ])
+        );
+    }
+
+    #[test]
+    fn test_has_active_descendants_detects_grandchildren() {
+        let descendants = HashSet::from([
+            "ses_child".to_string(),
+            "ses_grandchild".to_string(),
+        ]);
+        let statuses = HashMap::from([(
+            "ses_grandchild".to_string(),
+            SessionStatusInfo {
+                status_type: "busy".to_string(),
+            },
+        )]);
+
+        assert!(has_active_descendants(&descendants, &statuses));
+    }
+
+    #[test]
+    fn test_child_lookup_failure_keeps_session_running() {
+        assert_eq!(
+            completion_action_for_descendant_outcome(DescendantPollOutcome::LookupFailed),
+            CompletionAction::KeepRunning,
+        );
+    }
+
+    #[test]
+    fn test_polling_timeout_keeps_session_running() {
+        assert_eq!(
+            completion_action_for_descendant_outcome(DescendantPollOutcome::TimedOut),
+            CompletionAction::KeepRunning,
+        );
+    }
+
+    #[test]
+    fn test_missing_root_session_id_keeps_session_running() {
+        assert_eq!(
+            completion_action_for_descendant_outcome(DescendantPollOutcome::MissingRootSessionId),
+            CompletionAction::KeepRunning,
+        );
+    }
+
+    #[test]
+    fn test_should_not_persist_completed_status_while_child_poll_is_running() {
+        assert!(!should_persist_completed_status(false, true));
+        assert!(!should_persist_completed_status(true, false));
+        assert!(should_persist_completed_status(false, false));
+    }
+
+    #[test]
+    fn test_descendant_snapshot_empty_is_only_idle_candidate() {
+        let descendants = HashSet::new();
+        let statuses = HashMap::new();
+
+        assert!(descendant_snapshot_is_idle_candidate(&descendants, &statuses));
+    }
+
+    #[test]
+    fn test_descendant_snapshot_with_missing_statuses_is_idle_candidate() {
+        let descendants = HashSet::from(["ses_child".to_string()]);
+        let statuses = HashMap::new();
+
+        assert!(descendant_snapshot_is_idle_candidate(&descendants, &statuses));
     }
 
     #[test]
