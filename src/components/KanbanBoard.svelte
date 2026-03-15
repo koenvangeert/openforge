@@ -15,10 +15,11 @@
   type BoardColumnConfig = (typeof DEFAULT_BOARD_COLUMNS)[number]
 
   interface Props {
+    projectName: string
     onRunAction: (data: { taskId: string; actionPrompt: string; agent: string | null }) => void
   }
 
-  let { onRunAction }: Props = $props()
+  let { projectName, onRunAction }: Props = $props()
 
   let boardColumns = $state<BoardColumnConfig[]>([])
 
@@ -213,7 +214,7 @@
 
 <div class="flex flex-col h-full overflow-hidden">
   <div class="flex items-center justify-between px-6 py-4 bg-base-200 border-b border-base-300 shrink-0">
-    <h2 class="text-xl font-semibold text-base-content m-0">Board</h2>
+    <h2 class="text-xl font-semibold text-base-content m-0">{projectName} — Board</h2>
   </div>
 
   <div class="flex items-center justify-between px-6 pt-4 pb-1">

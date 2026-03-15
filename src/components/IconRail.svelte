@@ -20,10 +20,10 @@
   ]
 </script>
 
-<div class="w-16 h-full bg-neutral flex flex-col items-center py-4 gap-5">
+<div class="w-16 h-full bg-base-200 border-r border-base-content/10 flex flex-col items-center py-4 gap-5">
   {#each navItems as { view, Icon, shortcut, label }}
     <button
-      class="relative cursor-pointer {currentView === view ? 'text-primary' : 'text-neutral-content/40'}"
+      class="relative cursor-pointer {currentView === view ? 'text-primary' : 'text-base-content/40'}"
       title={label}
       onclick={() => onNavigate(view)}
     >
@@ -35,7 +35,7 @@
         <span class="badge badge-warning badge-xs absolute -bottom-2 -right-3 text-[0.6rem] font-bold min-w-4 h-4">{authoredPrCount}</span>
       {/if}
       {#if $commandHeld && !modalsOpen}
-        <kbd class="kbd kbd-xs absolute -bottom-2 -left-3 bg-neutral-content/10 text-neutral-content/60 border-neutral-content/20 text-[0.55rem] min-w-4 h-4 flex items-center justify-center pointer-events-none">{shortcut}</kbd>
+        <kbd class="kbd kbd-xs absolute -bottom-2 -left-3 bg-base-content/10 text-base-content/40 border-base-content/20 text-[0.55rem] min-w-4 h-4 flex items-center justify-center pointer-events-none">{shortcut}</kbd>
       {/if}
     </button>
   {/each}

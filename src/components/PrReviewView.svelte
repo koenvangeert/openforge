@@ -21,6 +21,12 @@
 
   type PrDetailTab = 'overview' | 'files'
 
+  interface Props {
+    projectName: string
+  }
+
+  let { projectName }: Props = $props()
+
   let isLoading = $state(false)
   let isLoadingAuthored = $state(false)
   let error = $state<string | null>(null)
@@ -535,7 +541,7 @@
   {:else}
     <div class="flex flex-col h-full overflow-hidden">
       <div class="flex items-center justify-between px-6 py-5 bg-base-200 border-b border-base-300 shrink-0">
-        <h2 class="text-xl font-semibold text-base-content m-0">Pull Requests</h2>
+        <h2 class="text-xl font-semibold text-base-content m-0">{projectName} — Pull Requests</h2>
         <div class="relative">
           <button
             class="btn btn-ghost btn-sm gap-1 {excludedRepos.size > 0 ? 'text-warning' : 'text-base-content/50'}"

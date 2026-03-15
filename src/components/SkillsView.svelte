@@ -1,9 +1,14 @@
 <script lang="ts">
-  import { onMount } from 'svelte'
   import { skills, selectedSkillName, activeProjectId } from '../lib/stores'
   import { listOpenCodeSkills, saveSkillContent } from '../lib/ipc'
   import { pushNavState } from '../lib/navigation'
   import { isInputFocused } from '../lib/domUtils'
+
+  interface Props {
+    projectName: string
+  }
+
+  let { projectName }: Props = $props()
   import { useVimNavigation } from '../lib/useVimNavigation.svelte'
   import MarkdownContent from './MarkdownContent.svelte'
   import type { SkillInfo } from '../lib/types'
@@ -150,8 +155,12 @@
     el?.scrollIntoView?.({ block: 'nearest' })
   })
 
-  onMount(() => {
-    loadSkills()
+  // Reload skills when active project changes (also handles initial load)
+  $effect(() => {
+    const _pid = $activeProjectId
+    if (_pid) {
+      loadSkills()
+    }
   })
 </script>
 
@@ -161,7 +170,7 @@
   <!-- Header -->
   <div class="flex items-center justify-between px-6 py-4 bg-base-200 border-b border-base-300 shrink-0">
     <div class="flex items-center gap-3">
-      <h2 class="text-xl font-semibold text-base-content m-0">Skills</h2>
+      <h2 class="text-xl font-semibold text-base-content m-0">{projectName} — Skills</h2>
       <span class="badge badge-primary badge-sm">{$skills.length} {$skills.length === 1 ? 'skill' : 'skills'}</span>
     </div>
     <div class="flex items-center gap-2">
