@@ -109,14 +109,16 @@ impl OpenCodeProvider {
                     .await
                     .map_err(|e| e.to_string())?;
 
-                self.sse_mgr
-                    .start_bridge(app.clone(), task_id.to_string(), None, port)
-                    .await
-                    .map_err(|e| e.to_string())?;
+                if let Some(bridge_session_id) = resume_bridge_session_id(session) {
+                    self.sse_mgr
+                        .start_bridge(app.clone(), task_id.to_string(), Some(bridge_session_id), port)
+                        .await
+                        .map_err(|e| e.to_string())?;
+                }
 
                 Ok(ProviderSessionResult {
                     port,
-                    opencode_session_id: None,
+                    opencode_session_id: resume_bridge_session_id(session),
                 })
             }
         }
@@ -161,6 +163,10 @@ impl OpenCodeProvider {
     pub fn list_agents(&self, _project_path: Option<&str>) -> Vec<crate::opencode_client::AgentInfo> {
         vec![]
     }
+}
+
+fn resume_bridge_session_id(session: &AgentSessionRow) -> Option<String> {
+    session.opencode_session_id.clone()
 }
 
 #[cfg(test)]
@@ -214,5 +220,17 @@ mod tests {
         );
         let session = make_session(None);
         assert_eq!(provider.provider_session_id(&session), None);
+    }
+
+    #[test]
+    fn test_resume_bridge_session_id_uses_existing_session_id() {
+        let session = make_session(Some("oc-xyz789"));
+        assert_eq!(resume_bridge_session_id(&session), Some("oc-xyz789".to_string()));
+    }
+
+    #[test]
+    fn test_resume_bridge_session_id_skips_bridge_when_missing() {
+        let session = make_session(None);
+        assert_eq!(resume_bridge_session_id(&session), None);
     }
 }
