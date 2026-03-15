@@ -1,5 +1,34 @@
 use serde::{Deserialize, Serialize};
 
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct PrRef {
+    pub repo_owner: String,
+    pub repo_name: String,
+    pub number: i64,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct GitHubEvent {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub event_type: String,
+    #[serde(default)]
+    pub created_at: String,
+    #[serde(default)]
+    pub repo: Option<GitHubEventRepo>,
+    #[serde(default)]
+    pub payload: serde_json::Value,
+    #[serde(flatten)]
+    pub extra: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct GitHubEventRepo {
+    pub name: String,
+    #[serde(flatten)]
+    pub extra: serde_json::Value,
+}
+
 /// Pull request representation
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct PullRequest {
