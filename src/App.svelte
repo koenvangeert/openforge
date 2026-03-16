@@ -19,16 +19,17 @@
   import CheckpointToast from './components/CheckpointToast.svelte'
   import CiFailureToast from './components/CiFailureToast.svelte'
   import TaskSpawnedToast from './components/TaskSpawnedToast.svelte'
-  import ProjectSidebar from './components/ProjectSidebar.svelte'
+  import AppSidebar from './components/AppSidebar.svelte'
   import ProjectSwitcherModal from './components/ProjectSwitcherModal.svelte'
   import ProjectSetupDialog from './components/ProjectSetupDialog.svelte'
   import IconRail from './components/IconRail.svelte'
   import CommandPalette from './components/CommandPalette.svelte'
   import ActionPalette from './components/ActionPalette.svelte'
 
-  import { PanelLeft } from 'lucide-svelte'
   import { pushNavState, navigateBack } from './lib/navigation'
   import { loadActions, getEnabledActions } from './lib/actions'
+  import { getProjectColor } from './lib/projectColors'
+  import { themeMode } from './lib/theme'
   import type { Action } from './lib/types'
   import { release as releaseTerminal, isPtyActive, focusTerminal } from './lib/terminalPool'
   import { isInputFocused } from './lib/domUtils'
@@ -68,7 +69,7 @@
   let appMode = $state<string | null>(null)
   let showShortcutsDialog = $state(false)
   let showProjectSwitcher = $state(false)
-  let showProjectSidebar = $state(localStorage.getItem('projectSidebarVisible') !== 'false')
+  let appSidebarCollapsed = $state(localStorage.getItem('appSidebarCollapsed') === 'true')
   let showCommandPalette = $state(false)
   let showActionPalette = $state(false)
   let actionPaletteActions = $state<Action[]>([])
@@ -103,16 +104,51 @@
      }
    })
 
+   $effect(() => {
+     if ($currentView === 'global_settings') {
+       $selectedTaskId = null
+     }
+   })
+
    // Reload tasks when active project changes
   $effect(() => {
     if ($activeProjectId) {
       loadTasks()
       loadPullRequests()
+      refreshPrCounts()
     }
   })
 
   // Find active project
   let activeProject = $derived($projects.find(p => p.id === $activeProjectId) || null)
+
+  let activeProjectColorId = $state<string | null>(null)
+  $effect(() => {
+    const pid = $activeProjectId
+    void $currentView
+    if (pid) {
+      getProjectConfig(pid, 'project_color').then((val) => {
+        activeProjectColorId = val
+      })
+    } else {
+      activeProjectColorId = null
+    }
+  })
+  let contentBg = $derived.by(() => {
+    const color = getProjectColor(activeProjectColorId)
+    return $themeMode === 'dark' ? color.dark : color.light
+  })
+  let contentBgAlt = $derived.by(() => {
+    const color = getProjectColor(activeProjectColorId)
+    return $themeMode === 'dark' ? color.darkAlt : color.lightAlt
+  })
+  let iconRailBg = $derived.by(() => {
+    const color = getProjectColor(activeProjectColorId)
+    if ($themeMode === 'dark') {
+      return color.darkAlt
+    }
+    return color.lightAlt
+  })
 
   async function loadProjects() {
     try {
@@ -187,6 +223,34 @@
       $ticketPrs = grouped
     } catch (e) {
       console.error('Failed to load pull requests:', e)
+    }
+  }
+
+  async function refreshPrCounts() {
+    if (!$activeProjectId) return
+    try {
+      let excludedRepos = new Set<string>()
+      try {
+        const val = await getProjectConfig($activeProjectId, 'pr_excluded_repos')
+        if (val) {
+          const parsed = JSON.parse(val)
+          excludedRepos = new Set(Array.isArray(parsed) ? parsed : [])
+        }
+      } catch {
+        // No exclusion config — count all
+      }
+
+      const isExcluded = (owner: string, name: string) => excludedRepos.has(`${owner}/${name}`)
+
+      const reviewPrList = await getReviewPrs()
+      const filtered = reviewPrList.filter(p => !isExcluded(p.repo_owner, p.repo_name))
+      $reviewRequestCount = filtered.filter(p => p.viewed_at === null).length
+
+      const authoredPrList = await getAuthoredPrs()
+      const filteredAuthored = authoredPrList.filter(p => !isExcluded(p.repo_owner, p.repo_name))
+      $authoredPrCount = filteredAuthored.filter(p => p.ci_status === 'failure' || p.review_status === 'changes_requested').length
+    } catch (e) {
+      console.error('Failed to refresh PR counts:', e)
     }
   }
 
@@ -354,8 +418,8 @@
     }
     if (e.metaKey && e.key === 'b') {
       e.preventDefault()
-      showProjectSidebar = !showProjectSidebar
-      localStorage.setItem('projectSidebarVisible', String(showProjectSidebar))
+      appSidebarCollapsed = !appSidebarCollapsed
+      localStorage.setItem('appSidebarCollapsed', String(appSidebarCollapsed))
       return
     }
     if (e.metaKey && e.key === 't') {
@@ -407,6 +471,28 @@
     if (e.metaKey && e.key === ',') {
       e.preventDefault()
       handleNavigate('settings')
+      return
+    }
+
+    // 1/2 — cycle through projects (plain keys, no modifier)
+    if ((e.key === '1' || e.key === '2') && !e.metaKey && !e.ctrlKey && !e.altKey && !isInputFocused()) {
+      const projectList = $projects
+      if (projectList.length === 0) return
+      e.preventDefault()
+      const currentIndex = projectList.findIndex((p) => p.id === $activeProjectId)
+      let nextIndex: number
+      if (e.key === '2') {
+        // Next project
+        nextIndex = currentIndex < 0 ? 0 : (currentIndex + 1) % projectList.length
+      } else {
+        // Previous project
+        nextIndex = currentIndex <= 0 ? projectList.length - 1 : currentIndex - 1
+      }
+      $activeProjectId = projectList[nextIndex].id
+      // If on workqueue/global_settings, switch to board
+      if ($currentView === 'workqueue' || $currentView === 'global_settings') {
+        handleNavigate('board')
+      }
       return
     }
   }
@@ -758,79 +844,29 @@
   })
 </script>
 
-<div class="flex h-screen overflow-hidden bg-base-200">
-  <IconRail currentView={$currentView} onNavigate={handleNavigate} reviewRequestCount={$reviewRequestCount} authoredPrCount={$authoredPrCount} modalsOpen={showCommandPalette || showProjectSwitcher || showActionPalette || showAddDialog} />
-  {#if showProjectSidebar}
-    <ProjectSidebar onNewProject={() => showProjectSetup = true} />
+<div class="flex h-screen overflow-hidden bg-base-100" style="--project-bg: {contentBg}; --project-bg-alt: {contentBgAlt}">
+  <AppSidebar
+    collapsed={appSidebarCollapsed}
+    currentView={$currentView}
+    {appMode}
+    onToggleCollapse={() => { appSidebarCollapsed = !appSidebarCollapsed; localStorage.setItem('appSidebarCollapsed', String(appSidebarCollapsed)) }}
+    onNewProject={() => showProjectSetup = true}
+    onNavigate={handleNavigate}
+  />
+  {#if $currentView !== 'workqueue' && $currentView !== 'global_settings'}
+    <IconRail currentView={$currentView} onNavigate={handleNavigate} reviewRequestCount={$reviewRequestCount} authoredPrCount={$authoredPrCount} modalsOpen={showCommandPalette || showProjectSwitcher || showActionPalette || showAddDialog} railBg={iconRailBg} />
   {/if}
 
-  <div class="flex flex-col flex-1 min-w-0">
-    <header class="bg-neutral text-neutral-content h-12 grid grid-cols-3 items-center px-6 shrink-0">
-      <div class="flex items-center gap-3">
-        <button
-          type="button"
-          class="btn btn-ghost btn-sm btn-square {showProjectSidebar ? 'text-primary' : 'text-neutral-content/40 hover:text-neutral-content'}"
-          onclick={() => { showProjectSidebar = !showProjectSidebar; localStorage.setItem('projectSidebarVisible', String(showProjectSidebar)) }}
-          title={showProjectSidebar ? 'Hide project sidebar (⌘B)' : 'Show project sidebar (⌘B)'}
-        >
-          <PanelLeft size={16} />
-        </button>
-        <button
-          type="button"
-          class="btn btn-ghost btn-sm font-mono text-sm gap-1.5 px-1.5 text-neutral-content hover:text-neutral-content"
-          onclick={() => showProjectSwitcher = true}
-          title="Switch project (⌘P)"
-        >
-          <span class="text-primary font-bold">&gt;</span>
-          {#if activeProject}
-            <span class="font-semibold">{activeProject.name}</span>
-          {:else}
-            <span class="font-semibold text-neutral-content/50">no project</span>
-          {/if}
-        </button>
-        {#if appMode === 'dev'}
-          <span class="badge badge-sm bg-primary text-black font-mono">DEV</span>
-        {/if}
-        <button
-          type="button"
-          class="btn btn-sm bg-primary text-black hover:bg-primary/80 font-mono"
-          onclick={() => {
-            editingTask = null
-            showAddDialog = true
-            loadDialogAgentInfo()
-          }}
-        >
-          + new_task <span class="text-[0.65rem] opacity-70 ml-1 font-normal">&#8984;T</span>
-        </button>
-      </div>
-
-      <button
-        type="button"
-        class="btn btn-ghost btn-sm text-neutral-content/60 hover:text-neutral-content font-mono text-xs gap-1 justify-self-center"
-        onclick={() => showProjectSwitcher = true}
-      >
-        projects
-        <kbd class="kbd kbd-xs bg-neutral-content/10 text-neutral-content/50 border-neutral-content/20">&#8984;P</kbd>
-      </button>
-
-      <div class="flex items-center gap-2 justify-end">
-        <button
-          type="button"
-          class="btn btn-ghost btn-sm text-neutral-content/60 hover:text-neutral-content font-mono text-xs gap-1"
-          onclick={() => showCommandPalette = true}
-        >
-          search <kbd class="kbd kbd-xs bg-neutral-content/10 text-neutral-content/50 border-neutral-content/20">&#8984;K</kbd>
-        </button>
-      </div>
-    </header>
-
+  <div class="flex flex-col flex-1 min-w-0 relative" style="background: linear-gradient(180deg, var(--project-bg-alt) 0%, var(--project-bg) 100%)">
     <main class="flex-1 overflow-hidden flex flex-col">
       {#if $currentView === 'settings'}
-        <SettingsView onClose={() => { pushNavState(); $currentView = 'board' }} onProjectDeleted={loadProjects} />
+        <SettingsView mode="project" onClose={() => { pushNavState(); $currentView = 'board' }} onProjectDeleted={loadProjects} />
+      {:else if $currentView === 'global_settings'}
+        <SettingsView mode="global" onClose={() => { pushNavState(); $currentView = 'board' }} onProjectDeleted={loadProjects} />
       {:else if $currentView === 'pr_review'}
-        <PrReviewView />
+        <PrReviewView projectName={activeProject?.name ?? ''} />
        {:else if $currentView === 'skills'}
-         <SkillsView />
+         <SkillsView projectName={activeProject?.name ?? ''} />
        {:else if $currentView === 'workqueue'}
          <WorkQueueView refreshTrigger={workQueueRefreshTrigger} onRunAction={handleRunAction} />
        {:else if selectedTask}
@@ -843,7 +879,7 @@
               <span>Loading tasks...</span>
             </div>
           {:else}
-            <KanbanBoard onRunAction={handleRunAction} />
+            <KanbanBoard onRunAction={handleRunAction} projectName={activeProject?.name ?? ''} />
           {/if}
         </div>
       {/if}
@@ -929,6 +965,21 @@
         <ProjectSetupDialog onClose={() => showProjectSetup = false} onProjectCreated={handleProjectCreated} />
       {/if}
     </main>
+
+    {#if $activeProjectId && $currentView !== 'global_settings'}
+      <button
+        type="button"
+        class="absolute bottom-6 right-6 btn btn-primary btn-circle btn-lg shadow-lg font-mono text-lg z-10"
+        aria-label="Create new task"
+        onclick={() => {
+          editingTask = null
+          showAddDialog = true
+          loadDialogAgentInfo()
+        }}
+      >
+        +
+      </button>
+    {/if}
   </div>
 </div>
 

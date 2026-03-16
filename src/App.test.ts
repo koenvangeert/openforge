@@ -1,12 +1,12 @@
 import { render } from '@testing-library/svelte'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { writable } from 'svelte/store'
-import type { Task, AgentSession, Project, ProjectAttention, OpenCodeStatus, PullRequestInfo, CheckpointNotification, CiFailureNotification } from './lib/types'
+import type { Task, AgentSession, Project, ProjectAttention, PullRequestInfo, CheckpointNotification, CiFailureNotification } from './lib/types'
 
 const callOrder: string[] = []
 
 vi.mock('@tauri-apps/api/event', () => ({
-  listen: vi.fn(async (eventName: string) => {
+  listen: vi.fn(async (_eventName: string) => {
     callOrder.push('listen')
     return () => {}
   }),
@@ -154,7 +154,7 @@ vi.mock('./components/Toast.svelte', () => ({ default: vi.fn() }))
 vi.mock('./components/CheckpointToast.svelte', () => ({ default: vi.fn() }))
 vi.mock('./components/CiFailureToast.svelte', () => ({ default: vi.fn() }))
 vi.mock('./components/TaskSpawnedToast.svelte', () => ({ default: vi.fn() }))
-vi.mock('./components/ProjectSidebar.svelte', () => ({ default: vi.fn() }))
+vi.mock('./components/AppSidebar.svelte', () => ({ default: vi.fn() }))
 vi.mock('./components/ProjectSwitcherModal.svelte', () => ({ default: vi.fn() }))
 vi.mock('./components/ProjectSetupDialog.svelte', () => ({ default: vi.fn() }))
 vi.mock('./components/IconRail.svelte', () => ({ default: vi.fn() }))
@@ -174,10 +174,20 @@ vi.mock('./lib/terminalPool', () => ({
   release: vi.fn(),
 }))
 
-vi.mock('lucide-svelte', () => ({
-  RefreshCw: vi.fn(),
-  PanelLeft: vi.fn(),
-}))
+vi.mock('lucide-svelte', () => {
+  const stub = vi.fn()
+  return {
+    RefreshCw: stub,
+    ChevronLeft: stub,
+    ChevronRight: stub,
+    ListChecks: stub,
+    Settings: stub,
+    Plus: stub,
+    LayoutDashboard: stub,
+    GitPullRequest: stub,
+    Sparkles: stub,
+  }
+})
 
 describe('App onMount initialization order', () => {
   beforeEach(() => {
@@ -226,8 +236,8 @@ describe('App onMount initialization order', () => {
     const firstGetProjects = callOrder.indexOf('getProjects')
     const firstGetAppMode = callOrder.indexOf('getAppMode')
 
-    expect(firstListen).toBeLessThan(firstGetProjects, 'listen() should be called before getProjects()')
-    expect(firstListen).toBeLessThan(firstGetAppMode, 'listen() should be called before getAppMode()')
+    expect(firstListen).toBeLessThan(firstGetProjects)
+    expect(firstListen).toBeLessThan(firstGetAppMode)
   }, 15000)
 
   describe('keyboard shortcuts', () => {
@@ -281,6 +291,106 @@ describe('App onMount initialization order', () => {
 
       window.dispatchEvent(new KeyboardEvent('keydown', { key: ',', metaKey: true, bubbles: true }))
       expect(get(stores.currentView)).toBe('settings')
+    })
+
+    it('pressing 2 cycles to next project', async () => {
+      const App = (await import('./App.svelte')).default
+      const stores = await import('./lib/stores')
+      const ipc = await import('./lib/ipc')
+      const { get } = await import('svelte/store')
+
+      const projectList: Project[] = [
+        { id: 'proj-1', name: 'Project One', path: '/test/one', created_at: 0, updated_at: 0 },
+        { id: 'proj-2', name: 'Project Two', path: '/test/two', created_at: 0, updated_at: 0 },
+      ]
+      vi.mocked(ipc.getProjects).mockResolvedValue(projectList)
+
+      render(App)
+
+      await vi.waitFor(() => {
+        expect(get(stores.projects)).toHaveLength(2)
+      })
+
+      stores.activeProjectId.set('proj-1')
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: '2', bubbles: true }))
+
+      expect(get(stores.activeProjectId)).toBe('proj-2')
+    })
+
+    it('pressing 1 cycles to previous project', async () => {
+      const App = (await import('./App.svelte')).default
+      const stores = await import('./lib/stores')
+      const ipc = await import('./lib/ipc')
+      const { get } = await import('svelte/store')
+
+      const projectList: Project[] = [
+        { id: 'proj-1', name: 'Project One', path: '/test/one', created_at: 0, updated_at: 0 },
+        { id: 'proj-2', name: 'Project Two', path: '/test/two', created_at: 0, updated_at: 0 },
+      ]
+      vi.mocked(ipc.getProjects).mockResolvedValue(projectList)
+
+      render(App)
+
+      await vi.waitFor(() => {
+        expect(get(stores.projects)).toHaveLength(2)
+      })
+
+      stores.activeProjectId.set('proj-2')
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: '1', bubbles: true }))
+
+      expect(get(stores.activeProjectId)).toBe('proj-1')
+    })
+
+    it('pressing 2 wraps around to first project', async () => {
+      const App = (await import('./App.svelte')).default
+      const stores = await import('./lib/stores')
+      const ipc = await import('./lib/ipc')
+      const { get } = await import('svelte/store')
+
+      const projectList: Project[] = [
+        { id: 'proj-1', name: 'Project One', path: '/test/one', created_at: 0, updated_at: 0 },
+        { id: 'proj-2', name: 'Project Two', path: '/test/two', created_at: 0, updated_at: 0 },
+      ]
+      vi.mocked(ipc.getProjects).mockResolvedValue(projectList)
+
+      render(App)
+
+      await vi.waitFor(() => {
+        expect(get(stores.projects)).toHaveLength(2)
+      })
+
+      stores.activeProjectId.set('proj-2')
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: '2', bubbles: true }))
+
+      expect(get(stores.activeProjectId)).toBe('proj-1')
+    })
+
+    it('1 and 2 do not fire when input is focused', async () => {
+      const App = (await import('./App.svelte')).default
+      const stores = await import('./lib/stores')
+      const ipc = await import('./lib/ipc')
+      const { get } = await import('svelte/store')
+
+      const projectList: Project[] = [
+        { id: 'proj-1', name: 'Project One', path: '/test/one', created_at: 0, updated_at: 0 },
+        { id: 'proj-2', name: 'Project Two', path: '/test/two', created_at: 0, updated_at: 0 },
+      ]
+      vi.mocked(ipc.getProjects).mockResolvedValue(projectList)
+
+      render(App)
+
+      await vi.waitFor(() => {
+        expect(get(stores.projects)).toHaveLength(2)
+      })
+
+      stores.activeProjectId.set('proj-1')
+      const input = document.createElement('input')
+      document.body.appendChild(input)
+      input.focus()
+
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: '1', bubbles: true }))
+
+      expect(get(stores.activeProjectId)).toBe('proj-1')
     })
 
     it('? does NOT open dialog when input is focused', async () => {

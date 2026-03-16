@@ -50,7 +50,7 @@
 	}
 </script>
 
-<div id="section-board" class="bg-base-100 rounded-lg border border-base-300 overflow-hidden">
+<div id="section-board" class="rounded-lg border border-base-300 overflow-hidden" style="background-color: var(--project-bg, oklch(var(--b1)))">
 	<div class="flex items-center justify-between px-5 py-3 border-b border-base-300">
 		<div class="flex items-center gap-2">
 			<LayoutGrid size={16} class="text-base-content" />
@@ -88,7 +88,7 @@
 				/>
 			</label>
 
-			<div class="collapse collapse-arrow bg-base-100 border border-base-300 rounded-md">
+		<div class="collapse collapse-arrow border border-base-300 rounded-md" style="background-color: var(--project-bg, oklch(var(--b1)))">
 					<input type="checkbox" />
 					<div class="collapse-title text-sm font-medium py-2 min-h-0">
 						Task States

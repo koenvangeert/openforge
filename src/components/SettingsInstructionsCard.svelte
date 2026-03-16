@@ -10,7 +10,7 @@
   let { agentInstructions, disabled, onInstructionsChange }: Props = $props()
 </script>
 
-<div id="section-instructions" class="bg-base-100 rounded-lg border border-base-300 overflow-hidden">
+<div id="section-instructions" class="rounded-lg border border-base-300 overflow-hidden" style="background-color: var(--project-bg, oklch(var(--b1)))">
   <!-- Header -->
   <div class="px-5 py-4 border-b border-base-300 flex items-center gap-3">
     <FileText size={16} class="text-primary" />

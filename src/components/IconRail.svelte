@@ -1,37 +1,32 @@
 <script lang="ts">
-  import { LayoutDashboard, GitPullRequest, Settings, Sparkles, ListChecks } from 'lucide-svelte'
+  import { LayoutDashboard, GitPullRequest, Sparkles, Settings } from 'lucide-svelte'
   import type { AppView } from '../lib/types'
   import { commandHeld } from '../lib/stores'
 
   interface Props {
     currentView: AppView
     onNavigate: (view: AppView) => void
-    reviewRequestCount: number
-    authoredPrCount: number
+    reviewRequestCount?: number
+    authoredPrCount?: number
     modalsOpen?: boolean
+    railBg?: string
   }
 
-  let { currentView, onNavigate, reviewRequestCount = 0, authoredPrCount = 0, modalsOpen = false }: Props = $props()
+  let { currentView, onNavigate, reviewRequestCount = 0, authoredPrCount = 0, modalsOpen = false, railBg = 'oklch(var(--b2))' }: Props = $props()
 
-  const navItems: { view: AppView; Icon: typeof LayoutDashboard; shortcut: string }[] = [
-    { view: 'board', Icon: LayoutDashboard, shortcut: 'H' },
-    { view: 'pr_review', Icon: GitPullRequest, shortcut: 'G' },
-    { view: 'skills', Icon: Sparkles, shortcut: 'L' },
-    { view: 'workqueue', Icon: ListChecks, shortcut: 'R' },
-    { view: 'settings', Icon: Settings, shortcut: ',' },
+  const navItems: { view: AppView; Icon: typeof LayoutDashboard; shortcut: string; label: string }[] = [
+    { view: 'board', Icon: LayoutDashboard, shortcut: 'H', label: 'Board' },
+    { view: 'pr_review', Icon: GitPullRequest, shortcut: 'G', label: 'Pull Requests' },
+    { view: 'skills', Icon: Sparkles, shortcut: 'L', label: 'Skills' },
+    { view: 'settings', Icon: Settings, shortcut: ',', label: 'Settings' },
   ]
 </script>
 
-<div class="w-16 h-full bg-neutral flex flex-col items-center py-4 gap-5">
-  <div class="w-9 h-9 bg-primary flex items-center justify-center rounded">
-    <span class="text-black font-bold font-mono text-sm">&gt;_</span>
-  </div>
-
-  <div class="w-9 h-px bg-neutral-content/20"></div>
-
-  {#each navItems as { view, Icon, shortcut }}
+<div class="w-16 h-full border-r border-base-content/10 flex flex-col items-center py-4 gap-5" style="background-color: {railBg}">
+  {#each navItems as { view, Icon, shortcut, label }}
     <button
-      class="relative cursor-pointer {currentView === view ? 'text-primary' : 'text-neutral-content/40'}"
+      class="relative cursor-pointer {currentView === view ? 'text-primary' : 'text-base-content/40'}"
+      title={label}
       onclick={() => onNavigate(view)}
     >
       <Icon size={24} />
@@ -42,7 +37,7 @@
         <span class="badge badge-warning badge-xs absolute -bottom-2 -right-3 text-[0.6rem] font-bold min-w-4 h-4">{authoredPrCount}</span>
       {/if}
       {#if $commandHeld && !modalsOpen}
-        <kbd class="kbd kbd-xs absolute -bottom-2 -left-3 bg-neutral-content/10 text-neutral-content/60 border-neutral-content/20 text-[0.55rem] min-w-4 h-4 flex items-center justify-center pointer-events-none">{shortcut}</kbd>
+        <kbd class="kbd kbd-xs absolute -bottom-2 -left-3 bg-base-content/10 text-base-content/40 border-base-content/20 text-[0.55rem] min-w-4 h-4 flex items-center justify-center pointer-events-none">{shortcut}</kbd>
       {/if}
     </button>
   {/each}

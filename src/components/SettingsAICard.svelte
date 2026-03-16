@@ -30,7 +30,7 @@
   const activeModel = $derived(modelStatuses.find(m => m.size === activeModelSize))
 </script>
 
-<div id="section-ai" class="bg-base-100 rounded-lg border border-base-300 overflow-hidden">
+<div id="section-ai" class="rounded-lg border border-base-300 overflow-hidden" style="background-color: var(--project-bg, oklch(var(--b1)))">
   <!-- Header -->
   <div class="px-5 py-4 border-b border-base-300 flex items-center gap-3">
     <Brain size={16} class="text-primary" />

@@ -24,7 +24,7 @@
 	const previewTaskId = $derived(isValid ? `${taskIdPrefix}-${nextTaskNumber}` : '')
 </script>
 
-<div id="section-preferences" class="bg-base-100 rounded-lg border border-base-300 overflow-hidden">
+<div id="section-preferences" class="rounded-lg border border-base-300 overflow-hidden" style="background-color: var(--project-bg, oklch(var(--b1)))">
 	<div class="flex items-center gap-2 px-5 py-3 border-b border-base-300">
 		<Settings2 size={16} />
 		<h3 class="text-sm font-semibold text-base-content m-0">Preferences</h3>

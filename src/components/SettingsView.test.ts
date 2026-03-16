@@ -47,6 +47,7 @@ import { activeProjectId, projects } from '../lib/stores'
 const defaultProps = {
   onClose: vi.fn(),
   onProjectDeleted: vi.fn(),
+  mode: 'project' as const,
 }
 
 describe('SettingsView', () => {
@@ -93,8 +94,10 @@ describe('SettingsView', () => {
     expect(screen.queryAllByText(/ai/i).length).toBeGreaterThan(0)
   })
 
-  it('renders Credentials section', () => {
-    render(SettingsView, { props: defaultProps })
+  it('renders Credentials section on global page', () => {
+    activeProjectId.set(null)
+    projects.set([])
+    render(SettingsView, { props: { ...defaultProps, mode: 'global' as const } })
     expect(screen.queryAllByText(/credentials/i).length).toBeGreaterThan(0)
   })
 
@@ -124,18 +127,20 @@ describe('SettingsView', () => {
     expect(texts.some((t) => /instructions/i.test(t))).toBe(true)
   })
 
-  it('renders sidebar nav with Voice link', () => {
-    render(SettingsView, { props: defaultProps })
-    const links = screen.getAllByRole('link')
-    const texts = links.map((l) => l.textContent ?? '')
-    expect(texts.some((t) => /voice/i.test(t))).toBe(true)
+  it('does not render sidebar nav in global mode', () => {
+    activeProjectId.set(null)
+    projects.set([])
+    render(SettingsView, { props: { ...defaultProps, mode: 'global' as const } })
+    const links = screen.queryAllByRole('link')
+    expect(links.length).toBe(0)
   })
 
-  it('renders sidebar nav with Credentials link', () => {
-    render(SettingsView, { props: defaultProps })
-    const links = screen.getAllByRole('link')
-    const texts = links.map((l) => l.textContent ?? '')
-    expect(texts.some((t) => /credentials/i.test(t))).toBe(true)
+  it('does not render sidebar nav with Credentials link on global page', () => {
+    activeProjectId.set(null)
+    projects.set([])
+    render(SettingsView, { props: { ...defaultProps, mode: 'global' as const } })
+    const links = screen.queryAllByRole('link')
+    expect(links.length).toBe(0)
   })
 
   it('renders sidebar nav with Actions link', () => {
@@ -177,28 +182,28 @@ describe('SettingsView', () => {
   it('renders JIRA base URL field on global page', () => {
     activeProjectId.set(null)
     projects.set([])
-    render(SettingsView, { props: defaultProps })
+    render(SettingsView, { props: { ...defaultProps, mode: 'global' as const } })
     expect(screen.getByPlaceholderText('https://your-domain.atlassian.net')).toBeTruthy()
   })
 
   it('renders JIRA username field on global page', () => {
     activeProjectId.set(null)
     projects.set([])
-    render(SettingsView, { props: defaultProps })
+    render(SettingsView, { props: { ...defaultProps, mode: 'global' as const } })
     expect(screen.getByPlaceholderText('your@email.com')).toBeTruthy()
   })
 
   it('renders JIRA API token field on global page', () => {
     activeProjectId.set(null)
     projects.set([])
-    render(SettingsView, { props: defaultProps })
+    render(SettingsView, { props: { ...defaultProps, mode: 'global' as const } })
     expect(screen.getByPlaceholderText('Your JIRA API token')).toBeTruthy()
   })
 
   it('renders GitHub PAT field on global page', () => {
     activeProjectId.set(null)
     projects.set([])
-    render(SettingsView, { props: defaultProps })
+    render(SettingsView, { props: { ...defaultProps, mode: 'global' as const } })
     expect(screen.getByPlaceholderText('ghp_...')).toBeTruthy()
   })
 
@@ -210,14 +215,21 @@ describe('SettingsView', () => {
   it('shows Global Settings header when no project is active', () => {
     activeProjectId.set(null)
     projects.set([])
-    render(SettingsView, { props: defaultProps })
+    render(SettingsView, { props: { ...defaultProps, mode: 'global' as const } })
     expect(screen.queryAllByText(/global settings/i).length).toBeGreaterThan(0)
   })
 
-  it('renders sidebar Project and Global group labels', () => {
+  it('renders sidebar Project group label in project mode', () => {
     render(SettingsView, { props: defaultProps })
     expect(screen.queryAllByText(/^project$/i).length).toBeGreaterThan(0)
-    expect(screen.queryAllByText(/^global$/i).length).toBeGreaterThan(0)
+  })
+
+  it('does not render sidebar Global group label in global mode', () => {
+    activeProjectId.set(null)
+    projects.set([])
+    render(SettingsView, { props: { ...defaultProps, mode: 'global' as const } })
+    const links = screen.queryAllByRole('link')
+    expect(links.length).toBe(0)
   })
 
   it('does not show global cards on project page', () => {
@@ -228,7 +240,7 @@ describe('SettingsView', () => {
   it('does not show project cards on global page', () => {
     activeProjectId.set(null)
     projects.set([])
-    render(SettingsView, { props: defaultProps })
+    render(SettingsView, { props: { ...defaultProps, mode: 'global' as const } })
     expect(screen.queryByPlaceholderText('My Project')).toBeNull()
   })
 
@@ -301,7 +313,7 @@ describe('SettingsView', () => {
   it('JIRA API token field has type=password on global page', () => {
     activeProjectId.set(null)
     projects.set([])
-    render(SettingsView, { props: defaultProps })
+    render(SettingsView, { props: { ...defaultProps, mode: 'global' as const } })
     const apiTokenInput = screen.getByPlaceholderText('Your JIRA API token') as HTMLInputElement
     expect(apiTokenInput.type).toBe('password')
   })
@@ -309,7 +321,7 @@ describe('SettingsView', () => {
   it('GitHub PAT field has type=password on global page', () => {
     activeProjectId.set(null)
     projects.set([])
-    render(SettingsView, { props: defaultProps })
+    render(SettingsView, { props: { ...defaultProps, mode: 'global' as const } })
     const patInput = screen.getByPlaceholderText('ghp_...') as HTMLInputElement
     expect(patInput.type).toBe('password')
   })
@@ -331,7 +343,7 @@ describe('SettingsView', () => {
       },
     ])
 
-    render(SettingsView, { props: defaultProps })
+    render(SettingsView, { props: { ...defaultProps, mode: 'global' as const } })
 
     await vi.waitFor(() => {
       expect(screen.queryAllByText(/tiny/i).length).toBeGreaterThan(0)
@@ -347,7 +359,7 @@ describe('SettingsView', () => {
     activeProjectId.set(null)
     projects.set([])
 
-    render(SettingsView, { props: defaultProps })
+    render(SettingsView, { props: { ...defaultProps, mode: 'global' as const } })
 
     expect(screen.queryByPlaceholderText('My Project')).toBeNull()
     expect(screen.getByPlaceholderText('https://your-domain.atlassian.net')).toBeTruthy()

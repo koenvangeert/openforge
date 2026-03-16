@@ -13,6 +13,7 @@
   import FileTree from './FileTree.svelte'
   import ResizablePanel from './ResizablePanel.svelte'
   import DiffViewer from './DiffViewer.svelte'
+  import ProjectPageHeader from './ProjectPageHeader.svelte'
   import ReviewSubmitPanel from './ReviewSubmitPanel.svelte'
   import PrOverviewTab from './PrOverviewTab.svelte'
   import AgentReviewOutputModal from './AgentReviewOutputModal.svelte'
@@ -20,6 +21,12 @@
   import type { FileContents } from '../lib/diffAdapter'
 
   type PrDetailTab = 'overview' | 'files'
+
+  interface Props {
+    projectName: string
+  }
+
+  let { projectName }: Props = $props()
 
   let isLoading = $state(false)
   let isLoadingAuthored = $state(false)
@@ -414,7 +421,7 @@
 <div class="flex flex-col w-full h-full overflow-hidden">
   {#if $selectedReviewPr}
     <div class="flex flex-col h-full overflow-hidden">
-      <div class="flex flex-col gap-1.5 px-4 py-2.5 bg-base-200 border-b border-base-300 shrink-0">
+      <div class="flex flex-col gap-1.5 px-4 py-2.5 border-b border-base-300 shrink-0" style="background-color: var(--project-bg-alt, oklch(var(--b2)))">
         <div class="flex items-center gap-2 min-w-0">
           <button class="btn btn-ghost btn-xs text-base-content/50 shrink-0" onclick={backToList}>← Back</button>
           <span class="badge badge-primary badge-sm shrink-0">{$selectedReviewPr.repo_owner}/{$selectedReviewPr.repo_name}</span>
@@ -534,73 +541,77 @@
     </div>
   {:else}
     <div class="flex flex-col h-full overflow-hidden">
-      <div class="flex items-center justify-between px-6 py-5 bg-base-200 border-b border-base-300 shrink-0">
-        <h2 class="text-xl font-semibold text-base-content m-0">Pull Requests</h2>
-        <div class="relative">
-          <button
-            class="btn btn-ghost btn-sm gap-1 {excludedRepos.size > 0 ? 'text-warning' : 'text-base-content/50'}"
-            title="Filter repositories"
-            onclick={() => { showFilterDropdown = !showFilterDropdown }}
-          >
-            {#if excludedRepos.size > 0}
-              <span class="badge badge-warning badge-xs">{excludedRepos.size}</span>
-            {/if}
-            Filter
-          </button>
-          {#if showFilterDropdown}
-            <!-- Invisible backdrop to close dropdown on outside click -->
-            <!-- svelte-ignore a11y_no_static_element_interactions -->
-            <div class="fixed inset-0 z-40" onclick={() => { showFilterDropdown = false }}></div>
-            <div class="absolute right-0 top-full mt-1 z-50 bg-base-100 border border-base-300 rounded-lg shadow-lg w-[320px] p-3">
-              <div class="text-xs font-semibold text-base-content/50 mb-2">Excluded Repositories</div>
-
-              <!-- Manual input to add a repo -->
-              <form class="flex gap-1.5 mb-3" onsubmit={(e) => { e.preventDefault(); addExcludedRepo(newRepoInput) }}>
-                <input
-                  type="text"
-                  class="input input-bordered input-xs flex-1"
-                  placeholder="owner/repo"
-                  bind:value={newRepoInput}
-                />
-                <button type="submit" class="btn btn-primary btn-xs" disabled={!newRepoInput.trim()}>Add</button>
-              </form>
-
-              <!-- Current exclusion list -->
+      <ProjectPageHeader
+        title={`${projectName} — Pull Requests`}
+        subtitle="Review open pull requests for this project"
+      >
+        {#snippet actions()}
+          <div class="relative">
+            <button
+              class="btn btn-ghost btn-sm gap-1 {excludedRepos.size > 0 ? 'text-warning' : 'text-base-content/50'}"
+              title="Filter repositories"
+              onclick={() => { showFilterDropdown = !showFilterDropdown }}
+            >
               {#if excludedRepos.size > 0}
-                <div class="flex flex-col gap-1 mb-3 max-h-[160px] overflow-y-auto">
-                  {#each [...excludedRepos].sort() as repo}
-                    <div class="flex items-center justify-between px-2 py-1 rounded bg-base-200 text-sm">
-                      <span class="text-base-content truncate">{repo}</span>
-                      <button
-                        class="btn btn-ghost btn-xs text-base-content/40 hover:text-error"
-                        onclick={() => removeExcludedRepo(repo)}
-                        title="Remove from exclusion list"
-                      >✕</button>
-                    </div>
-                  {/each}
-                </div>
-              {:else}
-                <div class="text-xs text-base-content/40 px-1 mb-3">No repositories excluded</div>
+                <span class="badge badge-warning badge-xs">{excludedRepos.size}</span>
               {/if}
+              Filter
+            </button>
+            {#if showFilterDropdown}
+              <!-- Invisible backdrop to close dropdown on outside click -->
+              <!-- svelte-ignore a11y_no_static_element_interactions -->
+              <div class="fixed inset-0 z-40" onclick={() => { showFilterDropdown = false }}></div>
+              <div class="absolute right-0 top-full mt-1 z-50 bg-base-100 border border-base-300 rounded-lg shadow-lg w-[320px] p-3">
+                <div class="text-xs font-semibold text-base-content/50 mb-2">Excluded Repositories</div>
 
-              <!-- Quick-add suggestions from current PRs -->
-              {#if suggestedRepos().length > 0}
-                <div class="border-t border-base-300 pt-2">
-                  <div class="text-xs text-base-content/40 mb-1.5">Quick add from open PRs</div>
-                  <div class="flex flex-wrap gap-1">
-                    {#each suggestedRepos() as repo}
-                      <button
-                        class="btn btn-ghost btn-xs text-base-content/60"
-                        onclick={() => addExcludedRepo(repo)}
-                      >+ {repo}</button>
+                <!-- Manual input to add a repo -->
+                <form class="flex gap-1.5 mb-3" onsubmit={(e) => { e.preventDefault(); addExcludedRepo(newRepoInput) }}>
+                  <input
+                    type="text"
+                    class="input input-bordered input-xs flex-1"
+                    placeholder="owner/repo"
+                    bind:value={newRepoInput}
+                  />
+                  <button type="submit" class="btn btn-primary btn-xs" disabled={!newRepoInput.trim()}>Add</button>
+                </form>
+
+                <!-- Current exclusion list -->
+                {#if excludedRepos.size > 0}
+                  <div class="flex flex-col gap-1 mb-3 max-h-[160px] overflow-y-auto">
+                    {#each [...excludedRepos].sort() as repo}
+                      <div class="flex items-center justify-between px-2 py-1 rounded bg-base-200 text-sm">
+                        <span class="text-base-content truncate">{repo}</span>
+                        <button
+                          class="btn btn-ghost btn-xs text-base-content/40 hover:text-error"
+                          onclick={() => removeExcludedRepo(repo)}
+                          title="Remove from exclusion list"
+                        >✕</button>
+                      </div>
                     {/each}
                   </div>
-                </div>
-              {/if}
-            </div>
-          {/if}
-        </div>
-      </div>
+                {:else}
+                  <div class="text-xs text-base-content/40 px-1 mb-3">No repositories excluded</div>
+                {/if}
+
+                <!-- Quick-add suggestions from current PRs -->
+                {#if suggestedRepos().length > 0}
+                  <div class="border-t border-base-300 pt-2">
+                    <div class="text-xs text-base-content/40 mb-1.5">Quick add from open PRs</div>
+                    <div class="flex flex-wrap gap-1">
+                      {#each suggestedRepos() as repo}
+                        <button
+                          class="btn btn-ghost btn-xs text-base-content/60"
+                          onclick={() => addExcludedRepo(repo)}
+                        >+ {repo}</button>
+                      {/each}
+                    </div>
+                  </div>
+                {/if}
+              </div>
+            {/if}
+          </div>
+        {/snippet}
+      </ProjectPageHeader>
 
       <div class="flex flex-1 overflow-hidden">
         <!-- Left column: Review Requests -->

@@ -18,7 +18,6 @@
   import { themeMode, applyTheme } from '../lib/theme'
   import type { ThemeMode } from '../lib/theme'
   import type { Action, WhisperModelStatus, WhisperModelSizeId, BoardColumnConfig } from '../lib/types'
-  import SettingsSidebar from './SettingsSidebar.svelte'
   import SettingsGeneralCard from './SettingsGeneralCard.svelte'
   import SettingsBoardCard from './SettingsBoardCard.svelte'
   import SettingsIntegrationsCard from './SettingsIntegrationsCard.svelte'
@@ -28,13 +27,15 @@
   import SettingsCredentialsCard from './SettingsCredentialsCard.svelte'
   import SettingsActionsCard from './SettingsActionsCard.svelte'
   import SettingsExperimentalCard from './SettingsExperimentalCard.svelte'
+  import ProjectPageHeader from './ProjectPageHeader.svelte'
 
   interface Props {
     onClose: () => void
     onProjectDeleted: () => void
+    mode: 'project' | 'global'
   }
 
-  let { onClose, onProjectDeleted }: Props = $props()
+  let { onClose, onProjectDeleted, mode }: Props = $props()
 
   // Project state
   let projectName = $state('')
@@ -44,6 +45,7 @@
   let agentInstructions = $state('')
   let aiProvider = $state('claude-code')
   let useWorktrees = $state(true)
+  let projectColor = $state('')
 
   // Global state
   let taskIdPrefix = $state('')
@@ -89,7 +91,7 @@
   // UI state
   let isSaving = $state(false)
   let saved = $state(false)
-  let activeSection = $state('general')
+  let activeSection = $state(mode === 'global' ? 'preferences' : 'general')
   let isDeleting = $state(false)
 
   // Scroll spy
@@ -100,7 +102,7 @@
 
   // Derived state
   const hasProject = $derived(!!$activeProjectId)
-  const activePage = $derived(globalSections.includes(activeSection) ? 'global' : 'project')
+  const activePage = $derived(mode === 'global' ? 'global' : mode === 'project' ? 'project' : (globalSections.includes(activeSection) ? 'global' : 'project'))
 
   // Load project config on activeProjectId change
   $effect(() => {
@@ -120,12 +122,14 @@
         getProjectConfig(pid, 'additional_instructions'),
         getProjectConfig(pid, 'ai_provider'),
         getProjectConfig(pid, 'use_worktrees'),
-      ]).then(([boardId, repo, instructions, provider, worktrees]) => {
+        getProjectConfig(pid, 'project_color'),
+      ]).then(([boardId, repo, instructions, provider, worktrees, color]) => {
         jiraBoardId = boardId ?? ''
         githubDefaultRepo = repo ?? ''
         agentInstructions = instructions ?? ''
         aiProvider = provider ?? 'claude-code'
         useWorktrees = worktrees !== 'false'
+        projectColor = color ?? ''
       })
 
       // Load actions
@@ -145,15 +149,20 @@
       agentInstructions = ''
       aiProvider = 'claude-code'
       useWorktrees = true
+      projectColor = ''
       actions = []
       boardColumns = []
     }
   })
 
-  // Default to global page when no project is active
+  // Default to correct page based on mode
   $effect(() => {
-    if (!hasProject && projectSections.includes(activeSection)) {
-      activeSection = 'ai'
+    if (mode === 'global' && projectSections.includes(activeSection)) {
+      activeSection = 'preferences'
+    } else if (mode === 'project' && globalSections.includes(activeSection)) {
+      activeSection = 'general'
+    } else if (!hasProject && projectSections.includes(activeSection)) {
+      activeSection = 'preferences'
     }
   })
 
@@ -242,15 +251,6 @@
     return () => obs.disconnect()
   })
 
-  function handleNavigate(sectionId: string) {
-    isNavigating = true
-    activeSection = sectionId
-    document.getElementById(`section-${sectionId}`)?.scrollIntoView({ behavior: 'smooth' })
-    setTimeout(() => {
-      isNavigating = false
-    }, 800)
-  }
-
   async function save() {
     isSaving = true
     try {
@@ -261,6 +261,7 @@
         await setProjectConfig($activeProjectId, 'additional_instructions', agentInstructions)
         await setProjectConfig($activeProjectId, 'ai_provider', aiProvider)
         await setProjectConfig($activeProjectId, 'use_worktrees', useWorktrees ? 'true' : 'false')
+        await setProjectConfig($activeProjectId, 'project_color', projectColor)
         await saveActions($activeProjectId, actions)
         await saveBoardColumns($activeProjectId, boardColumns)
       }
@@ -340,31 +341,28 @@
 </script>
 
 <div class="flex h-full w-full">
-  <SettingsSidebar {activeSection} onNavigate={handleNavigate} {hasProject} />
-
-  <div bind:this={scrollContainer} class="flex-1 overflow-y-auto bg-base-200">
+  <div bind:this={scrollContainer} class="flex-1 overflow-y-auto" style="background: linear-gradient(180deg, var(--project-bg-alt, oklch(var(--b2))) 0%, var(--project-bg, oklch(var(--b1))) 100%)">
     <div class="px-6 py-6 flex flex-col gap-6">
-      <div class="flex items-center justify-between">
-        <div>
-          <h1 class="text-lg font-semibold text-base-content m-0">
-            {activePage === 'project' ? 'Project Settings' : 'Global Settings'}
-          </h1>
-          <p class="text-xs text-base-content/50 mt-1">
-            {activePage === 'project'
-              ? 'Configure project-specific options'
-              : 'Configure global preferences and credentials'}
-          </p>
-        </div>
-        <button class="btn btn-primary btn-sm" onclick={save} disabled={isSaving}>
-          {#if isSaving}
-            Saving...
-          {:else if saved}
-            Saved!
-          {:else}
-            Save Settings
-          {/if}
-        </button>
-      </div>
+      <ProjectPageHeader
+        title={activePage === 'project'
+          ? `${projectName || 'Project'} — Settings`
+          : 'Global Settings'}
+        subtitle={activePage === 'project'
+          ? 'Configure project-specific options'
+          : 'Configure global preferences and credentials'}
+      >
+        {#snippet actions()}
+          <button class="btn btn-primary btn-sm" onclick={save} disabled={isSaving}>
+            {#if isSaving}
+              Saving...
+            {:else if saved}
+              Saved!
+            {:else}
+              Save Settings
+            {/if}
+          </button>
+        {/snippet}
+      </ProjectPageHeader>
 
       {#if activePage === 'project'}
         <SettingsGeneralCard
@@ -372,6 +370,7 @@
           {projectPath}
           {aiProvider}
           {useWorktrees}
+          {projectColor}
           disabled={!hasProject}
           {opencodeInstalled}
           {opencodeVersion}
@@ -382,6 +381,7 @@
           onProjectPathChange={(v) => (projectPath = v)}
           onAiProviderChange={(v) => (aiProvider = v)}
           onUseWorktreesChange={() => (useWorktrees = !useWorktrees)}
+          onProjectColorChange={(v) => (projectColor = v)}
         />
 
         <SettingsBoardCard

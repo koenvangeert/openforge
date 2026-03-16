@@ -157,7 +157,7 @@
 <svelte:window onkeydown={handleTaskDetailKeydown} />
 
 <div class="flex flex-col flex-1 h-full bg-base-100 overflow-hidden">
-  <header class="flex flex-col bg-base-200 border-b border-base-300 shrink-0">
+  <header class="flex flex-col border-b border-base-300 shrink-0" style="background-color: var(--project-bg-alt, oklch(var(--b2)))">
     <div class="flex items-center gap-3 px-6 py-3.5">
       <button class="btn btn-ghost btn-sm font-mono text-sm text-secondary border border-base-300 shrink-0 px-2.5 h-7" onclick={handleBack}>
         <span aria-hidden="true">&lt; </span><span>back</span>

@@ -12,7 +12,7 @@
   let { jiraBoardId, githubDefaultRepo, disabled, onJiraBoardIdChange, onGithubDefaultRepoChange }: Props = $props()
 </script>
 
-<div id="section-integrations" class="bg-base-100 rounded-lg border border-base-300 overflow-hidden">
+<div id="section-integrations" class="rounded-lg border border-base-300 overflow-hidden" style="background-color: var(--project-bg, oklch(var(--b1)))">
   <div class="flex items-center gap-2 px-5 py-3 border-b border-base-300">
     <Plug size={16} class="text-base-content" />
     <h3 class="text-sm font-semibold text-base-content m-0">Integrations</h3>

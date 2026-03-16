@@ -5,28 +5,23 @@ import type { AppView } from '../lib/types'
 import { commandHeld } from '../lib/stores'
 
 describe('IconRail', () => {
-  it('renders the logo text ">_"', () => {
-    render(IconRail, { props: { currentView: 'board' as AppView, onNavigate: vi.fn(), authoredPrCount: 0 } })
-    expect(screen.getByText('>_')).toBeTruthy()
-  })
-
-  it('renders 5 navigation buttons', () => {
-    render(IconRail, { props: { currentView: 'board' as AppView, onNavigate: vi.fn(), authoredPrCount: 0 } })
+  it('renders 3 navigation buttons', () => {
+    render(IconRail, { props: { currentView: 'board' as AppView, onNavigate: vi.fn() } })
     const buttons = screen.getAllByRole('button')
-    expect(buttons).toHaveLength(5)
+    expect(buttons).toHaveLength(3)
   })
 
-  it('clicking first button (dashboard) calls onNavigate with "board"', () => {
+  it('clicking first button (board) calls onNavigate with "board"', () => {
     const onNavigate = vi.fn()
-    render(IconRail, { props: { currentView: 'settings' as AppView, onNavigate, authoredPrCount: 0 } })
+    render(IconRail, { props: { currentView: 'settings' as AppView, onNavigate } })
     const buttons = screen.getAllByRole('button')
     fireEvent.click(buttons[0])
     expect(onNavigate).toHaveBeenCalledWith('board')
   })
 
-  it('clicking second button (pr) calls onNavigate with "pr_review"', () => {
+  it('clicking second button (pr_review) calls onNavigate with "pr_review"', () => {
     const onNavigate = vi.fn()
-    render(IconRail, { props: { currentView: 'board' as AppView, onNavigate, authoredPrCount: 0 } })
+    render(IconRail, { props: { currentView: 'board' as AppView, onNavigate } })
     const buttons = screen.getAllByRole('button')
     fireEvent.click(buttons[1])
     expect(onNavigate).toHaveBeenCalledWith('pr_review')
@@ -34,35 +29,19 @@ describe('IconRail', () => {
 
   it('clicking third button (skills) calls onNavigate with "skills"', () => {
     const onNavigate = vi.fn()
-    render(IconRail, { props: { currentView: 'board' as AppView, onNavigate, authoredPrCount: 0 } })
+    render(IconRail, { props: { currentView: 'board' as AppView, onNavigate } })
     const buttons = screen.getAllByRole('button')
     fireEvent.click(buttons[2])
     expect(onNavigate).toHaveBeenCalledWith('skills')
   })
 
-  it('clicking fourth button calls onNavigate with "workqueue"', () => {
-    const onNavigate = vi.fn()
-    render(IconRail, { props: { currentView: 'board' as AppView, onNavigate, authoredPrCount: 0 } })
-    const buttons = screen.getAllByRole('button')
-    fireEvent.click(buttons[3])
-    expect(onNavigate).toHaveBeenCalledWith('workqueue')
-  })
-
-  it('clicking fifth button calls onNavigate with "settings"', () => {
-    const onNavigate = vi.fn()
-    render(IconRail, { props: { currentView: 'board' as AppView, onNavigate, authoredPrCount: 0 } })
-    const buttons = screen.getAllByRole('button')
-    fireEvent.click(buttons[4])
-    expect(onNavigate).toHaveBeenCalledWith('settings')
-  })
-
   it('shows review request count badge when reviewRequestCount > 0', () => {
-    render(IconRail, { props: { currentView: 'board' as AppView, onNavigate: vi.fn(), reviewRequestCount: 3, authoredPrCount: 0 } })
+    render(IconRail, { props: { currentView: 'board' as AppView, onNavigate: vi.fn(), reviewRequestCount: 3 } })
     expect(screen.getByText('3')).toBeTruthy()
   })
 
   it('does not show badge when reviewRequestCount is 0', () => {
-    render(IconRail, { props: { currentView: 'board' as AppView, onNavigate: vi.fn(), reviewRequestCount: 0, authoredPrCount: 0 } })
+    render(IconRail, { props: { currentView: 'board' as AppView, onNavigate: vi.fn(), reviewRequestCount: 0 } })
     expect(screen.queryByText('0')).toBeNull()
   })
 
@@ -74,20 +53,18 @@ describe('IconRail', () => {
   describe('shortcut badges', () => {
     it('shows shortcut key badges for all nav items when commandHeld is true', () => {
       commandHeld.set(true)
-      render(IconRail, { props: { currentView: 'board' as AppView, onNavigate: vi.fn(), authoredPrCount: 0 } })
+      render(IconRail, { props: { currentView: 'board' as AppView, onNavigate: vi.fn() } })
 
       expect(screen.getByText('H')).toBeTruthy()
       expect(screen.getByText('G')).toBeTruthy()
       expect(screen.getByText('L')).toBeTruthy()
-      expect(screen.getByText('R')).toBeTruthy()
-      expect(screen.getByText(',')).toBeTruthy()
 
       commandHeld.set(false)
     })
 
     it('hides shortcut badges when commandHeld is false', () => {
       commandHeld.set(false)
-      render(IconRail, { props: { currentView: 'board' as AppView, onNavigate: vi.fn(), authoredPrCount: 0 } })
+      render(IconRail, { props: { currentView: 'board' as AppView, onNavigate: vi.fn() } })
 
       expect(screen.queryByText('H')).toBeNull()
       expect(screen.queryByText('G')).toBeNull()
@@ -95,26 +72,22 @@ describe('IconRail', () => {
 
     it('shows correct shortcut letter for each view', () => {
       commandHeld.set(true)
-      render(IconRail, { props: { currentView: 'board' as AppView, onNavigate: vi.fn(), authoredPrCount: 0 } })
+      render(IconRail, { props: { currentView: 'board' as AppView, onNavigate: vi.fn() } })
 
       expect(screen.getByText('H')).toBeTruthy()  // board (Home)
       expect(screen.getByText('G')).toBeTruthy()  // pr_review (Git)
-      expect(screen.getByText('L')).toBeTruthy()  // skiLLs
-      expect(screen.getByText('R')).toBeTruthy()  // woRkqueue
-      expect(screen.getByText(',')).toBeTruthy()  // settings (macOS standard ⌘,)
+      expect(screen.getByText('L')).toBeTruthy()  // skills (skiLLs)
 
       commandHeld.set(false)
     })
 
     it('hides kbd badges when modalsOpen is true even if commandHeld is true', () => {
       commandHeld.set(true)
-      render(IconRail, { props: { currentView: 'board' as AppView, onNavigate: vi.fn(), authoredPrCount: 0, modalsOpen: true } })
+      render(IconRail, { props: { currentView: 'board' as AppView, onNavigate: vi.fn(), modalsOpen: true } })
 
       expect(screen.queryByText('H')).toBeNull()
       expect(screen.queryByText('G')).toBeNull()
       expect(screen.queryByText('L')).toBeNull()
-      expect(screen.queryByText('R')).toBeNull()
-      expect(screen.queryByText(',')).toBeNull()
 
       commandHeld.set(false)
     })

@@ -20,7 +20,7 @@
 		onToggleAction,
 		onUpdateAction,
 		onResetActions
-	} = $props();
+	}: Props = $props();
 
 	function handleDelete(action: Action) {
 		if (action.builtin) {
@@ -39,7 +39,7 @@
 	}
 </script>
 
-<div id="section-actions" class="bg-base-100 rounded-lg border border-base-300 overflow-hidden">
+<div id="section-actions" class="rounded-lg border border-base-300 overflow-hidden" style="background-color: var(--project-bg, oklch(var(--b1)))">
 	<div class="flex items-center justify-between px-5 py-3 border-b border-base-300">
 		<div class="flex items-center gap-2">
 			<Zap size={16} class="text-base-content" />

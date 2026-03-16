@@ -1,10 +1,16 @@
 <script lang="ts">
-  import { onMount } from 'svelte'
   import { skills, selectedSkillName, activeProjectId } from '../lib/stores'
   import { listOpenCodeSkills, saveSkillContent } from '../lib/ipc'
   import { pushNavState } from '../lib/navigation'
   import { isInputFocused } from '../lib/domUtils'
+
+  interface Props {
+    projectName: string
+  }
+
+  let { projectName }: Props = $props()
   import { useVimNavigation } from '../lib/useVimNavigation.svelte'
+  import ProjectPageHeader from './ProjectPageHeader.svelte'
   import MarkdownContent from './MarkdownContent.svelte'
   import type { SkillInfo } from '../lib/types'
 
@@ -150,8 +156,12 @@
     el?.scrollIntoView?.({ block: 'nearest' })
   })
 
-  onMount(() => {
-    loadSkills()
+  // Reload skills when active project changes (also handles initial load)
+  $effect(() => {
+    const _pid = $activeProjectId
+    if (_pid) {
+      loadSkills()
+    }
   })
 </script>
 
@@ -159,22 +169,24 @@
 
 <div class="flex flex-col h-full overflow-hidden">
   <!-- Header -->
-  <div class="flex items-center justify-between px-6 py-4 bg-base-200 border-b border-base-300 shrink-0">
-    <div class="flex items-center gap-3">
-      <h2 class="text-xl font-semibold text-base-content m-0">Skills</h2>
-      <span class="badge badge-primary badge-sm">{$skills.length} {$skills.length === 1 ? 'skill' : 'skills'}</span>
-    </div>
-    <div class="flex items-center gap-2">
-      <button class="btn btn-sm border border-base-300" onclick={loadSkills} disabled={isLoading}>
-        {isLoading ? '⟳' : '↻'} Refresh
-      </button>
-    </div>
-  </div>
+  <ProjectPageHeader
+    title={`${projectName} — Skills`}
+    subtitle="View and edit project and personal skills"
+  >
+    {#snippet actions()}
+      <div class="flex items-center gap-2">
+        <span class="badge badge-primary badge-sm">{$skills.length} {$skills.length === 1 ? 'skill' : 'skills'}</span>
+        <button class="btn btn-sm border border-base-300" onclick={loadSkills} disabled={isLoading}>
+          {isLoading ? '⟳' : '↻'} Refresh
+        </button>
+      </div>
+    {/snippet}
+  </ProjectPageHeader>
 
   <!-- Content -->
   <div class="flex flex-1 overflow-hidden">
     <!-- Left panel: Skill list -->
-    <div class="w-72 border-r border-base-300 flex flex-col shrink-0 bg-base-100">
+    <div class="w-72 border-r border-base-300 flex flex-col shrink-0" style="background-color: var(--project-bg, oklch(var(--b1)))">
       <!-- Search -->
       <div class="p-3 border-b border-base-300">
         <input
@@ -293,10 +305,10 @@
     </div>
 
     <!-- Right panel: Skill detail -->
-    <div class="flex-1 flex flex-col overflow-hidden bg-base-100">
+    <div class="flex-1 flex flex-col overflow-hidden" style="background-color: var(--project-bg, oklch(var(--b1)))">
       {#if selectedSkill}
         <!-- Skill detail header -->
-        <div class="flex items-center justify-between px-6 py-3 border-b border-base-300 bg-base-200 shrink-0">
+        <div class="flex items-center justify-between px-6 py-3 border-b border-base-300 shrink-0" style="background-color: var(--project-bg-alt, oklch(var(--b2)))">
           <div class="flex items-center gap-3 min-w-0">
             <h3 class="text-base font-semibold text-base-content m-0 truncate">{selectedSkill.name}</h3>
             <span class="badge badge-sm {selectedSkill.level === 'project' ? 'badge-primary' : 'badge-secondary'} shrink-0">{selectedSkill.level === 'project' ? 'repository' : 'personal'}</span>
@@ -340,7 +352,8 @@
           <!-- Edit mode: raw markdown textarea -->
           <div class="flex-1 overflow-hidden flex flex-col">
             <textarea
-              class="flex-1 w-full p-4 font-mono text-sm bg-base-100 text-base-content resize-none border-none outline-none"
+              class="flex-1 w-full p-4 font-mono text-sm text-base-content resize-none border-none outline-none"
+              style="background-color: var(--project-bg, oklch(var(--b1)))"
               bind:value={editContent}
               spellcheck="false"
             ></textarea>

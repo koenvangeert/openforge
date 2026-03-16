@@ -327,3 +327,14 @@
 .animate-slide-in-right {
   animation: slide-in-right 0.2s ease-out;
 }
+
+@keyframes gradient-shift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+.dev-badge-gradient {
+  background: linear-gradient(270deg, #00D084, #3B82F6, #A855F7, #00D084);
+  background-size: 300% 300%;
+  animation: gradient-shift 4s ease infinite;
+}
