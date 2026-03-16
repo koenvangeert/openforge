@@ -85,6 +85,7 @@ pub struct PollResult {
 /// * `github_client` - Shared GitHub API client (caller owns lifetime)
 pub async fn poll_github_once(app: &AppHandle, github_client: &GitHubClient) -> PollResult {
     let cycle_start = Instant::now();
+    github_client.clear_rate_limit_reset();
     let db = app.state::<Arc<Mutex<Database>>>();
 
     let github_token = crate::secure_store::get_secret("github_token")

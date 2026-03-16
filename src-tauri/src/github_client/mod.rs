@@ -60,6 +60,12 @@ impl GitHubClient {
         *self.last_rate_limit_reset.lock().unwrap()
     }
 
+    /// Clear the stored rate limit reset timestamp.
+    /// Call at the start of each poll cycle so stale values don't persist.
+    pub fn clear_rate_limit_reset(&self) {
+        *self.last_rate_limit_reset.lock().unwrap() = None;
+    }
+
     /// Make a GET request with ETag conditional request support.
     ///
     /// Sends `If-None-Match` header when a cached ETag exists for the URL.
