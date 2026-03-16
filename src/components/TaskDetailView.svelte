@@ -7,6 +7,8 @@
   import { navigateBack } from '../lib/navigation'
   import { isInputFocused } from '../lib/domUtils'
   import { loadActions, getEnabledActions } from '../lib/actions'
+  import { commandHeld } from '../lib/stores'
+  import { focusTerminal } from '../lib/terminalPool'
   import { Maximize2, Minimize2 } from 'lucide-svelte'
   import AgentPanel from './AgentPanel.svelte'
   import TaskInfoPanel from './TaskInfoPanel.svelte'
@@ -111,6 +113,28 @@
         setReviewMode(true)
         return
       }
+      if (e.key === 'i') {
+        e.preventDefault()
+        setReviewMode(false)
+        terminalFullscreen = false
+        rightPanelMode = 'info'
+        return
+      }
+      if (e.key === 'j') {
+        e.preventDefault()
+        setReviewMode(false)
+        terminalFullscreen = false
+        rightPanelMode = 'terminal'
+        return
+      }
+    }
+
+    if (e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey && e.key === 'e') {
+      e.preventDefault()
+      setReviewMode(false)
+      terminalFullscreen = false
+      focusTerminal(task.id)
+      return
     }
 
     // Escape in fullscreen exits fullscreen (does not navigate back)
@@ -247,29 +271,38 @@
         </div>
       </div>
     {:else}
-       <div class="flex-1 p-5 overflow-hidden max-[800px]:p-4">
+       <div class="relative flex-1 p-5 overflow-hidden max-[800px]:p-4">
          {#key task.id}
             <AgentPanel taskId={task.id} {isStarting} />
           {/key}
+         {#if $commandHeld}
+           <kbd class="kbd kbd-xs absolute top-2 right-2 bg-base-content/10 text-base-content/40 border-base-content/20 text-[0.55rem] min-w-4 h-4 flex items-center justify-center pointer-events-none z-10">E</kbd>
+         {/if}
        </div>
        <ResizablePanel storageKey="task-detail-sidebar" defaultWidth={360} minWidth={200} maxWidth={600} side="right">
          <div class="overflow-hidden bg-base-200 border-l border-base-300 flex flex-col h-full">
            {#if worktreePath !== null}
              <div class="flex items-center h-10 bg-base-200 border-b border-base-300 shrink-0 px-1">
-               <button
-                 class="flex items-center gap-1.5 h-full px-3.5 text-xs font-mono transition-colors {rightPanelMode === 'info' ? 'text-base-content font-semibold border-b-2 border-primary' : 'text-base-content/50'}"
-                 onclick={() => rightPanelMode = 'info'}
-               >
-                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
-                 Info
-               </button>
-               <button
-                 class="flex items-center gap-1.5 h-full px-3.5 text-xs font-mono transition-colors {rightPanelMode === 'terminal' ? 'text-base-content font-semibold border-b-2 border-primary' : 'text-base-content/50'}"
-                 onclick={() => rightPanelMode = 'terminal'}
-               >
-                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" x2="20" y1="19" y2="19"/></svg>
-                 Terminal
-               </button>
+              <button
+                  class="relative flex items-center gap-1.5 h-full px-3.5 text-xs font-mono transition-colors {rightPanelMode === 'info' ? 'text-base-content font-semibold border-b-2 border-primary' : 'text-base-content/50'}"
+                  onclick={() => rightPanelMode = 'info'}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+                  Info
+                  {#if $commandHeld}
+                    <kbd class="kbd kbd-xs absolute -top-2 -right-1 bg-base-content/10 text-base-content/40 border-base-content/20 text-[0.55rem] min-w-4 h-4 flex items-center justify-center pointer-events-none">I</kbd>
+                  {/if}
+                </button>
+                <button
+                  class="relative flex items-center gap-1.5 h-full px-3.5 text-xs font-mono transition-colors {rightPanelMode === 'terminal' ? 'text-base-content font-semibold border-b-2 border-primary' : 'text-base-content/50'}"
+                  onclick={() => rightPanelMode = 'terminal'}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" x2="20" y1="19" y2="19"/></svg>
+                  Terminal
+                  {#if $commandHeld}
+                    <kbd class="kbd kbd-xs absolute -top-2 -right-1 bg-base-content/10 text-base-content/40 border-base-content/20 text-[0.55rem] min-w-4 h-4 flex items-center justify-center pointer-events-none">J</kbd>
+                  {/if}
+                </button>
                {#if rightPanelMode === 'terminal'}
                  <button
                    class="btn btn-ghost btn-xs ml-auto gap-1"
