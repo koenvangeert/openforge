@@ -1,7 +1,5 @@
 <script lang="ts">
   import { onMount, onDestroy, untrack } from 'svelte'
-  import { listen } from '@tauri-apps/api/event'
-  import type { UnlistenFn } from '@tauri-apps/api/event'
   import { activeSessions } from '../lib/stores'
   import { writePty, killPty, spawnPty, abortImplementation } from '../lib/ipc'
   import '@xterm/xterm/css/xterm.css'
@@ -19,7 +17,6 @@
 
   let status = $state<'idle' | 'running' | 'complete' | 'error'>('idle')
   let opencodePort = $state<number | null>(null)
-  let unlisten: UnlistenFn | null = null
   let terminalEl: HTMLDivElement
   let poolEntry: PoolEntry | null = null
 
@@ -83,6 +80,7 @@
 
     const currentSession = $activeSessions.get(taskId)
     if (!currentSession) return
+    if (currentSession.status !== 'running' && currentSession.status !== 'paused') return
     if (!currentSession.opencode_session_id) return
 
     // Get port from session history or worktree
@@ -106,15 +104,9 @@
 
     await sessionHistory.loadSessionHistory()
     await tryAttachPty()
-
-    unlisten = await listen<{ task_id: string }>('action-complete', async (event) => {
-      if (event.payload.task_id !== taskId) return
-      await tryAttachPty()
-    })
   })
 
   onDestroy(() => {
-    if (unlisten) unlisten()
     if (poolEntry) {
       detach(poolEntry)
     }

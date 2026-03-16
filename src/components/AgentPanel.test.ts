@@ -3,6 +3,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { writable } from 'svelte/store'
 import type { AgentSession } from '../lib/types'
 
+type TauriEventCallback = (event: { payload: unknown }) => void
+
 // Mock xterm.js — provide a minimal Terminal stub
 vi.mock('@xterm/xterm', () => {
   const Terminal = vi.fn().mockImplementation(() => ({
@@ -45,16 +47,13 @@ vi.mock('../lib/ipc', () => ({
   downloadWhisperModel: vi.fn(),
 }))
 
-vi.mock('@tauri-apps/api/event', () => ({
-  listen: vi.fn().mockResolvedValue(() => {}),
-}))
-
 vi.mock('../lib/audioRecorder', () => ({
   createAudioRecorder: vi.fn(),
 }))
 
 // Mock terminalPool to avoid xterm constructor issues in test environment
-const { mockPoolEntry } = vi.hoisted(() => ({
+const { listenCallbacks, mockPoolEntry, mockSessionHistoryPort } = vi.hoisted(() => ({
+  listenCallbacks: new Map<string, TauriEventCallback[]>(),
   mockPoolEntry: {
     taskId: '',
     terminal: { write: vi.fn(), dispose: vi.fn(), reset: vi.fn(), cols: 80, rows: 24 },
@@ -68,6 +67,16 @@ const { mockPoolEntry } = vi.hoisted(() => ({
     resizeTimeout: null,
     attached: false,
   },
+  mockSessionHistoryPort: { value: null as number | null },
+}))
+
+vi.mock('@tauri-apps/api/event', () => ({
+  listen: vi.fn().mockImplementation((eventName: string, cb: TauriEventCallback) => {
+    const existing = listenCallbacks.get(eventName) || []
+    existing.push(cb)
+    listenCallbacks.set(eventName, existing)
+    return Promise.resolve(() => {})
+  }),
 }))
 
 vi.mock('../lib/terminalPool', () => ({
@@ -80,18 +89,34 @@ vi.mock('../lib/terminalPool', () => ({
 }))
 
 vi.mock('../lib/useSessionHistory.svelte', () => ({
-  createSessionHistory: vi.fn(() => ({
+  createSessionHistory: vi.fn((deps: { setOpencodePort: (port: number) => void }) => ({
     get loadingHistory() { return false },
-    loadSessionHistory: vi.fn().mockResolvedValue(undefined),
+    loadSessionHistory: vi.fn().mockImplementation(async () => {
+      if (mockSessionHistoryPort.value !== null) {
+        deps.setOpencodePort(mockSessionHistoryPort.value)
+      }
+    }),
   })),
 }))
 
 import AgentPanel from './AgentPanel.svelte'
 import { activeSessions } from '../lib/stores'
+import { spawnPty } from '../lib/ipc'
+
+function emitTauriEvent(eventName: string, payload: unknown = {}) {
+  const callbacks = listenCallbacks.get(eventName) || []
+  for (const cb of callbacks) {
+    cb({ payload })
+  }
+}
 
 describe('AgentPanel (router)', () => {
   beforeEach(() => {
     activeSessions.set(new Map())
+    listenCallbacks.clear()
+    mockSessionHistoryPort.value = null
+    mockPoolEntry.ptyActive = false
+    vi.clearAllMocks()
   })
 
   it('renders OpenCode panel by default when no session exists', async () => {
@@ -162,6 +187,10 @@ describe('AgentPanel (router)', () => {
 describe('AgentPanel starting animation', () => {
   beforeEach(() => {
     activeSessions.set(new Map())
+    listenCallbacks.clear()
+    mockSessionHistoryPort.value = null
+    mockPoolEntry.ptyActive = false
+    vi.clearAllMocks()
   })
 
   it('shows starting animation when isStarting=true and no session', async () => {
@@ -208,6 +237,10 @@ describe('AgentPanel starting animation', () => {
 describe('OpenCodeAgentPanel (via router)', () => {
   beforeEach(() => {
     activeSessions.set(new Map())
+    listenCallbacks.clear()
+    mockSessionHistoryPort.value = null
+    mockPoolEntry.ptyActive = false
+    vi.clearAllMocks()
   })
 
   it('shows running session status', () => {
@@ -278,6 +311,67 @@ describe('OpenCodeAgentPanel (via router)', () => {
 
     render(AgentPanel, { props: { taskId: 'T-1' } })
     expect(screen.getByText('completed')).toBeTruthy()
+  })
+
+  it('does not attach a PTY for completed sessions when mounted', async () => {
+    mockSessionHistoryPort.value = 4173
+
+    const session: AgentSession = {
+      id: 'ses-1',
+      ticket_id: 'T-1',
+      opencode_session_id: 'oc-sess-1',
+      stage: 'implement',
+      status: 'completed',
+      checkpoint_data: null,
+      error_message: null,
+      created_at: 1000,
+      updated_at: 2000,
+      provider: 'opencode',
+      claude_session_id: null,
+    }
+
+    activeSessions.set(new Map([['T-1', session]]))
+
+    render(AgentPanel, { props: { taskId: 'T-1' } })
+
+    await vi.waitFor(() => {
+      expect(screen.getByText('completed')).toBeTruthy()
+    })
+
+    expect(spawnPty).not.toHaveBeenCalled()
+  })
+
+  it('does not reattach a PTY when action-complete fires', async () => {
+    mockSessionHistoryPort.value = 4173
+
+    const session: AgentSession = {
+      id: 'ses-1',
+      ticket_id: 'T-1',
+      opencode_session_id: 'oc-sess-1',
+      stage: 'implement',
+      status: 'running',
+      checkpoint_data: null,
+      error_message: null,
+      created_at: 1000,
+      updated_at: 2000,
+      provider: 'opencode',
+      claude_session_id: null,
+    }
+
+    activeSessions.set(new Map([['T-1', session]]))
+
+    render(AgentPanel, { props: { taskId: 'T-1' } })
+
+    await vi.waitFor(() => {
+      expect(spawnPty).toHaveBeenCalledTimes(1)
+    })
+
+    vi.mocked(spawnPty).mockClear()
+    mockPoolEntry.ptyActive = false
+
+    emitTauriEvent('action-complete', { task_id: 'T-1' })
+
+    expect(spawnPty).not.toHaveBeenCalled()
   })
 
   it('shows question banner when session is paused with checkpoint_data', () => {
