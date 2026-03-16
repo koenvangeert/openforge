@@ -242,11 +242,11 @@
        <button
            class="btn btn-ghost btn-xs gap-1.5 {!reviewMode ? 'text-primary border border-primary' : 'text-base-content/50 border border-base-300'}"
            onclick={() => setReviewMode(false)}
-         >code_view <kbd class="kbd kbd-xs opacity-50">⌘1</kbd></button>
+          >code_view {#if $commandHeld}<kbd class="kbd kbd-xs opacity-50">⌘1</kbd>{/if}</button>
          <button
            class="btn btn-ghost btn-xs gap-1.5 {reviewMode ? 'text-primary border border-primary' : 'text-base-content/50 border border-base-300'}"
            onclick={() => setReviewMode(true)}
-         >review_view <kbd class="kbd kbd-xs opacity-50">⌘2</kbd></button>
+          >review_view {#if $commandHeld}<kbd class="kbd kbd-xs opacity-50">⌘2</kbd>{/if}</button>
       </div>
     {/if}
   </div>
@@ -310,7 +310,7 @@
                    onclick={() => terminalFullscreen = true}
                  >
                    <Maximize2 size={14} />
-                   <kbd class="kbd kbd-xs text-base-content/40">⌘F</kbd>
+                    {#if $commandHeld}<kbd class="kbd kbd-xs text-base-content/40">⌘F</kbd>{/if}
                  </button>
                {/if}
              </div>

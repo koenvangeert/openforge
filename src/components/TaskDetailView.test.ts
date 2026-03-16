@@ -802,7 +802,7 @@ describe('TaskDetailView', () => {
       expect(breadcrumb?.textContent).not.toContain('self_review')
     })
 
-    it('shows shortcut hints on view toggle buttons', async () => {
+    it('shows shortcut hints on view toggle buttons when CMD is held', async () => {
       const { getWorktreeForTask } = await import('../lib/ipc')
       vi.mocked(getWorktreeForTask).mockResolvedValue({ worktree_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' } as any)
 
@@ -811,10 +811,36 @@ describe('TaskDetailView', () => {
         expect(screen.getByText('review_view')).toBeTruthy()
       })
 
-      const codeBtn = screen.getByText('code_view').closest('button')
-      const reviewBtn = screen.getByText('review_view').closest('button')
-      expect(codeBtn?.textContent).toContain('⌘1')
-      expect(reviewBtn?.textContent).toContain('⌘2')
+      commandHeld.set(true)
+
+      await waitFor(() => {
+        const codeBtn = screen.getByText('code_view').closest('button')
+        const reviewBtn = screen.getByText('review_view').closest('button')
+        expect(codeBtn?.textContent).toContain('⌘1')
+        expect(reviewBtn?.textContent).toContain('⌘2')
+      })
+
+      commandHeld.set(false)
+      vi.mocked(getWorktreeForTask).mockResolvedValue(null)
+    })
+
+    it('hides shortcut hints on view toggle buttons when CMD is not held', async () => {
+      const { getWorktreeForTask } = await import('../lib/ipc')
+      vi.mocked(getWorktreeForTask).mockResolvedValue({ worktree_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' } as any)
+
+      render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+      await waitFor(() => {
+        expect(screen.getByText('review_view')).toBeTruthy()
+      })
+
+      commandHeld.set(false)
+
+      await waitFor(() => {
+        const codeBtn = screen.getByText('code_view').closest('button')
+        const reviewBtn = screen.getByText('review_view').closest('button')
+        expect(codeBtn?.textContent).not.toContain('⌘1')
+        expect(reviewBtn?.textContent).not.toContain('⌘2')
+      })
 
       vi.mocked(getWorktreeForTask).mockResolvedValue(null)
     })
