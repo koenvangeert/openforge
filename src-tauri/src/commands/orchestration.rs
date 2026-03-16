@@ -2,7 +2,7 @@ use std::sync::{Mutex, Arc};
 use tauri::{State, Emitter};
 use crate::{db, server_manager::ServerManager, sse_bridge::SseBridgeManager, git_worktree, pty_manager::PtyManager};
 
-pub fn build_task_prompt(task: &db::TaskRow, action_instruction: &str, additional_instructions: Option<&str>, code_cleanup_enabled: bool) -> String {
+pub fn build_task_prompt(task: &db::TaskRow, additional_instructions: Option<&str>, code_cleanup_enabled: bool) -> String {
     let mut prompt = String::new();
 
     prompt.push_str(&format!(r#"<openforge_task_management>
@@ -64,10 +64,6 @@ Only create tasks for genuine issues worth addressing. Do not create tasks for m
             prompt.push_str(&format!("Jira: {}\n", key));
         }
     }
-
-    prompt.push('\n');
-
-    prompt.push_str(action_instruction);
 
     prompt
 }
@@ -256,7 +252,7 @@ pub async fn start_implementation(
         std::path::PathBuf::from(&repo_path)
     };
 
-    let prompt = build_task_prompt(&task, "Implement this task. Create a branch, make the changes, and create a pull request when done.", additional_instructions.as_deref(), code_cleanup_enabled);
+    let prompt = build_task_prompt(&task, additional_instructions.as_deref(), code_cleanup_enabled);
     let result = provider.start(&task_id, &working_dir, &prompt, task.agent.as_deref(), task.permission_mode.as_deref(), &app).await?;
 
     if use_worktrees && provider_name != "claude-code" {
@@ -344,11 +340,10 @@ mod tests {
             permission_mode: None,
         };
 
-        let prompt = build_task_prompt(&task, "Do the thing!", None, false);
+        let prompt = build_task_prompt(&task, None, false);
 
         assert!(prompt.contains("Test Task"));
         assert!(!prompt.contains("Plan:"));
-        assert!(prompt.contains("Do the thing!"));
         assert!(prompt.contains("<openforge_task_management>"));
         assert!(prompt.contains("openforge_update_task"));
         assert!(prompt.contains("T-123"));
@@ -374,11 +369,10 @@ mod tests {
             permission_mode: None,
         };
 
-        let prompt = build_task_prompt(&task, "Execute now!", None, false);
+        let prompt = build_task_prompt(&task, None, false);
         
         assert!(prompt.contains("Minimal Task"));
         assert!(!prompt.contains("Plan:"));
-        assert!(prompt.contains("Execute now!"));
         assert!(prompt.contains("openforge_update_task"));
         assert!(prompt.contains("T-456"));
     }
@@ -403,11 +397,10 @@ mod tests {
             permission_mode: None,
         };
 
-        let prompt = build_task_prompt(&task, "Run test!", None, false);
+        let prompt = build_task_prompt(&task, None, false);
         
         assert!(prompt.contains("Empty Fields Task"));
         assert!(!prompt.contains("Plan:"));
-        assert!(prompt.contains("Run test!"));
         assert!(prompt.contains("openforge_update_task"));
     }
 
@@ -431,13 +424,12 @@ mod tests {
             permission_mode: None,
         };
 
-        let prompt = build_task_prompt(&task, "Do the thing!", Some("Always use TypeScript strict mode.\nFollow the project coding standards."), false);
+        let prompt = build_task_prompt(&task, Some("Always use TypeScript strict mode.\nFollow the project coding standards."), false);
         
         assert!(prompt.starts_with("<openforge_task_management>"));
         assert!(prompt.contains("Always use TypeScript strict mode."));
         assert!(prompt.contains("Instructions Task"));
         assert!(!prompt.contains("Plan:"));
-        assert!(prompt.contains("Do the thing!"));
         assert!(prompt.contains("openforge_update_task"));
         assert!(prompt.contains("T-999"));
     }
@@ -462,8 +454,8 @@ mod tests {
             permission_mode: None,
         };
 
-        let prompt_with_empty = build_task_prompt(&task, "Do the thing!", Some(""), false);
-        let prompt_with_none = build_task_prompt(&task, "Do the thing!", None, false);
+        let prompt_with_empty = build_task_prompt(&task, Some(""), false);
+        let prompt_with_none = build_task_prompt(&task, None, false);
         
         assert_eq!(prompt_with_empty, prompt_with_none);
     }
@@ -488,7 +480,7 @@ mod tests {
             permission_mode: None,
         };
 
-        let prompt = build_task_prompt(&task, "Do the thing!", None, false);
+        let prompt = build_task_prompt(&task, None, false);
 
         assert!(prompt.starts_with("<openforge_task_management>"));
     }
@@ -513,14 +505,13 @@ mod tests {
             permission_mode: None,
         };
 
-        let prompt = build_task_prompt(&task, "Implement this task.", None, false);
+        let prompt = build_task_prompt(&task, None, false);
 
         assert!(prompt.contains("Feature with Jira context"));
         assert!(prompt.contains("Jira: PROJ-42"));
         assert!(!prompt.contains("Description:"));
         assert!(!prompt.contains("authenticate via JWT"));
         assert!(!prompt.contains("Plan:"));
-        assert!(prompt.contains("Implement this task."));
         assert!(prompt.contains("openforge_update_task"));
         assert!(prompt.contains("T-333"));
     }
@@ -545,11 +536,10 @@ mod tests {
             permission_mode: None,
         };
 
-        let prompt = build_task_prompt(&task, "Do it!", None, false);
+        let prompt = build_task_prompt(&task, None, false);
 
         assert!(prompt.contains("Task without jira"));
         assert!(!prompt.contains("Jira:"));
-        assert!(prompt.contains("Do it!"));
         assert!(prompt.contains("openforge_update_task"));
     }
 
@@ -573,7 +563,7 @@ mod tests {
             permission_mode: None,
         };
 
-        let prompt = build_task_prompt(&task, "Go!", None, false);
+        let prompt = build_task_prompt(&task, None, false);
 
         assert!(prompt.contains("T-555"));
         assert!(prompt.contains("Task with ID in prompt"));
@@ -601,11 +591,10 @@ mod tests {
             permission_mode: None,
         };
 
-        let prompt = build_task_prompt(&task, "Implement this task.", None, false);
+        let prompt = build_task_prompt(&task, None, false);
         
         assert!(prompt.contains("Fix auth bug"));
         assert!(!prompt.contains("Auth fix"));
-        assert!(prompt.contains("Implement this task."));
         assert!(prompt.contains("openforge_update_task"));
         assert!(prompt.contains("T-666"));
     }
@@ -630,10 +619,9 @@ mod tests {
             permission_mode: None,
         };
 
-        let prompt = build_task_prompt(&task, "Do it!", None, false);
+        let prompt = build_task_prompt(&task, None, false);
         
         assert!(prompt.contains("My task"));
-        assert!(prompt.contains("Do it!"));
         assert!(prompt.contains("openforge_update_task"));
         assert!(prompt.contains("T-777"));
     }
@@ -658,7 +646,7 @@ mod tests {
             permission_mode: None,
         };
 
-        let prompt = build_task_prompt(&task, "Implement this task.", None, false);
+        let prompt = build_task_prompt(&task, None, false);
 
         assert!(prompt.contains("<openforge_task_management>"));
         assert!(prompt.contains("</openforge_task_management>"));
@@ -670,8 +658,8 @@ mod tests {
         assert!(prompt.contains("not complete without"));
 
         let mgmt_pos = prompt.find("<openforge_task_management>").unwrap();
-        let action_pos = prompt.find("Implement this task.").unwrap();
-        assert!(mgmt_pos < action_pos, "Task management section should come before action instruction");
+        let task_prompt_pos = prompt.find("Add a login page").unwrap();
+        assert!(mgmt_pos < task_prompt_pos, "Task management section should come before task prompt");
     }
 
     #[test]
@@ -694,18 +682,16 @@ mod tests {
             permission_mode: None,
         };
 
-        let prompt = build_task_prompt(&task, "Execute!", Some("Project rules here"), false);
+        let prompt = build_task_prompt(&task, Some("Project rules here"), false);
 
         let mgmt_pos = prompt.find("<openforge_task_management>").unwrap();
         let instructions_pos = prompt.find("Project rules here").unwrap();
         let task_prompt_pos = prompt.find("Do the work").unwrap();
         let jira_pos = prompt.find("Jira: PROJ-10").unwrap();
-        let action_pos = prompt.find("Execute!").unwrap();
 
         assert!(mgmt_pos < instructions_pos);
         assert!(instructions_pos < task_prompt_pos);
         assert!(task_prompt_pos < jira_pos);
-        assert!(jira_pos < action_pos);
     }
 
     #[test]
@@ -813,7 +799,7 @@ mod tests {
             permission_mode: None,
         };
 
-        let prompt = build_task_prompt(&task, "Go!", None, false);
+        let prompt = build_task_prompt(&task, None, false);
 
         assert!(!prompt.contains("<openforge_code_cleanup>"));
         assert!(!prompt.contains("openforge_create_task"));
@@ -840,7 +826,7 @@ mod tests {
             permission_mode: None,
         };
 
-        let prompt = build_task_prompt(&task, "Go!", None, true);
+        let prompt = build_task_prompt(&task, None, true);
 
         assert!(prompt.contains("<openforge_code_cleanup>"));
         assert!(prompt.contains("</openforge_code_cleanup>"));
@@ -868,17 +854,15 @@ mod tests {
             permission_mode: None,
         };
 
-        let prompt = build_task_prompt(&task, "Execute!", None, true);
+        let prompt = build_task_prompt(&task, None, true);
 
         let mgmt_pos = prompt.find("<openforge_task_management>").unwrap();
         let cleanup_pos = prompt.find("<openforge_code_cleanup>").unwrap();
         let task_prompt_pos = prompt.find("Cleanup ordering").unwrap();
-        let action_pos = prompt.find("Execute!").unwrap();
 
         // Cleanup section should be after task management but before the task prompt
         assert!(mgmt_pos < cleanup_pos, "Task management should come before code cleanup");
         assert!(cleanup_pos < task_prompt_pos, "Code cleanup should come before task prompt");
-        assert!(task_prompt_pos < action_pos, "Task prompt should come before action");
     }
 
     #[test]
