@@ -1,7 +1,7 @@
 import { render, screen, fireEvent } from '@testing-library/svelte'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import AutocompletePopover from './AutocompletePopover.svelte'
-import type { AutocompleteItem } from './AutocompletePopover.svelte'
+import type { AutocompleteItem } from '../lib/types'
 
 const sampleItems: AutocompleteItem[] = [
   { label: 'main.ts', description: null, type: 'file' },

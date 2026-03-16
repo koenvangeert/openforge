@@ -1,6 +1,5 @@
 import { listOpenCodeAgents, listOpenCodeCommands, searchOpenCodeFiles } from './ipc'
-import type { AutocompleteAgentInfo, CommandInfo } from './types'
-import type { AutocompleteItem } from '../components/AutocompletePopover.svelte'
+import type { AutocompleteAgentInfo, AutocompleteItem, CommandInfo } from './types'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 

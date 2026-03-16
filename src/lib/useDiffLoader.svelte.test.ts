@@ -74,6 +74,8 @@ const baseLinkedPr: PullRequestInfo = {
   merged_at: null,
   created_at: 1700000000,
   updated_at: 1700000000,
+  draft: false,
+  is_queued: false,
   unaddressed_comment_count: 1,
 }
 

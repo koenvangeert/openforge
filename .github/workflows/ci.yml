@@ -75,7 +75,7 @@ jobs:
 
   rust:
     name: Rust Tests
-    runs-on: macos-latest
+    runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
 
@@ -91,6 +91,7 @@ jobs:
         id: tests
         working-directory: src-tauri
         run: |
+          mkdir -p ../dist
           set +e -o pipefail
           cargo test 2>&1 | tee /tmp/rust-tests.log
           echo "exit_code=$?" >> "$GITHUB_OUTPUT"

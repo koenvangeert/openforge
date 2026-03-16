@@ -278,7 +278,7 @@ describe('WorkQueueView', () => {
     expect(screen.getByText('T-1')).toBeTruthy()
     expect(screen.queryByText('Loading...')).toBeNull()
 
-    resolveRefresh?.([makeEntry({ id: 'T-1' }), makeEntry({ id: 'T-2', initial_prompt: 'New task' })])
+    resolveRefresh!([makeEntry({ id: 'T-1' }), makeEntry({ id: 'T-2', initial_prompt: 'New task' })])
 
     await waitFor(() => {
       expect(screen.getByText('T-2')).toBeTruthy()

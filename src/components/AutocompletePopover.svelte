@@ -1,10 +1,5 @@
 <script lang="ts">
-  export interface AutocompleteItem {
-    label: string
-    description: string | null
-    type: 'file' | 'directory' | 'agent' | 'skill' | 'command'
-    source?: string | null
-  }
+  import type { AutocompleteItem } from '../lib/types'
 
   interface Props {
     items: AutocompleteItem[]
@@ -25,7 +20,7 @@
     }
   })
 
-  function typeIcon(type: AutocompleteItem['type']): string {
+  function typeIcon(type: AutocompleteItem['type']): string | undefined {
     switch (type) {
       case 'file': return '📄'
       case 'directory': return '📁'

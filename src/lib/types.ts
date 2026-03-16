@@ -147,6 +147,13 @@ export interface AutocompleteAgentInfo {
   mode: string | null;
 }
 
+export interface AutocompleteItem {
+  label: string;
+  description: string | null;
+  type: 'file' | 'directory' | 'agent' | 'skill' | 'command';
+  source?: string | null;
+}
+
 export interface OpenCodeEvent {
   event_type: string;
   data: string;

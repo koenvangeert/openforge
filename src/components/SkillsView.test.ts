@@ -68,10 +68,10 @@ describe('SkillsView', () => {
 
   it('shows header with skill count', async () => {
     vi.mocked(listOpenCodeSkills).mockResolvedValue([projectSkill, userSkill])
-    render(SkillsView)
+    render(SkillsView, { props: { projectName: 'Test' } })
 
     await waitFor(() => {
-      expect(screen.getByText('Skills')).toBeTruthy()
+      expect(screen.getByText('Test — Skills')).toBeTruthy()
       expect(screen.getByText('2 skills')).toBeTruthy()
     })
   })

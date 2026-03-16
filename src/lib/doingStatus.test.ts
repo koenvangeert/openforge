@@ -11,6 +11,10 @@ const makeTask = (id: string, status: string): Task => ({
   jira_status: null,
   jira_assignee: null,
   jira_description: null,
+  prompt: null,
+  summary: null,
+  agent: null,
+  permission_mode: null,
   project_id: null,
   created_at: 1000,
   updated_at: 2000,
@@ -26,6 +30,8 @@ const makeSession = (ticketId: string, status: string, checkpointData: string | 
   error_message: null,
   created_at: 1000,
   updated_at: 2000,
+  provider: 'opencode',
+  claude_session_id: null,
 })
 
 describe('computeDoingStatus', () => {

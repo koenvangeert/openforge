@@ -30,6 +30,8 @@ const baseTask: Task = {
   jira_description: null,
   prompt: 'Build the auth middleware implementation with JWT support',
   summary: null,
+  agent: null,
+  permission_mode: null,
   project_id: null,
   created_at: 1000,
   updated_at: 2000,

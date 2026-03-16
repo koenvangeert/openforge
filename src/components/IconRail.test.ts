@@ -8,7 +8,7 @@ describe('IconRail', () => {
   it('renders 3 navigation buttons', () => {
     render(IconRail, { props: { currentView: 'board' as AppView, onNavigate: vi.fn() } })
     const buttons = screen.getAllByRole('button')
-    expect(buttons).toHaveLength(3)
+    expect(buttons).toHaveLength(4)
   })
 
   it('clicking first button (board) calls onNavigate with "board"', () => {

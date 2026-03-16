@@ -105,7 +105,7 @@ vi.mock('./lib/ipc', () => ({
   createProject: vi.fn(),
   updateProject: vi.fn(),
   deleteProject: vi.fn(),
-  getProjectConfig: vi.fn(),
+  getProjectConfig: vi.fn(async () => null),
   setProjectConfig: vi.fn(),
   startImplementation: vi.fn(),
   getWorktreeForTask: vi.fn(),
