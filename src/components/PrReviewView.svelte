@@ -373,6 +373,16 @@
     loadPrs()
     loadAuthoredPrs()
     unlisteners.push(
+      await listen('authored-prs-updated', () => {
+        loadAuthoredPrs()
+      })
+    )
+    unlisteners.push(
+      await listen('review-pr-count-changed', () => {
+        loadPrs()
+      })
+    )
+    unlisteners.push(
       await listen<{ task_id: string; event_type: string; data: string }>('agent-event', async (event) => {
         const { task_id, event_type, data } = event.payload
         const pr = $selectedReviewPr

@@ -216,6 +216,15 @@ pub async fn poll_github_once(app: &AppHandle, github_client: &GitHubClient) -> 
         review_start.elapsed().as_secs_f64()
     );
 
+    let authored_start = Instant::now();
+    if let Err(e) = poll_authored_prs(github_client, &db, app, &github_token).await {
+        eprintln!("[GitHub Poller] Failed to poll authored PRs: {}", e);
+    }
+    println!(
+        "[GitHub Poller] Authored PR polling took {:.1}s",
+        authored_start.elapsed().as_secs_f64()
+    );
+
     println!(
         "[GitHub Poller] Cycle completed in {:.1}s ({} projects, {} new comments, {} CI changes, {} review changes, {} errors)",
         cycle_start.elapsed().as_secs_f64(),
@@ -936,12 +945,10 @@ async fn poll_review_prs(
         return Ok(());
     };
 
-    let (prs, search_item_count) = github_client
+    let (prs, all_search_ids) = github_client
         .search_review_requested_prs(&username, github_token)
         .await
         .map_err(|e| format!("Failed to search review PRs: {}", e))?;
-
-    let current_ids: Vec<i64> = prs.iter().map(|pr| pr.id).collect();
 
     {
         let db_lock = db.lock().unwrap();
@@ -976,12 +983,8 @@ async fn poll_review_prs(
             );
         }
 
-        // Only delete stale PRs when the fetch was complete.
-        // If search found items but detail fetches failed (e.g. rate limiting),
-        // prs will be shorter than search_item_count — skip deletion to avoid
-        // wiping viewed state for PRs whose details we couldn't fetch.
-        if prs.len() >= search_item_count {
-            let _ = db_lock.delete_stale_review_prs(&current_ids);
+        if !all_search_ids.is_empty() || prs.is_empty() {
+            let _ = db_lock.delete_stale_review_prs(&all_search_ids);
         }
         let count = db_lock.get_all_review_prs()
             .map(|prs| prs.iter().filter(|p| p.viewed_at.is_none()).count())
@@ -992,9 +995,120 @@ async fn poll_review_prs(
     Ok(())
 }
 
-/// Parse GitHub timestamp (ISO 8601) to Unix timestamp
-///
-/// Example: "2024-01-01T00:00:00Z" -> 1704067200
+async fn poll_authored_prs(
+    github_client: &GitHubClient,
+    db: &Mutex<Database>,
+    app: &AppHandle,
+    github_token: &str,
+) -> Result<(), String> {
+    let username = {
+        let db_lock = db.lock().unwrap();
+        db_lock.get_config("github_username")
+            .map_err(|e| e.to_string())?
+    };
+
+    let Some(username) = username else {
+        return Ok(());
+    };
+
+    let (prs, all_search_ids) = github_client
+        .search_authored_prs(&username, github_token)
+        .await
+        .map_err(|e| format!("Failed to search authored PRs: {}", e))?;
+
+    type EnrichedPrData = (i64, Option<String>, Option<String>, Option<String>, bool);
+    let mut enriched: HashMap<i64, EnrichedPrData> =
+        HashMap::with_capacity(prs.len());
+
+    for pr in &prs {
+        let created_at = chrono::DateTime::parse_from_rfc3339(&pr.created_at)
+            .map(|dt| dt.timestamp())
+            .unwrap_or(0);
+        let (check_runs_result, combined_status_result, reviews_result, pr_details_result) = tokio::join!(
+            github_client.get_check_runs(&pr.repo_owner, &pr.repo_name, &pr.head_sha, github_token),
+            github_client.get_combined_status(&pr.repo_owner, &pr.repo_name, &pr.head_sha, github_token),
+            github_client.get_pr_reviews(&pr.repo_owner, &pr.repo_name, pr.number, github_token),
+            github_client.get_pr_details(&pr.repo_owner, &pr.repo_name, pr.number, github_token)
+        );
+
+        let (ci_status, ci_check_runs) = match (check_runs_result, combined_status_result) {
+            (Ok(check_runs), Ok(combined_status)) => {
+                let status = crate::github_client::aggregate_ci_status(&check_runs, &combined_status);
+                let check_runs_json = serde_json::to_string(&check_runs.check_runs)
+                    .unwrap_or_else(|_| "[]".to_string());
+                (Some(status), Some(check_runs_json))
+            }
+            _ => (None, None),
+        };
+
+        let review_status = reviews_result
+            .ok()
+            .map(|reviews| crate::github_client::aggregate_review_status(&reviews, false, None));
+
+        let is_queued = pr_details_result
+            .ok()
+            .and_then(|details| details.extra.get("merge_queue_entry").map(|v| !v.is_null()))
+            .unwrap_or(false);
+
+        enriched.insert(pr.id, (created_at, ci_status, ci_check_runs, review_status, is_queued));
+    }
+
+    {
+        let db_lock = db.lock().unwrap();
+        for pr in &prs {
+            let (created_at, ci_status, ci_check_runs, review_status, is_queued) = match enriched.get(&pr.id) {
+                Some(data) => data,
+                None => continue,
+            };
+
+            let updated_at = chrono::DateTime::parse_from_rfc3339(&pr.updated_at)
+                .map(|dt| dt.timestamp())
+                .unwrap_or(0);
+
+            let task_id = db_lock
+                .get_task_id_for_pr(pr.id)
+                .ok()
+                .flatten();
+
+            let _ = db_lock.upsert_authored_pr(
+                pr.id,
+                pr.number,
+                &pr.title,
+                pr.body.as_deref(),
+                &pr.state,
+                pr.draft,
+                &pr.html_url,
+                &pr.user_login,
+                pr.user_avatar_url.as_deref(),
+                &pr.repo_owner,
+                &pr.repo_name,
+                &pr.head_ref,
+                &pr.base_ref,
+                &pr.head_sha,
+                pr.additions,
+                pr.deletions,
+                pr.changed_files,
+                ci_status.as_deref(),
+                ci_check_runs.as_deref(),
+                review_status.as_deref(),
+                None,
+                *is_queued,
+                task_id.as_deref(),
+                *created_at,
+                updated_at,
+            );
+        }
+
+        if !all_search_ids.is_empty() || prs.is_empty() {
+            let _ = db_lock.delete_stale_authored_prs(&all_search_ids);
+        }
+
+        let _ = app.emit("authored-prs-updated", ());
+    }
+
+    Ok(())
+}
+
 fn parse_github_timestamp(timestamp: &str) -> Option<i64> {
     use chrono::{DateTime, Utc};
     DateTime::parse_from_rfc3339(timestamp)

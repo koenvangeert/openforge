@@ -147,6 +147,7 @@ pub(crate) struct AuthenticatedUser {
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct SearchResponse {
+    pub total_count: usize,
     pub items: Vec<SearchItem>,
 }
 

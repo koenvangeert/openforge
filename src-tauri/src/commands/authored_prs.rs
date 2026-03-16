@@ -40,12 +40,10 @@ pub async fn fetch_authored_prs(
         .map_err(|e| format!("Failed to get config: {}", e))?
         .ok_or("github_token not configured".to_string())?;
 
-    let (prs, search_item_count) = github_client
+    let (prs, all_search_ids) = github_client
         .search_authored_prs(&username, &token)
         .await
         .map_err(|e| format!("Failed to search authored PRs: {}", e))?;
-
-    let current_ids: Vec<i64> = prs.iter().map(|pr| pr.id).collect();
 
     type EnrichedPrData = (i64, Option<String>, Option<String>, Option<String>, bool);
     let mut enriched: HashMap<i64, EnrichedPrData> =
@@ -133,9 +131,9 @@ pub async fn fetch_authored_prs(
                 .map_err(|e| format!("Failed to upsert authored PR: {}", e))?;
         }
 
-        if prs.len() >= search_item_count {
+        if !all_search_ids.is_empty() || prs.is_empty() {
             db_lock
-                .delete_stale_authored_prs(&current_ids)
+                .delete_stale_authored_prs(&all_search_ids)
                 .map_err(|e| format!("Failed to delete stale authored PRs: {}", e))?;
         }
     }

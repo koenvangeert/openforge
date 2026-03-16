@@ -293,15 +293,11 @@ impl GitHubClient {
         self.get_with_etag::<Vec<PullRequest>>(&url, token).await
     }
 
-    /// Search for PRs where the user is requested as a reviewer
-    ///
-    /// Returns tuple of (results, search_item_count) — search_item_count is the number
-    /// of items the search matched before fetching details.
     pub async fn search_review_requested_prs(
         &self,
         username: &str,
         token: &str,
-    ) -> Result<(Vec<SearchPrResult>, usize), GitHubError> {
+    ) -> Result<(Vec<SearchPrResult>, Vec<i64>), GitHubError> {
         let url = format!(
             "https://api.github.com/search/issues?q=review-requested:{}+type:pr+state:open&per_page=100",
             username
@@ -333,7 +329,8 @@ impl GitHubClient {
             .await
             .map_err(|e| GitHubError::ParseError(e.to_string()))?;
 
-        let search_item_count = search_response.items.len();
+        let all_search_ids: Vec<i64> = search_response.items.iter().map(|item| item.id).collect();
+        let is_complete = search_response.total_count <= search_response.items.len();
 
         let items_with_coords: Vec<(SearchItem, String, String)> = search_response
             .items
@@ -403,14 +400,15 @@ impl GitHubClient {
             }
         }
 
-        Ok((results, search_item_count))
+        let safe_search_ids = if is_complete { all_search_ids } else { vec![] };
+        Ok((results, safe_search_ids))
     }
 
     pub async fn search_authored_prs(
         &self,
         username: &str,
         token: &str,
-    ) -> Result<(Vec<SearchPrResult>, usize), GitHubError> {
+    ) -> Result<(Vec<SearchPrResult>, Vec<i64>), GitHubError> {
         let url = format!(
             "https://api.github.com/search/issues?q=author:{}+type:pr+state:open&per_page=100",
             username
@@ -442,7 +440,8 @@ impl GitHubClient {
             .await
             .map_err(|e| GitHubError::ParseError(e.to_string()))?;
 
-        let search_item_count = search_response.items.len();
+        let all_search_ids: Vec<i64> = search_response.items.iter().map(|item| item.id).collect();
+        let is_complete = search_response.total_count <= search_response.items.len();
 
         let items_with_coords: Vec<(SearchItem, String, String)> = search_response
             .items
@@ -510,7 +509,8 @@ impl GitHubClient {
             }
         }
 
-        Ok((results, search_item_count))
+        let safe_search_ids = if is_complete { all_search_ids } else { vec![] };
+        Ok((results, safe_search_ids))
     }
 
     /// Get file diffs for a pull request
