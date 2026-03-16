@@ -1,5 +1,5 @@
 import { writable } from "svelte/store";
-import type { Task, AgentSession, PullRequestInfo, Project, AgentEvent, CheckpointNotification, CiFailureNotification, ReviewPullRequest, AuthoredPullRequest, PrFileDiff, AppView, ReviewComment, ReviewSubmissionComment, SelfReviewComment, AgentReviewComment, PrOverviewComment, ProjectAttention, ClaudeSessionState, SkillInfo, ShepherdMessage, ShepherdStatus } from "./types";
+import type { Task, AgentSession, PullRequestInfo, Project, AgentEvent, CheckpointNotification, CiFailureNotification, RateLimitNotification, ReviewPullRequest, AuthoredPullRequest, PrFileDiff, AppView, ReviewComment, ReviewSubmissionComment, SelfReviewComment, AgentReviewComment, PrOverviewComment, ProjectAttention, ClaudeSessionState, SkillInfo, ShepherdMessage, ShepherdStatus } from "./types";
 
 export const tasks = writable<Task[]>([]);
 // selectedTaskId serves as both selection state and navigation:
@@ -9,6 +9,7 @@ export const selectedTaskId = writable<string | null>(null);
 export const activeSessions = writable<Map<string, AgentSession>>(new Map());
 export const checkpointNotification = writable<CheckpointNotification | null>(null);
 export const ciFailureNotification = writable<CiFailureNotification | null>(null);
+export const rateLimitNotification = writable<RateLimitNotification | null>(null);
 export const taskSpawned = writable<{ taskId: string; initial_prompt: string } | null>(null);
 export const ticketPrs = writable<Map<string, PullRequestInfo[]>>(new Map());
 export const isLoading = writable(false);

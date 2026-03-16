@@ -167,6 +167,13 @@
   0%, 100% { opacity: 1; }
   50% { opacity: 0.4; }
 }
+@keyframes slideIn {
+  from { transform: translateY(20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+.animate-slideIn {
+  animation: slideIn 0.2s ease-out;
+}
 /* CI/Review text animations */
 .ci-failure-text {
   animation: ci-pulse 1.5s ease-in-out infinite;
