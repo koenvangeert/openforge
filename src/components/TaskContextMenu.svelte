@@ -69,5 +69,6 @@
   {#if taskStatus === 'doing'}
     <ContextMenuItem label="Move to Done" onclick={handleMoveToDone} />
   {/if}
+  <div class="border-t border-base-content/10 my-1"></div>
   <ContextMenuItem label="Delete" variant="danger" onclick={handleDelete} />
 </ContextMenu>

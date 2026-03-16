@@ -46,6 +46,7 @@
   let dialogAgents = $state<string[]>([])
   let dialogSelectedAgent = $state('')
   let dialogSelectedPermissionMode = $state<PermissionMode>('default')
+  let dialogActions = $state<Action[]>([])
 
   async function loadDialogAgentInfo() {
     dialogSelectedAgent = ''
@@ -59,12 +60,16 @@
       if ($activeProjectId) {
         const agents = await listOpenCodeAgents($activeProjectId)
         dialogAgents = agents.filter(a => !a.hidden).map(a => a.name)
+        const all = await loadActions($activeProjectId)
+        dialogActions = getEnabledActions(all)
       } else {
         dialogAgents = []
+        dialogActions = []
       }
     } catch {
       dialogAiProvider = null
       dialogAgents = []
+      dialogActions = []
     }
   }
   let showProjectSetup = $state(false)
@@ -949,6 +954,7 @@
               value={editingTask ? editingTask.initial_prompt : ''}
               jiraKey={editingTask ? (editingTask.jira_key || '') : ''}
               autofocus={true}
+              actions={editingTask ? [] : dialogActions}
               onSubmit={async (prompt, jiraKey) => {
                 try {
                   if (editingTask) {
@@ -974,6 +980,19 @@
                   await handleRunAction({ taskId: newTask.id, actionPrompt: '', agent })
                 } catch (e) {
                   console.error('Failed to start task:', e)
+                  $error = String(e)
+                }
+              }}
+              onRunAction={editingTask ? undefined : async (prompt, jiraKey, actionPrompt) => {
+                try {
+                  const agent = dialogSelectedAgent || null
+                  const newTask = await createTask(prompt, 'backlog', jiraKey, $activeProjectId, agent, dialogSelectedPermissionMode)
+                  showAddDialog = false
+                  editingTask = null
+                  await loadTasks()
+                  await handleRunAction({ taskId: newTask.id, actionPrompt, agent })
+                } catch (e) {
+                  console.error('Failed to run custom action:', e)
                   $error = String(e)
                 }
               }}
