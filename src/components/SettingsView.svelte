@@ -58,6 +58,7 @@
   let jiraUsername = $state('')
   let jiraApiToken = $state('')
   let githubToken = $state('')
+  let githubPollInterval = $state(30)
 
   // AI state
   let modelStatuses = $state<WhisperModelStatus[]>([])
@@ -193,7 +194,7 @@
   // Load global config once on mount
   onMount(async () => {
     // Global config
-    const [taskIdPrefixVal, jiraBaseUrlVal, jiraUsernameVal, jiraApiTokenVal, githubTokenVal, codeCleanupTasksEnabledVal] =
+    const [taskIdPrefixVal, jiraBaseUrlVal, jiraUsernameVal, jiraApiTokenVal, githubTokenVal, codeCleanupTasksEnabledVal, githubPollIntervalVal] =
       await Promise.all([
         getConfig('task_id_prefix'),
         getConfig('jira_base_url'),
@@ -201,6 +202,7 @@
         getConfig('jira_api_token'),
         getConfig('github_token'),
         getConfig('code_cleanup_tasks_enabled'),
+        getConfig('github_poll_interval'),
       ])
 
     if (taskIdPrefixVal) taskIdPrefix = taskIdPrefixVal
@@ -210,6 +212,7 @@
     if (githubTokenVal) githubToken = githubTokenVal
     isCodeCleanupTasksEnabled = codeCleanupTasksEnabledVal === 'true'
     $codeCleanupTasksEnabled = isCodeCleanupTasksEnabled
+    githubPollInterval = parseInt(githubPollIntervalVal ?? '30', 10) || 30
 
     // Check installations
     const [opencodeResult, claudeResult] = await Promise.all([
@@ -289,12 +292,13 @@
         await saveActions($activeProjectId, actions)
         await saveBoardColumns($activeProjectId, boardColumns)
       }
-      await setConfig('task_id_prefix', taskIdPrefix)
-      await setConfig('jira_base_url', jiraBaseUrl)
-      await setConfig('jira_username', jiraUsername)
-      await setConfig('jira_api_token', jiraApiToken)
-      await setConfig('github_token', githubToken)
-      await setConfig('code_cleanup_tasks_enabled', isCodeCleanupTasksEnabled ? 'true' : 'false')
+       await setConfig('task_id_prefix', taskIdPrefix)
+       await setConfig('jira_base_url', jiraBaseUrl)
+       await setConfig('jira_username', jiraUsername)
+       await setConfig('jira_api_token', jiraApiToken)
+       await setConfig('github_token', githubToken)
+       await setConfig('code_cleanup_tasks_enabled', isCodeCleanupTasksEnabled ? 'true' : 'false')
+       await setConfig('github_poll_interval', String(githubPollInterval))
       saved = true
       setTimeout(() => {
         saved = false
@@ -479,6 +483,8 @@
           onTaskIdPrefixChange={(v) => { taskIdPrefix = v; scheduleSave() }}
           {isDarkMode}
           onThemeToggle={() => { handleThemeToggle(); scheduleSave() }}
+          {githubPollInterval}
+          onGithubPollIntervalChange={(v) => { githubPollInterval = v; scheduleSave() }}
         />
 
         <SettingsAICard
