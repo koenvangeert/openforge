@@ -61,6 +61,7 @@ function createPr(overrides: Partial<PullRequestInfo> = {}): PullRequestInfo {
     created_at: 1000,
     updated_at: 2000,
     draft: false,
+    is_queued: false,
     unaddressed_comment_count: 0,
     ...overrides,
   }
@@ -247,5 +248,90 @@ describe('computeTaskState - ci-running and review-pending (PART 2 - EXPECTED FA
       const state = computeTaskState(task, session, prs)
       expect(state).toBe('pr-open')
     })
+  })
+})
+
+// ============================================================================
+// PART 3: Tests for pr-queued (merge queue support)
+// ============================================================================
+
+describe('computeTaskState - pr-queued (PART 3)', () => {
+  it('test 1: open PR with CI success + approved + is_queued → pr-queued', () => {
+    const task = createTask({ status: 'doing' })
+    const session = createSession({ status: 'completed' })
+    const prs = [
+      createPr({
+        state: 'open',
+        ci_status: 'success',
+        review_status: 'approved',
+        is_queued: true,
+      }),
+    ]
+
+    const state = computeTaskState(task, session, prs)
+    expect(state).toBe('pr-queued')
+  })
+
+  it('test 2: open PR with CI success + approved + NOT is_queued → ready-to-merge', () => {
+    const task = createTask({ status: 'doing' })
+    const session = createSession({ status: 'completed' })
+    const prs = [
+      createPr({
+        state: 'open',
+        ci_status: 'success',
+        review_status: 'approved',
+        is_queued: false,
+      }),
+    ]
+
+    const state = computeTaskState(task, session, prs)
+    expect(state).toBe('ready-to-merge')
+  })
+
+  it('test 3: CI failure takes priority over is_queued → ci-failed', () => {
+    const task = createTask({ status: 'doing' })
+    const session = createSession({ status: 'completed' })
+    const prs = [
+      createPr({
+        state: 'open',
+        ci_status: 'failure',
+        review_status: 'approved',
+        is_queued: true,
+      }),
+    ]
+
+    const state = computeTaskState(task, session, prs)
+    expect(state).toBe('ci-failed')
+  })
+
+  it('test 4: changes_requested takes priority over is_queued → changes-requested', () => {
+    const task = createTask({ status: 'doing' })
+    const session = createSession({ status: 'completed' })
+    const prs = [
+      createPr({
+        state: 'open',
+        ci_status: 'success',
+        review_status: 'changes_requested',
+        is_queued: true,
+      }),
+    ]
+
+    const state = computeTaskState(task, session, prs)
+    expect(state).toBe('changes-requested')
+  })
+
+  it('test 5: is_queued with no session → pr-queued', () => {
+    const task = createTask({ status: 'doing' })
+    const prs = [
+      createPr({
+        state: 'open',
+        ci_status: 'success',
+        review_status: 'approved',
+        is_queued: true,
+      }),
+    ]
+
+    const state = computeTaskState(task, null, prs)
+    expect(state).toBe('pr-queued')
   })
 })

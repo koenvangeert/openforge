@@ -74,6 +74,7 @@ export interface PullRequestInfo {
   created_at: number;
   updated_at: number;
   draft: boolean;
+  is_queued: boolean;
   unaddressed_comment_count: number;
 }
 
@@ -90,6 +91,11 @@ export function isReadyToMerge(pr: PullRequestInfo): boolean {
   return pr.state === 'open'
     && pr.ci_status === 'success'
     && pr.review_status === 'approved';
+}
+
+/** Check if a PR is queued in a merge queue (ready to merge + is_queued) */
+export function isQueuedForMerge(pr: PullRequestInfo): boolean {
+  return isReadyToMerge(pr) && pr.is_queued;
 }
 
 export interface CheckRunInfo {
@@ -220,6 +226,7 @@ export interface AuthoredPullRequest {
   ci_check_runs: string | null;
   review_status: string | null;
   merged_at: number | null;
+  is_queued: boolean;
   task_id: string | null;
   created_at: number;
   updated_at: number;
