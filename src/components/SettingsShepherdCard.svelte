@@ -1,5 +1,9 @@
 <script lang="ts">
+	import { onMount } from 'svelte'
 	import { FlaskConical } from 'lucide-svelte'
+	import { activeProjectId } from '../lib/stores'
+	import { listOpenCodeAgents, getProjectConfig, setProjectConfig } from '../lib/ipc'
+	import type { AutocompleteAgentInfo } from '../lib/types'
 
 	interface Props {
 		shepherdEnabled: boolean
@@ -7,6 +11,36 @@
 	}
 
 	const { shepherdEnabled, onShepherdToggle }: Props = $props()
+
+	let agents = $state<AutocompleteAgentInfo[]>([])
+	let selectedAgent = $state('')
+	let loadingAgents = $state(false)
+
+	async function loadAgents() {
+		if (!$activeProjectId) return
+		loadingAgents = true
+		try {
+			agents = await listOpenCodeAgents($activeProjectId)
+			const saved = await getProjectConfig($activeProjectId, 'shepherd_agent')
+			selectedAgent = saved ?? ''
+		} catch {
+			agents = []
+		} finally {
+			loadingAgents = false
+		}
+	}
+
+	async function handleAgentChange(e: Event) {
+		const value = (e.target as HTMLSelectElement).value
+		selectedAgent = value
+		if ($activeProjectId) {
+			await setProjectConfig($activeProjectId, 'shepherd_agent', value)
+		}
+	}
+
+	onMount(() => {
+		loadAgents()
+	})
 </script>
 
 <div id="section-shepherd" class="bg-base-100 rounded-lg border border-base-300 overflow-hidden">
@@ -31,6 +65,25 @@
 					data-testid="shepherd-toggle"
 				/>
 			</label>
+
+			{#if shepherdEnabled}
+				<label class="flex flex-col gap-1.5">
+					<span class="text-sm text-base-content">Agent</span>
+					<select
+						class="select select-bordered select-sm w-full"
+						value={selectedAgent}
+						onchange={handleAgentChange}
+						disabled={loadingAgents}
+						data-testid="shepherd-agent-select"
+					>
+						<option value="">Default</option>
+						{#each agents.filter(a => !a.hidden) as agent}
+							<option value={agent.name}>{agent.name}</option>
+						{/each}
+					</select>
+					<span class="text-[0.7rem] text-base-content/50">Which OpenCode agent the shepherd uses. Configure the agent's model in your OpenCode settings.</span>
+				</label>
+			{/if}
 		</div>
 	</div>
 </div>

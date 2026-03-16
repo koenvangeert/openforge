@@ -45,7 +45,7 @@
 
   {#if shepherdEnabled}
     <button
-      class="relative cursor-pointer {currentView === 'shepherd' ? 'text-primary' : 'text-neutral-content/40'} hover:text-primary"
+      class="relative cursor-pointer {currentView === 'shepherd' ? 'text-primary' : 'text-base-content/40'}"
       onclick={() => onNavigate('shepherd')}
       aria-label="Task Shepherd"
       title="Task Shepherd (⌘A)"
