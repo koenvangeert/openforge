@@ -12,16 +12,19 @@
   let tooltipX = $state(0)
   let tooltipY = $state(0)
   let hoverTimer: ReturnType<typeof setTimeout> | null = $state(null)
-  let hoveredTarget: HTMLElement | null = $state(null)
 
   function show(e: MouseEvent | FocusEvent) {
-    hoveredTarget = e.currentTarget as HTMLElement
     if (hoverTimer) clearTimeout(hoverTimer)
+    
+    // Get the actual element to position relative to (the child element, not the wrapper)
+    const wrapper = e.currentTarget as HTMLElement
+    const targetElement = wrapper.firstElementChild as HTMLElement
+    if (!targetElement) return
+    
+    // Store the rect immediately while the element is definitely in the DOM
+    const rect = targetElement.getBoundingClientRect()
+    
     hoverTimer = setTimeout(() => {
-      if (!hoveredTarget) return
-      const firstChild = hoveredTarget.firstElementChild as HTMLElement
-      if (!firstChild) return
-      const rect = firstChild.getBoundingClientRect()
       const tooltipWidth = 280
       const margin = 8
 
