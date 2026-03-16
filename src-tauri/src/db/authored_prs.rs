@@ -24,6 +24,7 @@ pub struct AuthoredPrRow {
     pub ci_check_runs: Option<String>,
     pub review_status: Option<String>,
     pub merged_at: Option<i64>,
+    pub is_queued: bool,
     pub task_id: Option<String>,
     pub created_at: i64,
     pub updated_at: i64,
@@ -54,14 +55,15 @@ impl super::Database {
         ci_check_runs: Option<&str>,
         review_status: Option<&str>,
         merged_at: Option<i64>,
+        is_queued: bool,
         task_id: Option<&str>,
         created_at: i64,
         updated_at: i64,
     ) -> Result<()> {
         let conn = self.conn.lock().unwrap();
         conn.execute(
-            "INSERT INTO authored_prs (id, number, title, body, state, draft, html_url, user_login, user_avatar_url, repo_owner, repo_name, head_ref, base_ref, head_sha, additions, deletions, changed_files, ci_status, ci_check_runs, review_status, merged_at, task_id, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24)
+            "INSERT INTO authored_prs (id, number, title, body, state, draft, html_url, user_login, user_avatar_url, repo_owner, repo_name, head_ref, base_ref, head_sha, additions, deletions, changed_files, ci_status, ci_check_runs, review_status, merged_at, is_queued, task_id, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25)
              ON CONFLICT(id) DO UPDATE SET
                  number = excluded.number,
                  title = excluded.title,
@@ -80,12 +82,13 @@ impl super::Database {
                  deletions = excluded.deletions,
                  changed_files = excluded.changed_files,
                  ci_status = excluded.ci_status,
-                 ci_check_runs = excluded.ci_check_runs,
-                 review_status = excluded.review_status,
-                 merged_at = excluded.merged_at,
-                 task_id = excluded.task_id,
-                 created_at = excluded.created_at,
-                 updated_at = excluded.updated_at",
+                  ci_check_runs = excluded.ci_check_runs,
+                  review_status = excluded.review_status,
+                  merged_at = excluded.merged_at,
+                  is_queued = excluded.is_queued,
+                  task_id = excluded.task_id,
+                  created_at = excluded.created_at,
+                  updated_at = excluded.updated_at",
             rusqlite::params![
                 id,
                 number,
@@ -108,6 +111,7 @@ impl super::Database {
                 ci_check_runs,
                 review_status,
                 merged_at,
+                is_queued as i32,
                 task_id,
                 created_at,
                 updated_at
@@ -121,8 +125,8 @@ impl super::Database {
         let mut stmt = conn.prepare(
             "SELECT id, number, title, body, state, draft, html_url, user_login, user_avatar_url,
                     repo_owner, repo_name, head_ref, base_ref, head_sha, additions, deletions,
-                    changed_files, ci_status, ci_check_runs, review_status, merged_at, task_id,
-                    created_at, updated_at
+                    changed_files, ci_status, ci_check_runs, review_status, merged_at, is_queued,
+                    task_id, created_at, updated_at
              FROM authored_prs
              ORDER BY updated_at DESC",
         )?;
@@ -149,9 +153,10 @@ impl super::Database {
                 ci_check_runs: row.get(18)?,
                 review_status: row.get(19)?,
                 merged_at: row.get(20)?,
-                task_id: row.get(21)?,
-                created_at: row.get(22)?,
-                updated_at: row.get(23)?,
+                is_queued: row.get::<_, i32>(21)? != 0,
+                task_id: row.get(22)?,
+                created_at: row.get(23)?,
+                updated_at: row.get(24)?,
             })
         })?;
         let mut result = Vec::new();
@@ -228,6 +233,7 @@ mod tests {
             None,
             None,
             None,
+            false,
             None,
             1000,
             2000,
@@ -276,6 +282,7 @@ mod tests {
             None,
             None,
             None,
+            false,
             None,
             1000,
             2000,
@@ -304,6 +311,7 @@ mod tests {
             Some("[]"),
             Some("review_required"),
             None,
+            false,
             None,
             1000,
             3000,
@@ -349,6 +357,7 @@ mod tests {
                 None,
                 None,
                 None,
+                false,
                 None,
                 i * 1000,
                 i * 1000,
@@ -400,6 +409,7 @@ mod tests {
             None,
             None,
             None,
+            false,
             None,
             1000,
             1000,
@@ -428,6 +438,7 @@ mod tests {
             None,
             None,
             None,
+            false,
             None,
             2000,
             5000,
@@ -469,6 +480,7 @@ mod tests {
             None,
             None,
             None,
+            false,
             Some("T-100"),
             1000,
             1000,
@@ -508,6 +520,7 @@ mod tests {
             Some("[{\"name\":\"build\"}]"),
             Some("approved"),
             None,
+            false,
             None,
             1000,
             1000,

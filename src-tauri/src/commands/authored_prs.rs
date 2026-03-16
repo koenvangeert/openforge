@@ -47,7 +47,7 @@ pub async fn fetch_authored_prs(
 
     let current_ids: Vec<i64> = prs.iter().map(|pr| pr.id).collect();
 
-    type EnrichedPrData = (i64, Option<String>, Option<String>, Option<String>);
+    type EnrichedPrData = (i64, Option<String>, Option<String>, Option<String>, bool);
     let mut enriched: HashMap<i64, EnrichedPrData> =
         HashMap::with_capacity(prs.len());
 
@@ -55,10 +55,11 @@ pub async fn fetch_authored_prs(
         let created_at = chrono::DateTime::parse_from_rfc3339(&pr.created_at)
             .map(|dt| dt.timestamp())
             .unwrap_or(0);
-        let (check_runs_result, combined_status_result, reviews_result) = tokio::join!(
+        let (check_runs_result, combined_status_result, reviews_result, pr_details_result) = tokio::join!(
             github_client.get_check_runs(&pr.repo_owner, &pr.repo_name, &pr.head_sha, &token),
             github_client.get_combined_status(&pr.repo_owner, &pr.repo_name, &pr.head_sha, &token),
-            github_client.get_pr_reviews(&pr.repo_owner, &pr.repo_name, pr.number, &token)
+            github_client.get_pr_reviews(&pr.repo_owner, &pr.repo_name, pr.number, &token),
+            github_client.get_pr_details(&pr.repo_owner, &pr.repo_name, pr.number, &token)
         );
 
         let (ci_status, ci_check_runs) = match (check_runs_result, combined_status_result) {
@@ -75,16 +76,21 @@ pub async fn fetch_authored_prs(
             .ok()
             .map(|reviews| crate::github_client::aggregate_review_status(&reviews, false, None));
 
+        let is_queued = pr_details_result
+            .ok()
+            .and_then(|details| details.extra.get("merge_queue_entry").map(|v| !v.is_null()))
+            .unwrap_or(false);
+
         enriched.insert(
             pr.id,
-            (created_at, ci_status, ci_check_runs, review_status),
+            (created_at, ci_status, ci_check_runs, review_status, is_queued),
         );
     }
 
     {
         let db_lock = crate::db::acquire_db(&db);
         for pr in &prs {
-            let (created_at, ci_status, ci_check_runs, review_status) = enriched
+            let (created_at, ci_status, ci_check_runs, review_status, is_queued) = enriched
                 .get(&pr.id)
                 .ok_or_else(|| format!("Missing enriched data for PR {}", pr.id))?;
 
@@ -119,6 +125,7 @@ pub async fn fetch_authored_prs(
                     ci_check_runs.as_deref(),
                     review_status.as_deref(),
                     None,
+                    *is_queued,
                     task_id.as_deref(),
                     *created_at,
                     updated_at,
