@@ -1,4 +1,6 @@
 <script lang="ts">
+  import HoverTooltip from './HoverTooltip.svelte'
+
   interface Props {
     label: string
     onclick: (e: MouseEvent) => void
@@ -17,13 +19,22 @@
   )
 </script>
 
-<button
-  class="context-item block w-full text-left px-3 py-2 text-sm cursor-pointer rounded {variantClasses}"
-  {onclick}
-  role="menuitem"
->
-  {label}
-  {#if description}
-    <span class="block text-xs opacity-50 truncate max-w-[250px]">{description}</span>
-  {/if}
-</button>
+{#if description}
+  <HoverTooltip text={description}>
+    <button
+      class="context-item block w-full text-left px-3 py-2 text-sm cursor-pointer rounded {variantClasses}"
+      {onclick}
+      role="menuitem"
+    >
+      {label}
+    </button>
+  </HoverTooltip>
+{:else}
+  <button
+    class="context-item block w-full text-left px-3 py-2 text-sm cursor-pointer rounded {variantClasses}"
+    {onclick}
+    role="menuitem"
+  >
+    {label}
+  </button>
+{/if}

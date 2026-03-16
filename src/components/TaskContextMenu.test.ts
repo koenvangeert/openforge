@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/svelte'
+import { render, screen, fireEvent, waitFor } from '@testing-library/svelte'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import TaskContextMenu from './TaskContextMenu.svelte'
 import type { Task } from '../lib/types'
@@ -195,7 +195,7 @@ describe('TaskContextMenu', () => {
     expect(labels).not.toContain('Deploy')
   })
 
-  it('shows action prompt as description on custom action items', () => {
+  it('shows action prompt as tooltip on custom action hover', async () => {
     tasks.set([makeTask('T-1', 'backlog')])
     const actions = [
       { id: 'act-1', name: 'Deploy', prompt: 'deploy to production', builtin: false, enabled: true },
@@ -203,6 +203,14 @@ describe('TaskContextMenu', () => {
     render(TaskContextMenu, {
       props: { visible: true, x: 0, y: 0, taskId: 'T-1', onClose: vi.fn(), onStart: vi.fn(), actions, onRunAction: vi.fn() },
     })
-    expect(screen.getByText('deploy to production')).toBeTruthy()
+
+    expect(screen.queryByRole('tooltip')).toBeNull()
+
+    await fireEvent.mouseOver(screen.getByText('Deploy'))
+
+    await waitFor(() => {
+      expect(screen.getByRole('tooltip')).toBeTruthy()
+    })
+    expect(screen.getByRole('tooltip').textContent).toContain('deploy to production')
   })
 })
