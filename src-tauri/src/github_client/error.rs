@@ -27,6 +27,13 @@ impl fmt::Display for GitHubError {
 
 impl StdError for GitHubError {}
 
+impl GitHubError {
+    /// Check if the error is a rate limit error (403 or 429)
+    pub fn is_rate_limited(&self) -> bool {
+        matches!(self, GitHubError::ApiError { status, .. } if *status == 403 || *status == 429)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -44,5 +51,44 @@ mod tests {
 
         let parse_err = GitHubError::ParseError("Invalid JSON".to_string());
         assert_eq!(parse_err.to_string(), "Parse error: Invalid JSON");
+    }
+
+    #[test]
+    fn test_is_rate_limited_403() {
+        let err = GitHubError::ApiError {
+            status: 403,
+            message: "API rate limit exceeded".to_string(),
+        };
+        assert!(err.is_rate_limited());
+    }
+
+    #[test]
+    fn test_is_rate_limited_429() {
+        let err = GitHubError::ApiError {
+            status: 429,
+            message: "Too Many Requests".to_string(),
+        };
+        assert!(err.is_rate_limited());
+    }
+
+    #[test]
+    fn test_is_not_rate_limited_404() {
+        let err = GitHubError::ApiError {
+            status: 404,
+            message: "Not Found".to_string(),
+        };
+        assert!(!err.is_rate_limited());
+    }
+
+    #[test]
+    fn test_is_not_rate_limited_network_error() {
+        let err = GitHubError::NetworkError("Connection timeout".to_string());
+        assert!(!err.is_rate_limited());
+    }
+
+    #[test]
+    fn test_is_not_rate_limited_parse_error() {
+        let err = GitHubError::ParseError("Invalid JSON".to_string());
+        assert!(!err.is_rate_limited());
     }
 }
