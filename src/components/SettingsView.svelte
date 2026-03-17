@@ -121,6 +121,8 @@
 
   let activeSection = $state(mode === 'global' ? 'preferences' : 'general')
   let isDeleting = $state(false)
+  let confirmingDelete = $state(false)
+  let deleteError = $state<string | null>(null)
 
   // Scroll spy
   let scrollContainer = $state<HTMLDivElement | null>(null)
@@ -336,19 +338,18 @@
 
   async function handleDelete() {
     if (!$activeProjectId) return
-    const confirmed = confirm(
-      `Are you sure you want to delete project "${projectName}"? This action cannot be undone.`
-    )
-    if (!confirmed) return
     isDeleting = true
+    deleteError = null
     try {
       await deleteProject($activeProjectId)
       onProjectDeleted()
       onClose()
     } catch (e) {
       console.error('Failed to delete project:', e)
+      deleteError = e instanceof Error ? e.message : String(e)
     } finally {
       isDeleting = false
+      confirmingDelete = false
     }
   }
 
@@ -471,14 +472,25 @@
             <div class="px-5 py-3 border-b border-error/30">
               <h3 class="text-sm font-semibold text-error m-0">Danger Zone</h3>
             </div>
-            <div class="p-5">
-              <button class="btn btn-error btn-sm" onclick={handleDelete} disabled={isDeleting}>
-                {#if isDeleting}
-                  Deleting...
+            <div class="p-5 flex flex-col gap-3">
+              <div class="flex items-center gap-3">
+                {#if confirmingDelete}
+                  <span class="text-sm text-error">Delete "{projectName}"? This cannot be undone.</span>
+                  <button class="btn btn-error btn-sm" onclick={handleDelete} disabled={isDeleting}>
+                    {isDeleting ? 'Deleting...' : 'Yes, delete'}
+                  </button>
+                  <button class="btn btn-ghost btn-sm" onclick={() => { confirmingDelete = false; deleteError = null }} disabled={isDeleting}>
+                    Cancel
+                  </button>
                 {:else}
-                  Delete Project
+                  <button class="btn btn-error btn-sm" onclick={() => { confirmingDelete = true; deleteError = null }}>
+                    Delete Project
+                  </button>
                 {/if}
-              </button>
+              </div>
+              {#if deleteError}
+                <p class="text-sm text-error font-mono break-all">{deleteError}</p>
+              {/if}
             </div>
           </div>
         {/if}

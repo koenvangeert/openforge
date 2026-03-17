@@ -692,6 +692,21 @@ CREATE TABLE IF NOT EXISTS action_items (
 CREATE INDEX IF NOT EXISTS idx_action_items_project_status ON action_items(project_id, status);
             "#,
         ),
+        // V16: Backfill shepherd_messages for databases where V13 ran before it was added.
+        M::up(
+            r#"
+CREATE TABLE IF NOT EXISTS shepherd_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id TEXT NOT NULL,
+    role TEXT NOT NULL,
+    content TEXT NOT NULL,
+    event_context TEXT,
+    created_at INTEGER NOT NULL,
+    FOREIGN KEY (project_id) REFERENCES projects(id)
+);
+CREATE INDEX IF NOT EXISTS idx_shepherd_messages_project_created ON shepherd_messages(project_id, created_at DESC);
+            "#,
+        ),
     ])
 }
 #[cfg(test)]
@@ -985,8 +1000,8 @@ mod tests {
             .query_row("PRAGMA user_version", [], |r| r.get(0))
             .unwrap();
         assert_eq!(
-            uv, 15,
-            "Fresh DB should have user_version=15 after migrations, got {}",
+            uv, 16,
+            "Fresh DB should have user_version=16 after migrations, got {}",
             uv
         );
 
@@ -1166,7 +1181,7 @@ mod tests {
         let uv: i32 = conn
             .query_row("PRAGMA user_version", [], |r| r.get(0))
             .expect("read repaired user_version");
-        assert_eq!(uv, 15, "V13 database should upgrade to schema version 15");
+        assert_eq!(uv, 16, "V13 database should upgrade to schema version 16");
 
         drop(conn);
         drop(db);
