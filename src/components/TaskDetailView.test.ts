@@ -973,6 +973,8 @@ describe('TaskDetailView', () => {
 
      it('⌘J switches to terminal tab when info is active', async () => {
        const cleanup = await setupWithWorktree()
+       const { focusTerminal } = await import('../lib/terminalPool')
+       vi.mocked(focusTerminal).mockClear()
 
        render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
        await waitFor(() => {
@@ -984,6 +986,32 @@ describe('TaskDetailView', () => {
          const shellWrapper = document.querySelector('.shell-terminal-wrapper')
          expect(shellWrapper).toBeTruthy()
        })
+       expect(focusTerminal).toHaveBeenCalledWith('T-42-shell')
+
+       cleanup()
+     })
+
+     it('⌘J focuses the shell terminal when terminal tab is already active', async () => {
+       const cleanup = await setupWithWorktree()
+       const { focusTerminal } = await import('../lib/terminalPool')
+
+       render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+       await waitFor(() => {
+         expect(screen.getByText('Info')).toBeTruthy()
+       })
+
+       // Switch to terminal first
+       await fireEvent.keyDown(window, { key: 'j', metaKey: true })
+       await waitFor(() => {
+         const shellWrapper = document.querySelector('.shell-terminal-wrapper')
+         expect(shellWrapper).toBeTruthy()
+       })
+
+       vi.mocked(focusTerminal).mockClear()
+
+       // Press ⌘J again — should still call focusTerminal
+       await fireEvent.keyDown(window, { key: 'j', metaKey: true })
+       expect(focusTerminal).toHaveBeenCalledWith('T-42-shell')
 
        cleanup()
      })
@@ -1108,8 +1136,8 @@ describe('TaskDetailView', () => {
        await waitFor(() => {
          const kbds = document.querySelectorAll('kbd')
          const hintTexts = Array.from(kbds).map(k => k.textContent)
-         expect(hintTexts).toContain('I')
-         expect(hintTexts).toContain('J')
+          expect(hintTexts).toContain('⌘I')
+          expect(hintTexts).toContain('⌘J')
        })
 
        vi.mocked(getWorktreeForTask).mockResolvedValue(null)
