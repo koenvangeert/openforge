@@ -152,6 +152,7 @@ impl ShepherdManager {
         self.active.is_some()
     }
 
+    #[cfg(test)]
     pub fn active_project_id(&self) -> Option<&str> {
         self.active.as_ref().map(|session| session.project_id.as_str())
     }
@@ -320,7 +321,6 @@ fn build_snapshot_from_db(app: &AppHandle, project_id: &str) -> ProjectSnapshot 
         .map(|t| SnapshotTask {
             id: t.id,
             prompt: t.initial_prompt,
-            status: t.status,
             session_status: None,
         })
         .collect();
@@ -332,7 +332,6 @@ fn build_snapshot_from_db(app: &AppHandle, project_id: &str) -> ProjectSnapshot 
         .map(|t| SnapshotTask {
             id: t.task.id,
             prompt: t.task.initial_prompt,
-            status: t.task.status,
             session_status: t.session_status,
         })
         .collect();
@@ -401,17 +400,6 @@ pub async fn start_shepherd_if_enabled(app: &AppHandle, project_id: &str) -> Res
     }
 
     manager.start_shepherd(project_id, &db_state).await
-}
-
-pub async fn stop_shepherd_if_running(app: &AppHandle) -> Result<(), String> {
-    let shepherd_state = app.state::<Arc<tokio::sync::Mutex<ShepherdManager>>>().inner().clone();
-    let mut manager = shepherd_state.lock().await;
-
-    if !manager.is_running() {
-        return Ok(());
-    }
-
-    manager.stop_shepherd().await
 }
 
 pub async fn shepherd_flush_loop(app: AppHandle) {
