@@ -356,4 +356,5 @@
   onClose={closeContextMenu}
   onStart={(taskId) => onRunAction?.({ taskId, actionPrompt: '', agent: null })}
   onDelete={(taskId) => { if ($selectedTaskId === taskId) $selectedTaskId = null }}
+  onRunAction={onRunAction}
 />

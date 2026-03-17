@@ -1,9 +1,10 @@
 <script lang="ts">
   import type { Snippet } from 'svelte'
-  import type { AutocompleteItem } from './AutocompletePopover.svelte'
+  import type { AutocompleteItem, Action } from '../lib/types'
   import AutocompletePopover from './AutocompletePopover.svelte'
   import VoiceInput from './VoiceInput.svelte'
   import ModelDownloadProgress from './ModelDownloadProgress.svelte'
+  import ActionDropdown from './ActionDropdown.svelte'
   import { useAutocomplete } from '../lib/useAutocomplete.svelte'
 
   interface Props {
@@ -13,9 +14,11 @@
     projectId: string
     onSubmit: (prompt: string, jiraKey: string | null) => void
     onStartTask?: (prompt: string, jiraKey: string | null) => void
+    onRunAction?: (prompt: string, jiraKey: string | null, actionPrompt: string) => void
     onCancel: () => void
     autofocus?: boolean
     extras?: Snippet
+    actions?: Action[]
   }
 
   let {
@@ -25,9 +28,11 @@
     projectId,
     onSubmit,
     onStartTask,
+    onRunAction,
     onCancel,
     autofocus = false,
-    extras
+    extras,
+    actions = []
   }: Props = $props()
 
   // ── Local state ──────────────────────────────────────────────────────────────
@@ -174,6 +179,16 @@
     if (!prompt) return
     onStartTask?.(prompt, jiraKeyValue.trim() || null)
   }
+
+  function handleCustomAction(actionPrompt: string) {
+    const prompt = textValue.trim()
+    if (!prompt) return
+    onRunAction?.(prompt, jiraKeyValue.trim() || null, actionPrompt)
+  }
+
+  function handleActionFromDropdown(action: Action) {
+    handleCustomAction(action.prompt)
+  }
 </script>
 
 <div class="bg-base-100">
@@ -258,6 +273,12 @@
       {/if}
     </div>
   </div>
+
+  {#if onStartTask && actions.length > 0}
+    <div class="flex items-center justify-end px-3 pb-2">
+      <ActionDropdown {actions} disabled={!textValue.trim()} onAction={handleActionFromDropdown} />
+    </div>
+  {/if}
 
   {#if showModelDownload}
     <div class="px-3 pb-2">

@@ -15,6 +15,7 @@
   import ResizablePanel from './ResizablePanel.svelte'
   import SelfReviewView from './SelfReviewView.svelte'
   import TaskTerminal from './TaskTerminal.svelte'
+  import ActionDropdown from './ActionDropdown.svelte'
 
   interface Props {
     task: Task
@@ -123,6 +124,9 @@
         setReviewMode(false)
         terminalFullscreen = false
         rightPanelMode = 'terminal'
+        // Focus the shell terminal if already visible; when switching from
+        // info the mount flow handles focus automatically via attach().
+        focusTerminal(task.id + '-shell')
         return
       }
     }
@@ -200,6 +204,9 @@
             Start Task
           {/if}
         </button>
+        {#if actions.length > 0}
+          <ActionDropdown {actions} disabled={isStarting} onAction={handleActionClick} />
+        {/if}
       {:else if task.status === 'doing'}
         <button
           class="btn btn-success btn-sm shrink-0 shadow-sm hover:shadow-md transition-shadow"
@@ -208,18 +215,7 @@
           Move to Done
         </button>
         {#if actions.length > 0}
-          <div class="flex gap-1.5 shrink-0">
-            {#each actions as action (action.id)}
-              <button
-                class="btn btn-soft btn-sm shadow-sm hover:shadow-md hover:btn-primary transition-all duration-200"
-                disabled={isStarting}
-                title={isStarting ? 'Task is starting' : (action.prompt || action.name)}
-                onclick={() => handleActionClick(action)}
-              >
-                {action.name}
-              </button>
-            {/each}
-          </div>
+          <ActionDropdown {actions} disabled={isStarting} onAction={handleActionClick} />
         {/if}
       {/if}
      </div>
@@ -282,24 +278,18 @@
            {#if worktreePath !== null}
              <div class="flex items-center h-10 bg-base-200 border-b border-base-300 shrink-0 px-1">
               <button
-                  class="relative flex items-center gap-1.5 h-full px-3.5 text-xs font-mono transition-colors {rightPanelMode === 'info' ? 'text-base-content font-semibold border-b-2 border-primary' : 'text-base-content/50'}"
-                  onclick={() => rightPanelMode = 'info'}
+                   class="flex items-center gap-1.5 h-full px-3.5 text-xs font-mono transition-colors {rightPanelMode === 'info' ? 'text-base-content font-semibold border-b-2 border-primary' : 'text-base-content/50'}"
+                   onclick={() => rightPanelMode = 'info'}
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
-                  Info
-                  {#if $commandHeld}
-                    <kbd class="kbd kbd-xs absolute -top-2 -right-1 bg-base-content/10 text-base-content/40 border-base-content/20 text-[0.55rem] min-w-4 h-4 flex items-center justify-center pointer-events-none">I</kbd>
-                  {/if}
+                  Info {#if $commandHeld}<kbd class="kbd kbd-xs opacity-50">⌘I</kbd>{/if}
                 </button>
                 <button
-                  class="relative flex items-center gap-1.5 h-full px-3.5 text-xs font-mono transition-colors {rightPanelMode === 'terminal' ? 'text-base-content font-semibold border-b-2 border-primary' : 'text-base-content/50'}"
-                  onclick={() => rightPanelMode = 'terminal'}
+                   class="flex items-center gap-1.5 h-full px-3.5 text-xs font-mono transition-colors {rightPanelMode === 'terminal' ? 'text-base-content font-semibold border-b-2 border-primary' : 'text-base-content/50'}"
+                   onclick={() => rightPanelMode = 'terminal'}
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" x2="20" y1="19" y2="19"/></svg>
-                  Terminal
-                  {#if $commandHeld}
-                    <kbd class="kbd kbd-xs absolute -top-2 -right-1 bg-base-content/10 text-base-content/40 border-base-content/20 text-[0.55rem] min-w-4 h-4 flex items-center justify-center pointer-events-none">J</kbd>
-                  {/if}
+                  Terminal {#if $commandHeld}<kbd class="kbd kbd-xs opacity-50">⌘J</kbd>{/if}
                 </button>
                {#if rightPanelMode === 'terminal'}
                  <button

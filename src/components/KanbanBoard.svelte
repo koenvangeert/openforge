@@ -1,6 +1,6 @@
 <script lang="ts">
   import { untrack } from 'svelte'
-  import type { Task, AgentSession } from '../lib/types'
+  import type { Task, AgentSession, Action } from '../lib/types'
   import { tasks, selectedTaskId, activeSessions, ticketPrs, error, activeProjectId, startingTasks } from '../lib/stores'
   import { clearDoneTasks, getConfig, setConfig } from '../lib/ipc'
   import { pushNavState } from '../lib/navigation'
@@ -9,6 +9,7 @@
   import { sortBySessionActivity } from '../lib/taskSort'
   import { isInputFocused } from '../lib/domUtils'
   import { useVimNavigation } from '../lib/useVimNavigation.svelte'
+  import { loadActions, getEnabledActions } from '../lib/actions'
   import TaskCard from './TaskCard.svelte'
   import TaskContextMenu from './TaskContextMenu.svelte'
   import ProjectPageHeader from './ProjectPageHeader.svelte'
@@ -37,6 +38,7 @@
 
   let showBacklog = $state(true)
   let showDoneDrawer = $state(false)
+  let projectActions = $state<Action[]>([])
 
   $effect(() => {
     getConfig('backlog_visible').then(stored => {
@@ -46,6 +48,15 @@
     }).catch(() => {
       // fallthrough: keep default (open)
     })
+  })
+
+  $effect(() => {
+    const pid = $activeProjectId
+    if (pid) {
+      loadActions(pid).then(all => { projectActions = getEnabledActions(all) })
+    } else {
+      projectActions = []
+    }
   })
 
   const backlogColumn = BACKLOG_COLUMN
@@ -340,4 +351,6 @@
   onClose={closeContextMenu}
   onStart={(taskId) => onRunAction({ taskId, actionPrompt: '', agent: null })}
   onDelete={(taskId) => { if ($selectedTaskId === taskId) $selectedTaskId = null }}
+  actions={projectActions}
+  onRunAction={onRunAction}
 />

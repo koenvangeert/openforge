@@ -2,6 +2,7 @@
   import { onMount, tick } from 'svelte'
   import type { Task, Action } from '../lib/types'
   import { getAvailableActions, filterActions, type PaletteAction } from '../lib/actionPalette'
+  import HoverTooltip from './HoverTooltip.svelte'
 
   interface Props {
     task: Task | null
@@ -96,6 +97,12 @@
   function getFlatIndex(action: PaletteAction): number {
     return flatList.indexOf(action)
   }
+
+  function getActionTooltip(action: PaletteAction): string | undefined {
+    if (!action.id.startsWith('custom-action-')) return undefined
+    const realId = action.id.replace('custom-action-', '')
+    return customActions.find(a => a.id === realId)?.prompt
+  }
 </script>
 
 <div
@@ -136,18 +143,36 @@
           {#each group.actions as action (action.id)}
             {@const flatIdx = getFlatIndex(action)}
             {@const isHighlighted = flatIdx === selectedIndex}
-            <button
-              type="button"
-              data-palette-item
-              class="flex items-center gap-3 w-full px-4 py-2 text-left text-sm text-base-content transition-colors
-                {isHighlighted ? 'bg-base-300' : 'hover:bg-base-300/60'}"
-              onclick={() => onExecute(action.id)}
-            >
-              <span class="flex-1">{action.label}</span>
-              {#if action.shortcut}
-                <kbd class="kbd kbd-xs bg-base-content/5 text-base-content/40 border-base-content/10">{action.shortcut}</kbd>
-              {/if}
-            </button>
+            {@const tooltip = getActionTooltip(action)}
+            {#if tooltip}
+              <HoverTooltip text={tooltip}>
+                <button
+                  type="button"
+                  data-palette-item
+                  class="flex items-center gap-3 w-full px-4 py-2 text-left text-sm text-base-content transition-colors
+                    {isHighlighted ? 'bg-base-300' : 'hover:bg-base-300/60'}"
+                  onclick={() => onExecute(action.id)}
+                >
+                  <span class="flex-1">{action.label}</span>
+                  {#if action.shortcut}
+                    <kbd class="kbd kbd-xs bg-base-content/5 text-base-content/40 border-base-content/10">{action.shortcut}</kbd>
+                  {/if}
+                </button>
+              </HoverTooltip>
+            {:else}
+              <button
+                type="button"
+                data-palette-item
+                class="flex items-center gap-3 w-full px-4 py-2 text-left text-sm text-base-content transition-colors
+                  {isHighlighted ? 'bg-base-300' : 'hover:bg-base-300/60'}"
+                onclick={() => onExecute(action.id)}
+              >
+                <span class="flex-1">{action.label}</span>
+                {#if action.shortcut}
+                  <kbd class="kbd kbd-xs bg-base-content/5 text-base-content/40 border-base-content/10">{action.shortcut}</kbd>
+                {/if}
+              </button>
+            {/if}
           {/each}
         {/each}
       {/if}

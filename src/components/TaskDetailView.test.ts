@@ -607,7 +607,7 @@ describe('TaskDetailView', () => {
     expect(currentValue).toBe('T-42')
   })
 
-  it('shows action prompt as tooltip when prompt is set', async () => {
+  it('shows action buttons in dropdown when actions exist', async () => {
     const { loadActions } = await import('../lib/actions')
     vi.mocked(loadActions).mockResolvedValue([
       { id: 'builtin-go', name: 'Go', prompt: 'Implement the task', builtin: true, enabled: true },
@@ -615,22 +615,23 @@ describe('TaskDetailView', () => {
     const doingTask = { ...baseTask, status: 'doing' }
     render(TaskDetailView, { props: { task: doingTask, onRunAction: mockOnRunAction } })
     await vi.waitFor(() => {
-      const goButton = screen.getByText('Go')
-      expect(goButton.getAttribute('title')).toBe('Implement the task')
+      expect(screen.getByText('Go')).toBeTruthy()
     })
   })
 
-  it('shows action name as tooltip when prompt is empty', async () => {
+  it('action button triggers onRunAction with correct prompt', async () => {
+    mockOnRunAction.mockClear()
     const { loadActions } = await import('../lib/actions')
     vi.mocked(loadActions).mockResolvedValue([
-      { id: 'builtin-go', name: 'Go', prompt: '', builtin: true, enabled: true },
+      { id: 'builtin-go', name: 'Go', prompt: 'Implement the task', builtin: true, enabled: true },
     ])
     const doingTask = { ...baseTask, status: 'doing' }
     render(TaskDetailView, { props: { task: doingTask, onRunAction: mockOnRunAction } })
     await vi.waitFor(() => {
-      const goButton = screen.getByText('Go')
-      expect(goButton.getAttribute('title')).toBe('Go')
+      expect(screen.getByText('Go')).toBeTruthy()
     })
+    await fireEvent.click(screen.getByText('Go'))
+    expect(mockOnRunAction).toHaveBeenCalledWith({ taskId: 'T-42', actionPrompt: 'Implement the task', agent: null })
   })
 
   describe('keyboard shortcuts', () => {
@@ -972,6 +973,8 @@ describe('TaskDetailView', () => {
 
      it('⌘J switches to terminal tab when info is active', async () => {
        const cleanup = await setupWithWorktree()
+       const { focusTerminal } = await import('../lib/terminalPool')
+       vi.mocked(focusTerminal).mockClear()
 
        render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
        await waitFor(() => {
@@ -983,6 +986,32 @@ describe('TaskDetailView', () => {
          const shellWrapper = document.querySelector('.shell-terminal-wrapper')
          expect(shellWrapper).toBeTruthy()
        })
+       expect(focusTerminal).toHaveBeenCalledWith('T-42-shell')
+
+       cleanup()
+     })
+
+     it('⌘J focuses the shell terminal when terminal tab is already active', async () => {
+       const cleanup = await setupWithWorktree()
+       const { focusTerminal } = await import('../lib/terminalPool')
+
+       render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+       await waitFor(() => {
+         expect(screen.getByText('Info')).toBeTruthy()
+       })
+
+       // Switch to terminal first
+       await fireEvent.keyDown(window, { key: 'j', metaKey: true })
+       await waitFor(() => {
+         const shellWrapper = document.querySelector('.shell-terminal-wrapper')
+         expect(shellWrapper).toBeTruthy()
+       })
+
+       vi.mocked(focusTerminal).mockClear()
+
+       // Press ⌘J again — should still call focusTerminal
+       await fireEvent.keyDown(window, { key: 'j', metaKey: true })
+       expect(focusTerminal).toHaveBeenCalledWith('T-42-shell')
 
        cleanup()
      })
@@ -1107,8 +1136,8 @@ describe('TaskDetailView', () => {
        await waitFor(() => {
          const kbds = document.querySelectorAll('kbd')
          const hintTexts = Array.from(kbds).map(k => k.textContent)
-         expect(hintTexts).toContain('I')
-         expect(hintTexts).toContain('J')
+          expect(hintTexts).toContain('⌘I')
+          expect(hintTexts).toContain('⌘J')
        })
 
        vi.mocked(getWorktreeForTask).mockResolvedValue(null)

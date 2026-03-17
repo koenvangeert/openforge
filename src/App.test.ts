@@ -237,6 +237,36 @@ describe('App onMount initialization order', () => {
     expect(get(stores.reviewRequestCount)).toBe(2)
   }, 15000)
 
+  it('reviewRequestCount respects repo exclusion filter', async () => {
+    const { getReviewPrs, getProjectConfig, getAuthoredPrs } = await import('./lib/ipc')
+    const stores = await import('./lib/stores')
+    const { get } = await import('svelte/store')
+
+    // PRs from two different repos, all unviewed
+    vi.mocked(getReviewPrs).mockResolvedValue([
+      { id: 1, number: 10, title: 'PR 1', body: null, state: 'open', draft: false, html_url: 'https://github.com/o/r/pull/10', user_login: 'u1', user_avatar_url: null, repo_owner: 'o', repo_name: 'r', head_ref: 'b1', base_ref: 'main', head_sha: 'sha1', additions: 0, deletions: 0, changed_files: 0, created_at: 1000, updated_at: 1000, viewed_at: null, viewed_head_sha: null },
+      { id: 2, number: 20, title: 'PR 2', body: null, state: 'open', draft: false, html_url: 'https://github.com/x/y/pull/20', user_login: 'u2', user_avatar_url: null, repo_owner: 'x', repo_name: 'y', head_ref: 'b2', base_ref: 'main', head_sha: 'sha2', additions: 0, deletions: 0, changed_files: 0, created_at: 2000, updated_at: 2000, viewed_at: null, viewed_head_sha: null },
+      { id: 3, number: 30, title: 'PR 3', body: null, state: 'open', draft: false, html_url: 'https://github.com/o/r/pull/30', user_login: 'u3', user_avatar_url: null, repo_owner: 'o', repo_name: 'r', head_ref: 'b3', base_ref: 'main', head_sha: 'sha3', additions: 0, deletions: 0, changed_files: 0, created_at: 3000, updated_at: 3000, viewed_at: null, viewed_head_sha: null },
+    ] as any)
+    vi.mocked(getAuthoredPrs).mockResolvedValue([])
+
+    // Exclude repo x/y
+    vi.mocked(getProjectConfig).mockImplementation(async (_projectId: string, key: string) => {
+      if (key === 'pr_excluded_repos') return JSON.stringify(['x/y'])
+      return null
+    })
+
+    const App = (await import('./App.svelte')).default
+    render(App)
+
+    await vi.waitFor(() => {
+      expect(getReviewPrs).toHaveBeenCalled()
+    })
+
+    // 3 PRs unviewed, but x/y is excluded → only 2 from o/r count
+    expect(get(stores.reviewRequestCount)).toBe(2)
+  }, 15000)
+
   it('registers event listeners before making IPC data-loading calls', async () => {
     const App = (await import('./App.svelte')).default
 
@@ -428,6 +458,48 @@ describe('App onMount initialization order', () => {
 
       // preventDefault should NOT be called (handler should not run)
       expect(preventDefaultSpy).not.toHaveBeenCalled()
+    })
+
+    it('s navigates to shepherd view when shepherd is enabled', async () => {
+      const App = (await import('./App.svelte')).default
+      const stores = await import('./lib/stores')
+      const { get } = await import('svelte/store')
+
+      stores.shepherdEnabled.set(true)
+      render(App)
+
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 's', bubbles: true }))
+      expect(get(stores.currentView)).toBe('shepherd')
+    })
+
+    it('s does NOT navigate to shepherd when shepherd is disabled', async () => {
+      const App = (await import('./App.svelte')).default
+      const stores = await import('./lib/stores')
+      const { get } = await import('svelte/store')
+
+      stores.shepherdEnabled.set(false)
+      stores.currentView.set('board')
+      render(App)
+
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 's', bubbles: true }))
+      expect(get(stores.currentView)).toBe('board')
+    })
+
+    it('s does NOT navigate when input is focused', async () => {
+      const App = (await import('./App.svelte')).default
+      const stores = await import('./lib/stores')
+      const { get } = await import('svelte/store')
+
+      stores.shepherdEnabled.set(true)
+      stores.currentView.set('board')
+      render(App)
+
+      const input = document.createElement('input')
+      document.body.appendChild(input)
+      input.focus()
+
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 's', bubbles: true }))
+      expect(get(stores.currentView)).toBe('board')
     })
 
     it('? opens dialog when input is NOT focused', async () => {

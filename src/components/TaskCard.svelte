@@ -2,6 +2,7 @@
   import { Pin } from 'lucide-svelte'
   import type { Task, AgentSession, PullRequestInfo } from '../lib/types'
   import { isReadyToMerge, isQueuedForMerge } from '../lib/types'
+  import { computeTaskState, taskStateToBorderClass } from '../lib/taskState'
   import { openUrl } from '../lib/ipc'
   import { timeAgoFromSeconds } from '../lib/timeAgo'
   import Card from './Card.svelte'
@@ -31,21 +32,19 @@
   }
 
 
+  let taskState = $derived(computeTaskState(task, session ?? null, pullRequests))
+  let borderClass = $derived(taskStateToBorderClass(taskState))
+
   let statusClass = $derived(session?.status || 'idle')
   let needsInput = $derived(session?.status === 'paused' && session?.checkpoint_data !== null)
   let hasVisibleStatus = $derived(session !== null && ['running', 'completed', 'paused', 'failed', 'interrupted'].includes(session?.status ?? ''))
-  let hasCiFailure = $derived(pullRequests.some(pr => pr.ci_status === 'failure' && pr.state === 'open'))
-  let hasPendingCi = $derived(pullRequests.some(pr => pr.ci_status === 'pending' && pr.state === 'open'))
-  let hasReadyToMerge = $derived(pullRequests.some(pr => isReadyToMerge(pr)))
-  let hasQueuedForMerge = $derived(pullRequests.some(pr => isQueuedForMerge(pr)))
-  let hasReviewPending = $derived(pullRequests.some(pr => pr.ci_status === 'success' && pr.review_status === 'review_required' && pr.state === 'open'))
   let totalUnaddressed = $derived(
     pullRequests.reduce((sum, pr) => sum + (pr.unaddressed_comment_count || 0), 0)
   )
 </script>
 
 <Card
-  class="group/card block px-3.5 py-3 {hasCiFailure && !hasPendingCi && statusClass !== 'running' && statusClass !== 'paused' && !needsInput ? 'ci-failed' : ''} {isStarting ? 'starting' : ''} {statusClass === 'running' ? 'running' : ''} {statusClass === 'paused' && !needsInput ? 'paused' : ''} {statusClass === 'failed' ? 'failed' : ''} {statusClass === 'interrupted' ? 'interrupted' : ''} {statusClass === 'completed' ? 'completed' : ''} {needsInput ? 'needs-input' : ''} {hasQueuedForMerge && statusClass !== 'running' && statusClass !== 'paused' && !needsInput ? 'ready-to-merge' : ''} {hasReadyToMerge && !hasQueuedForMerge && statusClass !== 'running' && statusClass !== 'paused' && !needsInput ? 'ready-to-merge' : ''} {hasPendingCi && statusClass !== 'running' && statusClass !== 'paused' && !needsInput && !hasCiFailure ? 'ci-running' : ''} {hasReviewPending && statusClass !== 'running' && statusClass !== 'paused' && !needsInput && !hasCiFailure && !hasPendingCi ? 'review-pending' : ''} {isPinned ? 'border-primary/30' : ''}"
+  class="group/card block px-3.5 py-3 {borderClass} {isStarting ? 'starting' : ''} {isPinned ? 'border-primary/30' : ''}"
   onclick={handleClick}
 >
   <div class="flex items-center justify-between mb-1">

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import type { Task, AgentSession, PullRequestInfo } from './types'
-import { computeTaskState } from './taskState'
+import { computeTaskState, taskStateToBorderClass } from './taskState'
 
 // ============================================================================
 // Factory Helpers
@@ -333,5 +333,83 @@ describe('computeTaskState - pr-queued (PART 3)', () => {
 
     const state = computeTaskState(task, null, prs)
     expect(state).toBe('pr-queued')
+  })
+})
+
+// ============================================================================
+// PART 4: taskStateToBorderClass mapping
+// ============================================================================
+
+describe('taskStateToBorderClass', () => {
+  it('maps active to running', () => {
+    expect(taskStateToBorderClass('active')).toBe('running')
+  })
+
+  it('maps needs-input to needs-input', () => {
+    expect(taskStateToBorderClass('needs-input')).toBe('needs-input')
+  })
+
+  it('maps resting to paused', () => {
+    expect(taskStateToBorderClass('resting')).toBe('paused')
+  })
+
+  it('maps celebrating to completed', () => {
+    expect(taskStateToBorderClass('celebrating')).toBe('completed')
+  })
+
+  it('maps sad to failed', () => {
+    expect(taskStateToBorderClass('sad')).toBe('failed')
+  })
+
+  it('maps frozen to interrupted', () => {
+    expect(taskStateToBorderClass('frozen')).toBe('interrupted')
+  })
+
+  it('maps ci-failed to ci-failed', () => {
+    expect(taskStateToBorderClass('ci-failed')).toBe('ci-failed')
+  })
+
+  it('maps ci-running to ci-running', () => {
+    expect(taskStateToBorderClass('ci-running')).toBe('ci-running')
+  })
+
+  it('maps review-pending to review-pending', () => {
+    expect(taskStateToBorderClass('review-pending')).toBe('review-pending')
+  })
+
+  it('maps ready-to-merge to ready-to-merge', () => {
+    expect(taskStateToBorderClass('ready-to-merge')).toBe('ready-to-merge')
+  })
+
+  it('maps pr-queued to ready-to-merge', () => {
+    expect(taskStateToBorderClass('pr-queued')).toBe('ready-to-merge')
+  })
+
+  it('returns empty string for egg', () => {
+    expect(taskStateToBorderClass('egg')).toBe('')
+  })
+
+  it('returns empty string for idle', () => {
+    expect(taskStateToBorderClass('idle')).toBe('')
+  })
+
+  it('returns empty string for done', () => {
+    expect(taskStateToBorderClass('done')).toBe('')
+  })
+
+  it('returns empty string for pr-draft', () => {
+    expect(taskStateToBorderClass('pr-draft')).toBe('')
+  })
+
+  it('returns empty string for pr-open', () => {
+    expect(taskStateToBorderClass('pr-open')).toBe('')
+  })
+
+  it('returns empty string for pr-merged', () => {
+    expect(taskStateToBorderClass('pr-merged')).toBe('')
+  })
+
+  it('returns empty string for changes-requested', () => {
+    expect(taskStateToBorderClass('changes-requested')).toBe('')
   })
 })

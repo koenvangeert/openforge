@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/svelte'
+import { render, screen, fireEvent, waitFor } from '@testing-library/svelte'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import TaskContextMenu from './TaskContextMenu.svelte'
 import type { Task } from '../lib/types'
@@ -133,5 +133,84 @@ describe('TaskContextMenu', () => {
     expect(screen.queryByText('Move to... ›')).toBeNull()
     expect(screen.queryByText('Backlog')).toBeNull()
     expect(screen.queryByText('Doing')).toBeNull()
+  })
+
+  it('shows custom actions for backlog tasks when actions and onRunAction are provided', () => {
+    tasks.set([makeTask('T-1', 'backlog')])
+    const actions = [
+      { id: 'act-1', name: 'Deploy', prompt: 'deploy to prod', builtin: false, enabled: true },
+      { id: 'act-2', name: 'Review', prompt: 'review code', builtin: false, enabled: true },
+    ]
+    render(TaskContextMenu, {
+      props: { visible: true, x: 0, y: 0, taskId: 'T-1', onClose: vi.fn(), onStart: vi.fn(), actions, onRunAction: vi.fn() },
+    })
+    expect(screen.getByText('Deploy')).toBeTruthy()
+    expect(screen.getByText('Review')).toBeTruthy()
+  })
+
+  it('does not show custom actions for doing tasks', () => {
+    tasks.set([makeTask('T-1', 'doing')])
+    const actions = [
+      { id: 'act-1', name: 'Deploy', prompt: 'deploy to prod', builtin: false, enabled: true },
+    ]
+    render(TaskContextMenu, {
+      props: { visible: true, x: 0, y: 0, taskId: 'T-1', onClose: vi.fn(), actions, onRunAction: vi.fn() },
+    })
+    expect(screen.queryByText('Deploy')).toBeNull()
+  })
+
+  it('does not show custom actions when onRunAction is not provided', () => {
+    tasks.set([makeTask('T-1', 'backlog')])
+    const actions = [
+      { id: 'act-1', name: 'Deploy', prompt: 'deploy to prod', builtin: false, enabled: true },
+    ]
+    render(TaskContextMenu, {
+      props: { visible: true, x: 0, y: 0, taskId: 'T-1', onClose: vi.fn(), actions },
+    })
+    expect(screen.queryByText('Deploy')).toBeNull()
+  })
+
+  it('calls onRunAction with action prompt when custom action is clicked', async () => {
+    const onRunAction = vi.fn()
+    const onClose = vi.fn()
+    tasks.set([makeTask('T-1', 'backlog')])
+    const actions = [
+      { id: 'act-1', name: 'Deploy', prompt: 'deploy to prod', builtin: false, enabled: true },
+    ]
+    render(TaskContextMenu, {
+      props: { visible: true, x: 0, y: 0, taskId: 'T-1', onClose, onStart: vi.fn(), actions, onRunAction },
+    })
+    await fireEvent.click(screen.getByText('Deploy'))
+    expect(onRunAction).toHaveBeenCalledWith({ taskId: 'T-1', actionPrompt: 'deploy to prod', agent: null })
+    expect(onClose).toHaveBeenCalled()
+  })
+
+  it('does not show custom actions when actions array is empty', () => {
+    tasks.set([makeTask('T-1', 'backlog')])
+    render(TaskContextMenu, {
+      props: { visible: true, x: 0, y: 0, taskId: 'T-1', onClose: vi.fn(), actions: [], onRunAction: vi.fn() },
+    })
+    const menuItems = screen.getAllByRole('menuitem')
+    const labels = menuItems.map(el => el.textContent?.trim())
+    expect(labels).not.toContain('Deploy')
+  })
+
+  it('shows action prompt as tooltip on custom action hover', async () => {
+    tasks.set([makeTask('T-1', 'backlog')])
+    const actions = [
+      { id: 'act-1', name: 'Deploy', prompt: 'deploy to production', builtin: false, enabled: true },
+    ]
+    render(TaskContextMenu, {
+      props: { visible: true, x: 0, y: 0, taskId: 'T-1', onClose: vi.fn(), onStart: vi.fn(), actions, onRunAction: vi.fn() },
+    })
+
+    expect(screen.queryByRole('tooltip')).toBeNull()
+
+    await fireEvent.mouseOver(screen.getByText('Deploy'))
+
+    await waitFor(() => {
+      expect(screen.getByRole('tooltip')).toBeTruthy()
+    })
+    expect(screen.getByRole('tooltip').textContent).toContain('deploy to production')
   })
 })

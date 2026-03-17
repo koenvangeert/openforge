@@ -46,6 +46,7 @@
   let dialogAgents = $state<string[]>([])
   let dialogSelectedAgent = $state('')
   let dialogSelectedPermissionMode = $state<PermissionMode>('default')
+  let dialogActions = $state<Action[]>([])
 
   async function loadDialogAgentInfo() {
     dialogSelectedAgent = ''
@@ -59,12 +60,16 @@
       if ($activeProjectId) {
         const agents = await listOpenCodeAgents($activeProjectId)
         dialogAgents = agents.filter(a => !a.hidden).map(a => a.name)
+        const all = await loadActions($activeProjectId)
+        dialogActions = getEnabledActions(all)
       } else {
         dialogAgents = []
+        dialogActions = []
       }
     } catch {
       dialogAiProvider = null
       dialogAgents = []
+      dialogActions = []
     }
   }
   let showProjectSetup = $state(false)
@@ -398,6 +403,13 @@
         triggerGithubSync()
         break
       default:
+        if (actionId.startsWith('custom-action-') && task) {
+          const realId = actionId.replace('custom-action-', '')
+          const action = actionPaletteActions.find(a => a.id === realId)
+          if (action) {
+            await handleRunAction({ taskId: task.id, actionPrompt: action.prompt, agent: null })
+          }
+        }
         break
     }
   }
@@ -484,6 +496,14 @@
     if (e.metaKey && e.key === ',') {
       e.preventDefault()
       handleNavigate('settings')
+      return
+    }
+
+    // s — navigate to shepherd view (plain key, no modifier)
+    if (e.key === 's' && !e.metaKey && !e.ctrlKey && !e.altKey && !isInputFocused() && $shepherdEnabled) {
+      e.preventDefault()
+      pushNavState()
+      $currentView = 'shepherd'
       return
     }
 
@@ -843,8 +863,8 @@
     )
 
     unlisteners.push(
-      await listen<number>('review-pr-count-changed', (event: Event<number>) => {
-        $reviewRequestCount = event.payload
+      await listen<number>('review-pr-count-changed', () => {
+        refreshPrCounts()
       })
     )
 
@@ -906,19 +926,8 @@
     }
     loadProjectAttention()
 
-    try {
-      const reviewPrList = await getReviewPrs()
-      $reviewRequestCount = reviewPrList.filter(p => p.viewed_at === null).length
-    } catch (e) {
-      console.error('[App] Failed to initialize review PR count:', e)
-    }
-
-    try {
-      const authoredPrList = await getAuthoredPrs()
-      $authoredPrCount = authoredPrList.filter(p => p.ci_status === 'failure' || p.review_status === 'changes_requested').length
-    } catch (e) {
-      console.error('[App] Failed to initialize authored PR count:', e)
-    }
+    // PR counts are initialized by the $effect that calls refreshPrCounts()
+    // when $activeProjectId is set — no separate unfiltered init needed.
 
     // Phase 3: Safety net
     await loadTasks()
@@ -985,6 +994,7 @@
               value={editingTask ? editingTask.initial_prompt : ''}
               jiraKey={editingTask ? (editingTask.jira_key || '') : ''}
               autofocus={true}
+              actions={editingTask ? [] : dialogActions}
               onSubmit={async (prompt, jiraKey) => {
                 try {
                   if (editingTask) {
@@ -1010,6 +1020,19 @@
                   await handleRunAction({ taskId: newTask.id, actionPrompt: '', agent })
                 } catch (e) {
                   console.error('Failed to start task:', e)
+                  $error = String(e)
+                }
+              }}
+              onRunAction={editingTask ? undefined : async (prompt, jiraKey, actionPrompt) => {
+                try {
+                  const agent = dialogSelectedAgent || null
+                  const newTask = await createTask(prompt, 'backlog', jiraKey, $activeProjectId, agent, dialogSelectedPermissionMode)
+                  showAddDialog = false
+                  editingTask = null
+                  await loadTasks()
+                  await handleRunAction({ taskId: newTask.id, actionPrompt, agent })
+                } catch (e) {
+                  console.error('Failed to run custom action:', e)
                   $error = String(e)
                 }
               }}
@@ -1145,7 +1168,7 @@
           </div>
           <div class="flex items-center justify-between">
             <span class="text-sm text-base-content">Task Shepherd</span>
-            <kbd class="kbd kbd-sm">⌘A</kbd>
+            <div class="flex gap-0.5"><kbd class="kbd kbd-sm">s</kbd><kbd class="kbd kbd-sm">⌘A</kbd></div>
           </div>
         </div>
       </div>

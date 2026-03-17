@@ -24,6 +24,24 @@ function getPrState(prs: PullRequestInfo[]): TaskState | null {
   return 'pr-open'
 }
 
+const BORDER_CLASS: Record<string, string> = {
+  'active': 'running',
+  'needs-input': 'needs-input',
+  'resting': 'paused',
+  'celebrating': 'completed',
+  'sad': 'failed',
+  'frozen': 'interrupted',
+  'ci-failed': 'ci-failed',
+  'ci-running': 'ci-running',
+  'review-pending': 'review-pending',
+  'ready-to-merge': 'ready-to-merge',
+  'pr-queued': 'ready-to-merge',
+}
+
+export function taskStateToBorderClass(state: TaskState): string {
+  return BORDER_CLASS[state] ?? ''
+}
+
 export function computeTaskState(task: Task, session: AgentSession | null, prs: PullRequestInfo[]): TaskState {
   // Done tasks are always done
   if (task.status === 'done') {

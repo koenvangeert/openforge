@@ -49,11 +49,14 @@
       class="relative cursor-pointer {currentView === 'shepherd' ? 'text-primary' : 'text-base-content/40'}"
       onclick={() => onNavigate('shepherd')}
       aria-label="Task Shepherd"
-      title="Task Shepherd (⌘A)"
+      title="Task Shepherd (s / ⌘A)"
     >
       <Bot size={24} />
       {#if actionItemCount > 0}
         <span class="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-primary"></span>
+      {/if}
+      {#if $commandHeld && !modalsOpen}
+        <kbd class="kbd kbd-xs absolute -bottom-2 -left-3 bg-base-content/10 text-base-content/40 border-base-content/20 text-[0.55rem] min-w-4 h-4 flex items-center justify-center pointer-events-none">A</kbd>
       {/if}
     </button>
   {/if}
