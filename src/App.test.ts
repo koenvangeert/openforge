@@ -5,9 +5,12 @@ import type { Task, AgentSession, Project, ProjectAttention, PullRequestInfo, Ch
 
 const callOrder: string[] = []
 
+const eventListeners = new Map<string, Function>()
+
 vi.mock('@tauri-apps/api/event', () => ({
-  listen: vi.fn(async (_eventName: string) => {
+  listen: vi.fn(async (eventName: string, callback: Function) => {
     callOrder.push('listen')
+    eventListeners.set(eventName, callback)
     return () => {}
   }),
   emit: vi.fn(),
@@ -446,22 +449,117 @@ describe('App onMount initialization order', () => {
 describe('Shepherd event wiring', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    eventListeners.clear()
   })
 
   afterEach(() => {
     vi.clearAllMocks()
+    eventListeners.clear()
   })
 
-  it('notifyShepherdEvent is mocked and available', async () => {
+  it('calls notifyShepherdEvent with task-created when task-changed event has action=created', async () => {
     const ipc = await import('./lib/ipc')
-    expect(ipc.notifyShepherdEvent).toBeDefined()
+    const stores = await import('./lib/stores')
+
+    const App = (await import('./App.svelte')).default
+    render(App)
+
+    await vi.waitFor(() => {
+      expect(eventListeners.has('task-changed')).toBe(true)
+    }, { timeout: 5000 })
+
+    stores.shepherdEnabled.set(true)
+
+    const taskChangedCallback = eventListeners.get('task-changed')!
+    await taskChangedCallback({
+      payload: { action: 'created', task_id: 'task-123' }
+    })
+
+    expect(ipc.notifyShepherdEvent).toHaveBeenCalledWith('task-created', {
+      action: 'created',
+      task_id: 'task-123'
+    })
   })
 
-  describe('action item count listener registration', () => {
-    it('registers action-item-created listener', async () => {
-      const { listen } = await import('@tauri-apps/api/event')
-      const App = (await import('./App.svelte')).default
+  it('calls notifyShepherdEvent with task-moved when task-changed event has action=updated', async () => {
+    const ipc = await import('./lib/ipc')
+    const stores = await import('./lib/stores')
 
+    const App = (await import('./App.svelte')).default
+    render(App)
+
+    await vi.waitFor(() => {
+      expect(eventListeners.has('task-changed')).toBe(true)
+    }, { timeout: 5000 })
+
+    stores.shepherdEnabled.set(true)
+
+    const taskChangedCallback = eventListeners.get('task-changed')!
+    await taskChangedCallback({
+      payload: { action: 'updated', task_id: 'task-456' }
+    })
+
+    expect(ipc.notifyShepherdEvent).toHaveBeenCalledWith('task-moved', {
+      action: 'updated',
+      task_id: 'task-456'
+    })
+  })
+
+  it('calls notifyShepherdEvent with task-deleted when task-changed event has action=deleted', async () => {
+    const ipc = await import('./lib/ipc')
+    const stores = await import('./lib/stores')
+
+    const App = (await import('./App.svelte')).default
+    render(App)
+
+    await vi.waitFor(() => {
+      expect(eventListeners.has('task-changed')).toBe(true)
+    }, { timeout: 5000 })
+
+    stores.shepherdEnabled.set(true)
+
+    const taskChangedCallback = eventListeners.get('task-changed')!
+    await taskChangedCallback({
+      payload: { action: 'deleted', task_id: 'task-789' }
+    })
+
+    expect(ipc.notifyShepherdEvent).toHaveBeenCalledWith('task-deleted', {
+      action: 'deleted',
+      task_id: 'task-789'
+    })
+  })
+
+  it('does not call notifyShepherdEvent when shepherdEnabled is false', async () => {
+    const ipc = await import('./lib/ipc')
+    const stores = await import('./lib/stores')
+
+    stores.shepherdEnabled.set(false)
+
+    const App = (await import('./App.svelte')).default
+    render(App)
+
+    await vi.waitFor(() => {
+      expect(eventListeners.has('task-changed')).toBe(true)
+    })
+
+    const taskChangedCallback = eventListeners.get('task-changed')!
+    await taskChangedCallback({
+      payload: { action: 'created', task_id: 'task-999' }
+    })
+
+    expect(ipc.notifyShepherdEvent).not.toHaveBeenCalled()
+  })
+
+  describe('action item count updates', () => {
+    it('action-item-created event triggers count refresh when shepherd enabled', async () => {
+      const { listen } = await import('@tauri-apps/api/event')
+      const ipc = await import('./lib/ipc')
+      const stores = await import('./lib/stores')
+      const { get } = await import('svelte/store')
+
+      vi.mocked(ipc.getActionItemCount).mockResolvedValue(5)
+
+      const App = (await import('./App.svelte')).default
       render(App)
 
       await vi.waitFor(() => {
@@ -469,12 +567,33 @@ describe('Shepherd event wiring', () => {
         const hasActionItemCreated = calls.some(call => call[0] === 'action-item-created')
         expect(hasActionItemCreated).toBe(true)
       })
+
+      stores.activeProjectId.set('proj-1')
+      stores.shepherdEnabled.set(true)
+
+      const actionItemCreatedCall = vi.mocked(listen).mock.calls.find(
+        call => call[0] === 'action-item-created'
+      )
+      expect(actionItemCreatedCall).toBeDefined()
+
+      const actionItemCreatedCallback = actionItemCreatedCall![1] as Function
+      await actionItemCreatedCallback({})
+
+      await vi.waitFor(() => {
+        expect(ipc.getActionItemCount).toHaveBeenCalledWith('proj-1')
+        expect(get(stores.actionItemCount)).toBe(5)
+      })
     })
 
-    it('registers action-item-dismissed listener', async () => {
+    it('action-item-dismissed event triggers count refresh when shepherd enabled', async () => {
       const { listen } = await import('@tauri-apps/api/event')
-      const App = (await import('./App.svelte')).default
+      const ipc = await import('./lib/ipc')
+      const stores = await import('./lib/stores')
+      const { get } = await import('svelte/store')
 
+      vi.mocked(ipc.getActionItemCount).mockResolvedValue(3)
+
+      const App = (await import('./App.svelte')).default
       render(App)
 
       await vi.waitFor(() => {
@@ -482,6 +601,52 @@ describe('Shepherd event wiring', () => {
         const hasActionItemDismissed = calls.some(call => call[0] === 'action-item-dismissed')
         expect(hasActionItemDismissed).toBe(true)
       })
+
+      stores.activeProjectId.set('proj-1')
+      stores.shepherdEnabled.set(true)
+
+      const actionItemDismissedCall = vi.mocked(listen).mock.calls.find(
+        call => call[0] === 'action-item-dismissed'
+      )
+      expect(actionItemDismissedCall).toBeDefined()
+
+      const actionItemDismissedCallback = actionItemDismissedCall![1] as Function
+      await actionItemDismissedCallback({})
+
+      await vi.waitFor(() => {
+        expect(ipc.getActionItemCount).toHaveBeenCalledWith('proj-1')
+        expect(get(stores.actionItemCount)).toBe(3)
+      })
+    })
+
+    it('action-item-created event does NOT trigger count refresh when shepherd disabled', async () => {
+      const { listen } = await import('@tauri-apps/api/event')
+      const ipc = await import('./lib/ipc')
+      const stores = await import('./lib/stores')
+
+      const App = (await import('./App.svelte')).default
+      render(App)
+
+      await vi.waitFor(() => {
+        const calls = vi.mocked(listen).mock.calls
+        const hasActionItemCreated = calls.some(call => call[0] === 'action-item-created')
+        expect(hasActionItemCreated).toBe(true)
+      })
+
+      stores.activeProjectId.set('proj-1')
+      stores.shepherdEnabled.set(false)
+
+      vi.mocked(ipc.getActionItemCount).mockClear()
+
+      const actionItemCreatedCall = vi.mocked(listen).mock.calls.find(
+        call => call[0] === 'action-item-created'
+      )
+      expect(actionItemCreatedCall).toBeDefined()
+
+      const actionItemCreatedCallback = actionItemCreatedCall![1] as Function
+      await actionItemCreatedCallback({})
+
+      expect(ipc.getActionItemCount).not.toHaveBeenCalled()
     })
   })
 })
