@@ -817,8 +817,8 @@
     )
 
     unlisteners.push(
-      await listen<number>('review-pr-count-changed', (event: Event<number>) => {
-        $reviewRequestCount = event.payload
+      await listen<number>('review-pr-count-changed', () => {
+        refreshPrCounts()
       })
     )
 
@@ -871,19 +871,8 @@
     }
     loadProjectAttention()
 
-    try {
-      const reviewPrList = await getReviewPrs()
-      $reviewRequestCount = reviewPrList.filter(p => p.viewed_at === null).length
-    } catch (e) {
-      console.error('[App] Failed to initialize review PR count:', e)
-    }
-
-    try {
-      const authoredPrList = await getAuthoredPrs()
-      $authoredPrCount = authoredPrList.filter(p => p.ci_status === 'failure' || p.review_status === 'changes_requested').length
-    } catch (e) {
-      console.error('[App] Failed to initialize authored PR count:', e)
-    }
+    // PR counts are initialized by the $effect that calls refreshPrCounts()
+    // when $activeProjectId is set — no separate unfiltered init needed.
 
     // Phase 3: Safety net
     await loadTasks()
