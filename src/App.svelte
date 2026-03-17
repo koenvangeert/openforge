@@ -171,7 +171,9 @@
   async function loadProjects() {
     try {
       $projects = await getProjects()
-      if ($projects.length > 0 && !$activeProjectId) {
+      if ($activeProjectId && !$projects.find(p => p.id === $activeProjectId)) {
+        $activeProjectId = $projects.length > 0 ? $projects[0].id : null
+      } else if ($projects.length > 0 && !$activeProjectId) {
         $activeProjectId = $projects[0].id
       }
       if ($projects.length === 0) {

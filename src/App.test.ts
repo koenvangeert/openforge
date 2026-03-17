@@ -721,4 +721,46 @@ describe('Shepherd event wiring', () => {
       expect(ipc.getActionItemCount).not.toHaveBeenCalled()
     })
   })
+
+  describe('loadProjects activeProjectId management', () => {
+    it('resets activeProjectId to first project when the active project is no longer in the list', async () => {
+      const App = (await import('./App.svelte')).default
+      const stores = await import('./lib/stores')
+      const ipc = await import('./lib/ipc')
+      const { get } = await import('svelte/store')
+
+      stores.activeProjectId.set('proj-deleted')
+
+      vi.mocked(ipc.getProjects).mockResolvedValue([
+        { id: 'proj-1', name: 'Project One', path: '/test/one', created_at: 0, updated_at: 0 },
+      ])
+
+      render(App)
+
+      await vi.waitFor(() => {
+        expect(get(stores.projects)).toHaveLength(1)
+      })
+
+      expect(get(stores.activeProjectId)).toBe('proj-1')
+    })
+
+    it('resets activeProjectId to null when all projects were deleted', async () => {
+      const App = (await import('./App.svelte')).default
+      const stores = await import('./lib/stores')
+      const ipc = await import('./lib/ipc')
+      const { get } = await import('svelte/store')
+
+      stores.activeProjectId.set('proj-deleted')
+
+      vi.mocked(ipc.getProjects).mockResolvedValue([])
+
+      render(App)
+
+      await vi.waitFor(() => {
+        expect(get(stores.projects)).toHaveLength(0)
+      })
+
+      expect(get(stores.activeProjectId)).toBeNull()
+    })
+  })
 })
