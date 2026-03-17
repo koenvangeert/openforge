@@ -15,6 +15,7 @@
   import ResizablePanel from './ResizablePanel.svelte'
   import SelfReviewView from './SelfReviewView.svelte'
   import TaskTerminal from './TaskTerminal.svelte'
+  import ActionDropdown from './ActionDropdown.svelte'
 
   interface Props {
     task: Task
@@ -200,6 +201,9 @@
             Start Task
           {/if}
         </button>
+        {#if actions.length > 0}
+          <ActionDropdown {actions} disabled={isStarting} onAction={handleActionClick} />
+        {/if}
       {:else if task.status === 'doing'}
         <button
           class="btn btn-success btn-sm shrink-0 shadow-sm hover:shadow-md transition-shadow"
@@ -208,18 +212,7 @@
           Move to Done
         </button>
         {#if actions.length > 0}
-          <div class="flex gap-1.5 shrink-0">
-            {#each actions as action (action.id)}
-              <button
-                class="btn btn-soft btn-sm shadow-sm hover:shadow-md hover:btn-primary transition-all duration-200"
-                disabled={isStarting}
-                title={isStarting ? 'Task is starting' : (action.prompt || action.name)}
-                onclick={() => handleActionClick(action)}
-              >
-                {action.name}
-              </button>
-            {/each}
-          </div>
+          <ActionDropdown {actions} disabled={isStarting} onAction={handleActionClick} />
         {/if}
       {/if}
      </div>

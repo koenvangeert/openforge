@@ -5,9 +5,10 @@
   interface Props {
     text: string
     children: Snippet
+    position?: 'bottom' | 'left'
   }
 
-  let { text, children }: Props = $props()
+  let { text, children, position = 'bottom' }: Props = $props()
 
   let visible = $state(false)
   let tooltipX = $state(0)
@@ -45,9 +46,14 @@
       const tooltipWidth = 280
       const margin = 6
 
-      const centerX = rect.left + rect.width / 2 - tooltipWidth / 2
-      tooltipX = Math.max(8, Math.min(centerX, window.innerWidth - tooltipWidth - 8))
-      tooltipY = Math.max(8, Math.min(rect.bottom + margin, window.innerHeight - 200))
+      if (position === 'left') {
+        tooltipX = Math.max(8, rect.left - tooltipWidth - margin)
+        tooltipY = Math.max(8, Math.min(rect.top + rect.height / 2 - 20, window.innerHeight - 100))
+      } else {
+        const centerX = rect.left + rect.width / 2 - tooltipWidth / 2
+        tooltipX = Math.max(8, Math.min(centerX, window.innerWidth - tooltipWidth - 8))
+        tooltipY = Math.max(8, Math.min(rect.bottom + margin, window.innerHeight - 200))
+      }
       visible = true
     }, 200)
   }

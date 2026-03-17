@@ -4,7 +4,7 @@
   import AutocompletePopover from './AutocompletePopover.svelte'
   import VoiceInput from './VoiceInput.svelte'
   import ModelDownloadProgress from './ModelDownloadProgress.svelte'
-  import HoverTooltip from './HoverTooltip.svelte'
+  import ActionDropdown from './ActionDropdown.svelte'
   import { useAutocomplete } from '../lib/useAutocomplete.svelte'
 
   interface Props {
@@ -185,6 +185,10 @@
     if (!prompt) return
     onRunAction?.(prompt, jiraKeyValue.trim() || null, actionPrompt)
   }
+
+  function handleActionFromDropdown(action: Action) {
+    handleCustomAction(action.prompt)
+  }
 </script>
 
 <div class="bg-base-100">
@@ -271,17 +275,8 @@
   </div>
 
   {#if onStartTask && actions.length > 0}
-    <div class="flex items-center justify-end px-3 pb-2 gap-2">
-      {#each actions as action (action.id)}
-        <HoverTooltip text={action.prompt}>
-          <button
-            class="btn btn-ghost btn-sm"
-            type="button"
-            disabled={!textValue.trim()}
-            onclick={() => handleCustomAction(action.prompt)}
-          >{action.name}</button>
-        </HoverTooltip>
-      {/each}
+    <div class="flex items-center justify-end px-3 pb-2">
+      <ActionDropdown {actions} disabled={!textValue.trim()} onAction={handleActionFromDropdown} />
     </div>
   {/if}
 
