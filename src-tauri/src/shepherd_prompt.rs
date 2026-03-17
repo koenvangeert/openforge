@@ -170,12 +170,6 @@ pub fn build_event_summary_prompt(events: &[ShepherdEvent], snapshot: &ProjectSn
                 ));
             }
             ShepherdEvent::ProjectSwitched { .. } => {}
-            ShepherdEvent::TaskCreated { .. } => {}
-            ShepherdEvent::TaskMoved { .. } => {}
-            ShepherdEvent::TaskDeleted { .. } => {}
-            ShepherdEvent::AgentStarted { .. } => {}
-            ShepherdEvent::AgentErrored { .. } => {}
-            ShepherdEvent::AgentCheckpoint { .. } => {}
         }
     }
 
