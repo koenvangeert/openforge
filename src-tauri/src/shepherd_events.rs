@@ -21,6 +21,7 @@ impl ShepherdEventCollector {
         self.events.push(event);
     }
 
+    #[cfg(test)]
     pub fn should_flush(&self) -> bool {
         !self.events.is_empty() && self.last_flush.elapsed() >= self.debounce_interval
     }
@@ -30,6 +31,7 @@ impl ShepherdEventCollector {
         std::mem::take(&mut self.events)
     }
 
+    #[cfg(test)]
     pub fn len(&self) -> usize {
         self.events.len()
     }

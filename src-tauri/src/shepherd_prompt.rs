@@ -14,7 +14,6 @@ pub struct ProjectSnapshot {
 pub struct SnapshotTask {
     pub id: String,
     pub prompt: String,
-    pub status: String,
     pub session_status: Option<String>,
 }
 
@@ -43,9 +42,6 @@ pub enum ShepherdEvent {
     NewPrComment {
         task_id: String,
         pr_id: i64,
-    },
-    ProjectSwitched {
-        project_id: String,
     },
     TaskCreated {
         task_id: String,
@@ -121,8 +117,6 @@ pub fn build_shepherd_system_prompt(project_name: &str, project_id: &str) -> Str
 
 /// Format a batch of events into a human-readable user message for the Shepherd.
 ///
-/// `ProjectSwitched` events are not included in the summary — they are handled
-/// by resetting the Shepherd session, not by sending a message.
 pub fn build_event_summary_prompt(events: &[ShepherdEvent], snapshot: &ProjectSnapshot) -> String {
     let mut event_lines: Vec<String> = Vec::new();
 
@@ -184,7 +178,6 @@ pub fn build_event_summary_prompt(events: &[ShepherdEvent], snapshot: &ProjectSn
                     task_id
                 ));
             }
-            ShepherdEvent::ProjectSwitched { .. } => {}
         }
     }
 
@@ -353,7 +346,6 @@ mod tests {
             doing_tasks: vec![SnapshotTask {
                 id: "T-10".into(),
                 prompt: "Build auth".into(),
-                status: "doing".into(),
                 session_status: Some("running".into()),
             }],
             ..Default::default()
@@ -409,32 +401,6 @@ mod tests {
         assert!(summary.contains("2 running"));
         assert!(summary.contains("T-10"));
         assert!(summary.contains("Build auth"));
-    }
-
-    #[test]
-    fn test_shepherd_event_summary_excludes_project_switched() {
-        let events = vec![ShepherdEvent::ProjectSwitched {
-            project_id: "P-5".to_string(),
-        }];
-
-        let summary = build_event_summary_prompt(&events, &empty_snapshot());
-        assert!(summary.is_empty());
-    }
-
-    #[test]
-    fn test_shepherd_event_summary_mixed_with_project_switched() {
-        let events = vec![
-            ShepherdEvent::ProjectSwitched {
-                project_id: "P-5".to_string(),
-            },
-            ShepherdEvent::AgentCompleted {
-                task_id: "T-99".to_string(),
-            },
-        ];
-
-        let summary = build_event_summary_prompt(&events, &empty_snapshot());
-        assert!(!summary.contains("P-5"));
-        assert!(summary.contains("T-99"));
     }
 
     #[test]

@@ -675,6 +675,23 @@ CREATE INDEX IF NOT EXISTS idx_action_items_project_status ON action_items(proje
             "ALTER TABLE pull_requests ADD COLUMN is_queued INTEGER NOT NULL DEFAULT 0;
              ALTER TABLE authored_prs ADD COLUMN is_queued INTEGER NOT NULL DEFAULT 0;",
         ),
+        M::up(
+            r#"
+CREATE TABLE IF NOT EXISTS action_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id TEXT NOT NULL,
+    source TEXT NOT NULL DEFAULT 'shepherd',
+    title TEXT NOT NULL,
+    description TEXT NOT NULL,
+    task_id TEXT,
+    status TEXT NOT NULL DEFAULT 'active',
+    created_at INTEGER NOT NULL,
+    dismissed_at INTEGER,
+    FOREIGN KEY (project_id) REFERENCES projects(id)
+);
+CREATE INDEX IF NOT EXISTS idx_action_items_project_status ON action_items(project_id, status);
+            "#,
+        ),
     ])
 }
 #[cfg(test)]
@@ -968,10 +985,188 @@ mod tests {
             .query_row("PRAGMA user_version", [], |r| r.get(0))
             .unwrap();
         assert_eq!(
-            uv, 14,
-            "Fresh DB should have user_version=14 after migrations, got {}",
+            uv, 15,
+            "Fresh DB should have user_version=15 after migrations, got {}",
             uv
         );
+
+        drop(conn);
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_recreates_missing_action_items_table_for_upgraded_db() {
+        let path = std::env::temp_dir().join(format!(
+            "test_recreate_action_items_{}.db",
+            std::process::id()
+        ));
+        let _ = fs::remove_file(&path);
+
+        {
+            let db = Database::new(path.clone()).expect("Database::new");
+            let conn = db.connection();
+            let conn = conn.lock().unwrap();
+
+            conn.execute("DROP TABLE action_items", [])
+                .expect("drop action_items");
+            conn.execute("PRAGMA user_version = 14", [])
+                .expect("set pre-repair user_version");
+
+            let uv: i32 = conn
+                .query_row("PRAGMA user_version", [], |r| r.get(0))
+                .expect("read user_version");
+            assert_eq!(
+                uv, 14,
+                "fixture should simulate the pre-repair schema version"
+            );
+        }
+
+        let db = Database::new(path.clone()).expect("Database::new should repair schema");
+        let conn = db.connection();
+        let conn = conn.lock().unwrap();
+
+        let has_action_items: bool = conn
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='action_items'",
+                [],
+                |r| r.get(0),
+            )
+            .expect("query sqlite_master");
+
+        assert!(
+            has_action_items,
+            "Database::new should recreate missing action_items table for upgraded databases"
+        );
+
+        drop(conn);
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_recreates_missing_action_items_table_from_v13_upgrade() {
+        let path = std::env::temp_dir().join(format!(
+            "test_recreate_action_items_v13_{}.db",
+            std::process::id()
+        ));
+        let _ = fs::remove_file(&path);
+
+        {
+            let conn = rusqlite::Connection::open(&path).expect("open raw db");
+            conn.execute("PRAGMA user_version = 13", [])
+                .expect("set v13 user_version");
+
+            conn.execute(
+                "CREATE TABLE projects (
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    path TEXT NOT NULL,
+                    created_at INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL
+                )",
+                [],
+            )
+            .expect("create projects table");
+
+            conn.execute(
+                "CREATE TABLE pull_requests (
+                    id INTEGER PRIMARY KEY,
+                    ticket_id TEXT NOT NULL,
+                    repo_owner TEXT NOT NULL,
+                    repo_name TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    url TEXT NOT NULL,
+                    state TEXT NOT NULL,
+                    created_at INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL,
+                    head_sha TEXT NOT NULL DEFAULT '',
+                    ci_status TEXT,
+                    ci_check_runs TEXT,
+                    last_polled_at INTEGER DEFAULT 0,
+                    review_status TEXT,
+                    merged_at INTEGER
+                )",
+                [],
+            )
+            .expect("create pull_requests table");
+
+            conn.execute(
+                "CREATE TABLE authored_prs (
+                    id INTEGER PRIMARY KEY,
+                    number INTEGER NOT NULL,
+                    title TEXT NOT NULL,
+                    body TEXT,
+                    state TEXT NOT NULL,
+                    draft INTEGER NOT NULL DEFAULT 0,
+                    html_url TEXT NOT NULL,
+                    user_login TEXT NOT NULL,
+                    user_avatar_url TEXT,
+                    repo_owner TEXT NOT NULL,
+                    repo_name TEXT NOT NULL,
+                    head_ref TEXT NOT NULL,
+                    base_ref TEXT NOT NULL,
+                    head_sha TEXT NOT NULL,
+                    additions INTEGER NOT NULL DEFAULT 0,
+                    deletions INTEGER NOT NULL DEFAULT 0,
+                    changed_files INTEGER NOT NULL DEFAULT 0,
+                    ci_status TEXT,
+                    ci_check_runs TEXT,
+                    review_status TEXT,
+                    merged_at INTEGER,
+                    task_id TEXT,
+                    created_at INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL
+                )",
+                [],
+            )
+            .expect("create authored_prs table");
+        }
+
+        let db = Database::new(path.clone()).expect("Database::new should repair v13 schema");
+        let conn = db.connection();
+        let conn = conn.lock().unwrap();
+
+        let has_action_items: bool = conn
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='action_items'",
+                [],
+                |r| r.get(0),
+            )
+            .expect("query sqlite_master for action_items");
+        assert!(
+            has_action_items,
+            "V15 repair should create action_items from a v13 database"
+        );
+
+        let has_is_queued_pull_requests: bool = conn
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM pragma_table_info('pull_requests') WHERE name = 'is_queued'",
+                [],
+                |r| r.get(0),
+            )
+            .expect("query pull_requests columns");
+        assert!(
+            has_is_queued_pull_requests,
+            "V14 migration should still run before the action_items repair"
+        );
+
+        let has_is_queued_authored_prs: bool = conn
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM pragma_table_info('authored_prs') WHERE name = 'is_queued'",
+                [],
+                |r| r.get(0),
+            )
+            .expect("query authored_prs columns");
+        assert!(
+            has_is_queued_authored_prs,
+            "V14 migration should add is_queued to authored_prs on the upgrade path"
+        );
+
+        let uv: i32 = conn
+            .query_row("PRAGMA user_version", [], |r| r.get(0))
+            .expect("read repaired user_version");
+        assert_eq!(uv, 15, "V13 database should upgrade to schema version 15");
 
         drop(conn);
         drop(db);

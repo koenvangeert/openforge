@@ -460,7 +460,7 @@ pub async fn hook_notification_permission_handler(
 pub async fn create_action_item_handler(
     State(state): State<AppState>,
     Json(request): Json<CreateActionItemRequest>,
-) -> Result<(StatusCode, Json<serde_json::Value>), (StatusCode, String)> {
+) -> Result<(StatusCode, Json<CreateActionItemResponse>), (StatusCode, String)> {
     let db = state.db.lock().unwrap();
 
     let row = db.insert_action_item(
@@ -486,10 +486,10 @@ pub async fn create_action_item_handler(
 
     Ok((
         StatusCode::CREATED,
-        Json(serde_json::json!({
-            "id": row.id,
-            "status": "created"
-        }))
+        Json(CreateActionItemResponse {
+            id: row.id,
+            status: "created".to_string(),
+        })
     ))
 }
 
@@ -848,7 +848,7 @@ mod tests {
         let json = response_body_json(response).await;
         let tasks = json.as_array().expect("array response");
         assert_eq!(tasks.len(), 1);
-        assert_eq!(tasks[0]["project_id"], "P-1");
+        assert_eq!(tasks[0]["task"]["project_id"], "P-1");
 
         let _ = std::fs::remove_file(path);
     }

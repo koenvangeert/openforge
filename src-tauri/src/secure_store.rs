@@ -52,16 +52,38 @@ pub fn delete_secret(key: &str) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::{mpsc, Mutex, OnceLock};
+    use std::time::Duration;
 
     fn test_key(suffix: &str) -> String {
         format!("test_openforge_{}_pid{}", suffix, std::process::id())
     }
 
+    fn keychain_test_mutex() -> &'static Mutex<()> {
+        static KEYCHAIN_TEST_MUTEX: OnceLock<Mutex<()>> = OnceLock::new();
+        KEYCHAIN_TEST_MUTEX.get_or_init(|| Mutex::new(()))
+    }
+
+    fn run_keychain_test<T>(test: impl FnOnce() -> T) -> T {
+        let _guard = keychain_test_mutex().lock().unwrap();
+        test()
+    }
+
     fn keychain_available() -> bool {
-        let key = test_key("probe");
-        let result = set_secret(&key, "probe");
-        let _ = delete_secret(&key);
-        result.is_ok()
+        let key = format!(
+            "{}_thread_{:?}",
+            test_key("probe"),
+            std::thread::current().id()
+        );
+        let (tx, rx) = mpsc::channel();
+
+        std::thread::spawn(move || {
+            let result = set_secret(&key, "probe");
+            let _ = delete_secret(&key);
+            let _ = tx.send(result.is_ok());
+        });
+
+        rx.recv_timeout(Duration::from_secs(1)).unwrap_or(false)
     }
 
     #[test]
@@ -82,82 +104,92 @@ mod tests {
 
     #[test]
     fn test_set_and_get_secret() {
-        if !keychain_available() {
-            return;
-        }
+        run_keychain_test(|| {
+            if !keychain_available() {
+                return;
+            }
 
-        let key = test_key("set_get");
-        let _ = delete_secret(&key);
+            let key = test_key("set_get");
+            let _ = delete_secret(&key);
 
-        set_secret(&key, "super_secret_value_abc123").expect("set_secret should succeed");
-        let retrieved = get_secret(&key).expect("get_secret should succeed");
-        assert_eq!(retrieved, Some("super_secret_value_abc123".to_string()));
+            set_secret(&key, "super_secret_value_abc123").expect("set_secret should succeed");
+            let retrieved = get_secret(&key).expect("get_secret should succeed");
+            assert_eq!(retrieved, Some("super_secret_value_abc123".to_string()));
 
-        delete_secret(&key).expect("cleanup should succeed");
+            delete_secret(&key).expect("cleanup should succeed");
+        });
     }
 
     #[test]
     fn test_get_nonexistent_secret() {
-        if !keychain_available() {
-            return;
-        }
+        run_keychain_test(|| {
+            if !keychain_available() {
+                return;
+            }
 
-        let key = test_key("nonexistent");
-        let _ = delete_secret(&key);
+            let key = test_key("nonexistent");
+            let _ = delete_secret(&key);
 
-        let result = get_secret(&key).expect("get_secret should succeed for nonexistent key");
-        assert_eq!(result, None);
+            let result = get_secret(&key).expect("get_secret should succeed for nonexistent key");
+            assert_eq!(result, None);
+        });
     }
 
     #[test]
     fn test_delete_secret() {
-        if !keychain_available() {
-            return;
-        }
+        run_keychain_test(|| {
+            if !keychain_available() {
+                return;
+            }
 
-        let key = test_key("delete");
-        set_secret(&key, "value_to_delete").expect("set_secret should succeed");
+            let key = test_key("delete");
+            set_secret(&key, "value_to_delete").expect("set_secret should succeed");
 
-        let retrieved = get_secret(&key).expect("get_secret should succeed");
-        assert!(retrieved.is_some());
+            let retrieved = get_secret(&key).expect("get_secret should succeed");
+            assert!(retrieved.is_some());
 
-        delete_secret(&key).expect("delete_secret should succeed");
+            delete_secret(&key).expect("delete_secret should succeed");
 
-        let retrieved = get_secret(&key).expect("get_secret should succeed after delete");
-        assert_eq!(retrieved, None);
+            let retrieved = get_secret(&key).expect("get_secret should succeed after delete");
+            assert_eq!(retrieved, None);
+        });
     }
 
     #[test]
     fn test_set_empty_deletes() {
-        if !keychain_available() {
-            return;
-        }
+        run_keychain_test(|| {
+            if !keychain_available() {
+                return;
+            }
 
-        let key = test_key("empty_deletes");
-        set_secret(&key, "initial_value").expect("set_secret should succeed");
+            let key = test_key("empty_deletes");
+            set_secret(&key, "initial_value").expect("set_secret should succeed");
 
-        set_secret(&key, "").expect("set_secret with empty should succeed");
+            set_secret(&key, "").expect("set_secret with empty should succeed");
 
-        let retrieved = get_secret(&key).expect("get_secret should succeed after empty set");
-        assert_eq!(retrieved, None);
+            let retrieved = get_secret(&key).expect("get_secret should succeed after empty set");
+            assert_eq!(retrieved, None);
 
-        let _ = delete_secret(&key);
+            let _ = delete_secret(&key);
+        });
     }
 
     #[test]
     fn test_delete_nonexistent_is_ok() {
-        if !keychain_available() {
-            return;
-        }
+        run_keychain_test(|| {
+            if !keychain_available() {
+                return;
+            }
 
-        let key = test_key("delete_nonexistent");
-        let _ = delete_secret(&key);
+            let key = test_key("delete_nonexistent");
+            let _ = delete_secret(&key);
 
-        let result = delete_secret(&key);
-        assert!(
-            result.is_ok(),
-            "delete_secret on nonexistent key should be Ok, got: {:?}",
-            result
-        );
+            let result = delete_secret(&key);
+            assert!(
+                result.is_ok(),
+                "delete_secret on nonexistent key should be Ok, got: {:?}",
+                result
+            );
+        });
     }
 }
