@@ -152,7 +152,49 @@ describe('SelfReviewView uncommitted toggle', () => {
     await waitFor(() => {
       const checkbox = screen.getByRole('checkbox')
       expect(checkbox).toBeTruthy()
-      expect((checkbox as HTMLInputElement).checked).toBe(false)
+      expect((checkbox as HTMLInputElement).checked).toBe(true)
+    })
+  })
+
+  it('auto-enables uncommitted when initial committed diff is empty', async () => {
+    const mockGetTaskDiff = vi.mocked(getTaskDiff)
+    mockGetTaskDiff
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([baseDiff])
+
+    render(SelfReviewView, {
+      props: {
+        task: baseTask,
+        agentStatus: null,
+        onSendToAgent: vi.fn(),
+      },
+    })
+
+    await waitFor(() => {
+      const checkbox = screen.getByRole('checkbox') as HTMLInputElement
+      expect(checkbox.checked).toBe(true)
+      expect(mockGetTaskDiff).toHaveBeenCalledTimes(2)
+      expect(mockGetTaskDiff).toHaveBeenNthCalledWith(1, 'task-1', false)
+      expect(mockGetTaskDiff).toHaveBeenNthCalledWith(2, 'task-1', true)
+    })
+  })
+
+  it('does not auto-enable uncommitted when committed changes exist', async () => {
+    const mockGetTaskDiff = vi.mocked(getTaskDiff).mockResolvedValue([baseDiff])
+
+    render(SelfReviewView, {
+      props: {
+        task: baseTask,
+        agentStatus: null,
+        onSendToAgent: vi.fn(),
+      },
+    })
+
+    await waitFor(() => {
+      const checkbox = screen.getByRole('checkbox') as HTMLInputElement
+      expect(checkbox.checked).toBe(false)
+      expect(mockGetTaskDiff).toHaveBeenCalledTimes(1)
+      expect(mockGetTaskDiff).toHaveBeenCalledWith('task-1', false)
     })
   })
 

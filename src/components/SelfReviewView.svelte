@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte'
+  import { get } from 'svelte/store'
   import { selfReviewDiffFiles, selfReviewGeneralComments } from '../lib/stores'
   import { getTaskFileContents, getTaskBatchFileContents, openUrl } from '../lib/ipc'
   import { timeAgo } from '../lib/timeAgo'
@@ -83,6 +84,10 @@
 
   onMount(async () => {
     await diffLoader.loadDiff()
+    if (get(selfReviewDiffFiles).length === 0 && !includeUncommitted) {
+      includeUncommitted = true
+      await diffLoader.refresh()
+    }
   })
 
   onDestroy(() => {
