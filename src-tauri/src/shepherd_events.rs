@@ -81,6 +81,36 @@ pub fn map_new_pr_comment(payload: &serde_json::Value) -> Option<ShepherdEvent> 
     Some(ShepherdEvent::NewPrComment { task_id, pr_id })
 }
 
+pub fn map_task_created(payload: &serde_json::Value) -> Option<ShepherdEvent> {
+    let task_id = payload.get("task_id")?.as_str()?.to_owned();
+    Some(ShepherdEvent::TaskCreated { task_id })
+}
+
+pub fn map_task_moved(payload: &serde_json::Value) -> Option<ShepherdEvent> {
+    let task_id = payload.get("task_id")?.as_str()?.to_owned();
+    Some(ShepherdEvent::TaskMoved { task_id })
+}
+
+pub fn map_task_deleted(payload: &serde_json::Value) -> Option<ShepherdEvent> {
+    let task_id = payload.get("task_id")?.as_str()?.to_owned();
+    Some(ShepherdEvent::TaskDeleted { task_id })
+}
+
+pub fn map_agent_started(payload: &serde_json::Value) -> Option<ShepherdEvent> {
+    let task_id = payload.get("task_id")?.as_str()?.to_owned();
+    Some(ShepherdEvent::AgentStarted { task_id })
+}
+
+pub fn map_agent_errored(payload: &serde_json::Value) -> Option<ShepherdEvent> {
+    let task_id = payload.get("task_id")?.as_str()?.to_owned();
+    Some(ShepherdEvent::AgentErrored { task_id })
+}
+
+pub fn map_agent_checkpoint(payload: &serde_json::Value) -> Option<ShepherdEvent> {
+    let task_id = payload.get("task_id")?.as_str()?.to_owned();
+    Some(ShepherdEvent::AgentCheckpoint { task_id })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -237,5 +267,119 @@ mod tests {
             }
             _ => panic!("wrong variant"),
         }
+    }
+
+    #[test]
+    fn test_shepherd_event_mapping_task_created() {
+        let payload = serde_json::json!({ "task_id": "T-100" });
+
+        let event = map_task_created(&payload).expect("should map");
+        match event {
+            ShepherdEvent::TaskCreated { task_id } => {
+                assert_eq!(task_id, "T-100");
+            }
+            _ => panic!("wrong variant"),
+        }
+    }
+
+    #[test]
+    fn test_shepherd_event_mapping_task_created_missing_task_id() {
+        let payload = serde_json::json!({ "status": "created" });
+        assert!(map_task_created(&payload).is_none());
+    }
+
+    #[test]
+    fn test_shepherd_event_mapping_task_moved() {
+        let payload = serde_json::json!({ "task_id": "T-101" });
+
+        let event = map_task_moved(&payload).expect("should map");
+        match event {
+            ShepherdEvent::TaskMoved { task_id } => {
+                assert_eq!(task_id, "T-101");
+            }
+            _ => panic!("wrong variant"),
+        }
+    }
+
+    #[test]
+    fn test_shepherd_event_mapping_task_moved_missing_task_id() {
+        let payload = serde_json::json!({ "column": "doing" });
+        assert!(map_task_moved(&payload).is_none());
+    }
+
+    #[test]
+    fn test_shepherd_event_mapping_task_deleted() {
+        let payload = serde_json::json!({ "task_id": "T-102" });
+
+        let event = map_task_deleted(&payload).expect("should map");
+        match event {
+            ShepherdEvent::TaskDeleted { task_id } => {
+                assert_eq!(task_id, "T-102");
+            }
+            _ => panic!("wrong variant"),
+        }
+    }
+
+    #[test]
+    fn test_shepherd_event_mapping_task_deleted_missing_task_id() {
+        let payload = serde_json::json!({ "deleted": true });
+        assert!(map_task_deleted(&payload).is_none());
+    }
+
+    #[test]
+    fn test_shepherd_event_mapping_agent_started() {
+        let payload = serde_json::json!({ "task_id": "T-103" });
+
+        let event = map_agent_started(&payload).expect("should map");
+        match event {
+            ShepherdEvent::AgentStarted { task_id } => {
+                assert_eq!(task_id, "T-103");
+            }
+            _ => panic!("wrong variant"),
+        }
+    }
+
+    #[test]
+    fn test_shepherd_event_mapping_agent_started_missing_task_id() {
+        let payload = serde_json::json!({ "agent": "claude-code" });
+        assert!(map_agent_started(&payload).is_none());
+    }
+
+    #[test]
+    fn test_shepherd_event_mapping_agent_errored() {
+        let payload = serde_json::json!({ "task_id": "T-104" });
+
+        let event = map_agent_errored(&payload).expect("should map");
+        match event {
+            ShepherdEvent::AgentErrored { task_id } => {
+                assert_eq!(task_id, "T-104");
+            }
+            _ => panic!("wrong variant"),
+        }
+    }
+
+    #[test]
+    fn test_shepherd_event_mapping_agent_errored_missing_task_id() {
+        let payload = serde_json::json!({ "error": "timeout" });
+        assert!(map_agent_errored(&payload).is_none());
+    }
+
+    #[test]
+    fn test_shepherd_event_mapping_agent_checkpoint() {
+        let payload = serde_json::json!({ "task_id": "T-105" });
+
+        let event = map_agent_checkpoint(&payload).expect("should map");
+        match event {
+            ShepherdEvent::AgentCheckpoint { task_id } => {
+                assert_eq!(task_id, "T-105");
+            }
+            _ => panic!("wrong variant"),
+        }
+    }
+
+    #[test]
+    fn test_shepherd_event_mapping_agent_checkpoint_missing_task_id() {
+        let payload = serde_json::json!({ "waiting": true });
+        assert!(map_agent_checkpoint(&payload).is_none());
     }
 }

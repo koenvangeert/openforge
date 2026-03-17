@@ -112,4 +112,24 @@ describe('IconRail', () => {
     const buttons = screen.getAllByRole('button')
     expect(buttons).toHaveLength(4)
   })
+
+  describe('action item dot indicator', () => {
+    it('shows dot when shepherdEnabled=true and actionItemCount > 0', () => {
+      render(IconRail, { props: { currentView: 'board' as AppView, onNavigate: vi.fn(), authoredPrCount: 0, shepherdEnabled: true, actionItemCount: 3, modalsOpen: false } })
+      const dots = document.querySelectorAll('span.rounded-full')
+      expect(dots.length).toBeGreaterThan(0)
+    })
+
+    it('does not show dot when shepherdEnabled=true and actionItemCount=0', () => {
+      render(IconRail, { props: { currentView: 'board' as AppView, onNavigate: vi.fn(), authoredPrCount: 0, shepherdEnabled: true, actionItemCount: 0, modalsOpen: false } })
+      const dots = document.querySelectorAll('span.rounded-full.bg-primary')
+      expect(dots).toHaveLength(0)
+    })
+
+    it('does not show dot when shepherdEnabled=false and actionItemCount > 0', () => {
+      render(IconRail, { props: { currentView: 'board' as AppView, onNavigate: vi.fn(), authoredPrCount: 0, shepherdEnabled: false, actionItemCount: 3, modalsOpen: false } })
+      const buttons = screen.getAllByRole('button')
+      expect(buttons).toHaveLength(4)
+    })
+  })
 })

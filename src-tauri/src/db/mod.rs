@@ -3,6 +3,7 @@ use rusqlite_migration::{Migrations, M};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
+mod action_items;
 mod agent_review;
 mod agents;
 mod authored_prs;
@@ -15,6 +16,8 @@ mod shepherd;
 mod tasks;
 mod worktrees;
 
+#[allow(unused_imports)]
+pub use action_items::ActionItemRow;
 pub use agent_review::AgentReviewCommentRow;
 pub use agents::AgentSessionRow;
 pub use authored_prs::AuthoredPrRow;
@@ -651,6 +654,20 @@ CREATE TABLE IF NOT EXISTS shepherd_messages (
     FOREIGN KEY (project_id) REFERENCES projects(id)
 );
 CREATE INDEX IF NOT EXISTS idx_shepherd_messages_project_created ON shepherd_messages(project_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS action_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id TEXT NOT NULL,
+    source TEXT NOT NULL DEFAULT 'shepherd',
+    title TEXT NOT NULL,
+    description TEXT NOT NULL,
+    task_id TEXT,
+    status TEXT NOT NULL DEFAULT 'active',
+    created_at INTEGER NOT NULL,
+    dismissed_at INTEGER,
+    FOREIGN KEY (project_id) REFERENCES projects(id)
+);
+CREATE INDEX IF NOT EXISTS idx_action_items_project_status ON action_items(project_id, status);
             "#,
         ),
         // V14: Add is_queued for merge queue detection
@@ -705,13 +722,13 @@ mod tests {
 
         let table_count: i32 = conn
             .query_row(
-                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('tasks', 'agent_sessions', 'pull_requests', 'pr_comments', 'config', 'projects', 'project_config', 'worktrees', 'review_prs', 'self_review_comments', 'agent_review_comments', 'authored_prs', 'shepherd_messages')",
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('tasks', 'agent_sessions', 'pull_requests', 'pr_comments', 'config', 'projects', 'project_config', 'worktrees', 'review_prs', 'self_review_comments', 'agent_review_comments', 'authored_prs', 'shepherd_messages', 'action_items')",
                 [],
                 |row| row.get(0),
             )
             .expect("Failed to count tables");
 
-        assert_eq!(table_count, 13, "All 13 tables should be created");
+        assert_eq!(table_count, 14, "All 14 tables should be created");
 
         let config_count: i32 = conn
             .query_row("SELECT COUNT(*) FROM config", [], |row| row.get(0))

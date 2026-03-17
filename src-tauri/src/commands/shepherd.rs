@@ -3,8 +3,9 @@ use tauri::State;
 use crate::db::{Database, ShepherdMessageRow};
 use crate::shepherd_agent::ShepherdManager;
 use crate::shepherd_events::{
-    map_agent_completed, map_ci_status_changed, map_new_pr_comment, map_review_status_changed,
-    ShepherdEventCollector,
+    map_agent_completed, map_agent_checkpoint, map_agent_errored, map_agent_started,
+    map_ci_status_changed, map_new_pr_comment, map_review_status_changed, map_task_created,
+    map_task_deleted, map_task_moved, ShepherdEventCollector,
 };
 use crate::shepherd_prompt::ShepherdEvent;
 
@@ -126,6 +127,12 @@ fn map_event(event_type: &str, payload: &serde_json::Value) -> Option<ShepherdEv
         "action-complete" => map_agent_completed(payload),
         "review-status-changed" => map_review_status_changed(payload),
         "new-pr-comment" => map_new_pr_comment(payload),
+        "task-created" => map_task_created(payload),
+        "task-moved" => map_task_moved(payload),
+        "task-deleted" => map_task_deleted(payload),
+        "agent-started" => map_agent_started(payload),
+        "agent-errored" => map_agent_errored(payload),
+        "agent-checkpoint" => map_agent_checkpoint(payload),
         _ => None,
     }
 }
@@ -167,5 +174,77 @@ mod tests {
     fn test_map_event_invalid_payload_returns_none() {
         let payload = serde_json::json!({"task_id": "T-1"});
         assert!(map_event("ci-status-changed", &payload).is_none());
+    }
+
+    #[test]
+    fn test_map_event_task_created() {
+        let payload = serde_json::json!({"task_id": "T-100"});
+        let event = map_event("task-created", &payload).expect("event should map");
+        match event {
+            ShepherdEvent::TaskCreated { task_id } => {
+                assert_eq!(task_id, "T-100");
+            }
+            _ => panic!("expected TaskCreated event"),
+        }
+    }
+
+    #[test]
+    fn test_map_event_task_moved() {
+        let payload = serde_json::json!({"task_id": "T-101"});
+        let event = map_event("task-moved", &payload).expect("event should map");
+        match event {
+            ShepherdEvent::TaskMoved { task_id } => {
+                assert_eq!(task_id, "T-101");
+            }
+            _ => panic!("expected TaskMoved event"),
+        }
+    }
+
+    #[test]
+    fn test_map_event_task_deleted() {
+        let payload = serde_json::json!({"task_id": "T-102"});
+        let event = map_event("task-deleted", &payload).expect("event should map");
+        match event {
+            ShepherdEvent::TaskDeleted { task_id } => {
+                assert_eq!(task_id, "T-102");
+            }
+            _ => panic!("expected TaskDeleted event"),
+        }
+    }
+
+    #[test]
+    fn test_map_event_agent_started() {
+        let payload = serde_json::json!({"task_id": "T-103"});
+        let event = map_event("agent-started", &payload).expect("event should map");
+        match event {
+            ShepherdEvent::AgentStarted { task_id } => {
+                assert_eq!(task_id, "T-103");
+            }
+            _ => panic!("expected AgentStarted event"),
+        }
+    }
+
+    #[test]
+    fn test_map_event_agent_errored() {
+        let payload = serde_json::json!({"task_id": "T-104"});
+        let event = map_event("agent-errored", &payload).expect("event should map");
+        match event {
+            ShepherdEvent::AgentErrored { task_id } => {
+                assert_eq!(task_id, "T-104");
+            }
+            _ => panic!("expected AgentErrored event"),
+        }
+    }
+
+    #[test]
+    fn test_map_event_agent_checkpoint() {
+        let payload = serde_json::json!({"task_id": "T-105"});
+        let event = map_event("agent-checkpoint", &payload).expect("event should map");
+        match event {
+            ShepherdEvent::AgentCheckpoint { task_id } => {
+                assert_eq!(task_id, "T-105");
+            }
+            _ => panic!("expected AgentCheckpoint event"),
+        }
     }
 }

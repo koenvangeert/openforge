@@ -9,11 +9,12 @@
     reviewRequestCount: number
     authoredPrCount: number
     shepherdEnabled: boolean
+    actionItemCount?: number
     modalsOpen?: boolean
     railBg?: string
   }
 
-  let { currentView, onNavigate, reviewRequestCount = 0, authoredPrCount = 0, shepherdEnabled = false, modalsOpen = false, railBg = 'oklch(var(--b2))' }: Props = $props()
+  let { currentView, onNavigate, reviewRequestCount = 0, authoredPrCount = 0, shepherdEnabled = false, actionItemCount = 0, modalsOpen = false, railBg = 'oklch(var(--b2))' }: Props = $props()
 
   const navItems: { view: AppView; Icon: typeof LayoutDashboard; shortcut: string; label: string }[] = [
     { view: 'board', Icon: LayoutDashboard, shortcut: 'H', label: 'Board' },
@@ -51,6 +52,9 @@
       title="Task Shepherd (⌘A)"
     >
       <Bot size={24} />
+      {#if actionItemCount > 0}
+        <span class="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-primary"></span>
+      {/if}
     </button>
   {/if}
 </div>

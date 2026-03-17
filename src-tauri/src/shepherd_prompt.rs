@@ -39,6 +39,24 @@ pub enum ShepherdEvent {
     ProjectSwitched {
         project_id: String,
     },
+    TaskCreated {
+        task_id: String,
+    },
+    TaskMoved {
+        task_id: String,
+    },
+    TaskDeleted {
+        task_id: String,
+    },
+    AgentStarted {
+        task_id: String,
+    },
+    AgentErrored {
+        task_id: String,
+    },
+    AgentCheckpoint {
+        task_id: String,
+    },
 }
 
 /// Build the system prompt for the Shepherd AI agent.
@@ -127,7 +145,37 @@ pub fn build_event_summary_prompt(events: &[ShepherdEvent], snapshot: &ProjectSn
                     pr_id, task_id
                 ));
             }
+            ShepherdEvent::TaskCreated { task_id } => {
+                event_lines.push(format!("New task {} created", task_id));
+            }
+            ShepherdEvent::TaskMoved { task_id } => {
+                event_lines.push(format!("Task {} moved to a new column", task_id));
+            }
+            ShepherdEvent::TaskDeleted { task_id } => {
+                event_lines.push(format!("Task {} was deleted", task_id));
+            }
+            ShepherdEvent::AgentStarted { task_id } => {
+                event_lines.push(format!("Agent started working on task {}", task_id));
+            }
+            ShepherdEvent::AgentErrored { task_id } => {
+                event_lines.push(format!(
+                    "Agent encountered an error on task {} — needs attention",
+                    task_id
+                ));
+            }
+            ShepherdEvent::AgentCheckpoint { task_id } => {
+                event_lines.push(format!(
+                    "Agent on task {} is waiting for developer input",
+                    task_id
+                ));
+            }
             ShepherdEvent::ProjectSwitched { .. } => {}
+            ShepherdEvent::TaskCreated { .. } => {}
+            ShepherdEvent::TaskMoved { .. } => {}
+            ShepherdEvent::TaskDeleted { .. } => {}
+            ShepherdEvent::AgentStarted { .. } => {}
+            ShepherdEvent::AgentErrored { .. } => {}
+            ShepherdEvent::AgentCheckpoint { .. } => {}
         }
     }
 
@@ -388,5 +436,71 @@ mod tests {
 
         let summary = build_event_summary_prompt(&events, &empty_snapshot());
         assert!(summary.contains("advise") || summary.contains("attention"));
+    }
+
+    #[test]
+    fn test_shepherd_event_summary_task_created() {
+        let events = vec![ShepherdEvent::TaskCreated {
+            task_id: "T-100".to_string(),
+        }];
+
+        let summary = build_event_summary_prompt(&events, &empty_snapshot());
+        assert!(summary.contains("T-100"));
+        assert!(summary.contains("created"));
+    }
+
+    #[test]
+    fn test_shepherd_event_summary_task_moved() {
+        let events = vec![ShepherdEvent::TaskMoved {
+            task_id: "T-101".to_string(),
+        }];
+
+        let summary = build_event_summary_prompt(&events, &empty_snapshot());
+        assert!(summary.contains("T-101"));
+        assert!(summary.contains("moved"));
+    }
+
+    #[test]
+    fn test_shepherd_event_summary_task_deleted() {
+        let events = vec![ShepherdEvent::TaskDeleted {
+            task_id: "T-102".to_string(),
+        }];
+
+        let summary = build_event_summary_prompt(&events, &empty_snapshot());
+        assert!(summary.contains("T-102"));
+        assert!(summary.contains("deleted"));
+    }
+
+    #[test]
+    fn test_shepherd_event_summary_agent_started() {
+        let events = vec![ShepherdEvent::AgentStarted {
+            task_id: "T-103".to_string(),
+        }];
+
+        let summary = build_event_summary_prompt(&events, &empty_snapshot());
+        assert!(summary.contains("T-103"));
+        assert!(summary.contains("started"));
+    }
+
+    #[test]
+    fn test_shepherd_event_summary_agent_errored() {
+        let events = vec![ShepherdEvent::AgentErrored {
+            task_id: "T-104".to_string(),
+        }];
+
+        let summary = build_event_summary_prompt(&events, &empty_snapshot());
+        assert!(summary.contains("T-104"));
+        assert!(summary.contains("error"));
+    }
+
+    #[test]
+    fn test_shepherd_event_summary_agent_checkpoint() {
+        let events = vec![ShepherdEvent::AgentCheckpoint {
+            task_id: "T-105".to_string(),
+        }];
+
+        let summary = build_event_summary_prompt(&events, &empty_snapshot());
+        assert!(summary.contains("T-105"));
+        assert!(summary.contains("waiting"));
     }
 }

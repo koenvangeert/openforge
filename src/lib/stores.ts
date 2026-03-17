@@ -47,6 +47,7 @@ export const startingTasks = writable<Set<string>>(new Set());
 
 export const codeCleanupTasksEnabled = writable<boolean>(false);
 export const shepherdEnabled = writable<boolean>(false);
+export const actionItemCount = writable<number>(0);
 
 /** Per-task review mode state — preserved across navigation */
 export const taskReviewModes = writable<Map<string, boolean>>(new Map());
