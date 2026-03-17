@@ -313,7 +313,7 @@ describe('OpenCodeAgentPanel (via router)', () => {
     expect(screen.getByText('completed')).toBeTruthy()
   })
 
-  it('does not attach a PTY for completed sessions when mounted', async () => {
+  it('attaches a PTY for completed sessions when mounted', async () => {
     mockSessionHistoryPort.value = 4173
 
     const session: AgentSession = {
@@ -335,10 +335,8 @@ describe('OpenCodeAgentPanel (via router)', () => {
     render(AgentPanel, { props: { taskId: 'T-1' } })
 
     await vi.waitFor(() => {
-      expect(screen.getByText('completed')).toBeTruthy()
+      expect(spawnPty).toHaveBeenCalledWith('T-1', 4173, 'oc-sess-1', 80, 24)
     })
-
-    expect(spawnPty).not.toHaveBeenCalled()
   })
 
   it('does not reattach a PTY when action-complete fires', async () => {

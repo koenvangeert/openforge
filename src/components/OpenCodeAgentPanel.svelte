@@ -80,7 +80,7 @@
 
     const currentSession = $activeSessions.get(taskId)
     if (!currentSession) return
-    if (currentSession.status !== 'running' && currentSession.status !== 'paused') return
+    if (currentSession.status !== 'running' && currentSession.status !== 'paused' && currentSession.status !== 'completed') return
     if (!currentSession.opencode_session_id) return
 
     // Get port from session history or worktree
