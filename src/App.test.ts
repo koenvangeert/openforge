@@ -425,6 +425,48 @@ describe('App onMount initialization order', () => {
       expect(preventDefaultSpy).not.toHaveBeenCalled()
     })
 
+    it('s navigates to shepherd view when shepherd is enabled', async () => {
+      const App = (await import('./App.svelte')).default
+      const stores = await import('./lib/stores')
+      const { get } = await import('svelte/store')
+
+      stores.shepherdEnabled.set(true)
+      render(App)
+
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 's', bubbles: true }))
+      expect(get(stores.currentView)).toBe('shepherd')
+    })
+
+    it('s does NOT navigate to shepherd when shepherd is disabled', async () => {
+      const App = (await import('./App.svelte')).default
+      const stores = await import('./lib/stores')
+      const { get } = await import('svelte/store')
+
+      stores.shepherdEnabled.set(false)
+      stores.currentView.set('board')
+      render(App)
+
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 's', bubbles: true }))
+      expect(get(stores.currentView)).toBe('board')
+    })
+
+    it('s does NOT navigate when input is focused', async () => {
+      const App = (await import('./App.svelte')).default
+      const stores = await import('./lib/stores')
+      const { get } = await import('svelte/store')
+
+      stores.shepherdEnabled.set(true)
+      stores.currentView.set('board')
+      render(App)
+
+      const input = document.createElement('input')
+      document.body.appendChild(input)
+      input.focus()
+
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 's', bubbles: true }))
+      expect(get(stores.currentView)).toBe('board')
+    })
+
     it('? opens dialog when input is NOT focused', async () => {
       const App = (await import('./App.svelte')).default
       render(App)

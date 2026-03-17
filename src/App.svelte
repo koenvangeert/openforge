@@ -481,6 +481,14 @@
       return
     }
 
+    // s — navigate to shepherd view (plain key, no modifier)
+    if (e.key === 's' && !e.metaKey && !e.ctrlKey && !e.altKey && !isInputFocused() && $shepherdEnabled) {
+      e.preventDefault()
+      pushNavState()
+      $currentView = 'shepherd'
+      return
+    }
+
     // 1/2 — cycle through projects (plain keys, no modifier)
     if ((e.key === '1' || e.key === '2') && !e.metaKey && !e.ctrlKey && !e.altKey && !isInputFocused()) {
       const projectList = $projects
@@ -1102,7 +1110,7 @@
           </div>
           <div class="flex items-center justify-between">
             <span class="text-sm text-base-content">Task Shepherd</span>
-            <kbd class="kbd kbd-sm">⌘A</kbd>
+            <div class="flex gap-0.5"><kbd class="kbd kbd-sm">s</kbd><kbd class="kbd kbd-sm">⌘A</kbd></div>
           </div>
         </div>
       </div>
