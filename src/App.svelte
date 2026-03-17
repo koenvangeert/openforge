@@ -231,6 +231,10 @@
     }
   }
 
+  function isSyntheticShepherdTask(taskId: string): boolean {
+    return taskId.startsWith('shepherd-')
+  }
+
   async function loadPullRequests() {
     try {
       const prs = await getPullRequests()
@@ -578,7 +582,7 @@
         loadTasks()
         loadProjectAttention()
         workQueueRefreshTrigger++
-        if ($shepherdEnabled) {
+        if ($shepherdEnabled && !isSyntheticShepherdTask(taskId)) {
           notifyShepherdEvent('action-complete', event.payload).catch(console.error)
         }
       })

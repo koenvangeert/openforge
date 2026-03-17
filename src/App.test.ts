@@ -153,7 +153,9 @@ vi.mock('./lib/ipc', () => ({
    clearShepherdMessages: vi.fn(async () => {}),
    getShepherdEnabled: vi.fn(async () => false),
    getActionItemCount: vi.fn(async () => 0),
-}))
+   getActionItems: vi.fn(async () => []),
+   dismissActionItem: vi.fn(async () => {}),
+ }))
 
 vi.mock('./components/KanbanBoard.svelte', () => ({ default: vi.fn() }))
 vi.mock('./components/TaskDetailView.svelte', () => ({ default: vi.fn() }))
@@ -187,6 +189,9 @@ vi.mock('./lib/navigation', () => ({
 }))
 
 vi.mock('./lib/terminalPool', () => ({
+  acquire: vi.fn(async () => ({ ptyActive: false })),
+  attach: vi.fn(),
+  detach: vi.fn(),
   release: vi.fn(),
 }))
 
@@ -202,6 +207,7 @@ vi.mock('lucide-svelte', () => {
     LayoutDashboard: stub,
     GitPullRequest: stub,
     Sparkles: stub,
+    PanelRight: stub,
   }
 })
 
@@ -617,6 +623,67 @@ describe('Shepherd event wiring', () => {
     const taskChangedCallback = eventListeners.get('task-changed')!
     await taskChangedCallback({
       payload: { action: 'created', task_id: 'task-999' }
+    })
+
+    expect(ipc.notifyShepherdEvent).not.toHaveBeenCalled()
+  })
+
+  it('calls notifyShepherdEvent for non-shepherd action-complete events', async () => {
+    const { listen } = await import('@tauri-apps/api/event')
+    const ipc = await import('./lib/ipc')
+    const stores = await import('./lib/stores')
+
+    const App = (await import('./App.svelte')).default
+    render(App)
+
+    await vi.waitFor(() => {
+      const calls = vi.mocked(listen).mock.calls
+      const hasActionComplete = calls.some(call => call[0] === 'action-complete')
+      expect(hasActionComplete).toBe(true)
+    })
+
+    stores.shepherdEnabled.set(true)
+
+    const actionCompleteCall = vi.mocked(listen).mock.calls.find(
+      call => call[0] === 'action-complete'
+    )
+    expect(actionCompleteCall).toBeDefined()
+
+    const actionCompleteCallback = actionCompleteCall![1] as Function
+    await actionCompleteCallback({
+      payload: { task_id: 'T-123' }
+    })
+
+    expect(ipc.notifyShepherdEvent).toHaveBeenCalledWith('action-complete', {
+      task_id: 'T-123'
+    })
+  })
+
+  it('does not call notifyShepherdEvent for shepherd action-complete events', async () => {
+    const { listen } = await import('@tauri-apps/api/event')
+    const ipc = await import('./lib/ipc')
+    const stores = await import('./lib/stores')
+
+    const App = (await import('./App.svelte')).default
+    render(App)
+
+    await vi.waitFor(() => {
+      const calls = vi.mocked(listen).mock.calls
+      const hasActionComplete = calls.some(call => call[0] === 'action-complete')
+      expect(hasActionComplete).toBe(true)
+    })
+
+    stores.shepherdEnabled.set(true)
+    vi.mocked(ipc.notifyShepherdEvent).mockClear()
+
+    const actionCompleteCall = vi.mocked(listen).mock.calls.find(
+      call => call[0] === 'action-complete'
+    )
+    expect(actionCompleteCall).toBeDefined()
+
+    const actionCompleteCallback = actionCompleteCall![1] as Function
+    await actionCompleteCallback({
+      payload: { task_id: 'shepherd-P-1' }
     })
 
     expect(ipc.notifyShepherdEvent).not.toHaveBeenCalled()

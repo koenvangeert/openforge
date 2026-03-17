@@ -124,7 +124,14 @@ pub async fn notify_shepherd_event(
 fn map_event(event_type: &str, payload: &serde_json::Value) -> Option<ShepherdEvent> {
     match event_type {
         "ci-status-changed" => map_ci_status_changed(payload),
-        "action-complete" => map_agent_completed(payload),
+        "action-complete" => {
+            let task_id = payload.get("task_id")?.as_str()?;
+            if is_shepherd_task_id(task_id) {
+                None
+            } else {
+                map_agent_completed(payload)
+            }
+        }
         "review-status-changed" => map_review_status_changed(payload),
         "new-pr-comment" => map_new_pr_comment(payload),
         "task-created" => map_task_created(payload),
@@ -135,6 +142,10 @@ fn map_event(event_type: &str, payload: &serde_json::Value) -> Option<ShepherdEv
         "agent-checkpoint" => map_agent_checkpoint(payload),
         _ => None,
     }
+}
+
+fn is_shepherd_task_id(task_id: &str) -> bool {
+    task_id.starts_with("shepherd-")
 }
 
 #[cfg(test)]
@@ -174,6 +185,24 @@ mod tests {
     fn test_map_event_invalid_payload_returns_none() {
         let payload = serde_json::json!({"task_id": "T-1"});
         assert!(map_event("ci-status-changed", &payload).is_none());
+    }
+
+    #[test]
+    fn test_map_event_action_complete() {
+        let payload = serde_json::json!({"task_id": "T-106"});
+        let event = map_event("action-complete", &payload).expect("event should map");
+        match event {
+            ShepherdEvent::AgentCompleted { task_id } => {
+                assert_eq!(task_id, "T-106");
+            }
+            _ => panic!("expected AgentCompleted event"),
+        }
+    }
+
+    #[test]
+    fn test_map_event_action_complete_ignores_shepherd_task() {
+        let payload = serde_json::json!({"task_id": "shepherd-P-1"});
+        assert!(map_event("action-complete", &payload).is_none());
     }
 
     #[test]
