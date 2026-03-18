@@ -67,7 +67,15 @@ pub enum ShepherdEvent {
 ///
 /// The Shepherd is an advise-only project manager for Open Forge.
 /// It synthesizes project state and tells the developer what to focus on.
-pub fn build_shepherd_system_prompt(project_name: &str, project_id: &str) -> String {
+pub fn build_shepherd_system_prompt(
+    project_name: &str,
+    project_id: &str,
+    custom_prompt: Option<&str>,
+) -> String {
+    if let Some(custom) = custom_prompt {
+        return custom.to_string();
+    }
+
     let mut prompt = String::new();
 
     prompt.push_str("=== TASK SHEPHERD ===\n\n");
@@ -235,7 +243,7 @@ mod tests {
 
     #[test]
     fn test_shepherd_system_prompt_content() {
-        let prompt = build_shepherd_system_prompt("My Project", "P-1");
+        let prompt = build_shepherd_system_prompt("My Project", "P-1", None);
 
         assert!(prompt.contains("Task Shepherd"));
         assert!(prompt.contains("project manager"));
@@ -249,7 +257,7 @@ mod tests {
 
     #[test]
     fn test_shepherd_system_prompt_priority_ordering() {
-        let prompt = build_shepherd_system_prompt("Test Project", "P-2");
+        let prompt = build_shepherd_system_prompt("Test Project", "P-2", None);
 
         // Must include CI failures as highest priority
         assert!(
@@ -303,7 +311,7 @@ mod tests {
 
     #[test]
     fn test_shepherd_system_prompt_no_action_instructions() {
-        let prompt = build_shepherd_system_prompt("Test Project", "P-3");
+        let prompt = build_shepherd_system_prompt("Test Project", "P-3", None);
 
         // Must NOT contain action-taking instructions (imperative form)
         assert!(
@@ -322,8 +330,8 @@ mod tests {
 
     #[test]
     fn test_shepherd_system_prompt_project_name_interpolated() {
-        let prompt_a = build_shepherd_system_prompt("Alpha Project", "P-10");
-        let prompt_b = build_shepherd_system_prompt("Beta Project", "P-20");
+        let prompt_a = build_shepherd_system_prompt("Alpha Project", "P-10", None);
+        let prompt_b = build_shepherd_system_prompt("Beta Project", "P-20", None);
 
         assert!(prompt_a.contains("Alpha Project"));
         assert!(prompt_a.contains("P-10"));
@@ -488,7 +496,7 @@ mod tests {
 
     #[test]
     fn test_shepherd_system_prompt_includes_action_items_section() {
-        let prompt = build_shepherd_system_prompt("Test Project", "P-1");
+        let prompt = build_shepherd_system_prompt("Test Project", "P-1", None);
         assert!(
             prompt.contains("ACTION ITEMS"),
             "Prompt must include ACTION ITEMS section"
@@ -501,7 +509,7 @@ mod tests {
 
     #[test]
     fn test_shepherd_system_prompt_action_items_no_shepherd_prefix() {
-        let prompt = build_shepherd_system_prompt("Test Project", "P-1");
+        let prompt = build_shepherd_system_prompt("Test Project", "P-1", None);
         if let Some(action_items_pos) = prompt.find("ACTION ITEMS") {
             let section_end = prompt[action_items_pos..]
                 .find("===")
@@ -563,5 +571,22 @@ mod tests {
             !summary.contains("Active action items"),
             "Summary must not include action items section when empty"
         );
+    }
+
+    #[test]
+    fn test_shepherd_system_prompt_with_custom_prompt() {
+        let custom = "Use this exact custom shepherd prompt.";
+        let prompt = build_shepherd_system_prompt("Ignored", "P-123", Some(custom));
+        assert_eq!(prompt, custom);
+    }
+
+    #[test]
+    fn test_shepherd_system_prompt_without_custom_prompt_unchanged() {
+        let prompt_a = build_shepherd_system_prompt("My Project", "P-1", None);
+        let prompt_b = build_shepherd_system_prompt("My Project", "P-1", None);
+        assert_eq!(prompt_a, prompt_b);
+        assert!(prompt_a.contains("Task Shepherd"));
+        assert!(prompt_a.contains("My Project"));
+        assert!(prompt_a.contains("P-1"));
     }
 }
