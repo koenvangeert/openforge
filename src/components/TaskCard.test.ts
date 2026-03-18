@@ -33,6 +33,8 @@ const basePr: PullRequestInfo = {
   ci_status: null,
   ci_check_runs: null,
   review_status: null,
+  mergeable: null,
+  mergeable_state: null,
   merged_at: null,
   created_at: 1000,
   updated_at: 2000,
@@ -325,6 +327,12 @@ describe('TaskCard', () => {
     const pr = { ...basePr, draft: true }
     render(TaskCard, { props: { task: baseTask, pullRequests: [pr] } })
     expect(screen.getByText('Draft')).toBeTruthy()
+  })
+
+  it('shows Merge Conflict when a linked PR has merge conflicts', () => {
+    const pr = { ...basePr, mergeable: false, mergeable_state: 'dirty' }
+    render(TaskCard, { props: { task: baseTask, pullRequests: [pr] } })
+    expect(screen.getByText('Merge Conflict')).toBeTruthy()
   })
 
   it('hides Draft label when PR is not draft', () => {

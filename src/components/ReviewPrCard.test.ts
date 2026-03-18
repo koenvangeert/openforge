@@ -21,6 +21,8 @@ const basePr: ReviewPullRequest = {
   additions: 50,
   deletions: 10,
   changed_files: 3,
+  mergeable: null,
+  mergeable_state: null,
   created_at: Date.now() - 3600000,
   updated_at: Date.now(),
   viewed_at: null,
@@ -88,6 +90,13 @@ describe('ReviewPrCard', () => {
     const onClick = () => {}
     render(ReviewPrCard, { props: { pr: basePr, selected: false, onClick } })
     expect(screen.getByText('3 files')).toBeTruthy()
+  })
+
+  it('shows Merge Conflict badge when the PR cannot merge cleanly', () => {
+    const onClick = () => {}
+    const conflictedPr = { ...basePr, mergeable: false, mergeable_state: 'dirty' }
+    render(ReviewPrCard, { props: { pr: conflictedPr, selected: false, onClick } })
+    expect(screen.getByText('Merge Conflict')).toBeTruthy()
   })
 
   it('calls onClick when card is clicked', async () => {

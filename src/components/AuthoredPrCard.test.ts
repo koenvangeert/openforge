@@ -24,6 +24,8 @@ const basePr: AuthoredPullRequest = {
   ci_status: null,
   ci_check_runs: null,
   review_status: null,
+  mergeable: null,
+  mergeable_state: null,
   merged_at: null,
   is_queued: false,
   task_id: null,
@@ -108,6 +110,12 @@ describe('AuthoredPrCard', () => {
     const prWithReview = { ...basePr, review_status: 'pending' }
     render(AuthoredPrCard, { props: { pr: prWithReview, selected: false, onClick: () => {} } })
     expect(screen.getByText('Pending Review')).toBeTruthy()
+  })
+
+  it('shows Merge Conflict badge when the PR cannot merge cleanly', () => {
+    const conflictedPr = { ...basePr, mergeable: false, mergeable_state: 'dirty' }
+    render(AuthoredPrCard, { props: { pr: conflictedPr, selected: false, onClick: () => {} } })
+    expect(screen.getByText('Merge Conflict')).toBeTruthy()
   })
 
   it('shows additions and deletions', () => {
