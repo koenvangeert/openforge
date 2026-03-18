@@ -128,9 +128,38 @@ impl super::Database {
         Ok(())
     }
 
-    /// Delete a project
+    /// Delete a project and all associated data
     pub fn delete_project(&self, id: &str) -> Result<()> {
         let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "DELETE FROM agent_sessions WHERE ticket_id IN (SELECT id FROM tasks WHERE project_id = ?1)",
+            rusqlite::params![id],
+        )?;
+        conn.execute(
+            "DELETE FROM pr_comments WHERE pr_id IN (SELECT id FROM pull_requests WHERE ticket_id IN (SELECT id FROM tasks WHERE project_id = ?1))",
+            rusqlite::params![id],
+        )?;
+        conn.execute(
+            "DELETE FROM pull_requests WHERE ticket_id IN (SELECT id FROM tasks WHERE project_id = ?1)",
+            rusqlite::params![id],
+        )?;
+        conn.execute(
+            "DELETE FROM worktrees WHERE project_id = ?1",
+            rusqlite::params![id],
+        )?;
+        conn.execute(
+            "DELETE FROM shepherd_messages WHERE project_id = ?1",
+            rusqlite::params![id],
+        )?;
+        conn.execute(
+            "DELETE FROM action_items WHERE project_id = ?1",
+            rusqlite::params![id],
+        )?;
+        conn.execute(
+            "DELETE FROM tasks WHERE project_id = ?1",
+            rusqlite::params![id],
+        )?;
+        // project_config cascades automatically via ON DELETE CASCADE
         conn.execute("DELETE FROM projects WHERE id = ?1", rusqlite::params![id])?;
         Ok(())
     }
@@ -347,6 +376,31 @@ impl super::Database {
 mod tests {
     use crate::db::test_helpers::*;
     use std::fs;
+
+    #[test]
+    fn test_delete_project_with_tasks_succeeds() {
+        let (db, path) = make_test_db("delete_project_with_tasks");
+
+        let project = db
+            .create_project("My Project", "/tmp/proj")
+            .expect("create project failed");
+
+        let task = db
+            .create_task("Do something", "backlog", None, Some(&project.id), None, None, None)
+            .expect("create task failed");
+
+        db.create_agent_session("ses-1", &task.id, None, "implement", "running", "opencode")
+            .expect("create session failed");
+
+        db.delete_project(&project.id)
+            .expect("delete_project should succeed even with associated tasks and sessions");
+
+        let projects = db.get_all_projects().expect("get projects failed");
+        assert!(projects.iter().all(|p| p.id != project.id), "project should be gone");
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
 
     #[test]
     fn test_project_config_operations() {
