@@ -2,8 +2,8 @@
 	import { onMount } from 'svelte'
 	import { FlaskConical } from 'lucide-svelte'
 	import { activeProjectId } from '../lib/stores'
-	import { listOpenCodeAgents, getProjectConfig, setProjectConfig } from '../lib/ipc'
-	import type { AutocompleteAgentInfo } from '../lib/types'
+	import { listShepherdAgents, listOpenCodeModels, getProjectConfig, setProjectConfig } from '../lib/ipc'
+	import type { AutocompleteAgentInfo, ProviderModelInfo } from '../lib/types'
 
 	interface Props {
 		shepherdEnabled: boolean
@@ -13,20 +13,37 @@
 	const { shepherdEnabled, onShepherdToggle }: Props = $props()
 
 	let agents = $state<AutocompleteAgentInfo[]>([])
+	let models = $state<ProviderModelInfo[]>([])
 	let selectedAgent = $state('')
+	let selectedModel = $state('')
+	let initialPrompt = $state('')
 	let loadingAgents = $state(false)
+	let loadingModels = $state(false)
+	let promptSaveTimer: ReturnType<typeof setTimeout> | null = null
 
-	async function loadAgents() {
+	async function loadConfig() {
 		if (!$activeProjectId) return
 		loadingAgents = true
+		loadingModels = true
 		try {
-			agents = await listOpenCodeAgents($activeProjectId)
-			const saved = await getProjectConfig($activeProjectId, 'shepherd_agent')
-			selectedAgent = saved ?? ''
+			const [agentList, modelList, savedAgent, savedModel, savedPrompt] = await Promise.all([
+				listShepherdAgents($activeProjectId),
+				listOpenCodeModels($activeProjectId),
+				getProjectConfig($activeProjectId, 'shepherd_agent'),
+				getProjectConfig($activeProjectId, 'shepherd_model'),
+				getProjectConfig($activeProjectId, 'shepherd_initial_prompt'),
+			])
+			agents = agentList
+			models = modelList
+			selectedAgent = savedAgent ?? ''
+			selectedModel = savedModel ?? ''
+			initialPrompt = savedPrompt ?? ''
 		} catch {
 			agents = []
+			models = []
 		} finally {
 			loadingAgents = false
+			loadingModels = false
 		}
 	}
 
@@ -38,8 +55,27 @@
 		}
 	}
 
+	async function handleModelChange(e: Event) {
+		const value = (e.target as HTMLSelectElement).value
+		selectedModel = value
+		if ($activeProjectId) {
+			await setProjectConfig($activeProjectId, 'shepherd_model', value)
+		}
+	}
+
+	function handlePromptInput(e: Event) {
+		const value = (e.target as HTMLTextAreaElement).value
+		initialPrompt = value
+		if (promptSaveTimer) clearTimeout(promptSaveTimer)
+		promptSaveTimer = setTimeout(() => {
+			if ($activeProjectId) {
+				setProjectConfig($activeProjectId, 'shepherd_initial_prompt', value)
+			}
+		}, 500)
+	}
+
 	onMount(() => {
-		loadAgents()
+		loadConfig()
 	})
 </script>
 
@@ -81,7 +117,37 @@
 							<option value={agent.name}>{agent.name}</option>
 						{/each}
 					</select>
-					<span class="text-[0.7rem] text-base-content/50">Which OpenCode agent the shepherd uses. Configure the agent's model in your OpenCode settings.</span>
+					<span class="text-[0.7rem] text-base-content/50">Which OpenCode agent the shepherd uses.</span>
+				</label>
+
+				<label class="flex flex-col gap-1.5">
+					<span class="text-sm text-base-content">Model</span>
+					<select
+						class="select select-bordered select-sm w-full"
+						value={selectedModel}
+						onchange={handleModelChange}
+						disabled={loadingModels}
+						data-testid="shepherd-model-select"
+					>
+						<option value="">Default</option>
+						{#each models as model}
+							<option value={`${model.provider_id}/${model.model_id}`}>{model.name}</option>
+						{/each}
+					</select>
+					<span class="text-[0.7rem] text-base-content/50">Which model the shepherd uses. Fetched from OpenCode providers.</span>
+				</label>
+
+				<label class="flex flex-col gap-1.5">
+					<span class="text-sm text-base-content">Initial Prompt</span>
+					<textarea
+						class="textarea textarea-bordered w-full text-xs leading-relaxed"
+						rows={6}
+						value={initialPrompt}
+						oninput={handlePromptInput}
+						placeholder="Leave empty to use the default system prompt"
+						data-testid="shepherd-initial-prompt"
+					></textarea>
+					<span class="text-[0.7rem] text-base-content/50">Custom system prompt. Leave empty to use the built-in default.</span>
 				</label>
 			{/if}
 		</div>

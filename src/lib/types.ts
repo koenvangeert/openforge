@@ -154,6 +154,13 @@ export interface AutocompleteAgentInfo {
   mode: string | null;
 }
 
+/** Model option from OpenCode GET /provider endpoint — used for shepherd model selection */
+export interface ProviderModelInfo {
+  provider_id: string;
+  model_id: string;
+  name: string;
+}
+
 export interface AutocompleteItem {
   label: string;
   description: string | null;

@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { Task, AgentSession, PrComment, PollResult, PullRequestInfo, AgentInfo, Project, ProjectAttention, WorktreeInfo, ImplementationStatus, ReviewPullRequest, AuthoredPullRequest, PrFileDiff, ReviewComment, ReviewSubmissionComment, SelfReviewComment, AgentReviewComment, CommandInfo, AutocompleteAgentInfo, PrOverviewComment, TranscriptionResult, WhisperModelStatus, WhisperModelSizeId, SkillInfo, WorkQueueEntry, ShepherdMessage, ShepherdStatus, ActionItem } from "./types";
+import type { Task, AgentSession, PrComment, PollResult, PullRequestInfo, AgentInfo, Project, ProjectAttention, WorktreeInfo, ImplementationStatus, ReviewPullRequest, AuthoredPullRequest, PrFileDiff, ReviewComment, ReviewSubmissionComment, SelfReviewComment, AgentReviewComment, CommandInfo, AutocompleteAgentInfo, PrOverviewComment, TranscriptionResult, WhisperModelStatus, WhisperModelSizeId, SkillInfo, WorkQueueEntry, ShepherdMessage, ShepherdStatus, ActionItem, ProviderModelInfo } from "./types";
 
 export async function createTask(initialPrompt: string, status: string, jiraKey: string | null, projectId: string | null, agent: string | null, permissionMode: string | null): Promise<Task> {
   return invoke<Task>("create_task", { initialPrompt, status, jiraKey, projectId, agent, permissionMode });
@@ -323,6 +323,14 @@ export async function searchOpenCodeFiles(projectId: string, query: string): Pro
 
 export async function listOpenCodeAgents(projectId: string): Promise<AutocompleteAgentInfo[]> {
   return invoke<AutocompleteAgentInfo[]>("list_opencode_agents", { projectId });
+}
+
+export async function listShepherdAgents(projectId: string): Promise<AutocompleteAgentInfo[]> {
+  return invoke<AutocompleteAgentInfo[]>("list_shepherd_agents", { projectId });
+}
+
+export async function listOpenCodeModels(projectId: string): Promise<ProviderModelInfo[]> {
+  return invoke<ProviderModelInfo[]>("list_opencode_models", { projectId });
 }
 
 export async function transcribeAudio(audioData: number[]): Promise<TranscriptionResult> {
