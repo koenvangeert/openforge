@@ -18,9 +18,11 @@
   let selectedEvent = $state<'COMMENT' | 'APPROVE' | 'REQUEST_CHANGES'>('COMMENT')
 
   let canSubmit = $derived(!isSubmitting && (summary.trim() !== '' || $pendingManualComments.length > 0))
+  let canApprove = $derived(!isSubmitting)
 
   async function handleSubmit(event: 'COMMENT' | 'APPROVE' | 'REQUEST_CHANGES') {
-    if (!canSubmit) return
+    const allowed = event === 'APPROVE' ? canApprove : canSubmit
+    if (!allowed) return
 
     isSubmitting = true
     error = null
@@ -120,7 +122,7 @@
       <button
         class="btn btn-sm btn-success"
         onclick={handleApproveClick}
-        disabled={!canSubmit}
+        disabled={!canApprove}
       >
         {isSubmitting && selectedEvent === 'APPROVE' ? 'Submitting...' : 'Approve'}
       </button>

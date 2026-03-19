@@ -82,7 +82,7 @@ describe('ReviewSubmitPanel', () => {
     expect(screen.getByText('Request Changes')).toBeTruthy()
   })
 
-  it('buttons are disabled when no summary and no pending comments', () => {
+  it('Comment and Request Changes buttons are disabled when no summary and no pending comments', () => {
     render(ReviewSubmitPanel, {
       props: {
         repoOwner: 'acme',
@@ -92,12 +92,24 @@ describe('ReviewSubmitPanel', () => {
       },
     })
     const commentBtn = screen.getByText('Comment')
-    const approveBtn = screen.getByText('Approve')
     const requestChangesBtn = screen.getByText('Request Changes')
 
     expect(commentBtn.closest('button')?.disabled).toBe(true)
-    expect(approveBtn.closest('button')?.disabled).toBe(true)
     expect(requestChangesBtn.closest('button')?.disabled).toBe(true)
+  })
+
+  it('Approve button is enabled even without summary or pending comments', () => {
+    render(ReviewSubmitPanel, {
+      props: {
+        repoOwner: 'acme',
+        repoName: 'repo',
+        prNumber: 42,
+        commitId: 'abc123',
+      },
+    })
+    const approveBtn = screen.getByText('Approve')
+
+    expect(approveBtn.closest('button')?.disabled).toBe(false)
   })
 
   it('buttons are enabled when summary has text', async () => {
@@ -169,7 +181,7 @@ describe('ReviewSubmitPanel', () => {
     expect(mockSubmit).toHaveBeenCalledWith('acme', 'repo', 42, 'COMMENT', 'Review summary', [], 'abc123')
   })
 
-  it('calls submitPrReview when Approve button is clicked', async () => {
+  it('calls submitPrReview when Approve button is clicked with summary', async () => {
     const mockSubmit = vi.mocked(submitPrReview).mockResolvedValue()
 
     const { container } = render(ReviewSubmitPanel, {
@@ -188,6 +200,24 @@ describe('ReviewSubmitPanel', () => {
     await fireEvent.click(approveBtn)
 
     expect(mockSubmit).toHaveBeenCalledWith('acme', 'repo', 42, 'APPROVE', 'LGTM', [], 'abc123')
+  })
+
+  it('calls submitPrReview when Approve button is clicked without summary', async () => {
+    const mockSubmit = vi.mocked(submitPrReview).mockResolvedValue()
+
+    render(ReviewSubmitPanel, {
+      props: {
+        repoOwner: 'acme',
+        repoName: 'repo',
+        prNumber: 42,
+        commitId: 'abc123',
+      },
+    })
+
+    const approveBtn = screen.getByText('Approve')
+    await fireEvent.click(approveBtn)
+
+    expect(mockSubmit).toHaveBeenCalledWith('acme', 'repo', 42, 'APPROVE', '', [], 'abc123')
   })
 
   it('calls submitPrReview when Request Changes button is clicked', async () => {
