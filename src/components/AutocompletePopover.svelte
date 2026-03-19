@@ -36,17 +36,19 @@
     class="absolute top-full left-0 right-0 z-50 mt-1 bg-base-100 border border-base-300 shadow-lg rounded-lg overflow-hidden max-h-[320px] overflow-y-auto"
     role="listbox"
     aria-label="Autocomplete suggestions"
-    onkeydown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); onClose() } }}
+    onkeydown={(e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); onClose() } }}
     tabindex="-1"
-  >
-    {#each items as item, i}
-      <div
+    >
+      {#each items as item, i}
+      <button
+        type="button"
         bind:this={itemEls[i]}
         role="option"
         aria-selected={i === selectedIndex}
+        tabindex="-1"
         class="px-3 py-2 cursor-pointer flex items-center gap-2 hover:bg-base-200 {i === selectedIndex ? 'bg-primary/10 text-primary' : ''}"
         onclick={() => onSelect(item)}
-        onmousedown={(e) => e.preventDefault()}
+        onmousedown={(e: MouseEvent) => e.preventDefault()}
       >
         <span class="shrink-0 text-base leading-none" aria-hidden="true">{typeIcon(item.type)}</span>
         <span class="flex-1 min-w-0 flex items-baseline gap-2">
@@ -58,7 +60,7 @@
         {#if item.type === 'command' && item.source}
           <span class="shrink-0 text-[0.6rem] bg-base-200 px-1 rounded text-base-content/50">{item.source}</span>
         {/if}
-      </div>
+      </button>
     {/each}
   </div>
 {/if}
