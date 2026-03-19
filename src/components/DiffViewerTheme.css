@@ -170,3 +170,14 @@
   background-color: #bfdbfe;
   color: #1f2937;
 }
+
+/* Flash highlight when scrolling to a comment via sidebar click */
+@keyframes diff-comment-flash {
+  0% { background-color: oklch(0.75 0.15 250 / 0.4); }
+  100% { background-color: transparent; }
+}
+
+.diff-comment-highlight,
+.diff-comment-highlight td {
+  animation: diff-comment-flash 2s ease-out;
+}

@@ -14,6 +14,7 @@
   import { createDiffWorker } from '../lib/useDiffWorker.svelte'
   import { createFileContentsFetcher } from '../lib/useFileContentsFetcher.svelte'
   import { createVirtualizer } from '../lib/useVirtualizer.svelte'
+  import { tick } from 'svelte'
   import { sortFilesAsTree } from '../lib/fileSort'
   import { getFileStatusIcon, getFileStatusColor, getFileStatusLabel } from '../lib/fileStatus'
   import { themeMode, getDiffTheme } from '../lib/theme'
@@ -83,6 +84,45 @@
       }
       virtualizer.scrollToIndex(index, { align: 'start', behavior: 'smooth' })
     }
+  }
+
+  export async function scrollToComment(filename: string, lineNumber: number) {
+    const index = sortedFiles.findIndex(f => f.filename === filename)
+    if (index < 0) return
+
+    // Uncollapse the file if needed
+    if (collapsedFiles.has(filename)) {
+      const next = new Set(collapsedFiles)
+      next.delete(filename)
+      collapsedFiles = next
+    }
+
+    // Scroll virtualizer to the file
+    virtualizer.scrollToIndex(index, { align: 'start' })
+
+    // Wait for DOM to render (same pattern as useDiffSearch navigateToCurrentMatch)
+    await tick()
+    await new Promise<void>(r => requestAnimationFrame(() => r()))
+    await tick()
+
+    if (!scrollContainerEl) return
+
+    // Find the file container, then the line within it
+    const fileEl = scrollContainerEl.querySelector(`[data-diff-file="${CSS.escape(filename)}"]`)
+    if (!fileEl) return
+
+    // Try to find the extend line (comment annotation) first, then the content line
+    const targetEl =
+      fileEl.querySelector(`tr[data-line="${lineNumber}-extend"]`) ??
+      fileEl.querySelector(`tr[data-line="${lineNumber}"]`)
+
+    if (!targetEl) return
+
+    targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' })
+
+    // Flash highlight
+    targetEl.classList.add('diff-comment-highlight')
+    setTimeout(() => targetEl.classList.remove('diff-comment-highlight'), 2000)
   }
 
   function autofocus(node: HTMLElement) {

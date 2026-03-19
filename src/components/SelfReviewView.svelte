@@ -216,7 +216,14 @@
                               </div>
                               {#if comment.file_path}
                                 <div class="flex items-center gap-1 mb-1.5">
-                                  <span class="text-xs text-base-content/50 font-mono bg-base-200 rounded px-1.5 py-0.5 overflow-hidden text-ellipsis whitespace-nowrap max-w-full">{comment.file_path}{#if comment.line_number}:{comment.line_number}{/if}</span>
+                                  {#if comment.line_number}
+                                    <button
+                                      class="text-xs text-base-content/50 font-mono bg-base-200 rounded px-1.5 py-0.5 overflow-hidden text-ellipsis whitespace-nowrap max-w-full hover:text-primary hover:bg-primary/10 cursor-pointer transition-colors"
+                                      onclick={() => diffViewer?.scrollToComment(comment.file_path!, comment.line_number!)}
+                                    >{comment.file_path}:{comment.line_number}</button>
+                                  {:else}
+                                    <span class="text-xs text-base-content/50 font-mono bg-base-200 rounded px-1.5 py-0.5 overflow-hidden text-ellipsis whitespace-nowrap max-w-full">{comment.file_path}</span>
+                                  {/if}
                                 </div>
                               {/if}
                               <div class="text-sm text-base-content leading-relaxed [&_.markdown-body]:text-sm [&_.markdown-body_pre]:text-xs [&_.markdown-body_code]:text-xs [&_.markdown-body_p]:my-1.5">
