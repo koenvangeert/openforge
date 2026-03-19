@@ -12,17 +12,12 @@
   let { onClose }: Props = $props()
 
   let searchQuery = $state('')
-  let selectedIndex = $state(0)
+  let selectedTaskKey = $state<string | null>(null)
   let inputEl = $state<HTMLInputElement | null>(null)
   let allTasks = $state<Task[]>([])
   let loading = $state(true)
 
   let projectMap = $derived(new Map($projects.map(p => [p.id, p])))
-
-  // Fetch all tasks across projects on mount
-  $effect(() => {
-    loadAllTasks()
-  })
 
   async function loadAllTasks() {
     loading = true
@@ -53,12 +48,37 @@
     return sorted.filter(t => matchesSearch(t, searchQuery.trim(), projectMap))
   })
 
+  let selectedIndex = $derived.by(() => {
+    if (sortedAndFiltered.length === 0) return -1
+    if (selectedTaskKey === null) return 0
+
+    const index = sortedAndFiltered.findIndex(task => task.id === selectedTaskKey)
+    return index === -1 ? 0 : index
+  })
+
+  let lastSearchQuery = $state('')
+
   $effect(() => {
-    // Reset selection when results change
-    if (sortedAndFiltered.length > 0) {
-      selectedIndex = 0
-    } else {
-      selectedIndex = -1
+    const trimmedSearchQuery = searchQuery.trim()
+
+    if (sortedAndFiltered.length === 0) {
+      selectedTaskKey = null
+      lastSearchQuery = trimmedSearchQuery
+      return
+    }
+
+    const searchChanged = trimmedSearchQuery !== lastSearchQuery
+    lastSearchQuery = trimmedSearchQuery
+
+    if (searchChanged || selectedTaskKey === null) {
+      selectedTaskKey = sortedAndFiltered[0].id
+      return
+    }
+
+    const selectedTaskStillVisible = sortedAndFiltered.some(task => task.id === selectedTaskKey)
+
+    if (!selectedTaskStillVisible) {
+      selectedTaskKey = sortedAndFiltered[0].id
     }
   })
 
@@ -106,10 +126,11 @@
 
     if (e.key === 'ArrowDown' || (e.ctrlKey && (e.key === 'j' || e.key === 'n'))) {
       e.preventDefault()
-      selectedIndex = (selectedIndex + 1) % count
+      selectedTaskKey = sortedAndFiltered[(selectedIndex + 1) % count].id
     } else if (e.key === 'ArrowUp' || (e.ctrlKey && (e.key === 'k' || e.key === 'p'))) {
       e.preventDefault()
-      selectedIndex = selectedIndex <= 0 ? count - 1 : selectedIndex - 1
+      const nextIndex = selectedIndex <= 0 ? count - 1 : selectedIndex - 1
+      selectedTaskKey = sortedAndFiltered[nextIndex].id
     } else if (e.key === 'Enter') {
       e.preventDefault()
       if (selectedIndex >= 0 && selectedIndex < count) {
@@ -138,6 +159,7 @@
   }
 
   onMount(async () => {
+    void loadAllTasks()
     await tick()
     inputEl?.focus()
   })
@@ -153,8 +175,10 @@
   })
 </script>
 
+<!-- svelte-ignore a11y_click_events_have_key_events -->
 <div
   data-testid="command-palette-backdrop"
+  role="presentation"
   class="fixed inset-0 z-50 flex items-start justify-center pt-[15vh] bg-black/50"
   onclick={handleBackdropClick}
 >
