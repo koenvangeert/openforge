@@ -1,3 +1,4 @@
+use log::{error, info, warn};
 use serde_json::Value;
 use std::fs;
 use std::path::PathBuf;
@@ -14,7 +15,7 @@ fn read_json_file_opt(path: &PathBuf) -> Option<Value> {
     match serde_json::from_str::<Value>(&contents) {
         Ok(v) => Some(v),
         Err(e) => {
-            eprintln!(
+            warn!(
                 "[mcp_installer] Warning: Invalid JSON in {}: {}. Starting fresh.",
                 path.display(),
                 e
@@ -53,7 +54,7 @@ fn write_mcp_server_files(install_dir: &PathBuf) -> Result<(), Box<dyn std::erro
     fs::create_dir_all(install_dir)?;
     fs::write(install_dir.join("index.js"), MCP_SERVER_INDEX_JS)?;
     fs::write(install_dir.join("package.json"), MCP_SERVER_PACKAGE_JSON)?;
-    println!(
+    info!(
         "[mcp_installer] MCP server files written to: {}",
         install_dir.display()
     );
@@ -71,14 +72,14 @@ pub fn install_mcp_server() -> Result<(), Box<dyn std::error::Error>> {
 
     match output {
         Ok(out) if out.status.success() => {
-            println!("[mcp_installer] npm install completed successfully");
+            info!("[mcp_installer] npm install completed successfully");
         }
         Ok(out) => {
             let stderr = String::from_utf8_lossy(&out.stderr);
-            eprintln!("[mcp_installer] npm install failed: {}", stderr);
+            error!("[mcp_installer] npm install failed: {}", stderr);
         }
         Err(e) => {
-            eprintln!("[mcp_installer] Failed to run npm install: {}", e);
+            error!("[mcp_installer] Failed to run npm install: {}", e);
         }
     }
 
@@ -99,7 +100,7 @@ pub fn configure_opencode_mcp(port: &str) -> Result<(), Box<dyn std::error::Erro
     }
 
     fs::write(&config_path, serde_json::to_string_pretty(&merged)?)?;
-    println!(
+    info!(
         "[mcp_installer] OpenCode MCP config written to: {}",
         config_path.display()
     );
@@ -117,7 +118,7 @@ pub fn configure_claude_mcp(port: &str) -> Result<(), Box<dyn std::error::Error>
     let merged = merge_mcp_config(existing, port, &install_path);
 
     fs::write(&config_path, serde_json::to_string_pretty(&merged)?)?;
-    println!(
+    info!(
         "[mcp_installer] Claude MCP config written to: {}",
         config_path.display()
     );

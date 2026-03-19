@@ -4,6 +4,7 @@ use axum::{
     Router,
     http::StatusCode,
 };
+use log::{error, info, warn};
 use serde::{Deserialize, Serialize};
 use std::{net::SocketAddr, sync::Mutex};
 use crate::db;
@@ -374,7 +375,7 @@ async fn handle_hook(
                         if let Some(ref sid) = payload.session_id {
                             if !sid.is_empty() {
                                 if let Err(e) = db.set_agent_session_claude_id(&session.id, sid) {
-                                    eprintln!("[http_server] Failed to set claude_session_id for session {}: {}", session.id, e);
+                                    error!("[http_server] Failed to set claude_session_id for session {}: {}", session.id, e);
                                 }
                             }
                         }
@@ -382,7 +383,7 @@ async fn handle_hook(
 
                     if let Some(new_status) = map_hook_to_status(event_type, &session.status) {
                         if let Err(e) = db.update_agent_session(&session.id, &session.stage, &new_status, None, None) {
-                            eprintln!("[http_server] Failed to update session status for task {}: {}", task_id, e);
+                            error!("[http_server] Failed to update session status for task {}: {}", task_id, e);
                         }
                         Some(new_status)
                     } else {
@@ -409,7 +410,7 @@ async fn handle_hook(
             }
         }
     } else {
-        eprintln!("[http_server] Warning: Hook event '{}' received without CLAUDE_TASK_ID", event_type);
+        warn!("[http_server] Warning: Hook event '{}' received without CLAUDE_TASK_ID", event_type);
     }
 
     Ok(Json(serde_json::json!({ "status": "ok" })))
@@ -579,7 +580,7 @@ pub async fn start_http_server(
     let state = AppState { app: Some(app), db };
     let router = create_router(state);
 
-    println!("[http_server] Starting on {}", addr);
+    info!("[http_server] Starting on {}", addr);
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
     // Signal that the server is listening before entering the serve loop

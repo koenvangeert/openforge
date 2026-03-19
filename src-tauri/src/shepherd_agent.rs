@@ -1,3 +1,4 @@
+use log::error;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -348,7 +349,7 @@ fn build_snapshot_from_db(app: &AppHandle, project_id: &str) -> ProjectSnapshot 
     let db = match db_state.lock() {
         Ok(guard) => guard,
         Err(e) => {
-            eprintln!("[shepherd] database lock poisoned in snapshot builder: {}", e);
+            error!("[shepherd] database lock poisoned in snapshot builder: {}", e);
             return ProjectSnapshot::default();
         }
     };
@@ -467,7 +468,7 @@ pub async fn shepherd_flush_loop(app: AppHandle) {
             let mut collector = match collector_state.lock() {
                 Ok(guard) => guard,
                 Err(e) => {
-                    eprintln!("[shepherd] collector lock error: {}", e);
+                    error!("[shepherd] collector lock error: {}", e);
                     continue;
                 }
             };
@@ -501,7 +502,7 @@ pub async fn shepherd_flush_loop(app: AppHandle) {
         }
 
         if let Err(e) = send_message_for_session(&app, &active_session, &prompt).await {
-            eprintln!("[shepherd] failed to send message to provider: {}", e);
+            error!("[shepherd] failed to send message to provider: {}", e);
             let _ = app.emit("shepherd-status-changed", "error");
         }
     }

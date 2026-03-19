@@ -1,3 +1,4 @@
+use log::error;
 use std::sync::{Mutex, Arc};
 use tauri::State;
 use crate::{db, jira_client::JiraClient};
@@ -49,7 +50,7 @@ pub async fn refresh_jira_info(
         let db_lock = crate::db::acquire_db(&db);
         match db_lock.update_task_jira_info(&issue.key, &jira_title, &jira_status, &assignee, &jira_description) {
             Ok(count) => updated += count,
-            Err(e) => eprintln!("Failed to update JIRA info for {}: {}", issue.key, e),
+            Err(e) => error!("Failed to update JIRA info for {}: {}", issue.key, e),
         }
         drop(db_lock);
     }

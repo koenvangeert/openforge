@@ -1,3 +1,4 @@
+use log::warn;
 use serde::Deserialize;
 use std::sync::Mutex;
 
@@ -106,23 +107,23 @@ fn validate_comments(comments: Vec<ParsedComment>) -> Vec<ParsedComment> {
     let mut valid = Vec::new();
     for mut comment in comments {
         if comment.file.is_empty() {
-            println!("Warning: skipping comment with empty file path");
+            warn!("Warning: skipping comment with empty file path");
             continue;
         }
         if comment.line <= 0 {
-            println!(
+            warn!(
                 "Warning: skipping comment with invalid line number: {}",
                 comment.line
             );
             continue;
         }
         if comment.body.is_empty() {
-            println!("Warning: skipping comment with empty body");
+            warn!("Warning: skipping comment with empty body");
             continue;
         }
         // Normalize side to "RIGHT" if not "LEFT" or "RIGHT"
         if comment.side != "LEFT" && comment.side != "RIGHT" {
-            println!(
+            warn!(
                 "Warning: invalid side '{}', defaulting to RIGHT",
                 comment.side
             );

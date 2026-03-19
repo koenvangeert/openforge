@@ -1,3 +1,4 @@
+use log::info;
 use std::fs;
 use std::path::PathBuf;
 
@@ -64,7 +65,7 @@ pub fn install_create_task_plugin() -> Result<(), Box<dyn std::error::Error>> {
     // Write the tool file
     fs::write(&tool_file, CREATE_TASK_TOOL)?;
 
-    println!(
+    info!(
         "[plugin_installer] create_task tool installed/updated at: {}",
         tool_file.display()
     );

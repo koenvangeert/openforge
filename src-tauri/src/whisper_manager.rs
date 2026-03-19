@@ -14,6 +14,7 @@
 //! 3. Call `download_model()` to fetch and verify a model file.
 //! 4. Call `transcribe()` with 16 kHz mono f32 PCM audio data.
 
+use log::info;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use sha1::{Digest, Sha1};
@@ -308,7 +309,7 @@ impl WhisperManager {
             *path_guard = None;
             let mut loaded_guard = self.loaded_model.write().unwrap();
             *loaded_guard = None;
-            println!("[whisper] Unloaded model (switching from {} to {})", previous, size);
+            info!("[whisper] Unloaded model (switching from {} to {})", previous, size);
         }
     }
 
@@ -402,7 +403,7 @@ impl WhisperManager {
         }
 
         let path_str = path.to_string_lossy().to_string();
-        println!("[whisper] Loading model: {} ({})", active, path_str);
+        info!("[whisper] Loading model: {} ({})", active, path_str);
 
         let ctx = WhisperContext::new_with_params(&path_str, WhisperContextParameters::default())
             .map_err(|e| WhisperError::ContextLoadError(e.to_string()))?;
@@ -416,7 +417,7 @@ impl WhisperManager {
         let mut loaded_guard = self.loaded_model.write().unwrap();
         *loaded_guard = Some(active);
 
-        println!("[whisper] Model loaded: {}", active);
+        info!("[whisper] Model loaded: {}", active);
         Ok(())
     }
 
@@ -518,7 +519,7 @@ impl WhisperManager {
             })?;
         }
 
-        println!(
+        info!(
             "[whisper] Downloading model: {} ({}) from {}",
             size, spec.filename, spec.url
         );
@@ -596,7 +597,7 @@ impl WhisperManager {
         })?;
 
         let path_str = dest_path.to_string_lossy().to_string();
-        println!("[whisper] Model downloaded and verified: {} ({})", size, path_str);
+        info!("[whisper] Model downloaded and verified: {} ({})", size, path_str);
         Ok(path_str)
     }
 }

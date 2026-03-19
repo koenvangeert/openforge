@@ -1,3 +1,4 @@
+use log::warn;
 use rusqlite::{Connection, Result};
 use rusqlite_migration::{Migrations, M};
 use std::path::PathBuf;
@@ -80,7 +81,7 @@ pub fn acquire_db(db: &std::sync::Mutex<Database>) -> std::sync::MutexGuard<'_, 
     match db.lock() {
         Ok(guard) => guard,
         Err(poisoned) => {
-            eprintln!("[db] Warning: recovering from poisoned mutex");
+            warn!("[db] Warning: recovering from poisoned mutex");
             poisoned.into_inner()
         }
     }

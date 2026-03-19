@@ -386,7 +386,15 @@ mod tests {
             .expect("create project failed");
 
         let task = db
-            .create_task("Do something", "backlog", None, Some(&project.id), None, None, None)
+            .create_task(
+                "Do something",
+                "backlog",
+                None,
+                Some(&project.id),
+                None,
+                None,
+                None,
+            )
             .expect("create task failed");
 
         db.create_agent_session("ses-1", &task.id, None, "implement", "running", "opencode")
@@ -396,7 +404,10 @@ mod tests {
             .expect("delete_project should succeed even with associated tasks and sessions");
 
         let projects = db.get_all_projects().expect("get projects failed");
-        assert!(projects.iter().all(|p| p.id != project.id), "project should be gone");
+        assert!(
+            projects.iter().all(|p| p.id != project.id),
+            "project should be gone"
+        );
 
         drop(db);
         let _ = fs::remove_file(&path);

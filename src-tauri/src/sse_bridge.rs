@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use log::{debug, error, info, warn};
 use tokio::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager};
 use crate::db;
@@ -76,7 +77,7 @@ fn persist_session_completed(app: &AppHandle, task_id: &str) {
     if let Ok(db_lock) = db.lock() {
         if let Ok(Some(session)) = db_lock.get_latest_session_for_ticket(task_id) {
             if let Err(e) = db_lock.update_agent_session(&session.id, &session.stage, "completed", None, None) {
-                eprintln!("[SSE] Failed to persist completed status for task {}: {}", task_id, e);
+                error!("[SSE] Failed to persist completed status for task {}: {}", task_id, e);
             }
         }
     };
@@ -257,7 +258,7 @@ impl SseBridgeManager {
         let bridges_clone = self.bridges.clone();
 
         tokio::spawn(async move {
-            println!("[SSE] Starting bridge for task {} on port {}", task_id_clone, server_port);
+            info!("[SSE] Starting bridge for task {} on port {}", task_id_clone, server_port);
 
             let stream = client.stream();
 
@@ -295,9 +296,9 @@ impl SseBridgeManager {
                                                 .and_then(|p| p.get("field"))
                                                 .and_then(|f| f.as_str())
                                                 .unwrap_or("<no field>");
-                                            println!("[SSE][{}] message.part.delta field={} delta_preview={}", task_id, field, delta_preview);
+                                            debug!("[SSE][{}] message.part.delta field={} delta_preview={}", task_id, field, delta_preview);
                                         } else {
-                                            println!("[SSE][{}] message.part.delta (unparsed): {}", task_id, &evt.data[..std::cmp::min(200, evt.data.len())]);
+                                            debug!("[SSE][{}] message.part.delta (unparsed): {}", task_id, &evt.data[..std::cmp::min(200, evt.data.len())]);
                                         }
                                     }
                                     "message.part.delta" | "message.part.updated" |
@@ -310,7 +311,7 @@ impl SseBridgeManager {
 
                                 // Log all events emitted for pr-review tasks
                                 if task_id.starts_with("pr-review-") {
-                                    println!("[SSE][{}] Emitting event: {} data_len={}", task_id, real_event_type, evt.data.len());
+                                    debug!("[SSE][{}] Emitting event: {} data_len={}", task_id, real_event_type, evt.data.len());
                                 }
 
                                 let payload = AgentEventPayload {
@@ -324,7 +325,7 @@ impl SseBridgeManager {
                                 };
 
                                 if let Err(e) = app_clone.emit("agent-event", &payload) {
-                                    eprintln!("[SSE] Failed to emit agent-event: {}", e);
+                                    warn!("[SSE] Failed to emit agent-event: {}", e);
                                 }
 
                                 // Layer 1: SessionID filtering — only react to status-changing events
@@ -364,7 +365,7 @@ impl SseBridgeManager {
                                 let mut spawned_child_poll = false;
 
                                 if is_session_idle {
-                                    println!("[SSE] Session idle for task {} — checking for active children", task_id);
+                                    info!("[SSE] Session idle for task {} — checking for active children", task_id);
 
                                     if child_poll_in_progress.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_ok() {
                                         spawned_child_poll = true;
@@ -377,14 +378,14 @@ impl SseBridgeManager {
                                             let emit_complete = |app: &AppHandle, task_id: &str| {
                                                 let completion = CompletionPayload { task_id: task_id.to_string() };
                                                 if let Err(e) = app.emit("action-complete", &completion) {
-                                                    eprintln!("[SSE] Failed to emit action-complete: {}", e);
+                                                    warn!("[SSE] Failed to emit action-complete: {}", e);
                                                 }
                                             };
 
                                             let our_session_id = match our_session_id_opt {
                                                 Some(ref id) => id.clone(),
                                                 None => {
-                                                    eprintln!("[SSE] No session ID available for task {} — keeping task running", task_id_for_poll);
+                                                    warn!("[SSE] No session ID available for task {} — keeping task running", task_id_for_poll);
                                                     match completion_action_for_descendant_outcome(DescendantPollOutcome::MissingRootSessionId) {
                                                         CompletionAction::EmitComplete => {
                                                             emit_complete(&app_for_poll, &task_id_for_poll);
@@ -409,7 +410,7 @@ impl SseBridgeManager {
                                                 let descendant_ids = match fetch_descendant_session_ids(&oc_client, &our_session_id).await {
                                                     Ok(ids) => ids,
                                                     Err(e) => {
-                                                        eprintln!("[SSE] fetch_descendant_session_ids failed for task {} (iter {}): {}", task_id_for_poll, iteration + 1, e);
+                                                        warn!("[SSE] fetch_descendant_session_ids failed for task {} (iter {}): {}", task_id_for_poll, iteration + 1, e);
                                                         poll_outcome = DescendantPollOutcome::LookupFailed;
                                                         break;
                                                     }
@@ -418,7 +419,7 @@ impl SseBridgeManager {
                                                 let statuses = match oc_client.get_all_session_statuses().await {
                                                     Ok(s) => s,
                                                     Err(e) => {
-                                                        eprintln!("[SSE] get_all_session_statuses failed (task {}, iter {}): {}", task_id_for_poll, iteration + 1, e);
+                                                        warn!("[SSE] get_all_session_statuses failed (task {}, iter {}): {}", task_id_for_poll, iteration + 1, e);
                                                         poll_outcome = DescendantPollOutcome::LookupFailed;
                                                         break;
                                                     }
@@ -427,7 +428,7 @@ impl SseBridgeManager {
                                                 if completion_snapshot_is_idle_candidate(&our_session_id, &descendant_ids, &statuses) {
                                                     consecutive_idle_snapshots += 1;
                                                     if consecutive_idle_snapshots >= DESCENDANT_IDLE_CONFIRMATION_POLLS {
-                                                        println!("[SSE] Root and descendants idle — emitting action-complete for task {}", task_id_for_poll);
+                                                        info!("[SSE] Root and descendants idle — emitting action-complete for task {}", task_id_for_poll);
                                                         poll_outcome = DescendantPollOutcome::AllIdle;
                                                         break;
                                                     }
@@ -435,7 +436,7 @@ impl SseBridgeManager {
                                                     consecutive_idle_snapshots = 0;
                                                 }
 
-                                                println!("[SSE] Descendants still busy (iter {}/{}) for task {} — waiting {}s", iteration + 1, max_iterations, task_id_for_poll, CHILD_CHECK_INTERVAL_SECS);
+                                                debug!("[SSE] Descendants still busy (iter {}/{}) for task {} — waiting {}s", iteration + 1, max_iterations, task_id_for_poll, CHILD_CHECK_INTERVAL_SECS);
                                                 tokio::time::sleep(tokio::time::Duration::from_secs(CHILD_CHECK_INTERVAL_SECS)).await;
                                             }
 
@@ -445,23 +446,23 @@ impl SseBridgeManager {
                                                     persist_session_completed(&app_for_poll, &task_id_for_poll);
                                                 }
                                                 CompletionAction::KeepRunning => {
-                                                    eprintln!("[SSE] Descendant polling ended without confirmed completion for task {} ({:?})", task_id_for_poll, poll_outcome);
+                                                    warn!("[SSE] Descendant polling ended without confirmed completion for task {} ({:?})", task_id_for_poll, poll_outcome);
                                                 }
                                             }
 
                                             poll_flag.store(false, Ordering::SeqCst);
                                         });
                                     } else {
-                                        println!("[SSE] Child-check poll already in progress for task {} — skipping", task_id);
+                                        debug!("[SSE] Child-check poll already in progress for task {} — skipping", task_id);
                                     }
                                 } else if real_event_type == "session.error" {
-                                    println!("[SSE] Session error → emitting implementation-failed for task {}", task_id);
+                                    info!("[SSE] Session error → emitting implementation-failed for task {}", task_id);
                                     let failure = FailurePayload {
                                         task_id: task_id.clone(),
                                         error: evt.data.clone(),
                                     };
                                     if let Err(e) = app_clone.emit("implementation-failed", &failure) {
-                                        eprintln!("[SSE] Failed to emit implementation-failed: {}", e);
+                                        warn!("[SSE] Failed to emit implementation-failed: {}", e);
                                     }
                                 }
 
@@ -509,14 +510,14 @@ impl SseBridgeManager {
                                             if let Err(e) = db_lock.update_agent_session(
                                                 &session.id, &session.stage, new_status, checkpoint, error_msg
                                             ) {
-                                                eprintln!("[SSE] Failed to persist session status '{}' for task {}: {}", new_status, task_id, e);
+                                                error!("[SSE] Failed to persist session status '{}' for task {}: {}", new_status, task_id, e);
                                             }
                                         }
                                     }
                                 }
                             }
                             es::SSE::Connected(_) => {
-                                println!("[SSE] Connected for task {}", task_id);
+                                info!("[SSE] Connected for task {}", task_id);
                             }
                             es::SSE::Comment(_) => {}
                         }
@@ -524,12 +525,12 @@ impl SseBridgeManager {
                     }
                 }) => {
                     match result {
-                        Ok(_) => println!("[SSE] Stream ended for task {}", task_id_clone),
-                        Err(e) => eprintln!("[SSE] Stream error for task {}: {}", task_id_clone, e),
+                        Ok(_) => info!("[SSE] Stream ended for task {}", task_id_clone),
+                        Err(e) => error!("[SSE] Stream error for task {}: {}", task_id_clone, e),
                     }
                 }
                 _ = &mut cancel_rx => {
-                    println!("[SSE] Cancelled for task {}", task_id_clone);
+                    info!("[SSE] Cancelled for task {}", task_id_clone);
                 }
             }
 
@@ -552,7 +553,7 @@ impl SseBridgeManager {
         let mut bridges = self.bridges.lock().await;
         if let Some(handle) = bridges.remove(task_id) {
             let _ = handle.cancel_tx.send(());
-            println!("[SSE] Stopped bridge for task {}", task_id);
+            info!("[SSE] Stopped bridge for task {}", task_id);
         }
     }
 
@@ -561,7 +562,7 @@ impl SseBridgeManager {
         let mut bridges = self.bridges.lock().await;
         for (task_id, handle) in bridges.drain() {
             let _ = handle.cancel_tx.send(());
-            println!("[SSE] Stopped bridge for task {}", task_id);
+            info!("[SSE] Stopped bridge for task {}", task_id);
         }
     }
 }

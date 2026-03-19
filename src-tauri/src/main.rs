@@ -28,6 +28,7 @@ pub mod providers;
 pub mod command_discovery;
 use std::sync::{Mutex, Arc};
 use std::time::Duration;
+use log::{info, warn, error, debug};
 use tauri::{Manager, Emitter};
 use jira_client::JiraClient;
 use github_client::GitHubClient;
@@ -44,9 +45,9 @@ use whisper_manager::{WhisperManager, WhisperModelSize};
 async fn resume_task_servers(app: tauri::AppHandle, http_ready: tokio::sync::oneshot::Receiver<()>) {
     // Wait for the HTTP server to be listening so Claude Code hooks don't get connection-refused
     match http_ready.await {
-        Ok(()) => println!("[startup] HTTP server ready, proceeding with session resume"),
+        Ok(()) => debug!("[startup] HTTP server ready, proceeding with session resume"),
         Err(_) => {
-            eprintln!("[startup] HTTP server ready channel dropped — resuming anyway (hooks may fail)");
+            warn!("[startup] HTTP server ready channel dropped — resuming anyway (hooks may fail)");
         }
     }
 
@@ -56,7 +57,7 @@ async fn resume_task_servers(app: tauri::AppHandle, http_ready: tokio::sync::one
         match db_lock.get_resumable_worktrees() {
             Ok(wts) => wts,
             Err(e) => {
-                eprintln!("[startup] Failed to get resumable worktrees: {}", e);
+                error!("[startup] Failed to get resumable worktrees: {}", e);
                 let _ = app.emit("startup-resume-complete", ());
                 return;
             }
@@ -68,12 +69,12 @@ async fn resume_task_servers(app: tauri::AppHandle, http_ready: tokio::sync::one
         return;
     }
 
-    println!("[startup] Resuming servers for {} task(s)", worktrees.len());
+    info!("[startup] Resuming servers for {} task(s)", worktrees.len());
 
     for worktree in worktrees {
         let worktree_path = std::path::Path::new(&worktree.worktree_path);
         if !worktree_path.exists() {
-            eprintln!(
+            warn!(
                 "[startup] Worktree path missing for task {}, skipping: {}",
                 worktree.task_id, worktree.worktree_path
             );
@@ -121,7 +122,7 @@ async fn resume_task_servers(app: tauri::AppHandle, http_ready: tokio::sync::one
         ) {
             Ok(p) => p,
             Err(e) => {
-                eprintln!("[startup] Unknown provider for task {}: {}", worktree.task_id, e);
+                warn!("[startup] Unknown provider for task {}: {}", worktree.task_id, e);
                 continue;
             }
         };
@@ -145,7 +146,7 @@ async fn resume_task_servers(app: tauri::AppHandle, http_ready: tokio::sync::one
                         result.port as i64,
                         0,
                     ) {
-                        eprintln!(
+                        warn!(
                             "[startup] Failed to update worktree server for {}: {}",
                             worktree.task_id, e
                         );
@@ -160,13 +161,13 @@ async fn resume_task_servers(app: tauri::AppHandle, http_ready: tokio::sync::one
                     }),
                 );
 
-                println!(
+                info!(
                     "[startup] Resumed {} for task {} (port {})",
                     provider_name, worktree.task_id, result.port
                 );
             }
             Err(e) => {
-                eprintln!(
+                error!(
                     "[startup] Failed to resume {} for task {}: {}",
                     provider_name, worktree.task_id, e
                 );
@@ -198,7 +199,7 @@ async fn resume_task_servers(app: tauri::AppHandle, http_ready: tokio::sync::one
     }
 
     let _ = app.emit("startup-resume-complete", ());
-    println!("[startup] Resume complete, emitted startup-resume-complete event");
+    info!("[startup] Resume complete, emitted startup-resume-complete event");
 }
 // ============================================================================
 // Main
@@ -212,7 +213,38 @@ fn main() {
 
     // ctrlc handler is set up after app is built so it can trigger proper cleanup
 
+    let log_plugin = {
+        let mut builder = tauri_plugin_log::Builder::new()
+            .timezone_strategy(tauri_plugin_log::TimezoneStrategy::UseLocal)
+            .max_file_size(10_000_000)
+            .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepSome(5));
+
+        if cfg!(debug_assertions) {
+            builder = builder
+                .level(log::LevelFilter::Debug)
+                .targets([
+                    tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Stdout),
+                    tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Webview),
+                    tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::LogDir {
+                        file_name: None,
+                    }),
+                ]);
+        } else {
+            builder = builder
+                .level(log::LevelFilter::Info)
+                .targets([
+                    tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Stdout),
+                    tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::LogDir {
+                        file_name: None,
+                    }),
+                ]);
+        }
+
+        builder.build()
+    };
+
     let app = tauri::Builder::default()
+        .plugin(log_plugin)
         .setup(|app| {
             let app_data_dir = app
                 .path()
@@ -228,32 +260,32 @@ fn main() {
             };
             let db_path = app_data_dir.join(db_filename);
 
-            println!("Initializing database at: {:?} (mode: {})", db_path, if cfg!(debug_assertions) { "dev" } else { "prod" });
+            info!("Initializing database at: {:?} (mode: {})", db_path, if cfg!(debug_assertions) { "dev" } else { "prod" });
 
             let database = db::Database::new(db_path).expect("Failed to initialize database");
 
             match database.mark_running_sessions_interrupted() {
                 Ok(count) if count > 0 => {
-                    println!("[startup] Marked {} stale running sessions as interrupted", count);
+                    info!("[startup] Marked {} stale running sessions as interrupted", count);
                 }
                 Ok(_) => {}
                 Err(e) => {
-                    eprintln!("[startup] Failed to mark stale sessions: {}", e);
+                    warn!("[startup] Failed to mark stale sessions: {}", e);
                 }
             }
 
             match database.clear_stale_worktree_servers() {
                 Ok(count) if count > 0 => {
-                    println!("[startup] Cleared stale server info from {} worktree(s)", count);
+                    info!("[startup] Cleared stale server info from {} worktree(s)", count);
                 }
                 Ok(_) => {}
                 Err(e) => {
-                    eprintln!("[startup] Failed to clear stale worktree servers: {}", e);
+                    warn!("[startup] Failed to clear stale worktree servers: {}", e);
                 }
             }
 
             if let Err(e) = mcp_installer::install_mcp_server() {
-                eprintln!("[startup] Failed to install MCP server: {}", e);
+                warn!("[startup] Failed to install MCP server: {}", e);
             }
             let whisper_model_pref = database.get_config("whisper_model_size")
                 .ok()
@@ -268,29 +300,29 @@ fn main() {
             let db_for_http = db_arc.clone();
             tauri::async_runtime::spawn(async move {
                 if let Err(e) = http_server::start_http_server(app_handle_http, db_for_http, http_ready_tx).await {
-                    eprintln!("[http_server] Failed to start: {}", e);
+                    error!("[http_server] Failed to start: {}", e);
                 }
             });
-            println!("HTTP server task started");
+            debug!("HTTP server task started");
 
             let port = std::env::var("AI_COMMAND_CENTER_PORT")
                 .unwrap_or_else(|_| "17422".to_string());
             if let Err(e) = mcp_installer::configure_opencode_mcp(&port) {
-                eprintln!("[startup] Failed to configure OpenCode MCP: {}", e);
+                warn!("[startup] Failed to configure OpenCode MCP: {}", e);
             }
             if let Err(e) = mcp_installer::configure_claude_mcp(&port) {
-                eprintln!("[startup] Failed to configure Claude Code MCP: {}", e);
+                warn!("[startup] Failed to configure Claude Code MCP: {}", e);
             }
 
             let hooks_port = claude_hooks::get_http_server_port();
             match claude_hooks::generate_hooks_settings(hooks_port) {
-                Ok(path) => println!("Claude hooks settings generated at: {:?}", path),
-                Err(e) => eprintln!("Failed to generate Claude hooks settings: {}", e),
+                Ok(path) => info!("Claude hooks settings generated at: {:?}", path),
+                Err(e) => warn!("Failed to generate Claude hooks settings: {}", e),
             }
 
             app.manage(db_arc.clone());
 
-            println!("Database initialized successfully");
+            info!("Database initialized successfully");
             let jira_client = JiraClient::new();
             let github_client = GitHubClient::new();
             let opencode_client = OpenCodeClient::with_base_url("http://127.0.0.1:4096".to_string());
@@ -311,35 +343,35 @@ fn main() {
             app.manage(Arc::new(tokio::sync::Notify::new()));
 
             if let Err(e) = server_manager::ServerManager::new().cleanup_stale_pids() {
-                eprintln!("Failed to cleanup stale server PIDs: {}", e);
+                warn!("Failed to cleanup stale server PIDs: {}", e);
             }
 
             if let Err(e) = PtyManager::new().cleanup_stale_pids() {
-                eprintln!("Failed to cleanup stale PTY PIDs: {}", e);
+                warn!("Failed to cleanup stale PTY PIDs: {}", e);
             }
 
-            println!("Server manager initialized");
+            info!("Server manager initialized");
 
             let app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 jira_sync::start_jira_sync(app_handle).await;
             });
 
-            println!("JIRA sync task started");
+            debug!("JIRA sync task started");
 
             let app_handle_github = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 github_poller::start_github_poller(app_handle_github).await;
             });
 
-            println!("GitHub poller task started");
+            debug!("GitHub poller task started");
 
             let app_handle_resume = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 resume_task_servers(app_handle_resume, http_ready_rx).await;
             });
 
-            println!("Server resume task started");
+            debug!("Server resume task started");
 
             let app_handle_shepherd = app.handle().clone();
             tauri::async_runtime::spawn(async move {
@@ -354,12 +386,12 @@ fn main() {
                         Ok(db) => match resolve_startup_project_id(&db) {
                             Ok(project_id) => project_id,
                             Err(e) => {
-                                eprintln!("[shepherd] Failed to resolve startup project: {}", e);
+                                warn!("[shepherd] Failed to resolve startup project: {}", e);
                                 None
                             }
                         },
                         Err(e) => {
-                            eprintln!("[shepherd] database lock error during startup: {}", e);
+                            error!("[shepherd] database lock error during startup: {}", e);
                             None
                         }
                     }
@@ -367,7 +399,7 @@ fn main() {
 
                 if let Some(project_id) = startup_project_id {
                     if let Err(e) = start_shepherd_if_enabled(&app_handle_shepherd_init, &project_id).await {
-                        eprintln!("[shepherd] auto-start failed for {}: {}", project_id, e);
+                        warn!("[shepherd] auto-start failed for {}: {}", project_id, e);
                     }
                 }
             });
@@ -480,32 +512,32 @@ fn main() {
     // Fix Ctrl+C to route through Tauri's exit path so RunEvent::Exit fires
     let ctrlc_handle = app.handle().clone();
     ctrlc::set_handler(move || {
-        println!("[shutdown] Ctrl+C received, triggering exit...");
+        info!("[shutdown] Ctrl+C received, triggering exit...");
         ctrlc_handle.exit(0);
     }).ok();
 
     app.run(|app_handle, event| {
         if let tauri::RunEvent::Exit = event {
-            println!("[shutdown] App exit triggered, cleaning up...");
+            info!("[shutdown] App exit triggered, cleaning up...");
             let sse_mgr = app_handle.state::<sse_bridge::SseBridgeManager>();
             let server_mgr = app_handle.state::<server_manager::ServerManager>();
             let pty_mgr = app_handle.state::<pty_manager::PtyManager>();
 
             tauri::async_runtime::block_on(async {
-                println!("[shutdown] Killing all PTY sessions...");
+                info!("[shutdown] Killing all PTY sessions...");
 
                 pty_mgr.kill_all().await;
 
-                println!("[shutdown] Stopping all SSE bridges...");
+                info!("[shutdown] Stopping all SSE bridges...");
                 sse_mgr.stop_all().await;
 
 
-                println!("[shutdown] Stopping all OpenCode servers...");
+                info!("[shutdown] Stopping all OpenCode servers...");
                 if let Err(e) = server_mgr.stop_all().await {
-                    eprintln!("[shutdown] Error stopping servers: {}", e);
+                    error!("[shutdown] Error stopping servers: {}", e);
                 }
 
-                println!("[shutdown] Cleanup complete");
+                info!("[shutdown] Cleanup complete");
             });
         }
     });

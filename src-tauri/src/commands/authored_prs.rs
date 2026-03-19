@@ -1,4 +1,5 @@
 use futures::future::join_all;
+use log::error;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
@@ -136,7 +137,7 @@ async fn fetch_event_signal_prs(
                 });
             }
             Err(e) => {
-                eprintln!(
+                error!(
                     "[authored_prs] Failed to fetch PR details for {}/{} #{}: {}",
                     pr_ref.repo_owner, pr_ref.repo_name, pr_ref.number, e
                 );
@@ -211,7 +212,7 @@ pub async fn fetch_authored_prs(
         .list_user_events(&username, &token)
         .await
         .unwrap_or_else(|e| {
-            eprintln!(
+            error!(
                 "[authored_prs] Failed to fetch user events for {}: {}",
                 username, e
             );

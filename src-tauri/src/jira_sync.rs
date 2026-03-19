@@ -19,6 +19,7 @@
 
 use crate::db::Database;
 use crate::jira_client::JiraClient;
+use log::{error, info, warn};
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter, Manager};
@@ -72,7 +73,7 @@ pub async fn start_jira_sync(app: AppHandle) {
         };
 
         if jira_base_url.is_empty() || jira_api_token.is_empty() {
-            println!("[JIRA Sync] JIRA credentials not configured, sleeping");
+            info!("[JIRA Sync] JIRA credentials not configured, sleeping");
             sleep(Duration::from_secs(poll_interval)).await;
             continue;
         }
@@ -85,14 +86,14 @@ pub async fn start_jira_sync(app: AppHandle) {
         let projects = match projects_result {
             Ok(projects) => projects,
             Err(e) => {
-                eprintln!("[JIRA Sync] Failed to get projects: {}", e);
+                error!("[JIRA Sync] Failed to get projects: {}", e);
                 sleep(Duration::from_secs(poll_interval)).await;
                 continue;
             }
         };
 
         if projects.is_empty() {
-            println!("[JIRA Sync] No projects found, sleeping");
+            info!("[JIRA Sync] No projects found, sleeping");
             sleep(Duration::from_secs(poll_interval)).await;
             continue;
         }
@@ -114,7 +115,7 @@ pub async fn start_jira_sync(app: AppHandle) {
                     .into_iter()
                     .collect(),
                 Err(e) => {
-                    eprintln!(
+                    warn!(
                         "[JIRA Sync] Failed to get tasks for project {}: {}",
                         project.id, e
                     );
@@ -123,7 +124,7 @@ pub async fn start_jira_sync(app: AppHandle) {
             };
 
             if jira_keys.is_empty() {
-                println!(
+                info!(
                     "[JIRA Sync] No tasks with JIRA links for project {}, skipping",
                     project.id
                 );
@@ -138,7 +139,7 @@ pub async fn start_jira_sync(app: AppHandle) {
                     .collect::<Vec<_>>()
                     .join(",")
             );
-            println!(
+            info!(
                 "[JIRA Sync] Refreshing JIRA info for project {} with JQL: {}",
                 project.id, jql
             );
@@ -177,19 +178,19 @@ pub async fn start_jira_sync(app: AppHandle) {
                         match db_lock.update_task_jira_info(&issue.key, &jira_title, &jira_status, &assignee, &jira_description) {
                             Ok(count) => updated += count,
                             Err(e) => {
-                                eprintln!("[JIRA Sync] Failed to update {}: {}", issue.key, e)
+                                warn!("[JIRA Sync] Failed to update {}: {}", issue.key, e)
                             }
                         }
                         drop(db_lock);
                     }
 
-                    println!(
+                    info!(
                         "[JIRA Sync] Updated JIRA info for {} tasks in project {}",
                         updated, project.id
                     );
                     total_updated += updated;
                 }
-                Err(e) => eprintln!(
+                Err(e) => error!(
                     "[JIRA Sync] Failed to fetch issues for project {}: {}",
                     project.id, e
                 ),
@@ -197,17 +198,16 @@ pub async fn start_jira_sync(app: AppHandle) {
         }
 
         if total_updated > 0 {
-            println!(
+            info!(
                 "[JIRA Sync] Total updated: {} tasks across all projects",
                 total_updated
             );
             if let Err(e) = app.emit("jira-sync-complete", ()) {
-                eprintln!("[JIRA Sync] Failed to emit event: {}", e);
+                warn!("[JIRA Sync] Failed to emit event: {}", e);
             }
         }
 
         sleep(Duration::from_secs(poll_interval)).await;
     }
 }
-
 

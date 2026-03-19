@@ -4,6 +4,7 @@ use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
+use log::{error, info, warn};
 use tokio::sync::Mutex;
 use portable_pty::{CommandBuilder, PtySize, native_pty_system};
 use tauri::Emitter;
@@ -136,7 +137,7 @@ impl PtyManager {
         let mut sessions = self.sessions.lock().await;
 
         if sessions.contains_key(task_id) {
-            println!("[PTY] Replacing existing PTY for task {}", task_id);
+            info!("[PTY] Replacing existing PTY for task {}", task_id);
             if let Some(mut old_session) = sessions.remove(task_id) {
                 let _ = old_session.child.kill();
             }
@@ -146,7 +147,7 @@ impl PtyManager {
             }
         }
 
-        println!("Spawning PTY for task {} ({}x{})", task_id, cols, rows);
+        info!("Spawning PTY for task {} ({}x{})", task_id, cols, rows);
 
         let pty_system = native_pty_system();
         let size = PtySize {
@@ -187,7 +188,7 @@ impl PtyManager {
         drop(pair.slave);
 
         let pid = child.process_id().unwrap_or(0);
-        println!("PTY for task {} started (PID: {})", task_id, pid);
+        info!("PTY for task {} started (PID: {})", task_id, pid);
 
         // Generate unique instance ID for this PTY session
         let instance_id = NEXT_INSTANCE_ID.fetch_add(1, Ordering::Relaxed);
@@ -248,7 +249,7 @@ impl PtyManager {
             loop {
                 match reader.read(&mut buffer) {
                     Ok(0) => {
-                        println!("[PTY] task={} closed (EOF)", task_id_reader);
+                        info!("[PTY] task={} closed (EOF)", task_id_reader);
                         let _ = tx.send(None);
                         break;
                     }
@@ -270,13 +271,13 @@ impl PtyManager {
                         if !data.is_empty() {
                             let text = String::from_utf8_lossy(&data).to_string();
                             if tx.send(Some(text)).is_err() {
-                                println!("[PTY] task={} channel closed, reader exiting", task_id_reader);
+                                info!("[PTY] task={} channel closed, reader exiting", task_id_reader);
                                 break;
                             }
                         }
                     }
                     Err(e) => {
-                        println!("[PTY] task={} read error: {}", task_id_reader, e);
+                        info!("[PTY] task={} read error: {}", task_id_reader, e);
                         let _ = tx.send(None);
                         break;
                     }
@@ -311,7 +312,7 @@ impl PtyManager {
                                         let event_name = format!("pty-output-{}", task_id_emitter);
                                         let payload = serde_json::json!({ "task_id": &task_id_emitter, "data": &buffer });
                                         if let Err(e) = app_handle.emit(&event_name, &payload) {
-                                            eprintln!("[PTY] Failed to emit {}: {}", event_name, e);
+                                            warn!("[PTY] Failed to emit {}: {}", event_name, e);
                                         }
                                         if let Ok(mut buf) = ring_buffer_emitter.lock() {
                                             buf.push(buffer.as_bytes());
@@ -325,14 +326,14 @@ impl PtyManager {
                                     let event_name = format!("pty-output-{}", task_id_emitter);
                                     let payload = serde_json::json!({ "task_id": &task_id_emitter, "data": &buffer });
                                     if let Err(e) = app_handle.emit(&event_name, &payload) {
-                                        eprintln!("[PTY] Failed to emit {}: {}", event_name, e);
+                                        warn!("[PTY] Failed to emit {}: {}", event_name, e);
                                     }
                                     if let Ok(mut buf) = ring_buffer_emitter.lock() {
                                         buf.push(buffer.as_bytes());
                                     }
                                     buffer.clear();
                                 }
-                                println!("[PTY] task={} emitter received exit signal", task_id_emitter);
+                                info!("[PTY] task={} emitter received exit signal", task_id_emitter);
                                 let _ = app_handle.emit(&format!("pty-exit-{}", task_id_emitter), serde_json::json!({"instance_id": instance_id_emitter}));
                                 break;
                             }
@@ -343,7 +344,7 @@ impl PtyManager {
                             let event_name = format!("pty-output-{}", task_id_emitter);
                             let payload = serde_json::json!({ "task_id": &task_id_emitter, "data": &buffer });
                             if let Err(e) = app_handle.emit(&event_name, &payload) {
-                                eprintln!("[PTY] Failed to emit {}: {}", event_name, e);
+                                warn!("[PTY] Failed to emit {}: {}", event_name, e);
                             }
                             if let Ok(mut buf) = ring_buffer_emitter.lock() {
                                 buf.push(buffer.as_bytes());
@@ -394,7 +395,7 @@ impl PtyManager {
         let mut sessions = self.sessions.lock().await;
 
         if sessions.contains_key(task_id) {
-            println!("[PTY] Replacing existing PTY for task {}", task_id);
+            info!("[PTY] Replacing existing PTY for task {}", task_id);
             if let Some(mut old_session) = sessions.remove(task_id) {
                 let _ = old_session.child.kill();
             }
@@ -406,11 +407,11 @@ impl PtyManager {
 
         // Pre-approve workspace trust so the "Do you trust this folder?" dialog is skipped
         if let Err(e) = crate::claude_hooks::ensure_workspace_trusted(cwd) {
-            println!("[PTY] Warning: Failed to pre-approve workspace trust: {}", e);
+            info!("[PTY] Warning: Failed to pre-approve workspace trust: {}", e);
             // Non-fatal — Claude will just show the trust dialog
         }
 
-        println!("Spawning Claude PTY for task {} ({}x{})", task_id, cols, rows);
+        info!("Spawning Claude PTY for task {} ({}x{})", task_id, cols, rows);
 
         let pty_system = native_pty_system();
         let size = PtySize {
@@ -448,7 +449,7 @@ impl PtyManager {
         drop(pair.slave);
 
         let pid = child.process_id().unwrap_or(0);
-        println!("Claude PTY for task {} started (PID: {})", task_id, pid);
+        info!("Claude PTY for task {} started (PID: {})", task_id, pid);
 
         let instance_id = NEXT_INSTANCE_ID.fetch_add(1, Ordering::Relaxed);
 
@@ -508,7 +509,7 @@ impl PtyManager {
             loop {
                 match reader.read(&mut buffer) {
                     Ok(0) => {
-                        println!("[PTY] task={} closed (EOF)", task_id_reader);
+                        info!("[PTY] task={} closed (EOF)", task_id_reader);
                         let _ = tx.send(None);
                         break;
                     }
@@ -536,13 +537,13 @@ impl PtyManager {
                         if !data.is_empty() {
                             let text = String::from_utf8_lossy(&data).to_string();
                             if tx.send(Some(text)).is_err() {
-                                println!("[PTY] task={} channel closed, reader exiting", task_id_reader);
+                                info!("[PTY] task={} channel closed, reader exiting", task_id_reader);
                                 break;
                             }
                         }
                     }
                     Err(e) => {
-                        println!("[PTY] task={} read error: {}", task_id_reader, e);
+                        info!("[PTY] task={} read error: {}", task_id_reader, e);
                         let _ = tx.send(None);
                         break;
                     }
@@ -573,7 +574,7 @@ impl PtyManager {
                                     let event_name = format!("pty-output-{}", task_id_emitter);
                                     let payload = serde_json::json!({ "task_id": &task_id_emitter, "data": &buffer });
                                     if let Err(e) = app_handle.emit(&event_name, &payload) {
-                                        eprintln!("[PTY] Failed to emit {}: {}", event_name, e);
+                                        warn!("[PTY] Failed to emit {}: {}", event_name, e);
                                     }
                                     buffer.clear();
                                 }
@@ -586,11 +587,11 @@ impl PtyManager {
                                     let event_name = format!("pty-output-{}", task_id_emitter);
                                     let payload = serde_json::json!({ "task_id": &task_id_emitter, "data": &buffer });
                                     if let Err(e) = app_handle.emit(&event_name, &payload) {
-                                        eprintln!("[PTY] Failed to emit {}: {}", event_name, e);
+                                        warn!("[PTY] Failed to emit {}: {}", event_name, e);
                                     }
                                     buffer.clear();
                                 }
-                                println!("[PTY] task={} emitter received exit signal", task_id_emitter);
+                                info!("[PTY] task={} emitter received exit signal", task_id_emitter);
                                 let _ = app_handle.emit(&format!("pty-exit-{}", task_id_emitter), serde_json::json!({"instance_id": instance_id_emitter}));
                                 let _ = app_handle.emit("claude-pty-exited", serde_json::json!({"task_id": &task_id_emitter}));
                                 break;
@@ -605,7 +606,7 @@ impl PtyManager {
                             let event_name = format!("pty-output-{}", task_id_emitter);
                             let payload = serde_json::json!({ "task_id": &task_id_emitter, "data": &buffer });
                             if let Err(e) = app_handle.emit(&event_name, &payload) {
-                                eprintln!("[PTY] Failed to emit {}: {}", event_name, e);
+                                warn!("[PTY] Failed to emit {}: {}", event_name, e);
                             }
                             buffer.clear();
                         }
@@ -629,7 +630,7 @@ impl PtyManager {
         let mut sessions = self.sessions.lock().await;
 
         if sessions.contains_key(&key) {
-            println!("[PTY] Replacing existing shell PTY for task {}", task_id);
+            info!("[PTY] Replacing existing shell PTY for task {}", task_id);
             if let Some(mut old_session) = sessions.remove(&key) {
                 let _ = old_session.child.kill();
             }
@@ -638,7 +639,7 @@ impl PtyManager {
             }
         }
 
-        println!("Spawning shell PTY for task {} ({}x{})", task_id, cols, rows);
+        info!("Spawning shell PTY for task {} ({}x{})", task_id, cols, rows);
 
         let pty_system = native_pty_system();
         let size = PtySize {
@@ -673,7 +674,7 @@ impl PtyManager {
         drop(pair.slave);
 
         let pid = child.process_id().unwrap_or(0);
-        println!("Shell PTY for task {} started (PID: {})", task_id, pid);
+        info!("Shell PTY for task {} started (PID: {})", task_id, pid);
 
         let instance_id = NEXT_INSTANCE_ID.fetch_add(1, Ordering::Relaxed);
 
@@ -733,7 +734,7 @@ impl PtyManager {
             loop {
                 match reader.read(&mut buffer) {
                     Ok(0) => {
-                        println!("[PTY] key={} closed (EOF)", key_reader);
+                        info!("[PTY] key={} closed (EOF)", key_reader);
                         let _ = tx.send(None);
                         break;
                     }
@@ -761,13 +762,13 @@ impl PtyManager {
                         if !data.is_empty() {
                             let text = String::from_utf8_lossy(&data).to_string();
                             if tx.send(Some(text)).is_err() {
-                                println!("[PTY] key={} channel closed, reader exiting", key_reader);
+                                info!("[PTY] key={} channel closed, reader exiting", key_reader);
                                 break;
                             }
                         }
                     }
                     Err(e) => {
-                        println!("[PTY] key={} read error: {}", key_reader, e);
+                        info!("[PTY] key={} read error: {}", key_reader, e);
                         let _ = tx.send(None);
                         break;
                     }
@@ -798,7 +799,7 @@ impl PtyManager {
                                     let event_name = format!("pty-output-{}", key_emitter);
                                     let payload = serde_json::json!({ "task_id": &key_emitter, "data": &buffer });
                                     if let Err(e) = app_handle.emit(&event_name, &payload) {
-                                        eprintln!("[PTY] Failed to emit {}: {}", event_name, e);
+                                        warn!("[PTY] Failed to emit {}: {}", event_name, e);
                                     }
                                     buffer.clear();
                                 }
@@ -811,11 +812,11 @@ impl PtyManager {
                                     let event_name = format!("pty-output-{}", key_emitter);
                                     let payload = serde_json::json!({ "task_id": &key_emitter, "data": &buffer });
                                     if let Err(e) = app_handle.emit(&event_name, &payload) {
-                                        eprintln!("[PTY] Failed to emit {}: {}", event_name, e);
+                                        warn!("[PTY] Failed to emit {}: {}", event_name, e);
                                     }
                                     buffer.clear();
                                 }
-                                println!("[PTY] key={} emitter received exit signal", key_emitter);
+                                info!("[PTY] key={} emitter received exit signal", key_emitter);
                                 let _ = app_handle.emit(&format!("pty-exit-{}", key_emitter), serde_json::json!({"instance_id": instance_id_emitter}));
                                 break;
                             }
@@ -829,7 +830,7 @@ impl PtyManager {
                             let event_name = format!("pty-output-{}", key_emitter);
                             let payload = serde_json::json!({ "task_id": &key_emitter, "data": &buffer });
                             if let Err(e) = app_handle.emit(&event_name, &payload) {
-                                eprintln!("[PTY] Failed to emit {}: {}", event_name, e);
+                                warn!("[PTY] Failed to emit {}: {}", event_name, e);
                             }
                             buffer.clear();
                         }
@@ -897,14 +898,14 @@ impl PtyManager {
         let mut sessions = self.sessions.lock().await;
 
         if let Some(mut session) = sessions.remove(task_id) {
-            println!("Killing PTY for task {}", task_id);
+            info!("Killing PTY for task {}", task_id);
 
             let _ = session.child.kill();
 
             let pid_file = self.get_pid_dir()?.join(format!("{}-pty.pid", task_id));
             let _ = std::fs::remove_file(pid_file);
 
-            println!("PTY for task {} killed", task_id);
+            info!("PTY for task {} killed", task_id);
         }
 
         drop(sessions);
@@ -930,7 +931,7 @@ impl PtyManager {
 
         for task_id in task_ids {
             if let Err(e) = self.kill_pty(&task_id).await {
-                eprintln!("Failed to kill PTY for task {}: {}", task_id, e);
+                error!("Failed to kill PTY for task {}: {}", task_id, e);
             }
         }
     }
@@ -1030,7 +1031,7 @@ impl PtyManager {
             };
 
             if !is_running {
-                println!("[cleanup] Removing stale PTY PID file (process dead): {:?}", path);
+                info!("[cleanup] Removing stale PTY PID file (process dead): {:?}", path);
                 let _ = std::fs::remove_file(&path);
             } else {
                 // Process is alive — verify it's actually opencode before killing
@@ -1044,7 +1045,7 @@ impl PtyManager {
                     .unwrap_or(false);
 
                 if is_opencode {
-                    println!("[cleanup] Killing orphaned opencode PTY process (PID: {})", pid);
+                    info!("[cleanup] Killing orphaned opencode PTY process (PID: {})", pid);
                     unsafe {
                         libc::kill(pid, libc::SIGTERM);
                     }
@@ -1053,13 +1054,13 @@ impl PtyManager {
                     // Check if still running, force kill if needed
                     let still_running = unsafe { libc::kill(pid, 0) == 0 };
                     if still_running {
-                        println!("[cleanup] Force killing PTY process (PID: {})", pid);
+                        info!("[cleanup] Force killing PTY process (PID: {})", pid);
                         unsafe {
                             libc::kill(pid, libc::SIGKILL);
                         }
                     }
                 } else {
-                    println!("[cleanup] PID {} is not opencode (PID reuse), removing stale PTY file: {:?}", pid, path);
+                    info!("[cleanup] PID {} is not opencode (PID reuse), removing stale PTY file: {:?}", pid, path);
                 }
                 let _ = std::fs::remove_file(&path);
             }
@@ -1194,7 +1195,7 @@ fn get_user_environment() -> HashMap<String, String> {
             }
         }
         _ => {
-            eprintln!("Failed to get user environment from shell, using fallbacks");
+            warn!("Failed to get user environment from shell, using fallbacks");
         }
     }
 

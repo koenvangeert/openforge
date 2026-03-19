@@ -1,3 +1,4 @@
+use log::error;
 use std::sync::{Mutex, Arc};
 use tauri::{State, Emitter};
 use crate::{db, server_manager::ServerManager, sse_bridge::SseBridgeManager, pty_manager::PtyManager, git_worktree};
@@ -113,7 +114,7 @@ pub async fn update_task_status(
             let repo_path = std::path::Path::new(&worktree.repo_path);
             let worktree_path = std::path::Path::new(&worktree.worktree_path);
             if let Err(e) = git_worktree::remove_worktree(repo_path, worktree_path).await {
-                eprintln!(
+                error!(
                     "[update_task_status] Failed to remove worktree at {}: {}",
                     worktree_path.display(),
                     e
@@ -122,7 +123,7 @@ pub async fn update_task_status(
 
             let db_lock = crate::db::acquire_db(&db);
             if let Err(e) = db_lock.delete_worktree_record(&id) {
-                eprintln!(
+                error!(
                     "[update_task_status] Failed to delete worktree record for {}: {}",
                     id, e
                 );
@@ -157,7 +158,7 @@ pub async fn delete_task(
         let repo_path = std::path::Path::new(&worktree.repo_path);
         let worktree_path = std::path::Path::new(&worktree.worktree_path);
         if let Err(e) = git_worktree::remove_worktree_with_branch(repo_path, worktree_path, Some(&worktree.branch_name)).await {
-            eprintln!(
+            error!(
                 "[delete_task] Failed to remove worktree at {}: {}",
                 worktree_path.display(),
                 e
@@ -212,7 +213,7 @@ pub async fn clear_done_tasks(
             )
             .await
             {
-                eprintln!(
+                error!(
                     "[clear_done_tasks] Failed to remove worktree at {}: {}",
                     worktree_path.display(),
                     e

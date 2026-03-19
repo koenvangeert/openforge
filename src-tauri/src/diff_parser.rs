@@ -159,8 +159,8 @@ index 1234567..abcdefg 100644
 +++ b/src/main.rs
 @@ -1,3 +1,4 @@
  fn main() {
-+    println!("hello");
-     println!("world");
++    info!("hello");
+     info!("world");
  }"#;
 
         let result = parse_unified_diff(diff, true);

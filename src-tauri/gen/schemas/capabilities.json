@@ -1,1 +1,1 @@
-{"default":{"identifier":"default","description":"Default capability granting core permissions","local":true,"windows":["main"],"permissions":["core:default","core:event:default"]}}
+{"default":{"identifier":"default","description":"Default capability granting core permissions","local":true,"windows":["main"],"permissions":["core:default","core:event:default","log:default"]}}

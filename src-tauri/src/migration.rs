@@ -1,3 +1,4 @@
+use log::{error, info, warn};
 use rusqlite::Connection;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -48,15 +49,15 @@ fn rename_if_needed(old: &Path, new: &Path, label: &str) {
         return;
     }
     if new.exists() {
-        eprintln!(
+        warn!(
             "[migration] Skipping {}: both old ({:?}) and new ({:?}) exist",
             label, old, new
         );
         return;
     }
     match fs::rename(old, new) {
-        Ok(()) => println!("[migration] Migrated {}: {:?} → {:?}", label, old, new),
-        Err(e) => eprintln!(
+        Ok(()) => info!("[migration] Migrated {}: {:?} → {:?}", label, old, new),
+        Err(e) => error!(
             "[migration] Failed to migrate {}: {:?} → {:?}: {}",
             label, old, new, e
         ),
@@ -69,7 +70,7 @@ fn migrate_database(old_app_data: &Path, new_app_data: &Path) {
     }
 
     if let Err(e) = fs::create_dir_all(new_app_data) {
-        eprintln!("[migration] Failed to create new app data dir: {}", e);
+        error!("[migration] Failed to create new app data dir: {}", e);
         return;
     }
 
@@ -111,7 +112,7 @@ fn rewrite_db_paths(app_data_dir: &Path, home_dir: Option<&Path>) {
         let conn = match Connection::open(&db_path) {
             Ok(c) => c,
             Err(e) => {
-                eprintln!(
+                error!(
                     "[migration] Failed to open {:?} for path rewrite: {}",
                     db_path, e
                 );
@@ -132,9 +133,9 @@ fn rewrite_db_paths(app_data_dir: &Path, home_dir: Option<&Path>) {
             "UPDATE worktrees SET worktree_path = REPLACE(worktree_path, ?1, ?2) WHERE worktree_path LIKE ?3",
             rusqlite::params![old_prefix, new_prefix, format!("{}%", old_prefix)],
         ) {
-            Ok(n) if n > 0 => println!("[migration] Rewrote {} worktree path(s) in {:?}", n, db_name),
+            Ok(n) if n > 0 => info!("[migration] Rewrote {} worktree path(s) in {:?}", n, db_name),
             Ok(_) => {}
-            Err(e) => eprintln!("[migration] Failed to rewrite worktree paths in {:?}: {}", db_name, e),
+            Err(e) => error!("[migration] Failed to rewrite worktree paths in {:?}: {}", db_name, e),
         }
     }
 }

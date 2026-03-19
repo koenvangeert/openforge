@@ -1,4 +1,5 @@
 use dashmap::DashMap;
+use log::{info, warn};
 use once_cell::sync::Lazy;
 use regex::Regex;
 use std::fmt;
@@ -100,7 +101,7 @@ pub async fn create_worktree(
 
     if !prune_output.status.success() {
         let stderr = String::from_utf8_lossy(&prune_output.stderr);
-        println!("Warning: worktree prune failed: {}", stderr);
+        warn!("Warning: worktree prune failed: {}", stderr);
     }
 
     // Fetch latest from origin so the base ref (e.g. origin/main) is up to date
@@ -114,7 +115,7 @@ pub async fn create_worktree(
 
     if !fetch_output.status.success() {
         let stderr = String::from_utf8_lossy(&fetch_output.stderr);
-        println!("Warning: git fetch origin failed: {}", stderr);
+        warn!("Warning: git fetch origin failed: {}", stderr);
     }
 
     if worktree_path.exists() {
@@ -124,7 +125,7 @@ pub async fn create_worktree(
     let result = try_create_worktree_inner(repo_path, worktree_path, branch_name, base_ref).await;
 
     if result.is_err() {
-        println!("Worktree creation failed, attempting cleanup and retry...");
+        info!("Worktree creation failed, attempting cleanup and retry...");
         
         let _ = Command::new("git")
             .arg("-C")
@@ -223,7 +224,7 @@ pub async fn create_review_worktree(
 
     if !prune_output.status.success() {
         let stderr = String::from_utf8_lossy(&prune_output.stderr);
-        println!("Warning: worktree prune failed: {}", stderr);
+        warn!("Warning: worktree prune failed: {}", stderr);
     }
 
     // Fetch the specific branch so origin/{remote_branch} is up to date
@@ -238,7 +239,7 @@ pub async fn create_review_worktree(
 
     if !fetch_output.status.success() {
         let stderr = String::from_utf8_lossy(&fetch_output.stderr);
-        println!("Warning: git fetch origin {} failed: {}", remote_branch, stderr);
+        warn!("Warning: git fetch origin {} failed: {}", remote_branch, stderr);
     }
 
     if worktree_path.exists() {
@@ -248,7 +249,7 @@ pub async fn create_review_worktree(
     let result = try_create_review_worktree_inner(repo_path, worktree_path, remote_branch).await;
 
     if result.is_err() {
-        println!("Review worktree creation failed, attempting cleanup and retry...");
+        info!("Review worktree creation failed, attempting cleanup and retry...");
 
         let _ = Command::new("git")
             .arg("-C")
@@ -335,7 +336,7 @@ pub async fn remove_worktree_with_branch(
 
     if !remove_output.status.success() {
         let stderr = String::from_utf8_lossy(&remove_output.stderr);
-        println!("Warning: git worktree remove failed: {}", stderr);
+        warn!("Warning: git worktree remove failed: {}", stderr);
     }
 
     // Step 2: Remove .git/worktrees metadata
@@ -347,7 +348,7 @@ pub async fn remove_worktree_with_branch(
     let git_dir = repo_path.join(".git").join("worktrees").join(worktree_name);
     if git_dir.exists() {
         if let Err(e) = std::fs::remove_dir_all(&git_dir) {
-            println!("Warning: failed to remove worktree metadata: {}", e);
+            warn!("Warning: failed to remove worktree metadata: {}", e);
         }
     }
 
@@ -376,7 +377,7 @@ pub async fn remove_worktree_with_branch(
 
     if !prune_output.status.success() {
         let stderr = String::from_utf8_lossy(&prune_output.stderr);
-        println!("Warning: worktree prune failed: {}", stderr);
+        warn!("Warning: worktree prune failed: {}", stderr);
     }
 
     if let Some(branch) = branch_name {
@@ -391,7 +392,7 @@ pub async fn remove_worktree_with_branch(
 
         if !branch_output.status.success() {
             let stderr = String::from_utf8_lossy(&branch_output.stderr);
-            println!("Warning: branch delete failed for {}: {}", branch, stderr);
+            warn!("Warning: branch delete failed for {}: {}", branch, stderr);
         }
     }
 

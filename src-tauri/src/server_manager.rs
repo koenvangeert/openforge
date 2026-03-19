@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::Arc;
 use std::time::Duration;
+use log::{error, info, debug};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::{Child, Command};
 use tokio::sync::Mutex;
@@ -89,11 +90,11 @@ impl ServerManager {
         let mut servers = self.servers.lock().await;
 
         if let Some(server) = servers.get(task_id) {
-            println!("Server already running for task {}: port {}", task_id, server.port);
+            info!("Server already running for task {}: port {}", task_id, server.port);
             return Ok(server.port);
         }
 
-        println!("Spawning OpenCode server for task {} in {:?}", task_id, worktree_path);
+        info!("Spawning OpenCode server for task {} in {:?}", task_id, worktree_path);
 
         let pid_dir = self.get_pid_dir()?;
         std::fs::create_dir_all(&pid_dir)?;
@@ -113,11 +114,11 @@ impl ServerManager {
 
         let port = self.detect_port(&mut child).await?;
 
-        println!("Server for task {} started on port {} (PID: {})", task_id, port, pid);
+        info!("Server for task {} started on port {} (PID: {})", task_id, port, pid);
 
         self.wait_for_health(port).await?;
 
-        println!("Server for task {} is healthy", task_id);
+        info!("Server for task {} is healthy", task_id);
 
         let pid_file = pid_dir.join(format!("{}.pid", task_id));
         std::fs::write(&pid_file, pid.to_string())?;
@@ -146,7 +147,7 @@ impl ServerManager {
             ServerError::ProcessNotFound(task_id.to_string())
         })?;
 
-        println!("Stopping server for task {} (PID: {}) — force killing", task_id, server.pid);
+        info!("Stopping server for task {} (PID: {}) — force killing", task_id, server.pid);
 
         server.child.kill().await?;
         let _ = server.child.wait().await;
@@ -154,7 +155,7 @@ impl ServerManager {
         let pid_file = self.get_pid_dir()?.join(format!("{}.pid", task_id));
         let _ = std::fs::remove_file(pid_file);
 
-        println!("Server for task {} stopped", task_id);
+        info!("Server for task {} stopped", task_id);
 
         Ok(())
     }
@@ -168,7 +169,7 @@ impl ServerManager {
 
         for task_id in task_ids {
             if let Err(e) = self.stop_server(&task_id).await {
-                eprintln!("Failed to stop server for task {}: {}", task_id, e);
+                error!("Failed to stop server for task {}: {}", task_id, e);
             }
         }
 
@@ -232,7 +233,7 @@ impl ServerManager {
             };
 
             if !is_running {
-                println!("[cleanup] Removing stale PID file (process dead): {:?}", path);
+                info!("[cleanup] Removing stale PID file (process dead): {:?}", path);
                 let _ = std::fs::remove_file(&path);
             } else {
                 // Process is alive — verify it's actually opencode before killing
@@ -246,12 +247,12 @@ impl ServerManager {
                     .unwrap_or(false);
 
                 if is_opencode {
-                    println!("[cleanup] Force killing orphaned opencode process (PID: {})", pid);
+                    info!("[cleanup] Force killing orphaned opencode process (PID: {})", pid);
                     unsafe {
                         libc::kill(pid, libc::SIGKILL);
                     }
                 } else {
-                    println!("[cleanup] PID {} is not opencode (PID reuse), removing stale file: {:?}", pid, path);
+                    info!("[cleanup] PID {} is not opencode (PID reuse), removing stale file: {:?}", pid, path);
                 }
                 let _ = std::fs::remove_file(&path);
             }
@@ -317,7 +318,7 @@ impl ServerManager {
         for attempt in 1..=HEALTH_CHECK_RETRIES {
             match client.get(&health_url).send().await {
                 Ok(response) if response.status().is_success() => {
-                    println!("Health check passed for port {}: {}", port, response.status());
+                    debug!("Health check passed for port {}: {}", port, response.status());
                     return Ok(());
                 }
                 Ok(_response) => {}
