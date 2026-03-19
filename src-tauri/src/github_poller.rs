@@ -34,6 +34,7 @@ use crate::github_client::{
     parse_repo_event_changes,
 };
 use futures::future::join_all;
+use log::{debug, error, info, warn};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
@@ -116,7 +117,7 @@ pub async fn poll_github_once(app: &AppHandle, github_client: &GitHubClient) -> 
     let projects = match projects {
         Ok(projects) => projects,
         Err(e) => {
-            eprintln!("[GitHub Poller] Failed to get projects: {}", e);
+            error!("[GitHub Poller] Failed to get projects: {}", e);
             return PollResult {
                 new_comments: 0,
                 ci_changes: 0,
@@ -141,7 +142,7 @@ pub async fn poll_github_once(app: &AppHandle, github_client: &GitHubClient) -> 
         };
     }
 
-    println!(
+    debug!(
         "[GitHub Poller] Polling {} projects for PR updates...",
         projects.len()
     );
@@ -160,7 +161,7 @@ pub async fn poll_github_once(app: &AppHandle, github_client: &GitHubClient) -> 
                 continue;
             }
             Err(e) => {
-                eprintln!(
+                error!(
                     "[GitHub Poller] Failed to read config for project {}: {}",
                     project.id, e
                 );
@@ -175,7 +176,7 @@ pub async fn poll_github_once(app: &AppHandle, github_client: &GitHubClient) -> 
 
         let parts: Vec<&str> = config.github_default_repo.split('/').collect();
         if parts.len() != 2 {
-            eprintln!(
+            error!(
                 "[GitHub Poller] Invalid repo format for project {}: {}",
                 project.id, config.github_default_repo
             );
@@ -185,7 +186,7 @@ pub async fn poll_github_once(app: &AppHandle, github_client: &GitHubClient) -> 
 
         let sync_start = Instant::now();
         if let Err(e) = sync_open_prs(github_client, &db, app, &config, &github_token).await {
-            eprintln!(
+            error!(
                 "[GitHub Poller] Failed to sync PRs for project {}: {}",
                 project.id, e
             );
@@ -195,7 +196,7 @@ pub async fn poll_github_once(app: &AppHandle, github_client: &GitHubClient) -> 
             }
             continue;
         }
-        println!(
+        debug!(
             "[GitHub Poller] Sync open PRs for project {} took {:.1}s",
             project.id,
             sync_start.elapsed().as_secs_f64()
@@ -204,7 +205,7 @@ pub async fn poll_github_once(app: &AppHandle, github_client: &GitHubClient) -> 
         let open_prs = match get_open_prs_for_project(&db, &project.id) {
             Ok(prs) => prs,
             Err(e) => {
-                eprintln!(
+                error!(
                     "[GitHub Poller] Failed to get PRs for project {}: {}",
                     project.id, e
                 );
@@ -219,7 +220,7 @@ pub async fn poll_github_once(app: &AppHandle, github_client: &GitHubClient) -> 
         {
             Ok(events) => parse_repo_event_changes(&events).touched_pr_numbers,
             Err(e) => {
-                eprintln!(
+                error!(
                     "[GitHub Poller] Failed to fetch repo events for {}/{}: {}",
                     parts[0], parts[1], e
                 );
@@ -237,7 +238,7 @@ pub async fn poll_github_once(app: &AppHandle, github_client: &GitHubClient) -> 
             &activity_pr_numbers,
         )
         .await;
-        println!(
+        debug!(
             "[GitHub Poller] PR polling for project {} took {:.1}s",
             project.id,
             poll_start.elapsed().as_secs_f64()
@@ -249,7 +250,7 @@ pub async fn poll_github_once(app: &AppHandle, github_client: &GitHubClient) -> 
     }
 
     if total_new_comments > 0 || total_errors > 0 {
-        println!(
+        info!(
             "[GitHub Poller] Found {} new comments ({} errors)",
             total_new_comments, total_errors
         );
@@ -257,23 +258,23 @@ pub async fn poll_github_once(app: &AppHandle, github_client: &GitHubClient) -> 
 
     let review_start = Instant::now();
     if let Err(e) = poll_review_prs(github_client, &db, app, &github_token).await {
-        eprintln!("[GitHub Poller] Failed to poll review PRs: {}", e);
+        error!("[GitHub Poller] Failed to poll review PRs: {}", e);
     }
-    println!(
+    debug!(
         "[GitHub Poller] Review PR polling took {:.1}s",
         review_start.elapsed().as_secs_f64()
     );
 
     let authored_start = Instant::now();
     if let Err(e) = poll_authored_prs(github_client, &db, app, &github_token).await {
-        eprintln!("[GitHub Poller] Failed to poll authored PRs: {}", e);
+        error!("[GitHub Poller] Failed to poll authored PRs: {}", e);
     }
-    println!(
+    debug!(
         "[GitHub Poller] Authored PR polling took {:.1}s",
         authored_start.elapsed().as_secs_f64()
     );
 
-    println!(
+    debug!(
         "[GitHub Poller] Cycle completed in {:.1}s ({} projects, {} new comments, {} CI changes, {} review changes, {} errors)",
         cycle_start.elapsed().as_secs_f64(),
         project_count,
@@ -330,7 +331,7 @@ pub async fn start_github_poller(app: AppHandle) {
 
         if has_changes {
             if let Err(e) = app.emit("github-sync-complete", &result) {
-                eprintln!("[GitHub Poller] Failed to emit github-sync-complete: {}", e);
+                warn!("[GitHub Poller] Failed to emit github-sync-complete: {}", e);
             }
         }
 
@@ -341,7 +342,7 @@ pub async fn start_github_poller(app: AppHandle) {
                     "reset_at": result.rate_limit_reset_at
                 }),
             ) {
-                eprintln!("[GitHub Poller] Failed to emit github-rate-limited: {}", e);
+                warn!("[GitHub Poller] Failed to emit github-rate-limited: {}", e);
             }
         }
 
@@ -466,7 +467,7 @@ async fn sync_open_prs(
                         (pr_id, merged, merged_at)
                     }
                     Err(e) => {
-                        eprintln!(
+                        warn!(
                             "[GitHub Poller] Failed to check merge status for PR #{}: {}",
                             pr_id, e
                         );
@@ -486,7 +487,7 @@ async fn sync_open_prs(
                 merged_pr_ids.insert(*pr_id);
                 if let Some(ts) = merged_at {
                     if let Err(e) = db_lock.update_pr_merged(*pr_id, *ts) {
-                        eprintln!(
+                        error!(
                             "[GitHub Poller] Failed to update merged status for PR #{}: {}",
                             pr_id, e
                         );
@@ -684,7 +685,7 @@ async fn poll_single_pr(
     let check_runs = check_runs_result.and_then(|r| match r {
         Ok(cr) => Some(cr),
         Err(e) => {
-            eprintln!(
+            warn!(
                 "[GitHub Poller] Failed to fetch check runs for PR #{}: {}",
                 pr.id, e
             );
@@ -695,7 +696,7 @@ async fn poll_single_pr(
     let combined_status = combined_status_result.and_then(|r| match r {
         Ok(cs) => Some(cs),
         Err(e) => {
-            eprintln!(
+            warn!(
                 "[GitHub Poller] Failed to fetch combined status for PR #{}: {}",
                 pr.id, e
             );
@@ -706,7 +707,7 @@ async fn poll_single_pr(
     let reviews = match reviews_result {
         Ok(r) => Some(r),
         Err(e) => {
-            eprintln!(
+            warn!(
                 "[GitHub Poller] Failed to fetch reviews for PR #{}: {}",
                 pr.id, e
             );
@@ -730,7 +731,7 @@ async fn poll_single_pr(
                     .unwrap_or(false)
         }
         Err(e) => {
-            eprintln!(
+            warn!(
                 "[GitHub Poller] Failed to fetch PR details for PR #{}: {}",
                 pr.id, e
             );
@@ -914,7 +915,7 @@ async fn poll_prs_for_project(
 
     for result in results {
         if let Some(err) = &result.error {
-            eprintln!(
+            error!(
                 "[GitHub Poller] Failed to poll PR #{}: {}",
                 result.pr_id, err
             );
@@ -925,7 +926,7 @@ async fn poll_prs_for_project(
         let existing_ids = match db_lock.get_existing_comment_ids(result.pr_id) {
             Ok(ids) => ids,
             Err(e) => {
-                eprintln!(
+                error!(
                     "[GitHub Poller] Failed to get existing comment IDs for PR #{}: {}",
                     result.pr_id, e
                 );
@@ -952,7 +953,7 @@ async fn poll_prs_for_project(
                 false,
                 created_at,
             ) {
-                eprintln!(
+                error!(
                     "[GitHub Poller] Failed to insert comment {}: {}",
                     comment.id, e
                 );
@@ -966,7 +967,7 @@ async fn poll_prs_for_project(
                     "comment_id": comment.id
                 }),
             ) {
-                eprintln!("[GitHub Poller] Failed to emit new-pr-comment event: {}", e);
+                warn!("[GitHub Poller] Failed to emit new-pr-comment event: {}", e);
             }
 
             new_comment_count += 1;
@@ -999,7 +1000,7 @@ async fn poll_prs_for_project(
                     false,
                     created_at,
                 ) {
-                    eprintln!(
+                    error!(
                         "[GitHub Poller] Failed to insert review body {}: {}",
                         review.id, e
                     );
@@ -1013,7 +1014,7 @@ async fn poll_prs_for_project(
                         "comment_id": comment_id
                     }),
                 ) {
-                    eprintln!("[GitHub Poller] Failed to emit new-pr-comment event: {}", e);
+                    warn!("[GitHub Poller] Failed to emit new-pr-comment event: {}", e);
                 }
 
                 new_comment_count += 1;
@@ -1054,7 +1055,7 @@ async fn poll_prs_for_project(
                 &new_status,
                 &check_runs_json,
             ) {
-                eprintln!(
+                error!(
                     "[GitHub Poller] Failed to update CI status for PR #{}: {}",
                     result.pr_id, e
                 );
@@ -1069,7 +1070,7 @@ async fn poll_prs_for_project(
                         "timestamp": now
                     }),
                 ) {
-                    eprintln!(
+                    warn!(
                         "[GitHub Poller] Failed to emit ci-status-changed event: {}",
                         e
                     );
@@ -1085,7 +1086,7 @@ async fn poll_prs_for_project(
                 result.required_approving_count,
             );
             if let Err(e) = db_lock.update_pr_review_status(result.pr_id, &review_status) {
-                eprintln!(
+                error!(
                     "[GitHub Poller] Failed to update review status for PR #{}: {}",
                     result.pr_id, e
                 );
@@ -1100,7 +1101,7 @@ async fn poll_prs_for_project(
                         "timestamp": now
                     }),
                 ) {
-                    eprintln!(
+                    warn!(
                         "[GitHub Poller] Failed to emit review-status-changed event: {}",
                         e
                     );
@@ -1110,7 +1111,7 @@ async fn poll_prs_for_project(
         }
 
         if let Err(e) = db_lock.update_pr_is_queued(result.pr_id, result.is_queued) {
-            eprintln!(
+            error!(
                 "[GitHub Poller] Failed to update is_queued for PR #{}: {}",
                 result.pr_id, e
             );
@@ -1121,14 +1122,14 @@ async fn poll_prs_for_project(
             result.mergeable,
             result.mergeable_state.as_deref(),
         ) {
-            eprintln!(
+            error!(
                 "[GitHub Poller] Failed to update mergeability for PR #{}: {}",
                 result.pr_id, e
             );
         }
 
         if let Err(e) = db_lock.set_pr_last_polled(result.pr_id, now) {
-            eprintln!(
+            error!(
                 "[GitHub Poller] Failed to set last_polled_at for PR #{}: {}",
                 result.pr_id, e
             );

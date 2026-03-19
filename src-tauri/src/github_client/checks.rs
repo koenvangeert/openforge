@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 
+use log::warn;
+
 use super::GitHubClient;
 use super::error::GitHubError;
 use super::types::*;
@@ -114,7 +116,7 @@ impl GitHubClient {
             all_check_runs.extend(page_response.check_runs);
 
             if page == 10 && all_check_runs.len() < total_count {
-                eprintln!(
+                warn!(
                     "[GitHub] Capped check runs pagination at 10 pages ({} of {} fetched)",
                     all_check_runs.len(),
                     total_count
@@ -256,7 +258,7 @@ impl GitHubClient {
             all_statuses.extend(page_response.statuses);
 
             if page == 10 && all_statuses.len() < total_count {
-                eprintln!(
+                warn!(
                     "[GitHub] Capped combined status pagination at 10 pages ({} of {} fetched)",
                     all_statuses.len(),
                     total_count
@@ -326,7 +328,7 @@ impl GitHubClient {
         let response = match req.send().await {
             Ok(r) => r,
             Err(e) => {
-                eprintln!(
+                warn!(
                     "[GitHub] Failed to fetch required status checks for {}/{} branch {}: {}",
                     owner, repo, branch, e
                 );
@@ -354,7 +356,7 @@ impl GitHubClient {
         }
 
         if !response.status().is_success() {
-            eprintln!(
+            warn!(
                 "[GitHub] Unexpected status {} fetching required checks for {}/{} branch {}",
                 response.status(),
                 owner,
@@ -388,7 +390,7 @@ impl GitHubClient {
         match serde_json::from_str::<RequiredStatusChecksResponse>(&body) {
             Ok(result) => result.into_context_names(),
             Err(e) => {
-                eprintln!(
+                warn!(
                     "[GitHub] Failed to parse required status checks for {}/{} branch {}: {}",
                     owner, repo, branch, e
                 );

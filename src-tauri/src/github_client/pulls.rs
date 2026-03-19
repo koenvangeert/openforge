@@ -1,5 +1,6 @@
 use base64::{Engine as _, engine::general_purpose};
 use futures::future::join_all;
+use log::warn;
 
 use super::GitHubClient;
 use super::error::GitHubError;
@@ -236,7 +237,7 @@ impl GitHubClient {
             .get_pr_reviews(owner, repo, pr_number, token)
             .await
             .unwrap_or_else(|e| {
-                eprintln!(
+                warn!(
                     "[GitHub] Failed to fetch reviews for PR #{}: {}",
                     pr_number, e
                 );
@@ -391,7 +392,7 @@ impl GitHubClient {
                     });
                 }
                 Err(e) => {
-                    eprintln!(
+                    warn!(
                         "[GitHub] Failed to fetch PR details for {}/{} #{}: {}",
                         owner, repo, item.number, e
                     );
@@ -510,7 +511,7 @@ impl GitHubClient {
                     });
                 }
                 Err(e) => {
-                    eprintln!(
+                    warn!(
                         "[GitHub] Failed to fetch PR details for {}/{} #{}: {}",
                         owner, repo, item.number, e
                     );

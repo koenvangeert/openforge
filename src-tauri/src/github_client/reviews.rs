@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 
+use log::warn;
+
 use super::GitHubClient;
 use super::error::GitHubError;
 use super::types::*;
@@ -152,7 +154,7 @@ impl GitHubClient {
         let response = match req.send().await {
             Ok(r) => r,
             Err(e) => {
-                eprintln!(
+                warn!(
                     "[GitHub] Failed to fetch required reviews for {}/{} branch {}: {}",
                     owner, repo, branch, e
                 );
@@ -180,7 +182,7 @@ impl GitHubClient {
         }
 
         if !response.status().is_success() {
-            eprintln!(
+            warn!(
                 "[GitHub] Unexpected status {} fetching required reviews for {}/{} branch {}",
                 response.status(),
                 owner,
@@ -214,7 +216,7 @@ impl GitHubClient {
         match serde_json::from_str::<RequiredPullRequestReviewsResponse>(&body) {
             Ok(result) => Some(result.required_approving_review_count),
             Err(e) => {
-                eprintln!(
+                warn!(
                     "[GitHub] Failed to parse required reviews for {}/{} branch {}: {}",
                     owner, repo, branch, e
                 );
