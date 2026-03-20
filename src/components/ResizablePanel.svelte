@@ -82,6 +82,25 @@
     width = defaultWidth
     clearWidth()
   }
+
+  function onKeyDown(e: KeyboardEvent) {
+    let delta = 0
+    if (e.key === 'ArrowRight') {
+      delta = side === 'left' ? 10 : -10
+    } else if (e.key === 'ArrowLeft') {
+      delta = side === 'left' ? -10 : 10
+    } else if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault()
+      onDblClick()
+      return
+    }
+
+    if (delta !== 0) {
+      e.preventDefault()
+      width = clamp(width + delta)
+      saveWidth(width)
+    }
+  }
 </script>
 
 <div
@@ -91,32 +110,36 @@
   bind:this={panelEl}
 >
   {#if side === 'right'}
-    <!-- svelte-ignore a11y_no_noninteractive_tabindex a11y_no_noninteractive_element_interactions -->
+    <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
     <div
       data-testid="resize-handle"
-      class="absolute left-0 top-0 bottom-0 z-10 w-1 hover:bg-primary/30 transition-colors {isDragging ? 'bg-primary/40' : ''}"
+      class="absolute left-0 top-0 bottom-0 z-10 w-1 hover:bg-primary/30 transition-colors {isDragging ? 'bg-primary/40' : ''} focus-visible:bg-primary/40 focus-visible:outline-none"
       style="cursor: col-resize"
       role="separator"
       aria-orientation="vertical"
       tabindex="0"
       onmousedown={onMouseDown}
       ondblclick={onDblClick}
+      onkeydown={onKeyDown}
     ></div>
   {/if}
   <div class="flex-1 overflow-hidden">
     {@render children?.()}
   </div>
   {#if side === 'left'}
-    <!-- svelte-ignore a11y_no_noninteractive_tabindex a11y_no_noninteractive_element_interactions -->
+    <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
     <div
       data-testid="resize-handle"
-      class="absolute right-0 top-0 bottom-0 z-10 w-1 hover:bg-primary/30 transition-colors {isDragging ? 'bg-primary/40' : ''}"
+      class="absolute right-0 top-0 bottom-0 z-10 w-1 hover:bg-primary/30 transition-colors {isDragging ? 'bg-primary/40' : ''} focus-visible:bg-primary/40 focus-visible:outline-none"
       style="cursor: col-resize"
       role="separator"
       aria-orientation="vertical"
       tabindex="0"
       onmousedown={onMouseDown}
       ondblclick={onDblClick}
+      onkeydown={onKeyDown}
     ></div>
   {/if}
 </div>

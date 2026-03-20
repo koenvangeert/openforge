@@ -124,6 +124,37 @@ describe('PromptInput', () => {
     expect(jiraInput).toBeTruthy()
   })
 
+  it('shows JIRA key field when the add control is activated with Space', async () => {
+    render(PromptInput, {
+      props: {
+        ...baseProps,
+      },
+    })
+
+    const addJiraButton = screen.getByRole('button', { name: '+ Add JIRA key' })
+    await fireEvent.keyDown(addJiraButton, { key: ' ' })
+
+    expect(screen.getByPlaceholderText('e.g. PROJ-123')).toBeTruthy()
+  })
+
+  it('clears the JIRA key when the clear control is activated with Enter', async () => {
+    render(PromptInput, {
+      props: {
+        ...baseProps,
+        jiraKey: 'PROJ-42',
+      },
+    })
+
+    const clearJiraButton = screen.getByRole('button', { name: '✕' })
+    await fireEvent.keyDown(clearJiraButton, { key: 'Enter' })
+
+    expect(screen.queryByPlaceholderText('e.g. PROJ-123')).toBeNull()
+
+    await fireEvent.click(screen.getByRole('button', { name: '+ Add JIRA key' }))
+
+    expect((screen.getByPlaceholderText('e.g. PROJ-123') as HTMLInputElement).value).toBe('')
+  })
+
 
   it('renders a submit button', () => {
     render(PromptInput, { props: { ...baseProps } })

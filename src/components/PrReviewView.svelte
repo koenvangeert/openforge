@@ -572,11 +572,11 @@
               {/if}
               Filter
             </button>
-            {#if showFilterDropdown}
-              <!-- Invisible backdrop to close dropdown on outside click -->
-              <!-- svelte-ignore a11y_no_static_element_interactions -->
-              <div class="fixed inset-0 z-40" onclick={() => { showFilterDropdown = false }}></div>
-              <div class="absolute right-0 top-full mt-1 z-50 bg-base-100 border border-base-300 rounded-lg shadow-lg w-[320px] p-3">
+              {#if showFilterDropdown}
+                <!-- Invisible backdrop to close dropdown on outside click -->
+               <!-- svelte-ignore a11y_click_events_have_key_events -->
+               <div role="presentation" class="fixed inset-0 z-40" onclick={() => { showFilterDropdown = false }}></div>
+               <div class="absolute right-0 top-full mt-1 z-50 bg-base-100 border border-base-300 rounded-lg shadow-lg w-[320px] p-3">
                 <div class="text-xs font-semibold text-base-content/50 mb-2">Excluded Repositories</div>
 
                 <!-- Manual input to add a repo -->

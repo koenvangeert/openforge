@@ -118,8 +118,9 @@
   let saved = $state(false)
   let saveTimer: ReturnType<typeof setTimeout> | null = null
   const SAVE_DEBOUNCE_MS = 500
+  const getInitialActiveSection = () => mode === 'global' ? 'preferences' : 'general'
 
-  let activeSection = $state(mode === 'global' ? 'preferences' : 'general')
+  let activeSection = $state(getInitialActiveSection())
   let isDeleting = $state(false)
   let confirmingDelete = $state(false)
   let deleteError = $state<string | null>(null)

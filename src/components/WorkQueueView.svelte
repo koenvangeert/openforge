@@ -322,6 +322,7 @@
               {@const colIdx = sortedColumns.findIndex(([n]) => n === projectName)}
               {@const isVimFocused = colIdx === focusedCol && vimWq.focusedIndex === i}
               <div
+                role="presentation"
                 data-testid={`task-card-${entry.task.id}`}
                 data-vim-wq-item
                 class={isVimFocused ? 'vim-focus' : ''}

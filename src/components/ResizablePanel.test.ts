@@ -168,4 +168,60 @@ describe('ResizablePanel', () => {
     expect(panel.style.width).toBe('250px')
     expect(localStorage.getItem('resizable-panel:test-reset')).toBeNull()
   })
+
+  it('resizes panel with ArrowRight and ArrowLeft keys on left-side handle', async () => {
+    const { container } = render(ResizablePanel, {
+      props: { storageKey: 'test-keys-left', defaultWidth: 250, side: 'left' },
+    })
+    const handle = container.querySelector('[data-testid="resize-handle"]') as HTMLElement
+    const panel = container.querySelector('[data-testid="resizable-panel"]') as HTMLElement
+
+    await fireEvent.keyDown(handle, { key: 'ArrowRight' })
+    expect(panel.style.width).toBe('260px')
+
+    await fireEvent.keyDown(handle, { key: 'ArrowLeft' })
+    expect(panel.style.width).toBe('250px')
+  })
+
+  it('resizes panel with ArrowLeft and ArrowRight keys on right-side handle', async () => {
+    const { container } = render(ResizablePanel, {
+      props: { storageKey: 'test-keys-right', defaultWidth: 250, side: 'right' },
+    })
+    const handle = container.querySelector('[data-testid="resize-handle"]') as HTMLElement
+    const panel = container.querySelector('[data-testid="resizable-panel"]') as HTMLElement
+
+    await fireEvent.keyDown(handle, { key: 'ArrowLeft' })
+    expect(panel.style.width).toBe('260px')
+
+    await fireEvent.keyDown(handle, { key: 'ArrowRight' })
+    expect(panel.style.width).toBe('250px')
+  })
+
+  it('resets to default width on Enter key', async () => {
+    localStorage.setItem('resizable-panel:test-key-reset', '400')
+    const { container } = render(ResizablePanel, {
+      props: { storageKey: 'test-key-reset', defaultWidth: 250 },
+    })
+    const handle = container.querySelector('[data-testid="resize-handle"]') as HTMLElement
+    const panel = container.querySelector('[data-testid="resizable-panel"]') as HTMLElement
+    expect(panel.style.width).toBe('400px')
+
+    await fireEvent.keyDown(handle, { key: 'Enter' })
+    expect(panel.style.width).toBe('250px')
+    expect(localStorage.getItem('resizable-panel:test-key-reset')).toBeNull()
+  })
+
+  it('resets to default width on Space key', async () => {
+    localStorage.setItem('resizable-panel:test-space-reset', '400')
+    const { container } = render(ResizablePanel, {
+      props: { storageKey: 'test-space-reset', defaultWidth: 250 },
+    })
+    const handle = container.querySelector('[data-testid="resize-handle"]') as HTMLElement
+    const panel = container.querySelector('[data-testid="resizable-panel"]') as HTMLElement
+    expect(panel.style.width).toBe('400px')
+
+    await fireEvent.keyDown(handle, { key: ' ' })
+    expect(panel.style.width).toBe('250px')
+    expect(localStorage.getItem('resizable-panel:test-space-reset')).toBeNull()
+  })
 })

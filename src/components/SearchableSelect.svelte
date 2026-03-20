@@ -21,6 +21,7 @@
   let highlightedIndex = $state(0)
   let inputEl = $state<HTMLInputElement | null>(null)
   let listEl = $state<HTMLUListElement | null>(null)
+  const listboxId = `searchable-select-listbox-${Math.random().toString(36).slice(2)}`
 
   let selectedLabel = $derived(options.find(o => o.value === value)?.label ?? '')
 
@@ -88,8 +89,9 @@
   <div
     class="select select-{size} w-full cursor-pointer"
     onclick={openDropdown}
-    onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); openDropdown() } }}
+    onkeydown={(e: KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); openDropdown() } }}
     role="combobox"
+    aria-controls={listboxId}
     aria-expanded={open}
     tabindex="0"
   >
@@ -98,8 +100,8 @@
 
   <!-- Dropdown -->
   {#if open}
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div class="fixed inset-0 z-40" onclick={closeDropdown} onkeydown={() => {}}></div>
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <div role="presentation" class="fixed inset-0 z-40" onclick={closeDropdown}></div>
     <div class="absolute z-50 mt-1 left-0 right-0 bg-base-100 border border-base-300 rounded-lg shadow-lg overflow-hidden">
       <div class="p-1.5 border-b border-base-200">
         <input
@@ -112,6 +114,7 @@
         />
       </div>
       <ul
+        id={listboxId}
         bind:this={listEl}
         class="max-h-[200px] overflow-y-auto py-1"
         role="listbox"
@@ -120,10 +123,12 @@
           <li
             role="option"
             aria-selected={i === highlightedIndex}
+            tabindex="-1"
             class="px-3 py-1.5 text-sm cursor-pointer transition-colors
               {i === highlightedIndex ? 'bg-primary text-primary-content' : 'hover:bg-base-200'}
               {opt.value === value && i !== highlightedIndex ? 'font-medium text-primary' : ''}"
             onclick={() => selectOption(opt)}
+            onkeydown={(e: KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectOption(opt) } }}
             onmouseenter={() => { highlightedIndex = i }}
           >
             {opt.label}

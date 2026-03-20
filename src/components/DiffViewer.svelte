@@ -177,9 +177,11 @@
   })
 </script>
 
-<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+<!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
 <div
   class="flex flex-col flex-1 min-w-0 h-full overflow-hidden"
+  role="region"
+  aria-label="Diff viewer"
   tabindex="-1"
   onkeydown={search.handleRootKeydown}
 >
@@ -261,7 +263,8 @@
     {/if}
   </div>
 
-  <div class="flex-1 overflow-y-auto overflow-x-hidden bg-base-100" bind:this={scrollContainerEl} ondblclick={search.handleDoubleClick} onclick={search.handleContainerClick}>
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <div role="presentation" class="flex-1 overflow-y-auto overflow-x-hidden bg-base-100" bind:this={scrollContainerEl} ondblclick={search.handleDoubleClick} onclick={search.handleContainerClick}>
     {#if files.length === 0}
       <div class="flex items-center justify-center h-full text-base-content/50 text-sm">No files to display</div>
     {:else}

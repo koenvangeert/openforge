@@ -313,6 +313,17 @@ describe('KanbanBoard', () => {
     expect(screen.queryByText('// done')).toBeNull()
   })
 
+  it('Escape key dismisses done drawer when open', async () => {
+    const doneTask: Task = { ...baseTask, id: 'T-2', initial_prompt: 'Done task', status: 'done' }
+    tasks.set([doneTask])
+    render(KanbanBoard, { props: { onRunAction: mockOnRunAction } })
+    await screen.findByText('// doing')
+    await fireEvent.keyDown(window, { key: 'c' })
+    expect(screen.getByText('// done')).toBeTruthy()
+    await fireEvent.keyDown(window, { key: 'Escape' })
+    expect(screen.queryByText('// done')).toBeNull()
+  })
+
   describe('backlog state persistence', () => {
     it('loads saved backlog state on mount (collapsed)', async () => {
       const { getConfig } = await import('../lib/ipc')

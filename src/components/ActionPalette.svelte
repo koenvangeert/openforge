@@ -14,7 +14,7 @@
   let { task, customActions, onClose, onExecute }: Props = $props()
 
   let searchQuery = $state('')
-  let selectedIndex = $state(0)
+  let selectedActionId = $state<string | null>(null)
   let inputEl = $state<HTMLInputElement | null>(null)
 
   let allActions = $derived(getAvailableActions(task, customActions))
@@ -42,10 +42,38 @@
   // Flat list for keyboard navigation
   let flatList = $derived(grouped.flatMap(g => g.actions))
 
+  let selectedIndex = $derived.by(() => {
+    if (flatList.length === 0) return -1
+    if (selectedActionId === null) return 0
+
+    const index = flatList.findIndex(action => action.id === selectedActionId)
+    return index === -1 ? 0 : index
+  })
+
+  let lastSearchQuery = $state('')
+
   $effect(() => {
-    // Reset selection when results change
-    void filtered.length
-    selectedIndex = filtered.length > 0 ? 0 : -1
+    const trimmedSearchQuery = searchQuery.trim()
+
+    if (flatList.length === 0) {
+      selectedActionId = null
+      lastSearchQuery = trimmedSearchQuery
+      return
+    }
+
+    const searchChanged = trimmedSearchQuery !== lastSearchQuery
+    lastSearchQuery = trimmedSearchQuery
+
+    if (searchChanged || selectedActionId === null) {
+      selectedActionId = flatList[0].id
+      return
+    }
+
+    const selectedActionStillVisible = flatList.some(action => action.id === selectedActionId)
+
+    if (!selectedActionStillVisible) {
+      selectedActionId = flatList[0].id
+    }
   })
 
   function handleKeyDown(e: KeyboardEvent) {
@@ -61,10 +89,11 @@
 
     if (e.key === 'ArrowDown' || (e.ctrlKey && (e.key === 'j' || e.key === 'n'))) {
       e.preventDefault()
-      selectedIndex = (selectedIndex + 1) % count
+      selectedActionId = flatList[(selectedIndex + 1) % count].id
     } else if (e.key === 'ArrowUp' || (e.ctrlKey && (e.key === 'k' || e.key === 'p'))) {
       e.preventDefault()
-      selectedIndex = selectedIndex <= 0 ? count - 1 : selectedIndex - 1
+      const nextIndex = selectedIndex <= 0 ? count - 1 : selectedIndex - 1
+      selectedActionId = flatList[nextIndex].id
     } else if (e.key === 'Enter') {
       e.preventDefault()
       if (selectedIndex >= 0 && selectedIndex < count) {
@@ -105,8 +134,10 @@
   }
 </script>
 
+<!-- svelte-ignore a11y_click_events_have_key_events -->
 <div
   data-testid="action-palette-backdrop"
+  role="presentation"
   class="fixed inset-0 z-50 flex items-start justify-center pt-[15vh] bg-black/50"
   onclick={handleBackdropClick}
 >

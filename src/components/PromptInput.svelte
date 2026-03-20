@@ -35,16 +35,21 @@
     actions = []
   }: Props = $props()
 
+  const getInitialTextValue = () => value
+  const getInitialJiraKeyValue = () => initialJiraKey
+  const getInitialShowJiraKey = () => !!initialJiraKey
+  const getAutocompleteProjectId = () => projectId
+
   // ── Local state ──────────────────────────────────────────────────────────────
-  let textValue = $state(value)
-  let jiraKeyValue = $state(initialJiraKey)
-  let showJiraKey = $state(!!initialJiraKey)
+  let textValue = $state(getInitialTextValue())
+  let jiraKeyValue = $state(getInitialJiraKeyValue())
+  let showJiraKey = $state(getInitialShowJiraKey())
   let showModelDownload = $state(false)
 
   let textareaEl = $state<HTMLTextAreaElement | null>(null)
 
   // ── Autocomplete composable ───────────────────────────────────────────────────
-  const ac = useAutocomplete(projectId)
+  const ac = useAutocomplete(getAutocompleteProjectId())
 
   // ── Auto-focus ───────────────────────────────────────────────────────────────
   // Use requestAnimationFrame to ensure focus happens after any parent (e.g. Modal)
@@ -189,6 +194,22 @@
   function handleActionFromDropdown(action: Action) {
     handleCustomAction(action.prompt)
   }
+
+  function showJiraKeyField() {
+    showJiraKey = true
+  }
+
+  function clearJiraKeyField() {
+    showJiraKey = false
+    jiraKeyValue = ''
+  }
+
+  function handleJiraKeyControlKeydown(event: KeyboardEvent, action: () => void) {
+    if (event.key === 'Enter' || event.key === ' ' || event.key === 'Spacebar') {
+      event.preventDefault()
+      action()
+    }
+  }
 </script>
 
 <div class="bg-base-100">
@@ -233,16 +254,16 @@
           class="text-xs text-base-content/40 cursor-pointer"
           role="button"
           tabindex="0"
-          onclick={() => { showJiraKey = false; jiraKeyValue = '' }}
-          onkeydown={(e: KeyboardEvent) => e.key === 'Enter' && (showJiraKey = false) && (jiraKeyValue = '')}
+          onclick={clearJiraKeyField}
+          onkeydown={(e: KeyboardEvent) => handleJiraKeyControlKeydown(e, clearJiraKeyField)}
         >✕</span>
       {:else}
         <span
           class="text-xs text-primary cursor-pointer"
           role="button"
           tabindex="0"
-          onclick={() => { showJiraKey = true }}
-          onkeydown={(e: KeyboardEvent) => { if (e.key === 'Enter') showJiraKey = true }}
+          onclick={showJiraKeyField}
+          onkeydown={(e: KeyboardEvent) => handleJiraKeyControlKeydown(e, showJiraKeyField)}
         >+ Add JIRA key</span>
       {/if}
     </div>

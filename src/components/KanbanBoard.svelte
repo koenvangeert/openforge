@@ -179,6 +179,11 @@
 
   function handleBoardKeydown(e: KeyboardEvent) {
     if (isInputFocused()) return
+    if (e.key === 'Escape' && showDoneDrawer) {
+      e.preventDefault()
+      toggleDoneDrawer()
+      return
+    }
     if (e.metaKey || e.ctrlKey || e.altKey) return
     if (e.key === 'b') { e.preventDefault(); toggleBacklog(); return }
     if (e.key === 'c') { e.preventDefault(); toggleDoneDrawer(); return }
@@ -260,7 +265,7 @@
         <div class="flex-1 flex flex-col gap-2 overflow-y-auto" role="listbox" data-vim-column={backlogColumn.id}>
           {#each backlogTasks as task, i (task.id)}
             {@const isVimFocused = columns[focusedColumn]?.key === backlogColumn.id && vim.focusedIndex === i}
-            <div data-vim-item oncontextmenu={(e: MouseEvent) => handleContextMenu(e, task.id)} class={isVimFocused ? 'vim-focus' : ''}>
+            <div role="presentation" data-vim-item oncontextmenu={(e: MouseEvent) => handleContextMenu(e, task.id)} class={isVimFocused ? 'vim-focus' : ''}>
               <TaskCard {task} session={getSession($activeSessions, task.id)} pullRequests={$ticketPrs.get(task.id) || []} isStarting={$startingTasks.has(task.id)} onSelect={handleSelect} />
             </div>
           {/each}
@@ -281,7 +286,7 @@
         <div class="flex-1 flex flex-col gap-2 overflow-y-auto" role="listbox" data-vim-column={colData.config.id}>
           {#each colData.tasks as task, i (task.id)}
             {@const isVimFocused = columns[focusedColumn]?.key === colData.config.id && vim.focusedIndex === i}
-            <div data-vim-item oncontextmenu={(e: MouseEvent) => handleContextMenu(e, task.id)} class={isVimFocused ? 'vim-focus' : ''}>
+            <div role="presentation" data-vim-item oncontextmenu={(e: MouseEvent) => handleContextMenu(e, task.id)} class={isVimFocused ? 'vim-focus' : ''}>
               <TaskCard {task} session={getSession($activeSessions, task.id)} pullRequests={$ticketPrs.get(task.id) || []} isStarting={$startingTasks.has(task.id)} onSelect={handleSelect} />
             </div>
           {/each}
@@ -299,10 +304,10 @@
 
 {#if showDoneDrawer}
   <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
   <div
     class="fixed inset-0 bg-black/30 z-40 transition-opacity duration-200"
     onclick={toggleDoneDrawer}
-    onkeydown={(e: KeyboardEvent) => { if (e.key === 'Escape') toggleDoneDrawer() }}
   ></div>
   <div class="fixed top-0 right-0 h-full w-[400px] max-w-[85vw] bg-base-100 border-l border-base-300 z-50 shadow-2xl flex flex-col">
     <div class="flex items-center justify-between px-5 py-4 border-b border-base-300">
@@ -332,7 +337,7 @@
     </div>
     <div class="flex-1 flex flex-col gap-2 overflow-y-auto p-4">
       {#each doneTasks as task (task.id)}
-        <div oncontextmenu={(e: MouseEvent) => handleContextMenu(e, task.id)}>
+        <div role="presentation" oncontextmenu={(e: MouseEvent) => handleContextMenu(e, task.id)}>
           <TaskCard {task} session={getSession($activeSessions, task.id)} pullRequests={$ticketPrs.get(task.id) || []} isStarting={$startingTasks.has(task.id)} onSelect={handleSelect} />
         </div>
       {/each}

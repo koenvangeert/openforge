@@ -92,8 +92,10 @@
 </script>
 
 <!-- Backdrop -->
+<!-- svelte-ignore a11y_click_events_have_key_events -->
 <div
   data-testid="modal-backdrop"
+  role="presentation"
   class="fixed inset-0 z-50 flex items-start justify-center pt-[20vh] bg-black/50"
   onclick={handleBackdropClick}
 >

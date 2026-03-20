@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount, tick } from 'svelte'
   import type { Project } from '../lib/types'
   import { createProject, setProjectConfig } from '../lib/ipc'
   import Modal from './Modal.svelte'
@@ -17,6 +18,12 @@
   let isSubmitting = $state(false)
   let showJiraSection = $state(false)
   let showGithubSection = $state(false)
+  let projectNameInput = $state<HTMLInputElement | null>(null)
+
+  onMount(async () => {
+    await tick()
+    projectNameInput?.focus()
+  })
 
   async function handleSubmit() {
     if (!projectName.trim() || !path.trim()) return
@@ -58,12 +65,12 @@
     <label class="flex flex-col gap-1.5">
       <span class="text-xs text-base-content/60 font-medium">Project Name <span class="text-error">*</span></span>
       <input
+        bind:this={projectNameInput}
         type="text"
         class="input input-bordered input-sm w-full"
         bind:value={projectName}
         placeholder="My Awesome Project"
         required
-        autofocus
       />
     </label>
 
