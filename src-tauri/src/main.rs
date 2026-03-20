@@ -221,7 +221,8 @@ fn main() {
 
         if cfg!(debug_assertions) {
             builder = builder
-                .level(log::LevelFilter::Debug)
+                .level(log::LevelFilter::Warn)
+                .level_for("openforge", log::LevelFilter::Debug)
                 .targets([
                     tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Stdout),
                     tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::LogDir {
@@ -230,7 +231,8 @@ fn main() {
                 ]);
         } else {
             builder = builder
-                .level(log::LevelFilter::Info)
+                .level(log::LevelFilter::Warn)
+                .level_for("openforge", log::LevelFilter::Info)
                 .targets([
                     tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Stdout),
                     tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::LogDir {
