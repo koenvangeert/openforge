@@ -1,9 +1,11 @@
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
+import { WebLinksAddon } from '@xterm/addon-web-links'
+import { WebglAddon } from '@xterm/addon-webgl'
 import { listen } from '@tauri-apps/api/event'
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import type { PtyEvent } from './types'
-import { writePty, resizePty, getPtyBuffer } from './ipc'
+import { writePty, resizePty, getPtyBuffer, openUrl } from './ipc'
 import { themeMode, getTerminalTheme } from './theme'
 import { get } from 'svelte/store'
 
@@ -43,6 +45,29 @@ function safeFit(entry: PoolEntry): void {
   entry.fitAddon.fit()
 }
 
+function loadWebLinksAddon(terminal: Terminal): void {
+  const webLinksAddon = new WebLinksAddon((event, uri) => {
+    event.preventDefault()
+    openUrl(uri).catch(error => {
+      console.error('[terminalPool] Failed to open terminal link:', error)
+    })
+  })
+
+  terminal.loadAddon(webLinksAddon)
+}
+
+function loadWebglAddon(terminal: Terminal): void {
+  try {
+    const webglAddon = new WebglAddon()
+    webglAddon.onContextLoss(() => {
+      webglAddon.dispose()
+    })
+    terminal.loadAddon(webglAddon)
+  } catch (error) {
+    console.warn('[terminalPool] WebGL addon unavailable, falling back to default renderer:', error)
+  }
+}
+
 export async function acquire(taskId: string): Promise<PoolEntry> {
   const existing = pool.get(taskId)
   if (existing) return existing
@@ -60,6 +85,7 @@ export async function acquire(taskId: string): Promise<PoolEntry> {
 
   const fitAddon = new FitAddon()
   terminal.loadAddon(fitAddon)
+  loadWebLinksAddon(terminal)
 
   const hostDiv = createHostDiv()
 
@@ -143,6 +169,7 @@ export function attach(entry: PoolEntry, wrapperEl: HTMLDivElement): void {
   // dimensions against a container with real pixel dimensions.
   if (!openedTerminals.has(entry.terminal)) {
     entry.terminal.open(entry.hostDiv)
+    loadWebglAddon(entry.terminal)
     openedTerminals.add(entry.terminal)
   }
 
@@ -213,7 +240,9 @@ export function release(taskId: string): void {
   if (!entry) return
 
   detach(entry)
-  entry.unlisteners.forEach(fn => fn())
+  entry.unlisteners.forEach(fn => {
+    fn()
+  })
   entry.unlisteners.length = 0
   entry.terminal.dispose()
   pool.delete(taskId)

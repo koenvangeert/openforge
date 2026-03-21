@@ -3,6 +3,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 // Track listen callbacks so tests can simulate events
 const listenCallbacks = new Map<string, (event: unknown) => void>()
 const unlistenFns: Array<ReturnType<typeof vi.fn>> = []
+let webLinksHandler: ((event: MouseEvent, uri: string) => void) | null = null
+let webglContextLossHandler: (() => void) | null = null
 
 vi.mock('@tauri-apps/api/event', () => ({
   listen: vi.fn(async (eventName: string, cb: (event: unknown) => void) => {
@@ -37,13 +39,41 @@ vi.mock('@xterm/addon-fit', () => {
   return { FitAddon }
 })
 
+vi.mock('@xterm/addon-web-links', () => {
+  class WebLinksAddon {
+    constructor(handler?: (event: MouseEvent, uri: string) => void) {
+      webLinksHandler = handler ?? null
+    }
+
+    activate = vi.fn()
+    dispose = vi.fn()
+  }
+
+  return { WebLinksAddon }
+})
+
+vi.mock('@xterm/addon-webgl', () => {
+  class WebglAddon {
+    onContextLoss = vi.fn((handler: () => void) => {
+      webglContextLossHandler = handler
+      return { dispose: vi.fn() }
+    })
+    activate = vi.fn()
+    dispose = vi.fn()
+  }
+
+  return { WebglAddon }
+})
+
 vi.mock('./ipc', () => ({
   writePty: vi.fn().mockResolvedValue(undefined),
   resizePty: vi.fn().mockResolvedValue(undefined),
   getPtyBuffer: vi.fn().mockResolvedValue(null),
+  openUrl: vi.fn().mockResolvedValue(undefined),
 }))
 
 import { acquire, attach, detach, release, releaseAll, _getPool, isPtyActive, focusTerminal } from './terminalPool'
+import { openUrl } from './ipc'
 
 // Stub browser APIs not available in jsdom
 globalThis.ResizeObserver = class {
@@ -63,6 +93,8 @@ describe('terminalPool', () => {
     releaseAll()
     listenCallbacks.clear()
     unlistenFns.length = 0
+    webLinksHandler = null
+    webglContextLossHandler = null
     vi.clearAllMocks()
   })
 
@@ -93,6 +125,17 @@ describe('terminalPool', () => {
     expect(listenCallbacks.has('pty-exit-task-3')).toBe(true)
   })
 
+  it('acquire loads WebLinksAddon and routes links through openUrl', async () => {
+    const entry = await acquire('task-links')
+
+    expect(entry.terminal.loadAddon).toHaveBeenCalledTimes(2)
+    expect(webLinksHandler).not.toBeNull()
+
+    webLinksHandler!(new MouseEvent('click'), 'https://example.com/pool')
+
+    expect(openUrl).toHaveBeenCalledWith('https://example.com/pool')
+  })
+
   it('attach appends hostDiv to wrapper and marks attached', async () => {
     const entry = await acquire('task-4')
     const wrapper = document.createElement('div')
@@ -101,6 +144,36 @@ describe('terminalPool', () => {
 
     expect(wrapper.contains(entry.hostDiv)).toBe(true)
     expect(entry.attached).toBe(true)
+  })
+
+  it('attach attempts WebGL after terminal.open and tolerates WebGL setup failure', async () => {
+    const entry = await acquire('task-webgl')
+    const wrapper = document.createElement('div')
+
+    attach(entry, wrapper)
+
+    const openSpy = entry.terminal.open as ReturnType<typeof vi.fn>
+    const loadAddonSpy = entry.terminal.loadAddon as ReturnType<typeof vi.fn>
+
+    expect(openSpy).toHaveBeenCalledWith(entry.hostDiv)
+    expect(loadAddonSpy).toHaveBeenCalledTimes(3)
+    expect(openSpy.mock.invocationCallOrder[0]).toBeLessThan(loadAddonSpy.mock.invocationCallOrder[2])
+  })
+
+  it('attach disposes the WebGL addon on context loss', async () => {
+    const entry = await acquire('task-webgl-context-loss')
+    const wrapper = document.createElement('div')
+
+    attach(entry, wrapper)
+
+    const loadAddonSpy = entry.terminal.loadAddon as ReturnType<typeof vi.fn>
+    const webglAddon = loadAddonSpy.mock.calls[2][0] as { dispose: ReturnType<typeof vi.fn> }
+
+    expect(webglContextLossHandler).not.toBeNull()
+
+    webglContextLossHandler!()
+
+    expect(webglAddon.dispose).toHaveBeenCalledTimes(1)
   })
 
   it('attach is idempotent', async () => {
