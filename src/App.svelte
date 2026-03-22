@@ -49,6 +49,14 @@
   let dialogSelectedPermissionMode = $state<PermissionMode>('default')
   let dialogActions = $state<Action[]>([])
 
+  const providerDisplayNames: Record<string, string> = {
+    'claude-code': 'Claude Code',
+    'opencode': 'OpenCode',
+  }
+  let dialogAgentLabel = $derived(
+    dialogAiProvider ? `${providerDisplayNames[dialogAiProvider] ?? dialogAiProvider} Agent` : 'Agent'
+  )
+
   async function loadDialogAgentInfo() {
     dialogSelectedAgent = ''
     dialogSelectedPermissionMode = 'default'
@@ -1071,7 +1079,7 @@
                 {/if}
                 {#if !editingTask && dialogAgents.length > 0}
                   <div class="flex items-center gap-2">
-                    <span class="text-xs text-base-content/50 font-medium shrink-0">Agent</span>
+                    <span class="text-xs text-base-content/50 font-medium shrink-0">{dialogAgentLabel}</span>
                     <div class="flex-1">
                       <SearchableSelect
                         options={[{ value: '', label: 'Default' }, ...dialogAgents.map(a => ({ value: a, label: a }))]}
