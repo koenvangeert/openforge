@@ -57,4 +57,21 @@ describe('ActionPalette component', () => {
 
     expect(onExecute).toHaveBeenCalledWith('search-tasks')
   })
+
+  it('shows CMD+K as the toggle hint', async () => {
+    const { default: ActionPalette } = await import('./ActionPalette.svelte')
+
+    render(ActionPalette, {
+      props: {
+        task: makeTask({ id: 'T-100', status: 'backlog' }),
+        customActions: [],
+        onClose: vi.fn(),
+        onExecute: vi.fn(),
+      },
+    })
+
+    expect(screen.getByText('⌘K')).toBeTruthy()
+    expect(screen.getByText('⌘⇧F')).toBeTruthy()
+    expect(screen.queryByText('⌘⇧P')).toBeNull()
+  })
 })

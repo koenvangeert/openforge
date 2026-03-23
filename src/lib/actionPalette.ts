@@ -64,7 +64,7 @@ export function getGlobalActions(): PaletteAction[] {
     {
       id: 'search-tasks',
       label: 'Search Tasks',
-      shortcut: '⌘K',
+      shortcut: '⌘⇧F',
       category: 'general',
       keywords: ['find', 'search', 'lookup'],
     },

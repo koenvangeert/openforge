@@ -1,4 +1,4 @@
-import { render } from '@testing-library/svelte'
+import { render, fireEvent } from '@testing-library/svelte'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { writable } from 'svelte/store'
 import type { Task, AgentSession, Project, ProjectAttention, PullRequestInfo, CheckpointNotification, CiFailureNotification, RateLimitNotification, ShepherdMessage, ShepherdStatus, AuthoredPullRequest } from './lib/types'
@@ -445,6 +445,41 @@ describe('App onMount initialization order', () => {
 
       window.dispatchEvent(new KeyboardEvent('keydown', { key: ',', metaKey: true, bubbles: true }))
       expect(get(stores.currentView)).toBe('settings')
+    })
+
+    it('CMD+K opens the action palette', async () => {
+      const App = (await import('./App.svelte')).default
+      const actionPaletteModule = await import('./components/ActionPalette.svelte')
+
+      render(App)
+
+      await fireEvent.keyDown(window, { key: 'k', metaKey: true, bubbles: true })
+
+      await vi.waitFor(() => {
+        expect(actionPaletteModule.default).toHaveBeenCalled()
+      })
+    })
+
+    it('CMD+SHIFT+F opens search tasks', async () => {
+      const App = (await import('./App.svelte')).default
+      const commandPaletteModule = await import('./components/CommandPalette.svelte')
+
+      render(App)
+
+      await fireEvent.keyDown(window, { key: 'F', metaKey: true, shiftKey: true, bubbles: true })
+
+      expect(commandPaletteModule.default).toHaveBeenCalled()
+    })
+
+    it('? opens the keyboard shortcuts dialog', async () => {
+      const App = (await import('./App.svelte')).default
+      const modalModule = await import('./components/Modal.svelte')
+
+      render(App)
+
+      await fireEvent.keyDown(window, { key: '?', bubbles: true })
+
+      expect(modalModule.default).toHaveBeenCalled()
     })
 
     it('pressing 2 cycles to next project and resets to board', async () => {
