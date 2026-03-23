@@ -143,7 +143,7 @@
           </label>
         {/if}
 
-        {#if aiProvider !== null && (aiProvider !== 'claude-code' || availableAgents.length > 0)}
+        {#if aiProvider !== null && aiProvider !== 'claude-code'}
           <label class="flex flex-col gap-1.5">
             <span class="text-xs text-base-content/60 font-medium">{agentLabel}</span>
             <select
