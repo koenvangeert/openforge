@@ -225,8 +225,8 @@ export async function spawnPty(taskId: string, serverPort: number, opencodeSessi
   return invoke<number>("pty_spawn", { taskId, serverPort, opencodeSessionId, cols, rows });
 }
 
-export async function spawnShellPty(taskId: string, cwd: string, cols: number, rows: number): Promise<number> {
-  return invoke<number>("pty_spawn_shell", { taskId, cwd, cols, rows });
+export async function spawnShellPty(taskId: string, cwd: string, cols: number, rows: number, terminalIndex: number): Promise<number> {
+  return invoke<number>("pty_spawn_shell", { taskId, cwd, cols, rows, terminal_index: terminalIndex });
 }
 
 export async function writePty(taskId: string, data: string): Promise<void> {
@@ -239,6 +239,10 @@ export async function resizePty(taskId: string, cols: number, rows: number): Pro
 
 export async function killPty(taskId: string): Promise<void> {
   return invoke("pty_kill", { taskId });
+}
+
+export async function killShellsForTask(taskId: string): Promise<void> {
+  return invoke("pty_kill_shells_for_task", { taskId });
 }
 
 export async function getPtyBuffer(taskId: string): Promise<string | null> {

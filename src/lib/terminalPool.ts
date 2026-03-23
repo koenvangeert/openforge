@@ -254,6 +254,24 @@ export function releaseAll(): void {
   }
 }
 
+export function releaseAllForTask(taskId: string): number {
+  let count = 0
+  const keysToRelease: string[] = []
+
+  for (const key of pool.keys()) {
+    if (key.startsWith(`${taskId}-shell-`)) {
+      keysToRelease.push(key)
+    }
+  }
+
+  for (const key of keysToRelease) {
+    release(key)
+    count++
+  }
+
+  return count
+}
+
 themeMode.subscribe((mode) => {
   const theme = getTerminalTheme(mode)
   for (const entry of pool.values()) {

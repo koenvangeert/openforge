@@ -103,33 +103,16 @@
       return
     }
 
-    // Cmd+number shortcuts work regardless of focus (even when terminal has focus)
-    if (e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey && worktreePath !== null) {
-      if (e.key === '1') {
+    // Cmd+Shift+number shortcuts work regardless of focus (even when terminal has focus)
+    if (e.metaKey && !e.ctrlKey && !e.altKey && e.shiftKey && worktreePath !== null) {
+      if (e.code === 'Digit1') {
         e.preventDefault()
         setReviewMode(false)
         return
       }
-      if (e.key === '2') {
+      if (e.code === 'Digit2') {
         e.preventDefault()
         setReviewMode(true)
-        return
-      }
-      if (e.key === 'i') {
-        e.preventDefault()
-        setReviewMode(false)
-        terminalFullscreen = false
-        rightPanelMode = 'info'
-        return
-      }
-      if (e.key === 'j') {
-        e.preventDefault()
-        setReviewMode(false)
-        terminalFullscreen = false
-        rightPanelMode = 'terminal'
-        // Focus the shell terminal if already visible; when switching from
-        // info the mount flow handles focus automatically via attach().
-        focusTerminal(task.id + '-shell')
         return
       }
     }
@@ -155,18 +138,6 @@
     if (e.key === 'Escape' || e.key === 'q') {
       e.preventDefault()
       handleBack()
-      return
-    }
-    // ] / [ switches between Info and Terminal panels (vim-style prev/next)
-    if (e.key === ']' && worktreePath !== null) {
-      e.preventDefault()
-      rightPanelMode = 'terminal'
-      return
-    }
-    if (e.key === '[' && worktreePath !== null) {
-      e.preventDefault()
-      rightPanelMode = 'info'
-      terminalFullscreen = false
       return
     }
     if (e.key === 'h' && worktreePath !== null) {
@@ -235,16 +206,16 @@
       <span class="text-primary font-semibold">{reviewMode ? 'self_review' : 'code'}</span>
     </div>
     {#if worktreePath !== null}
-      <div class="flex items-center gap-1">
-       <button
-           class="btn btn-ghost btn-xs gap-1.5 {!reviewMode ? 'text-primary border border-primary' : 'text-base-content/50 border border-base-300'}"
-           onclick={() => setReviewMode(false)}
-          >code_view {#if $commandHeld}<kbd class="kbd kbd-xs opacity-50">⌘1</kbd>{/if}</button>
-         <button
-           class="btn btn-ghost btn-xs gap-1.5 {reviewMode ? 'text-primary border border-primary' : 'text-base-content/50 border border-base-300'}"
-           onclick={() => setReviewMode(true)}
-          >review_view {#if $commandHeld}<kbd class="kbd kbd-xs opacity-50">⌘2</kbd>{/if}</button>
-      </div>
+       <div class="flex items-center gap-1">
+        <button
+            class="btn btn-ghost btn-xs gap-1.5 {!reviewMode ? 'text-primary border border-primary' : 'text-base-content/50 border border-base-300'}"
+            onclick={() => setReviewMode(false)}
+           >code_view {#if $commandHeld}<kbd class="kbd kbd-xs opacity-50">⌘⇧1</kbd>{/if}</button>
+          <button
+            class="btn btn-ghost btn-xs gap-1.5 {reviewMode ? 'text-primary border border-primary' : 'text-base-content/50 border border-base-300'}"
+            onclick={() => setReviewMode(true)}
+           >review_view {#if $commandHeld}<kbd class="kbd kbd-xs opacity-50">⌘⇧2</kbd>{/if}</button>
+       </div>
     {/if}
   </div>
 
