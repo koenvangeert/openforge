@@ -9,12 +9,12 @@
   import { loadActions, getEnabledActions } from '../lib/actions'
   import { commandHeld } from '../lib/stores'
   import { focusTerminal, releaseAllForTask } from '../lib/terminalPool'
-  import { Maximize2, Minimize2 } from 'lucide-svelte'
   import AgentPanel from './AgentPanel.svelte'
   import TaskInfoPanel from './TaskInfoPanel.svelte'
   import ResizablePanel from './ResizablePanel.svelte'
+  import ResizableBottomPanel from './ResizableBottomPanel.svelte'
   import SelfReviewView from './SelfReviewView.svelte'
-  import TaskTerminal from './TaskTerminal.svelte'
+  import TerminalTabs from './TerminalTabs.svelte'
   import ActionDropdown from './ActionDropdown.svelte'
 
   interface Props {
@@ -25,14 +25,13 @@
   let { task, onRunAction }: Props = $props()
 
   let reviewMode = $state(false)
-  let rightPanelMode = $state<'info' | 'terminal'>('info')
+  let bottomPanelOpen = $state(false)
   let terminalFullscreen = $state(false)
   let worktreePath = $state<string | null>(null)
   let jiraBaseUrl = $state('')
-  // Plain variable (not $state) so it's not tracked as a reactive dependency.
-  // Used to detect actual task changes vs. same-task prop re-renders.
   let lastTaskId = ''
   let actions = $state<Action[]>([])
+  let terminalTabsRef = $state<TerminalTabs | null>(null)
 
   let displayTitle = $derived(task.initial_prompt || (task.prompt ? task.prompt.split('\n')[0] : '') || task.id)
 
@@ -52,7 +51,7 @@
     if (taskId !== lastTaskId) {
       lastTaskId = taskId
       reviewMode = (get(taskReviewModes) as Map<string, boolean>).get(taskId) ?? false
-      rightPanelMode = 'info'
+      bottomPanelOpen = false
       terminalFullscreen = false
       worktreePath = null
       getWorktreeForTask(taskId).then((worktree) => {
@@ -100,14 +99,36 @@
   }
 
   function handleTaskDetailKeydown(e: KeyboardEvent) {
-    // Cmd+f toggles terminal fullscreen (works even when xterm has focus)
-    if ((e.metaKey || e.ctrlKey) && e.key === 'f' && rightPanelMode === 'terminal' && worktreePath !== null) {
+    if (e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey && e.code === 'KeyJ') {
+      e.preventDefault()
+      if (terminalFullscreen) { terminalFullscreen = false; return }
+      bottomPanelOpen = !bottomPanelOpen
+      return
+    }
+
+    if (e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey && worktreePath !== null) {
+      const digitMatch = e.code.match(/^Digit([1-9])$/)
+      if (digitMatch) {
+        e.preventDefault()
+        const tabIndex = parseInt(digitMatch[1]) - 1
+        if (!bottomPanelOpen) bottomPanelOpen = true
+        terminalTabsRef?.switchToTab(tabIndex)
+        return
+      }
+    }
+
+    if (e.metaKey && e.shiftKey && !e.ctrlKey && !e.altKey && e.code === 'KeyT') {
+      e.preventDefault()
+      if (!bottomPanelOpen) bottomPanelOpen = true
+      return
+    }
+
+    if ((e.metaKey || e.ctrlKey) && e.code === 'KeyF' && bottomPanelOpen && !reviewMode) {
       e.preventDefault()
       terminalFullscreen = !terminalFullscreen
       return
     }
 
-    // Cmd+Shift+number shortcuts work regardless of focus (even when terminal has focus)
     if (e.metaKey && !e.ctrlKey && !e.altKey && e.shiftKey && worktreePath !== null) {
       if (e.code === 'Digit1') {
         e.preventDefault()
@@ -129,7 +150,6 @@
       return
     }
 
-    // Escape in fullscreen exits fullscreen (does not navigate back)
     if (e.key === 'Escape' && terminalFullscreen) {
       e.preventDefault()
       terminalFullscreen = false
@@ -223,73 +243,44 @@
     {/if}
   </div>
 
-  <div class="flex flex-1 overflow-hidden max-[800px]:flex-col">
-    {#if reviewMode}
-      <SelfReviewView {task} {agentStatus} onSendToAgent={handleSendToAgent} />
-    {:else if terminalFullscreen && worktreePath !== null}
-      <div class="flex flex-col flex-1 overflow-hidden">
-        <div class="flex items-center h-10 bg-base-200 border-b border-base-300 shrink-0 px-3">
-          <span class="text-xs font-mono text-base-content/50 flex-1">Terminal — {task.jira_key || task.id}</span>
-          <button
-            class="btn btn-ghost btn-xs"
-            aria-label="Exit fullscreen"
-            onclick={() => terminalFullscreen = false}
-          >
-            <Minimize2 size={14} />
-          </button>
-        </div>
-        <div class="flex-1 overflow-hidden">
-          <TaskTerminal taskId={task.id} {worktreePath} />
-        </div>
+  {#if terminalFullscreen && bottomPanelOpen}
+    <div data-testid="fullscreen-terminal" class="flex-1 overflow-hidden">
+      <ResizableBottomPanel storageKey="terminal-panel-height" defaultHeight={300} minHeight={100} maxHeight={null}>
+        {#if worktreePath !== null}
+          <TerminalTabs bind:this={terminalTabsRef} taskId={task.id} {worktreePath} onTabChange={null} onTabCountChange={null} />
+        {/if}
+      </ResizableBottomPanel>
+    </div>
+  {:else}
+    <div class="flex flex-col flex-1 overflow-hidden">
+      <div data-testid="upper-area" class="flex flex-1 overflow-hidden max-[800px]:flex-col">
+        {#if reviewMode}
+          <SelfReviewView {task} {agentStatus} onSendToAgent={handleSendToAgent} />
+        {:else}
+          <div class="relative flex-1 p-5 overflow-hidden max-[800px]:p-4">
+            {#key task.id}
+              <AgentPanel taskId={task.id} {isStarting} />
+            {/key}
+            {#if $commandHeld}
+              <kbd class="kbd kbd-xs absolute top-2 right-2 bg-base-content/10 text-base-content/40 border-base-content/20 text-[0.55rem] min-w-4 h-4 flex items-center justify-center pointer-events-none z-10">E</kbd>
+            {/if}
+          </div>
+          <ResizablePanel storageKey="task-detail-sidebar" defaultWidth={360} minWidth={200} maxWidth={600} side="right">
+            <div class="overflow-hidden bg-base-200 border-l border-base-300 flex flex-col h-full">
+              <div class="flex-1 overflow-y-auto">
+                <TaskInfoPanel task={task} {worktreePath} {jiraBaseUrl} />
+              </div>
+            </div>
+          </ResizablePanel>
+        {/if}
       </div>
-    {:else}
-       <div class="relative flex-1 p-5 overflow-hidden max-[800px]:p-4">
-         {#key task.id}
-            <AgentPanel taskId={task.id} {isStarting} />
-          {/key}
-         {#if $commandHeld}
-           <kbd class="kbd kbd-xs absolute top-2 right-2 bg-base-content/10 text-base-content/40 border-base-content/20 text-[0.55rem] min-w-4 h-4 flex items-center justify-center pointer-events-none z-10">E</kbd>
-         {/if}
-       </div>
-       <ResizablePanel storageKey="task-detail-sidebar" defaultWidth={360} minWidth={200} maxWidth={600} side="right">
-         <div class="overflow-hidden bg-base-200 border-l border-base-300 flex flex-col h-full">
-           {#if worktreePath !== null}
-             <div class="flex items-center h-10 bg-base-200 border-b border-base-300 shrink-0 px-1">
-              <button
-                   class="flex items-center gap-1.5 h-full px-3.5 text-xs font-mono transition-colors {rightPanelMode === 'info' ? 'text-base-content font-semibold border-b-2 border-primary' : 'text-base-content/50'}"
-                   onclick={() => rightPanelMode = 'info'}
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
-                  Info {#if $commandHeld}<kbd class="kbd kbd-xs opacity-50">⌘I</kbd>{/if}
-                </button>
-                <button
-                   class="flex items-center gap-1.5 h-full px-3.5 text-xs font-mono transition-colors {rightPanelMode === 'terminal' ? 'text-base-content font-semibold border-b-2 border-primary' : 'text-base-content/50'}"
-                   onclick={() => rightPanelMode = 'terminal'}
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" x2="20" y1="19" y2="19"/></svg>
-                  Terminal {#if $commandHeld}<kbd class="kbd kbd-xs opacity-50">⌘J</kbd>{/if}
-                </button>
-               {#if rightPanelMode === 'terminal'}
-                 <button
-                   class="btn btn-ghost btn-xs ml-auto gap-1"
-                   aria-label="Fullscreen terminal"
-                   onclick={() => terminalFullscreen = true}
-                 >
-                   <Maximize2 size={14} />
-                    {#if $commandHeld}<kbd class="kbd kbd-xs text-base-content/40">⌘F</kbd>{/if}
-                 </button>
-               {/if}
-             </div>
-           {/if}
-           <div class="flex-1 overflow-y-auto">
-             {#if rightPanelMode === 'terminal' && worktreePath !== null}
-               <TaskTerminal taskId={task.id} {worktreePath} />
-             {:else}
-               <TaskInfoPanel task={task} {worktreePath} {jiraBaseUrl} />
-             {/if}
-           </div>
-         </div>
-       </ResizablePanel>
-    {/if}
-  </div>
+      {#if bottomPanelOpen}
+        <ResizableBottomPanel storageKey="terminal-panel-height" defaultHeight={300} minHeight={100} maxHeight={null}>
+          {#if worktreePath !== null}
+            <TerminalTabs bind:this={terminalTabsRef} taskId={task.id} {worktreePath} onTabChange={null} onTabCountChange={null} />
+          {/if}
+        </ResizableBottomPanel>
+      {/if}
+    </div>
+  {/if}
 </div>
