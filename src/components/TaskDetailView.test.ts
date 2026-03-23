@@ -85,7 +85,7 @@ vi.mock('../lib/useCommentSelection.svelte', () => ({
 }))
 
 import { render, screen, waitFor, fireEvent } from '@testing-library/svelte'
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { writable, get } from 'svelte/store'
 
 vi.mock('../lib/stores', () => ({
@@ -157,6 +157,7 @@ vi.mock('../lib/terminalPool', () => ({
   attach: vi.fn(),
   detach: vi.fn(),
   release: vi.fn(),
+  releaseAllForTask: vi.fn().mockReturnValue(0),
   focusTerminal: vi.fn(),
 }))
 
@@ -937,9 +938,67 @@ describe('TaskDetailView', () => {
          expect(breadcrumb?.textContent).not.toContain('self_review')
        })
 
-       vi.mocked(getWorktreeForTask).mockResolvedValue(null)
-     })
-   })
+        vi.mocked(getWorktreeForTask).mockResolvedValue(null)
+      })
+    })
 
+    describe('terminal cleanup on navigate-away', () => {
+      it('calls releaseAllForTask when component unmounts', async () => {
+        const { getWorktreeForTask } = await import('../lib/ipc')
+        const { releaseAllForTask } = await import('../lib/terminalPool')
+        
+        vi.mocked(getWorktreeForTask).mockResolvedValue({ worktree_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' } as any)
+        vi.mocked(releaseAllForTask).mockClear()
+        
+        const { unmount } = render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+        
+        await waitFor(() => expect(screen.getByText('code_view')).toBeTruthy())
+        
+        unmount()
+        
+        expect(releaseAllForTask).toHaveBeenCalledWith('T-42')
+        
+        vi.mocked(getWorktreeForTask).mockResolvedValue(null)
+      })
+
+      it('calls releaseAllForTask when task prop changes', async () => {
+        const { getWorktreeForTask } = await import('../lib/ipc')
+        const { releaseAllForTask } = await import('../lib/terminalPool')
+        
+        vi.mocked(getWorktreeForTask).mockResolvedValue({ worktree_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' } as any)
+        vi.mocked(releaseAllForTask).mockClear()
+        
+        const { rerender } = render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+        
+        await waitFor(() => expect(screen.getByText('code_view')).toBeTruthy())
+        
+        const newTask = { ...baseTask, id: 'T-99', initial_prompt: 'New task' }
+        rerender({ task: newTask, onRunAction: mockOnRunAction })
+        
+        await waitFor(() => {
+          expect(releaseAllForTask).toHaveBeenCalledWith('T-42')
+        })
+        
+        vi.mocked(getWorktreeForTask).mockResolvedValue(null)
+      })
+
+      it('cleanup only releases shell entries, not agent terminal', async () => {
+        const { getWorktreeForTask } = await import('../lib/ipc')
+        const { releaseAllForTask } = await import('../lib/terminalPool')
+        
+        vi.mocked(getWorktreeForTask).mockResolvedValue({ worktree_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' } as any)
+        vi.mocked(releaseAllForTask).mockClear()
+        
+        const { unmount } = render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+        
+        await waitFor(() => expect(screen.getByText('code_view')).toBeTruthy())
+        
+        unmount()
+        
+        expect(releaseAllForTask).toHaveBeenCalledWith('T-42')
+        
+        vi.mocked(getWorktreeForTask).mockResolvedValue(null)
+      })
+    })
 
 })

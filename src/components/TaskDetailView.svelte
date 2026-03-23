@@ -8,7 +8,7 @@
   import { isInputFocused } from '../lib/domUtils'
   import { loadActions, getEnabledActions } from '../lib/actions'
   import { commandHeld } from '../lib/stores'
-  import { focusTerminal } from '../lib/terminalPool'
+  import { focusTerminal, releaseAllForTask } from '../lib/terminalPool'
   import { Maximize2, Minimize2 } from 'lucide-svelte'
   import AgentPanel from './AgentPanel.svelte'
   import TaskInfoPanel from './TaskInfoPanel.svelte'
@@ -64,6 +64,13 @@
   $effect(() => {
     if ($activeProjectId) {
       loadActions($activeProjectId).then(a => { actions = getEnabledActions(a) })
+    }
+  })
+
+  $effect(() => {
+    const taskId = task.id
+    return () => {
+      releaseAllForTask(taskId)
     }
   })
 
