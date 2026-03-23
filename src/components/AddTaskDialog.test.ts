@@ -146,7 +146,7 @@ describe('AddTaskDialog', () => {
     })
   })
 
-  it('shows provider name in agent dropdown label for claude-code', async () => {
+  it('hides agent dropdown when ai_provider is claude-code even with agents', async () => {
     vi.mocked(getProjectConfig).mockResolvedValue('claude-code')
     vi.mocked(listOpenCodeAgents).mockResolvedValue([
       { name: 'agent-1', hidden: false, mode: null },
@@ -154,7 +154,8 @@ describe('AddTaskDialog', () => {
     render(AddTaskDialog, { props: { mode: 'create' } })
 
     await waitFor(() => {
-      expect(screen.queryByLabelText('Claude Code Agent')).toBeTruthy()
+      expect(screen.queryByLabelText('Permission Mode')).toBeTruthy()
+      expect(screen.queryByLabelText('Claude Code Agent')).toBeNull()
     })
   })
 
@@ -170,15 +171,16 @@ describe('AddTaskDialog', () => {
     })
   })
 
-  it('shows agent dropdown when ai_provider is claude-code and agents exist', async () => {
+  it('never shows agent dropdown when ai_provider is claude-code regardless of agents', async () => {
     vi.mocked(getProjectConfig).mockResolvedValue('claude-code')
     vi.mocked(listOpenCodeAgents).mockResolvedValue([
       { name: 'agent-1', hidden: false, mode: null },
+      { name: 'agent-2', hidden: false, mode: null },
     ])
     render(AddTaskDialog, { props: { mode: 'create' } })
 
     await waitFor(() => {
-      expect(screen.queryByLabelText('Claude Code Agent')).toBeTruthy()
+      expect(screen.queryByLabelText('Claude Code Agent')).toBeNull()
     })
   })
 
