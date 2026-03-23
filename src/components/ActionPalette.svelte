@@ -214,7 +214,7 @@
       <span class="font-mono text-[10px] text-base-content/40"><kbd class="kbd kbd-xs">↑↓</kbd> navigate</span>
       <span class="font-mono text-[10px] text-base-content/40"><kbd class="kbd kbd-xs">Enter</kbd> execute</span>
       <span class="font-mono text-[10px] text-base-content/40"><kbd class="kbd kbd-xs">Esc</kbd> close</span>
-      <span class="font-mono text-[10px] text-base-content/40 ml-auto"><kbd class="kbd kbd-xs">⌘⇧P</kbd> toggle</span>
+      <span class="font-mono text-[10px] text-base-content/40 ml-auto"><kbd class="kbd kbd-xs">⌘K</kbd> toggle</span>
     </div>
   </div>
 </div>

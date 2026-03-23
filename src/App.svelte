@@ -440,7 +440,7 @@
       showShortcutsDialog = true
       return
     }
-    if (e.metaKey && e.shiftKey && e.key === 'p') {
+    if (e.metaKey && !e.shiftKey && e.key === 'k') {
       e.preventDefault()
       openActionPalette()
       return
@@ -476,7 +476,7 @@
       e.preventDefault()
       window.dispatchEvent(new CustomEvent('toggle-voice-recording'))
     }
-    if (e.metaKey && e.key === 'k') {
+    if (e.metaKey && e.shiftKey && (e.key === 'F' || e.key === 'f')) {
       e.preventDefault()
       showCommandPalette = !showCommandPalette
       return
@@ -1167,11 +1167,11 @@
           </div>
           <div class="flex items-center justify-between">
             <span class="text-sm text-base-content">Search tasks</span>
-            <kbd class="kbd kbd-sm">⌘K</kbd>
+            <div class="flex gap-0.5"><kbd class="kbd kbd-sm">⌘</kbd><kbd class="kbd kbd-sm">⇧</kbd><kbd class="kbd kbd-sm">F</kbd></div>
           </div>
           <div class="flex items-center justify-between">
             <span class="text-sm text-base-content">Action palette</span>
-            <div class="flex gap-0.5"><kbd class="kbd kbd-sm">⌘</kbd><kbd class="kbd kbd-sm">⇧</kbd><kbd class="kbd kbd-sm">P</kbd></div>
+            <kbd class="kbd kbd-sm">⌘K</kbd>
           </div>
           <div class="flex items-center justify-between">
             <span class="text-sm text-base-content">Show shortcuts</span>

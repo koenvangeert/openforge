@@ -76,6 +76,13 @@ describe('getGlobalActions', () => {
     expect(ids).toContain('open-workqueue')
     expect(ids).toContain('refresh-github')
   })
+
+  it('uses CMD+SHIFT+F for Search Tasks', () => {
+    const actions = getGlobalActions()
+    const searchTasks = actions.find(action => action.id === 'search-tasks')
+
+    expect(searchTasks?.shortcut).toBe('⌘⇧F')
+  })
 })
 
 describe('getAvailableActions', () => {
