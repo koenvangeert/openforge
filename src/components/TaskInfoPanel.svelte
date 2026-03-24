@@ -1,9 +1,8 @@
 <script lang="ts">
-  import type { Task, PrComment, PullRequestInfo } from '../lib/types'
+  import type { Task, PullRequestInfo } from '../lib/types'
   import { parseCheckRuns, isReadyToMerge, isQueuedForMerge } from '../lib/types'
   import { ticketPrs } from '../lib/stores'
-  import { forceGithubSync, getPrComments, getPullRequests, markCommentAddressed, mergePullRequest, openUrl } from '../lib/ipc'
-  import { timeAgo } from '../lib/timeAgo'
+  import { forceGithubSync, getPullRequests, mergePullRequest, openUrl } from '../lib/ipc'
   import MarkdownContent from './MarkdownContent.svelte'
   import CopyButton from './CopyButton.svelte'
 
@@ -22,7 +21,6 @@
 
   let { task, worktreePath, jiraBaseUrl }: Props = $props()
 
-  let prCommentsByPr = $state<Map<number, PrComment[]>>(new Map())
   let mergeFeedbackByPr = $state<Map<number, MergeFeedback>>(new Map())
   let mergingPrId = $state<number | null>(null)
   const showMergeSmokeControls = typeof window !== 'undefined' && window.location.protocol.startsWith('http')
@@ -48,40 +46,6 @@
   async function refreshTaskPullRequests() {
     const prs = await getPullRequests()
     setTaskPullRequests(prs.filter((pr) => pr.ticket_id === task.id))
-  }
-
-  async function loadPrComments() {
-    const prs = $ticketPrs.get(task.id) || []
-    const nextCommentsByPr = new Map<number, PrComment[]>()
-    
-    for (const pr of prs) {
-      try {
-        const comments = await getPrComments(pr.id)
-        nextCommentsByPr.set(pr.id, comments)
-      } catch (e) {
-        console.error(`Failed to load comments for PR ${pr.id}:`, e)
-      }
-    }
-    prCommentsByPr = nextCommentsByPr
-  }
-
-  $effect(() => {
-    // Reload PR comments when task changes or ticketPrs updates
-    const prs = $ticketPrs.get(task.id)
-    if (prs) {
-      loadPrComments()
-    }
-  })
-
-  async function handleMarkAddressed(commentId: number, prId: number) {
-    try {
-      await markCommentAddressed(commentId)
-      // Reload comments for this PR
-      const comments = await getPrComments(prId)
-      prCommentsByPr = new Map(prCommentsByPr).set(prId, comments)
-    } catch (e) {
-      console.error('Failed to mark comment as addressed:', e)
-    }
   }
 
   async function handleMerge(pr: PullRequestInfo) {
@@ -367,60 +331,5 @@
       {/each}
     </section>
   {/if}
-
-  <!-- PR Comments Section -->
-  {#if taskPrs.length > 0}
-    {@const allComments = taskPrs.flatMap(pr => (prCommentsByPr.get(pr.id) || []).map(c => ({ ...c, prTitle: pr.title })))}
-    {@const totalUnaddressed = allComments.filter(c => c.addressed === 0).length}
-    {#if allComments.length > 0}
-      <section class="flex flex-col gap-2.5">
-        <div class="flex items-center gap-2">
-          <h3 class="text-[10px] font-bold text-primary font-mono tracking-[1.2px] m-0" aria-label="PR Comments">// PR_COMMENTS</h3>
-          {#if totalUnaddressed > 0}
-            <span class="badge badge-error badge-xs">{totalUnaddressed}</span>
-          {:else}
-            <span class="badge badge-success badge-xs">All addressed</span>
-          {/if}
-        </div>
-        {#each taskPrs as pr (pr.id)}
-          {@const comments = prCommentsByPr.get(pr.id) || []}
-          {#if comments.length > 0}
-            <div class="flex flex-col gap-2">
-              {#each comments as comment (comment.id)}
-                <div class="bg-base-100 border border-base-300 rounded-lg overflow-hidden {comment.addressed === 1 ? 'opacity-50' : ''}">
-                  <div class="flex items-center gap-2 px-3 py-2 bg-base-200 border-b border-base-300">
-                    <div class="w-5 h-5 rounded-full bg-primary/15 flex items-center justify-center text-[0.6rem] font-bold text-primary shrink-0">
-                      {comment.author.charAt(0).toUpperCase()}
-                    </div>
-                    <span class="text-xs font-semibold text-base-content">@{comment.author}</span>
-                    <span class="text-[0.65rem] text-base-content/40 ml-auto">{timeAgo(comment.created_at * 1000)}</span>
-                  </div>
-                  {#if comment.file_path}
-                    <div class="px-3 py-1 bg-base-200/50 border-b border-base-300 text-[0.65rem] font-mono text-base-content/50">
-                      {comment.file_path}{#if comment.line_number}:{comment.line_number}{/if}
-                    </div>
-                  {/if}
-                  <div class="px-3 py-2.5 text-sm [&_.markdown-body]:text-sm [&_.markdown-body_pre]:text-xs [&_.markdown-body_code]:text-xs [&_.markdown-body_p]:my-1">
-                    <MarkdownContent content={comment.body} />
-                  </div>
-                  <div class="px-3 py-1.5 border-t border-base-300 bg-base-200/30">
-                    {#if comment.addressed === 0}
-                      <button
-                        class="btn btn-ghost btn-xs text-base-content/50 hover:text-success hover:bg-success/10"
-                        onclick={() => handleMarkAddressed(comment.id, pr.id)}>
-                        ✓ Mark addressed
-                      </button>
-                    {:else}
-                      <span class="text-[0.65rem] text-success font-medium">✓ Addressed</span>
-                    {/if}
-                  </div>
-                </div>
-              {/each}
-            </div>
-          {/if}
-        {/each}
-      </section>
-    {/if}
-   {/if}
 
  </div>

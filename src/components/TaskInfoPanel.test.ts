@@ -20,9 +20,7 @@ vi.mock('../lib/ipc', () => ({
     rate_limited: false,
     rate_limit_reset_at: null,
   }),
-  getPrComments: vi.fn().mockResolvedValue([]),
   getPullRequests: vi.fn().mockResolvedValue([]),
-  markCommentAddressed: vi.fn().mockResolvedValue(undefined),
   mergePullRequest: vi.fn().mockResolvedValue(undefined),
   openUrl: vi.fn().mockResolvedValue(undefined),
 }))
