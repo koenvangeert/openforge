@@ -543,13 +543,12 @@ describe('TaskDetailView', () => {
 
     await fireEvent.keyDown(window, { code: 'KeyF', metaKey: true })
     await waitFor(() => {
-      expect(screen.getByTestId('fullscreen-terminal')).toBeTruthy()
       expect(screen.queryByTestId('upper-area')).toBeNull()
+      expect(screen.getByTestId('resizable-bottom-panel')).toBeTruthy()
     })
 
     await fireEvent.keyDown(window, { code: 'KeyF', metaKey: true })
     await waitFor(() => {
-      expect(screen.queryByTestId('fullscreen-terminal')).toBeNull()
       expect(screen.getByTestId('upper-area')).toBeTruthy()
     })
     vi.mocked(getWorktreeForTask).mockResolvedValue(null)
@@ -559,7 +558,6 @@ describe('TaskDetailView', () => {
     render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
     await waitFor(() => expect(screen.getByTestId('upper-area')).toBeTruthy())
     await fireEvent.keyDown(window, { code: 'KeyF', metaKey: true })
-    expect(screen.queryByTestId('fullscreen-terminal')).toBeNull()
     expect(screen.getByTestId('upper-area')).toBeTruthy()
   })
 
@@ -576,13 +574,11 @@ describe('TaskDetailView', () => {
 
     await fireEvent.keyDown(window, { code: 'KeyF', metaKey: true })
     await waitFor(() => {
-      expect(screen.getByTestId('fullscreen-terminal')).toBeTruthy()
       expect(screen.queryByTestId('upper-area')).toBeNull()
     })
 
     await fireEvent.keyDown(window, { code: 'KeyJ', metaKey: true })
     await waitFor(() => {
-      expect(screen.queryByTestId('fullscreen-terminal')).toBeNull()
       expect(screen.getByTestId('upper-area')).toBeTruthy()
       expect(screen.getByTestId('resizable-bottom-panel')).toBeTruthy()
     })
