@@ -4,15 +4,24 @@
   interface Props {
     onclick?: (e: MouseEvent) => void
     selected?: boolean
+    featured?: boolean
     class?: string
     children: Snippet
   }
 
-  let { onclick, selected = false, class: className = '', children }: Props = $props()
+  let { onclick, selected = false, featured = false, class: className = '', children }: Props = $props()
+
+  let baseClasses = 'w-full text-left bg-base-100 border rounded-box cursor-pointer transition-all'
+
+  let stateClasses = $derived.by(() => {
+    if (selected) return 'selected border-2 border-primary bg-primary/10'
+    if (featured) return 'border-base-300 shadow-sm'
+    return 'border-base-300/50 hover:border-primary/50 hover:shadow-sm'
+  })
 </script>
 
 <button
-  class="w-full text-left bg-base-100 border rounded cursor-pointer transition-all {selected ? 'selected border-2 border-primary bg-primary/10' : 'border-base-300/60 hover:border-primary/50 hover:shadow-sm'} {className}"
+  class="{baseClasses} {stateClasses} {className}"
   {onclick}
 >
   {@render children()}
