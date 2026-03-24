@@ -20,11 +20,14 @@
   } from '../lib/ipc'
   import { loadActions, saveActions, createAction, DEFAULT_ACTIONS } from '../lib/actions'
   import { loadBoardColumns, saveBoardColumns } from '../lib/boardColumns'
+  import { loadFocusFilterStates, saveFocusFilterStates, DEFAULT_FOCUS_STATES } from '../lib/boardFilters'
   import { themeMode, applyTheme } from '../lib/theme'
   import type { ThemeMode } from '../lib/theme'
   import type { Action, WhisperModelStatus, WhisperModelSizeId, BoardColumnConfig } from '../lib/types'
+  import type { TaskState } from '../lib/taskState'
   import SettingsGeneralCard from './SettingsGeneralCard.svelte'
   import SettingsBoardCard from './SettingsBoardCard.svelte'
+  import SettingsFocusFilterCard from './SettingsFocusFilterCard.svelte'
   import SettingsIntegrationsCard from './SettingsIntegrationsCard.svelte'
   import SettingsPreferencesCard from './SettingsPreferencesCard.svelte'
   import SettingsAICard from './SettingsAICard.svelte'
@@ -75,6 +78,8 @@
   let actions = $state<Action[]>([])
   // Board state
   let boardColumns = $state<BoardColumnConfig[]>([])
+  // Focus filter state
+  let focusFilterStates = $state<TaskState[]>([...DEFAULT_FOCUS_STATES])
 
   // Feature flag state
   let isCodeCleanupTasksEnabled = $state($codeCleanupTasksEnabled)
@@ -177,6 +182,11 @@
       loadBoardColumns(pid).then((cols) => {
         boardColumns = cols
       })
+
+      // Load focus filter states
+      loadFocusFilterStates(pid).then((states) => {
+        focusFilterStates = states
+      })
     } else {
        projectName = ''
        projectPath = ''
@@ -189,6 +199,7 @@
        projectColor = ''
        actions = []
        boardColumns = []
+       focusFilterStates = [...DEFAULT_FOCUS_STATES]
      }
   })
 
@@ -304,6 +315,7 @@
          await setProjectConfig($activeProjectId, 'project_color', projectColor)
          await saveActions($activeProjectId, actions)
          await saveBoardColumns($activeProjectId, boardColumns)
+         await saveFocusFilterStates($activeProjectId, focusFilterStates)
        }
        await setConfig('task_id_prefix', taskIdPrefix)
        await setConfig('jira_base_url', jiraBaseUrl)
@@ -443,6 +455,12 @@
         <SettingsBoardCard
           columns={boardColumns}
           onColumnsChange={(cols) => { boardColumns = cols; scheduleSave() }}
+          disabled={!hasProject}
+        />
+
+        <SettingsFocusFilterCard
+          focusStates={focusFilterStates}
+          onFocusStatesChange={(states) => { focusFilterStates = states; scheduleSave() }}
           disabled={!hasProject}
         />
 
