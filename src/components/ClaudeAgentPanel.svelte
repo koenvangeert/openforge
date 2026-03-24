@@ -118,11 +118,11 @@
     <div class="flex items-start gap-2.5">
       <span class="mt-1.5 shrink-0 {status === 'idle' ? 'status status-neutral' : status === 'running' ? 'status status-success' : status === 'complete' ? 'status status-primary' : 'status status-error'}"></span>
       <div class="flex flex-col gap-1.5">
-        <span class="text-sm font-semibold text-base-content font-mono">{getStatusText()}</span>
+        <span class="text-sm font-semibold text-base-content">{getStatusText()}</span>
         {#if session}
           <div class="flex items-center gap-2">
             <span class="text-xs font-mono text-secondary">// {getStageLabel(session.stage)}</span>
-            <span class="badge badge-sm font-mono font-bold {getSessionStatusBadgeClass(session.status)}">
+            <span class="badge badge-sm font-bold {getSessionStatusBadgeClass(session.status)}">
               {session.status.toUpperCase()}
             </span>
             {#if session.claude_session_id}
@@ -137,7 +137,7 @@
     <div class="flex items-center gap-3">
       <VoiceInput onTranscription={handleTranscription} listenToHotkey />
       {#if status === 'running'}
-        <button class="btn btn-outline btn-error btn-sm uppercase tracking-wide font-mono" onclick={handleAbort}>
+        <button class="btn btn-outline btn-error btn-sm" onclick={handleAbort}>
           Abort
         </button>
       {/if}
