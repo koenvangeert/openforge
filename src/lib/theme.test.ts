@@ -77,13 +77,13 @@ describe('theme', () => {
     it('returns light terminal theme by default', () => {
       const theme = getTerminalTheme('light')
       expect(theme.background).toBe('#ffffff')
-      expect(theme.foreground).toBe('#1f2937')
+      expect(theme.foreground).toBe('#374151')
     })
 
     it('returns dark terminal theme', () => {
       const theme = getTerminalTheme('dark')
-      expect(theme.background).toBe('#1E293B')
-      expect(theme.foreground).toBe('#E2E8F0')
+      expect(theme.background).toBe('#1A1D23')
+      expect(theme.foreground).toBe('#D1D5DB')
     })
   })
 

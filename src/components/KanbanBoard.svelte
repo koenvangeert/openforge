@@ -235,34 +235,34 @@
     subtitle="Manage and prioritize project tasks"
   />
 
-  <div class="flex items-center justify-between px-6 pt-4 pb-1">
+  <div class="flex items-center justify-between px-6 pt-4 pb-2">
     <button
-      class="font-mono text-[11px] px-2.5 py-1 rounded cursor-pointer transition-colors {showBacklog ? 'bg-base-300 text-base-content' : 'text-secondary hover:text-base-content hover:bg-base-300/50'}"
+      class="font-mono text-[11px] px-2.5 py-1 rounded cursor-pointer transition-colors {showBacklog ? 'bg-base-200 text-base-content' : 'text-base-content/50 hover:text-base-content hover:bg-base-200/50'}"
       onclick={toggleBacklog}
       title="Toggle backlog (b)"
     >
       {showBacklog ? '▾' : '▸'} {backlogColumn.name.toLowerCase()}
-      <span class="ml-1 text-[10px] text-secondary bg-base-300 px-1 py-0.5 rounded">{backlogTasks.length}</span>
+       <span class="ml-1 text-[10px] text-base-content/40 bg-base-200 px-1 py-0.5 rounded">{backlogTasks.length}</span>
     </button>
     <button
-      class="font-mono text-[11px] px-2.5 py-1 rounded cursor-pointer transition-colors {showDoneDrawer ? 'bg-base-300 text-base-content' : 'text-secondary hover:text-base-content hover:bg-base-300/50'}"
+       class="font-mono text-[11px] px-2.5 py-1 rounded cursor-pointer transition-colors {showDoneDrawer ? 'bg-base-200 text-base-content' : 'text-base-content/50 hover:text-base-content hover:bg-base-200/50'}"
       onclick={toggleDoneDrawer}
       title="Toggle done drawer (c)"
     >
       {doneColumn.name.toLowerCase()}
-      <span class="ml-1 text-[10px] text-secondary bg-base-300 px-1 py-0.5 rounded">{doneTasks.length}</span>
+       <span class="ml-1 text-[10px] text-base-content/40 bg-base-200 px-1 py-0.5 rounded">{doneTasks.length}</span>
       {showDoneDrawer ? '✕' : '▸'}
     </button>
   </div>
 
-  <div class="flex gap-4 px-6 py-4 flex-1 overflow-hidden">
+   <div class="flex gap-5 px-6 py-5 flex-1 overflow-hidden">
     {#if showBacklog}
       <div class="flex-1 min-w-0 flex flex-col max-w-[340px] transition-all duration-200">
         <div class="flex items-center justify-between py-2 mb-2">
-          <span class="font-mono text-[11px] font-semibold text-secondary">// {backlogColumn.name.toLowerCase()}</span>
-          <span class="font-mono text-[10px] text-secondary bg-base-300 px-1.5 py-0.5 rounded">{backlogTasks.length}</span>
+           <span class="font-mono text-xs font-medium text-base-content/50">// {backlogColumn.name.toLowerCase()}</span>
+           <span class="font-mono text-[10px] text-base-content/40 bg-base-200 px-1.5 py-0.5 rounded">{backlogTasks.length}</span>
         </div>
-        <div class="flex-1 flex flex-col gap-2 overflow-y-auto" role="listbox" data-vim-column={backlogColumn.id}>
+         <div class="flex-1 flex flex-col gap-3 overflow-y-auto" role="listbox" data-vim-column={backlogColumn.id}>
           {#each backlogTasks as task, i (task.id)}
             {@const isVimFocused = columns[focusedColumn]?.key === backlogColumn.id && vim.focusedIndex === i}
             <div role="presentation" data-vim-item oncontextmenu={(e: MouseEvent) => handleContextMenu(e, task.id)} class={isVimFocused ? 'vim-focus' : ''}>
@@ -274,16 +274,16 @@
           {/if}
         </div>
       </div>
-      <div class="w-px bg-base-300 self-stretch my-2"></div>
-    {/if}
+       <div class="w-px bg-base-300/40 self-stretch my-2"></div>
+     {/if}
 
-    {#each middleColumnTasks as colData, colIdx (colData.config.id)}
+     {#each middleColumnTasks as colData, colIdx (colData.config.id)}
       <div class="flex-1 min-w-0 flex flex-col">
         <div class="flex items-center justify-between py-2 mb-2">
-          <span class="font-mono text-[11px] font-semibold text-secondary">// {colData.config.name.toLowerCase()}</span>
-          <span class="font-mono text-[10px] text-secondary bg-base-300 px-1.5 py-0.5 rounded">{colData.tasks.length}</span>
+           <span class="font-mono text-xs font-medium text-base-content/50">// {colData.config.name.toLowerCase()}</span>
+           <span class="font-mono text-[10px] text-base-content/40 bg-base-200 px-1.5 py-0.5 rounded">{colData.tasks.length}</span>
         </div>
-        <div class="flex-1 flex flex-col gap-2 overflow-y-auto" role="listbox" data-vim-column={colData.config.id}>
+         <div class="flex-1 flex flex-col gap-3 overflow-y-auto" role="listbox" data-vim-column={colData.config.id}>
           {#each colData.tasks as task, i (task.id)}
             {@const isVimFocused = columns[focusedColumn]?.key === colData.config.id && vim.focusedIndex === i}
             <div role="presentation" data-vim-item oncontextmenu={(e: MouseEvent) => handleContextMenu(e, task.id)} class={isVimFocused ? 'vim-focus' : ''}>
@@ -295,9 +295,9 @@
           {/if}
         </div>
       </div>
-      {#if colIdx < middleColumnTasks.length - 1}
-        <div class="w-px bg-base-300 self-stretch my-2"></div>
-      {/if}
+       {#if colIdx < middleColumnTasks.length - 1}
+         <div class="w-px bg-base-300/40 self-stretch my-2"></div>
+       {/if}
     {/each}
   </div>
 </div>
@@ -309,11 +309,11 @@
     class="fixed inset-0 bg-black/30 z-40 transition-opacity duration-200"
     onclick={toggleDoneDrawer}
   ></div>
-  <div class="fixed top-0 right-0 h-full w-[400px] max-w-[85vw] bg-base-100 border-l border-base-300 z-50 shadow-2xl flex flex-col">
+   <div class="fixed top-0 right-0 h-full w-[400px] max-w-[85vw] bg-base-100 border-l border-base-300/50 z-50 shadow-2xl flex flex-col">
     <div class="flex items-center justify-between px-5 py-4 border-b border-base-300">
       <div class="flex items-center gap-3">
-        <span class="font-mono text-[11px] font-semibold text-secondary">// {doneColumn.name.toLowerCase()}</span>
-        <span class="font-mono text-[10px] text-secondary bg-base-300 px-1.5 py-0.5 rounded">{doneTasks.length}</span>
+         <span class="font-mono text-xs font-medium text-base-content/50">// {doneColumn.name.toLowerCase()}</span>
+         <span class="font-mono text-[10px] text-base-content/40 bg-base-200 px-1.5 py-0.5 rounded">{doneTasks.length}</span>
       </div>
       <div class="flex items-center gap-2">
         {#if doneTasks.length > 0}

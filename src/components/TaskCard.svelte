@@ -44,17 +44,17 @@
 </script>
 
 <Card
-  class="group/card block px-3.5 py-3 {borderClass} {isStarting ? 'starting' : ''} {isPinned ? 'border-primary/30' : ''}"
+  class="group/card block px-4 py-3.5 {borderClass} {isStarting ? 'starting' : ''} {isPinned ? 'border-primary/30' : ''}"
   onclick={handleClick}
 >
   <div class="flex items-center justify-between mb-1">
     <div class="flex items-center gap-1.5">
-      <span class="font-mono text-xs font-semibold text-primary">{task.id}</span>
+      <span class="font-mono text-xs font-medium text-primary">{task.id}</span>
       {#if task.jira_key}
         <span class="badge badge-ghost badge-xs font-mono">{task.jira_key}</span>
       {/if}
       {#if needsInput}
-        <span class="badge badge-warning badge-xs font-mono animate-pulse">Needs Input</span>
+        <span class="badge badge-warning badge-xs font-mono">Needs Input</span>
       {/if}
     </div>
     <div class="flex items-center gap-1.5">
@@ -77,17 +77,17 @@
         </button>
       {/if}
       {#if isStarting}
-        <span
-          class="font-mono text-[0.6rem] font-semibold px-1.5 py-0.5 rounded uppercase tracking-wider whitespace-nowrap leading-tight bg-primary/15 text-primary"
-          style="animation: badge-pulse 2s ease-in-out infinite;"
-        >
-          Starting
-        </span>
+         <span
+           class="font-mono text-[0.6rem] font-medium px-1.5 py-0.5 rounded uppercase tracking-wider whitespace-nowrap leading-tight bg-primary/15 text-primary"
+           style="animation: badge-pulse 2s ease-in-out infinite;"
+         >
+           Starting
+         </span>
       {:else if hasVisibleStatus}
-        <span
-          class="font-mono text-[0.6rem] font-semibold px-1.5 py-0.5 rounded uppercase tracking-wider whitespace-nowrap leading-tight {statusClass === 'running' ? 'bg-success/15 text-success' : ''} {statusClass === 'completed' ? 'bg-info/20 text-info' : ''} {statusClass === 'paused' ? 'bg-warning/15 text-warning' : ''} {statusClass === 'failed' ? 'bg-error/15 text-error' : ''} {statusClass === 'interrupted' ? 'bg-base-content/15 text-base-content/50' : ''}"
-          style={statusClass === 'running' ? 'animation: badge-pulse 2s ease-in-out infinite;' : ''}
-        >
+         <span
+           class="font-mono text-[0.6rem] font-medium px-1.5 py-0.5 rounded uppercase tracking-wider whitespace-nowrap leading-tight {statusClass === 'running' ? 'bg-success/15 text-success' : ''} {statusClass === 'completed' ? 'bg-info/20 text-info' : ''} {statusClass === 'paused' ? 'bg-warning/15 text-warning' : ''} {statusClass === 'failed' ? 'bg-error/15 text-error' : ''} {statusClass === 'interrupted' ? 'bg-base-content/15 text-base-content/50' : ''}"
+           style={statusClass === 'running' ? 'animation: badge-pulse 2s ease-in-out infinite;' : ''}
+         >
           {#if statusClass === 'running'}
             Running
           {:else if statusClass === 'completed'}
@@ -120,8 +120,8 @@
   {#if pullRequests.length > 0}
     <div class="flex flex-wrap gap-1 mb-1">
       {#each pullRequests as pr}
-        <span
-          class="font-mono text-[10px] font-semibold px-1.5 py-px rounded cursor-pointer transition-opacity hover:opacity-80 {pr.state === 'open' && !isReadyToMerge(pr) ? 'text-primary' : ''} {pr.state === 'merged' ? 'text-secondary' : ''} {isReadyToMerge(pr) ? 'text-info bg-info/10 border border-info/40' : ''} {pr.state === 'closed' ? 'text-base-content/40' : ''}"
+         <span
+           class="font-mono text-[10px] font-medium px-1.5 py-px rounded cursor-pointer transition-opacity hover:opacity-80 {pr.state === 'open' && !isReadyToMerge(pr) ? 'text-primary' : ''} {pr.state === 'merged' ? 'text-secondary' : ''} {isReadyToMerge(pr) ? 'text-info bg-info/10 border border-info/40' : ''} {pr.state === 'closed' ? 'text-base-content/40' : ''}"
           role="link"
           tabindex="0"
           onclick={(e: MouseEvent) => { e.stopPropagation(); openUrl(pr.url) }}
@@ -152,13 +152,13 @@
       {/each}
     </div>
     {#each pullRequests as pr}
-      {#if pr.state === 'merged'}
-        <div class="font-mono text-[10px] font-semibold px-2 py-0.5 rounded mt-1 text-center text-secondary">// merged</div>
-      {:else if isQueuedForMerge(pr)}
-        <div class="font-mono text-[10px] font-semibold px-2 py-0.5 rounded mt-1 w-fit text-info bg-info/10 border border-info/30">$ queued for merge</div>
-      {:else if isReadyToMerge(pr)}
-        <div class="font-mono text-[10px] font-semibold px-2 py-0.5 rounded mt-1 w-fit text-info bg-info/10 border border-info/30">$ ready to merge</div>
-      {/if}
+       {#if pr.state === 'merged'}
+         <div class="font-mono text-[10px] font-medium px-2 py-0.5 rounded mt-1 text-center text-secondary">// merged</div>
+       {:else if isQueuedForMerge(pr)}
+         <div class="font-mono text-[10px] font-medium px-2 py-0.5 rounded mt-1 w-fit text-info bg-info/10 border border-info/30">$ queued for merge</div>
+       {:else if isReadyToMerge(pr)}
+         <div class="font-mono text-[10px] font-medium px-2 py-0.5 rounded mt-1 w-fit text-info bg-info/10 border border-info/30">$ ready to merge</div>
+       {/if}
     {/each}
   {/if}
   {#if totalUnaddressed > 0}
