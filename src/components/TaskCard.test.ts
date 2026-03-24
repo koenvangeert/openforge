@@ -439,4 +439,23 @@ describe('TaskCard', () => {
     expect(screen.queryByText('PR #42')).toBeNull()
     expect(screen.queryByText('#42')).toBeNull()
   })
+
+  it('expands PR chips on mouse enter and hides on mouse leave', async () => {
+    const pr = { ...basePr, review_status: 'approved' }
+    render(TaskCard, { props: { task: baseTask, pullRequests: [pr], isFeatured: false } })
+    
+    expect(screen.queryByText('Approved')).toBeNull()
+    expect(screen.queryByText('PR #42')).toBeNull()
+
+    const card = screen.getByRole('button')
+    await fireEvent.mouseEnter(card)
+    
+    expect(screen.getByText('Approved')).toBeTruthy()
+    expect(screen.getByText('PR #42')).toBeTruthy()
+
+    await fireEvent.mouseLeave(card)
+    
+    expect(screen.queryByText('Approved')).toBeNull()
+    expect(screen.queryByText('PR #42')).toBeNull()
+  })
 })

@@ -3,13 +3,15 @@
 
   interface Props {
     onclick?: (e: MouseEvent) => void
+    onmouseenter?: (e: MouseEvent) => void
+    onmouseleave?: (e: MouseEvent) => void
     selected?: boolean
     featured?: boolean
     class?: string
     children: Snippet
   }
 
-  let { onclick, selected = false, featured = false, class: className = '', children }: Props = $props()
+  let { onclick, onmouseenter, onmouseleave, selected = false, featured = false, class: className = '', children }: Props = $props()
 
   let baseClasses = 'w-full text-left bg-base-100 border rounded-box cursor-pointer transition-all'
 
@@ -23,6 +25,8 @@
 <button
   class="{baseClasses} {stateClasses} {className}"
   {onclick}
+  {onmouseenter}
+  {onmouseleave}
 >
   {@render children()}
 </button>

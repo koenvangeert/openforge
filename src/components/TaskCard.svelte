@@ -42,11 +42,14 @@
     pullRequests.reduce((sum, pr) => sum + (pr.unaddressed_comment_count || 0), 0)
   )
 
-  let cardPadding = $derived(isFeatured ? 'p-[18px]' : 'px-[18px] py-4')
-  let titleClasses = $derived(isFeatured
+  let isHovered = $state(false)
+  let isEffectivelyFeatured = $derived(isFeatured || isHovered)
+
+  let cardPadding = $derived(isEffectivelyFeatured ? 'p-[18px]' : 'px-[18px] py-4')
+  let titleClasses = $derived(isEffectivelyFeatured
     ? 'text-lg font-semibold leading-snug text-base-content'
     : 'text-[15px] font-medium leading-snug text-base-content')
-  let reasonClasses = $derived(isFeatured
+  let reasonClasses = $derived(isEffectivelyFeatured
     ? 'text-[13px] text-base-content/60'
     : 'text-xs text-base-content/50 truncate')
 
@@ -61,8 +64,10 @@
   class="group/card block {cardPadding} {borderClass} {isStarting ? 'starting' : ''} {isPinned ? 'border-primary/30' : ''}"
   featured={isFeatured}
   onclick={handleClick}
+  onmouseenter={() => isHovered = true}
+  onmouseleave={() => isHovered = false}
 >
-  <div class="flex flex-col {isFeatured ? 'gap-2.5' : 'gap-2'}">
+  <div class="flex flex-col {isEffectivelyFeatured ? 'gap-2.5' : 'gap-2'}">
     <div class="flex items-center justify-between">
       <div class="flex items-center gap-2.5">
         <span class="font-mono text-[11px] font-semibold text-primary">{task.id}</span>
@@ -146,7 +151,7 @@
       <div class={reasonClasses}>{reasonText}</div>
     {/if}
 
-    {#if isFeatured && pullRequests.length > 0}
+    {#if isEffectivelyFeatured && pullRequests.length > 0}
       <div class="flex flex-wrap gap-2">
         {#each pullRequests as pr}
           <button
@@ -207,6 +212,6 @@
   </div>
 
   {#if task.jira_assignee}
-    <div class="text-[10px] text-base-content/40 {isFeatured ? 'mt-2' : 'mt-1'}">@{task.jira_assignee}</div>
+    <div class="text-[10px] text-base-content/40 {isEffectivelyFeatured ? 'mt-2' : 'mt-1'}">@{task.jira_assignee}</div>
   {/if}
 </Card>
