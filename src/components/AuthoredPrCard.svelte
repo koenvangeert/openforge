@@ -44,27 +44,27 @@
 
   <div class="flex items-center gap-2 text-xs">
     {#if pr.ci_status === 'success'}
-      <span class="inline-flex items-center px-1.5 py-0.5 font-semibold text-success bg-success/15 rounded">CI Passed</span>
+      <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 bg-[var(--chip-running-bg)]"><span class="w-1.5 h-1.5 rounded-full bg-[var(--chip-running-dot)]"></span><span class="text-[10px] font-medium text-[var(--chip-running-text)]">CI Passed</span></span>
     {:else if pr.ci_status === 'failure'}
-      <span class="inline-flex items-center px-1.5 py-0.5 font-semibold text-error bg-error/15 rounded">CI Failed</span>
+      <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 bg-[var(--chip-error-bg)]"><span class="w-1.5 h-1.5 rounded-full bg-[var(--chip-error-dot)]"></span><span class="text-[10px] font-medium text-[var(--chip-error-text)]">CI Failed</span></span>
     {:else if pr.ci_status === 'pending'}
-      <span class="inline-flex items-center px-1.5 py-0.5 font-semibold text-warning bg-warning/15 rounded">CI Pending</span>
+      <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 bg-[var(--chip-paused-bg)]"><span class="w-1.5 h-1.5 rounded-full bg-[var(--chip-paused-dot)]"></span><span class="text-[10px] font-medium text-[var(--chip-paused-text)]">CI Pending</span></span>
     {/if}
 
     {#if pr.review_status === 'approved'}
-      <span class="inline-flex items-center px-1.5 py-0.5 font-semibold text-success bg-success/15 rounded">Approved</span>
+      <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 bg-[var(--chip-running-bg)]"><span class="w-1.5 h-1.5 rounded-full bg-[var(--chip-running-dot)]"></span><span class="text-[10px] font-medium text-[var(--chip-running-text)]">Approved</span></span>
     {:else if pr.review_status === 'changes_requested'}
-      <span class="inline-flex items-center px-1.5 py-0.5 font-semibold text-warning bg-warning/15 rounded">Changes Req.</span>
+      <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 bg-[var(--chip-paused-bg)]"><span class="w-1.5 h-1.5 rounded-full bg-[var(--chip-paused-dot)]"></span><span class="text-[10px] font-medium text-[var(--chip-paused-text)]">Changes Req.</span></span>
     {:else if pr.review_status === 'pending'}
-      <span class="inline-flex items-center px-1.5 py-0.5 font-semibold text-base-content/50 bg-base-content/10 rounded">Pending Review</span>
+      <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 bg-[var(--chip-stopped-bg)]"><span class="w-1.5 h-1.5 rounded-full bg-[var(--chip-stopped-dot)]"></span><span class="text-[10px] font-medium text-[var(--chip-stopped-text)]">Pending Review</span></span>
     {/if}
 
     {#if pr.is_queued && pr.state === 'open'}
-      <span class="inline-flex items-center px-1.5 py-0.5 font-semibold text-info bg-info/15 rounded">Queued</span>
+      <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 bg-[var(--chip-done-bg)]"><span class="w-1.5 h-1.5 rounded-full bg-[var(--chip-done-dot)]"></span><span class="text-[10px] font-medium text-[var(--chip-done-text)]">Queued</span></span>
     {/if}
 
     {#if hasConflict}
-      <span class="inline-flex items-center px-1.5 py-0.5 font-semibold text-error bg-error/15 rounded">Merge Conflict</span>
+      <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 bg-[var(--chip-error-bg)]"><span class="w-1.5 h-1.5 rounded-full bg-[var(--chip-error-dot)]"></span><span class="text-[10px] font-medium text-[var(--chip-error-text)]">Merge Conflict</span></span>
     {/if}
 
     <span class="flex-1"></span>

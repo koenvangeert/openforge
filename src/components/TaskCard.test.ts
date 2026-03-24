@@ -63,13 +63,13 @@ describe('TaskCard', () => {
 
   it('renders jira_title when present', () => {
     render(TaskCard, { props: { task: baseTask } })
-    expect(screen.getByText('// Add JWT authentication to REST API')).toBeTruthy()
+    expect(screen.getByText('Add JWT authentication to REST API')).toBeTruthy()
   })
 
   it('hides jira_title when null', () => {
     const taskWithoutJiraTitle = { ...baseTask, jira_title: null }
     render(TaskCard, { props: { task: taskWithoutJiraTitle } })
-    expect(screen.queryByText('// Add JWT authentication to REST API')).toBeNull()
+    expect(screen.queryByText('Add JWT authentication to REST API')).toBeNull()
   })
 
   it('renders jira_assignee', () => {
@@ -302,7 +302,7 @@ describe('TaskCard', () => {
   it('shows unaddressed comment badge when comments exist', () => {
     const pr = { ...basePr, unaddressed_comment_count: 3 }
     render(TaskCard, { props: { task: baseTask, pullRequests: [pr] } })
-    expect(screen.getByText('! 3 unaddressed')).toBeTruthy()
+    expect(screen.getByText('3 unaddressed')).toBeTruthy()
   })
 
   it('hides unaddressed comment badge when count is 0', () => {
@@ -315,7 +315,7 @@ describe('TaskCard', () => {
     const pr1 = { ...basePr, id: 1, unaddressed_comment_count: 2 }
     const pr2 = { ...basePr, id: 2, unaddressed_comment_count: 1 }
     render(TaskCard, { props: { task: baseTask, pullRequests: [pr1, pr2] } })
-    expect(screen.getByText('! 3 unaddressed')).toBeTruthy()
+    expect(screen.getByText('3 unaddressed')).toBeTruthy()
   })
 
   it('hides badge when no pull requests', () => {

@@ -1,3 +1,6 @@
+@import "@fontsource/inter/400.css";
+@import "@fontsource/inter/500.css";
+@import "@fontsource/inter/600.css";
 @import "@fontsource/jetbrains-mono/400.css";
 @import "@fontsource/jetbrains-mono/500.css";
 @import "@fontsource/jetbrains-mono/600.css";
@@ -81,7 +84,50 @@
 }
 
 :root {
-  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, Liberation Mono, monospace;
+  font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+}
+
+/* Chip color tokens — light theme */
+:root, [data-theme="openforge"] {
+  --chip-running-bg: #EFF8F1;
+  --chip-running-dot: #22C55E;
+  --chip-running-text: #2D8B6F;
+  --chip-done-bg: #EEEEFF;
+  --chip-done-dot: #6C63C9;
+  --chip-done-text: #5B54B0;
+  --chip-paused-bg: #FEF3E2;
+  --chip-paused-dot: #F59E0B;
+  --chip-paused-text: #B45309;
+  --chip-error-bg: #FEE2E2;
+  --chip-error-dot: #DC2626;
+  --chip-error-text: #B91C1C;
+  --chip-stopped-bg: #F3EFE8;
+  --chip-stopped-dot: #C6BFB2;
+  --chip-stopped-text: #8A8275;
+  --chip-starting-bg: #EDEBF7;
+  --chip-starting-dot: #6C63C9;
+  --chip-starting-text: #5B54B0;
+}
+/* Chip color tokens — dark theme */
+[data-theme="openforge-dark"] {
+  --chip-running-bg: #1A2E1A;
+  --chip-running-dot: #22C55E;
+  --chip-running-text: #4ADE80;
+  --chip-done-bg: #1E1B2E;
+  --chip-done-dot: #8B82E0;
+  --chip-done-text: #A5A0ED;
+  --chip-paused-bg: #2E2510;
+  --chip-paused-dot: #F59E0B;
+  --chip-paused-text: #FCD34D;
+  --chip-error-bg: #2E1010;
+  --chip-error-dot: #DC2626;
+  --chip-error-text: #FCA5A5;
+  --chip-stopped-bg: #2A2720;
+  --chip-stopped-dot: #8A8275;
+  --chip-stopped-text: #B8B0A0;
+  --chip-starting-bg: #1E1B2E;
+  --chip-starting-dot: #8B82E0;
+  --chip-starting-text: #A5A0ED;
 }
 
 /* Status border indicators — left-border accent, no gradients */

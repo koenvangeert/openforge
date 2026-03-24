@@ -64,9 +64,9 @@ describe('KanbanBoard', () => {
 
   it('renders backlog and doing columns by default', async () => {
     render(KanbanBoard, { props: { onRunAction: mockOnRunAction } })
-    expect(await screen.findByText('// backlog')).toBeTruthy()
-    expect(await screen.findByText('// doing')).toBeTruthy()
-    expect(screen.queryByText('// done')).toBeNull()
+    expect(await screen.findByText('backlog')).toBeTruthy()
+    expect(await screen.findByText('doing')).toBeTruthy()
+    expect(screen.queryByText('done')).toBeNull()
   })
 
   it('renders tasks in correct columns', async () => {
@@ -82,7 +82,7 @@ describe('KanbanBoard', () => {
     render(KanbanBoard, { props: { onRunAction: mockOnRunAction } })
 
     // Wait for columns to load
-    await screen.findByText('// backlog')
+    await screen.findByText('backlog')
 
     // Find column containers by data-vim-column attribute
     const backlogCol = document.querySelector('[data-vim-column="col-backlog"]')!
@@ -190,11 +190,11 @@ describe('KanbanBoard', () => {
 
     render(KanbanBoard, { props: { onRunAction: mockOnRunAction } })
 
-    expect(await screen.findByText('// backlog')).toBeTruthy()
-    expect(await screen.findByText('// in progress')).toBeTruthy()
-    expect(await screen.findByText('// blocked')).toBeTruthy()
-    expect(await screen.findByText('// review')).toBeTruthy()
-    expect(screen.queryByText('// done')).toBeNull()
+    expect(await screen.findByText('backlog')).toBeTruthy()
+    expect(await screen.findByText('in progress')).toBeTruthy()
+    expect(await screen.findByText('blocked')).toBeTruthy()
+    expect(await screen.findByText('review')).toBeTruthy()
+    expect(screen.queryByText('done')).toBeNull()
   })
 
   it('vim h/l navigation moves between columns', async () => {
@@ -202,7 +202,7 @@ describe('KanbanBoard', () => {
     tasks.set([baseTask, doingTask])
 
     render(KanbanBoard, { props: { onRunAction: mockOnRunAction } })
-    await screen.findByText('// backlog')
+    await screen.findByText('backlog')
 
     await fireEvent.keyDown(window, { key: 'l' })
     await fireEvent.keyDown(window, { key: 'l' })
@@ -215,7 +215,7 @@ describe('KanbanBoard', () => {
 
     render(KanbanBoard, { props: { onRunAction: mockOnRunAction } })
 
-    await screen.findByText('// backlog')
+    await screen.findByText('backlog')
     await waitFor(() => {
       expect(Element.prototype.scrollIntoView).toHaveBeenCalled()
     })
@@ -238,7 +238,7 @@ describe('KanbanBoard', () => {
   it('does not scroll when a task moves columns during a store update', async () => {
     render(KanbanBoard, { props: { onRunAction: mockOnRunAction } })
 
-    await screen.findByText('// backlog')
+    await screen.findByText('backlog')
     vi.mocked(Element.prototype.scrollIntoView).mockClear()
 
     tasks.set([{ ...baseTask, status: 'doing' }])
@@ -258,7 +258,7 @@ describe('KanbanBoard', () => {
 
     render(KanbanBoard, { props: { onRunAction: mockOnRunAction } })
 
-    await screen.findByText('// backlog')
+    await screen.findByText('backlog')
     vi.mocked(Element.prototype.scrollIntoView).mockClear()
 
     await fireEvent.keyDown(window, { key: 'l' })
@@ -276,29 +276,29 @@ describe('KanbanBoard', () => {
 
   it('hides backlog when toggle is clicked', async () => {
     render(KanbanBoard, { props: { onRunAction: mockOnRunAction } })
-    await screen.findByText('// backlog')
+    await screen.findByText('backlog')
     await fireEvent.click(screen.getByTitle('Toggle backlog (b)'))
-    expect(screen.queryByText('// backlog')).toBeNull()
-    expect(screen.getByText('// doing')).toBeTruthy()
+    expect(screen.queryByText('backlog')).toBeNull()
+    expect(screen.getByText('doing')).toBeTruthy()
   })
 
   it('b shortcut toggles backlog visibility', async () => {
     render(KanbanBoard, { props: { onRunAction: mockOnRunAction } })
-    await screen.findByText('// backlog')
+    await screen.findByText('backlog')
     await fireEvent.keyDown(window, { key: 'b' })
-    expect(screen.queryByText('// backlog')).toBeNull()
+    expect(screen.queryByText('backlog')).toBeNull()
     await fireEvent.keyDown(window, { key: 'b' })
-    expect(screen.getByText('// backlog')).toBeTruthy()
+    expect(screen.getByText('backlog')).toBeTruthy()
   })
 
   it('shows done drawer when toggle is clicked', async () => {
     const doneTask: Task = { ...baseTask, id: 'T-2', initial_prompt: 'Done task', status: 'done' }
     tasks.set([doneTask])
     render(KanbanBoard, { props: { onRunAction: mockOnRunAction } })
-    await screen.findByText('// doing')
-    expect(screen.queryByText('// done')).toBeNull()
+    await screen.findByText('doing')
+    expect(screen.queryByText('done')).toBeNull()
     await fireEvent.click(screen.getByTitle('Toggle done drawer (c)'))
-    expect(screen.getByText('// done')).toBeTruthy()
+    expect(screen.getByText('done')).toBeTruthy()
     expect(screen.getByText('Done task')).toBeTruthy()
   })
 
@@ -306,22 +306,22 @@ describe('KanbanBoard', () => {
     const doneTask: Task = { ...baseTask, id: 'T-2', initial_prompt: 'Done task', status: 'done' }
     tasks.set([doneTask])
     render(KanbanBoard, { props: { onRunAction: mockOnRunAction } })
-    await screen.findByText('// doing')
+    await screen.findByText('doing')
     await fireEvent.keyDown(window, { key: 'c' })
-    expect(screen.getByText('// done')).toBeTruthy()
+    expect(screen.getByText('done')).toBeTruthy()
     await fireEvent.keyDown(window, { key: 'c' })
-    expect(screen.queryByText('// done')).toBeNull()
+    expect(screen.queryByText('done')).toBeNull()
   })
 
   it('Escape key dismisses done drawer when open', async () => {
     const doneTask: Task = { ...baseTask, id: 'T-2', initial_prompt: 'Done task', status: 'done' }
     tasks.set([doneTask])
     render(KanbanBoard, { props: { onRunAction: mockOnRunAction } })
-    await screen.findByText('// doing')
+    await screen.findByText('doing')
     await fireEvent.keyDown(window, { key: 'c' })
-    expect(screen.getByText('// done')).toBeTruthy()
+    expect(screen.getByText('done')).toBeTruthy()
     await fireEvent.keyDown(window, { key: 'Escape' })
-    expect(screen.queryByText('// done')).toBeNull()
+    expect(screen.queryByText('done')).toBeNull()
   })
 
   describe('backlog state persistence', () => {
@@ -330,9 +330,9 @@ describe('KanbanBoard', () => {
       vi.mocked(getConfig).mockResolvedValue('false')
 
       render(KanbanBoard, { props: { onRunAction: mockOnRunAction } })
-      await screen.findByText('// doing')
+      await screen.findByText('doing')
 
-      expect(screen.queryByText('// backlog')).toBeNull()
+      expect(screen.queryByText('backlog')).toBeNull()
     })
 
     it('defaults to open when no saved state', async () => {
@@ -340,14 +340,14 @@ describe('KanbanBoard', () => {
       vi.mocked(getConfig).mockResolvedValue(null)
 
       render(KanbanBoard, { props: { onRunAction: mockOnRunAction } })
-      expect(await screen.findByText('// backlog')).toBeTruthy()
+      expect(await screen.findByText('backlog')).toBeTruthy()
     })
 
     it('persists collapsed state when backlog is toggled via click', async () => {
       const { setConfig } = await import('../lib/ipc')
 
       render(KanbanBoard, { props: { onRunAction: mockOnRunAction } })
-      await screen.findByText('// backlog')
+      await screen.findByText('backlog')
 
       await fireEvent.click(screen.getByTitle('Toggle backlog (b)'))
 
@@ -359,7 +359,7 @@ describe('KanbanBoard', () => {
       vi.mocked(getConfig).mockResolvedValue('false')
 
       render(KanbanBoard, { props: { onRunAction: mockOnRunAction } })
-      await screen.findByText('// doing')
+      await screen.findByText('doing')
 
       await fireEvent.click(screen.getByTitle('Toggle backlog (b)'))
 
@@ -371,7 +371,7 @@ describe('KanbanBoard', () => {
       vi.mocked(getConfig).mockResolvedValue(null)
 
       render(KanbanBoard, { props: { onRunAction: mockOnRunAction } })
-      await screen.findByText('// backlog')
+      await screen.findByText('backlog')
 
       await fireEvent.keyDown(window, { key: 'b' })
 
@@ -383,7 +383,7 @@ describe('KanbanBoard', () => {
       vi.mocked(getConfig).mockResolvedValue(null)
 
       render(KanbanBoard, { props: { onRunAction: mockOnRunAction } })
-      await screen.findByText('// doing')
+      await screen.findByText('doing')
 
       expect(getConfig).toHaveBeenCalledWith('backlog_visible')
     })

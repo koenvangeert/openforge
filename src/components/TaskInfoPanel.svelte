@@ -128,7 +128,7 @@
   <!-- Initial Prompt Section -->
   <section class="flex flex-col gap-2.5">
     <h3 class="text-[10px] font-bold text-primary font-mono tracking-[1.2px] m-0" aria-label="Initial Prompt">// INITIAL_PROMPT</h3>
-    <div class="text-sm text-base-content leading-relaxed whitespace-pre-wrap break-words">{task.prompt ?? ''}</div>
+    <div class="text-xs text-base-content/80 leading-relaxed whitespace-pre-wrap break-words">{task.prompt ?? ''}</div>
   </section>
 
   <!-- Summary Section -->
@@ -139,7 +139,7 @@
         <MarkdownContent content={task.summary.replace(/\\n/g, '\n')} />
       </div>
     {:else}
-      <div class="text-xs text-base-content/50">No summary yet</div>
+      <div class="text-[11px] text-base-content/40">No summary yet</div>
     {/if}
   </section>
 

@@ -154,7 +154,7 @@
       <input
         bind:this={inputEl}
         type="text"
-        class="input input-sm w-full bg-base-100 border-base-300 focus:outline-none text-base-content placeholder:text-base-content/40 font-mono"
+        class="input input-sm w-full bg-base-100 border-base-300 focus:outline-none text-base-content placeholder:text-base-content/40"
         placeholder="Type an action..."
         bind:value={searchQuery}
       />
@@ -167,10 +167,10 @@
           No actions match your search
         </div>
       {:else}
-        {#each grouped as group (group.category)}
-          <div class="font-mono text-[10px] text-base-content/40 uppercase tracking-wider px-4 pt-3 pb-1">
-            {group.label}
-          </div>
+         {#each grouped as group (group.category)}
+           <div class="text-[10px] text-base-content/40 uppercase tracking-wider px-4 pt-3 pb-1">
+             {group.label}
+           </div>
           {#each group.actions as action (action.id)}
             {@const flatIdx = getFlatIndex(action)}
             {@const isHighlighted = flatIdx === selectedIndex}
@@ -210,11 +210,11 @@
     </div>
 
     <!-- Hints bar -->
-    <div class="flex items-center gap-4 px-3 py-1.5 border-t border-base-300 bg-base-300/30">
-      <span class="font-mono text-[10px] text-base-content/40"><kbd class="kbd kbd-xs">↑↓</kbd> navigate</span>
-      <span class="font-mono text-[10px] text-base-content/40"><kbd class="kbd kbd-xs">Enter</kbd> execute</span>
-      <span class="font-mono text-[10px] text-base-content/40"><kbd class="kbd kbd-xs">Esc</kbd> close</span>
-      <span class="font-mono text-[10px] text-base-content/40 ml-auto"><kbd class="kbd kbd-xs">⌘K</kbd> toggle</span>
-    </div>
+     <div class="flex items-center gap-4 px-3 py-1.5 border-t border-base-300 bg-base-300/30">
+       <span class="text-[10px] text-base-content/40"><kbd class="kbd kbd-xs">↑↓</kbd> navigate</span>
+       <span class="text-[10px] text-base-content/40"><kbd class="kbd kbd-xs">Enter</kbd> execute</span>
+       <span class="text-[10px] text-base-content/40"><kbd class="kbd kbd-xs">Esc</kbd> close</span>
+       <span class="text-[10px] text-base-content/40 ml-auto"><kbd class="kbd kbd-xs">⌘K</kbd> toggle</span>
+     </div>
   </div>
 </div>

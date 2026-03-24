@@ -185,12 +185,12 @@
 <div class="flex flex-col flex-1 h-full bg-base-100 overflow-hidden">
   <header class="flex flex-col border-b border-base-300 shrink-0" style="background-color: var(--project-bg-alt, oklch(var(--b2)))">
     <div class="flex items-center gap-3 px-6 py-3.5">
-      <button class="btn btn-ghost btn-sm font-mono text-sm text-secondary border border-base-300 shrink-0 px-2.5 h-7" onclick={handleBack}>
+      <button class="btn btn-ghost btn-sm text-sm text-secondary border border-base-300 shrink-0 px-2.5 h-7" onclick={handleBack}>
         <span aria-hidden="true">&lt; </span><span>back</span>
       </button>
        <span class="text-base-content/20 select-none">|</span>
        <span class="text-[0.8125rem] font-semibold text-primary font-mono shrink-0">{task.jira_key || task.id}</span>
-       <h1 class="text-lg font-bold text-base-content m-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap min-w-0" title={displayTitle}>{displayTitle}</h1>
+        <h1 class="text-lg font-semibold text-base-content m-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap min-w-0" title={displayTitle}>{displayTitle}</h1>
       {#if task.status === 'backlog'}
         <button
           class="btn btn-primary btn-sm shrink-0 shadow-sm hover:shadow-md transition-shadow"
@@ -277,17 +277,17 @@
          <div class="overflow-hidden bg-base-200 border-l border-base-300 flex flex-col h-full">
            {#if worktreePath !== null}
              <div class="flex items-center h-10 bg-base-200 border-b border-base-300 shrink-0 px-1">
-              <button
-                   class="flex items-center gap-1.5 h-full px-3.5 text-xs font-mono transition-colors {rightPanelMode === 'info' ? 'text-base-content font-semibold border-b-2 border-primary' : 'text-base-content/50'}"
-                   onclick={() => rightPanelMode = 'info'}
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
-                  Info {#if $commandHeld}<kbd class="kbd kbd-xs opacity-50">⌘I</kbd>{/if}
-                </button>
-                <button
-                   class="flex items-center gap-1.5 h-full px-3.5 text-xs font-mono transition-colors {rightPanelMode === 'terminal' ? 'text-base-content font-semibold border-b-2 border-primary' : 'text-base-content/50'}"
-                   onclick={() => rightPanelMode = 'terminal'}
-                >
+               <button
+                    class="flex items-center gap-1.5 h-full px-3.5 text-xs transition-colors {rightPanelMode === 'info' ? 'text-base-content font-semibold border-b-2 border-primary' : 'text-base-content/50'}"
+                    onclick={() => rightPanelMode = 'info'}
+                 >
+                   <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+                   Info {#if $commandHeld}<kbd class="kbd kbd-xs opacity-50">⌘I</kbd>{/if}
+                 </button>
+                 <button
+                    class="flex items-center gap-1.5 h-full px-3.5 text-xs transition-colors {rightPanelMode === 'terminal' ? 'text-base-content font-semibold border-b-2 border-primary' : 'text-base-content/50'}"
+                    onclick={() => rightPanelMode = 'terminal'}
+                 >
                   <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" x2="20" y1="19" y2="19"/></svg>
                   Terminal {#if $commandHeld}<kbd class="kbd kbd-xs opacity-50">⌘J</kbd>{/if}
                 </button>

@@ -185,11 +185,11 @@
     </div>
 
     <!-- Hints bar -->
-    <div class="flex items-center gap-4 px-3 py-1.5 border-t border-base-300 bg-base-300/30">
-      <span class="font-mono text-[10px] text-base-content/40"><kbd class="kbd kbd-xs">↑↓</kbd> navigate</span>
-      <span class="font-mono text-[10px] text-base-content/40"><kbd class="kbd kbd-xs">Enter</kbd> select</span>
-      <span class="font-mono text-[10px] text-base-content/40"><kbd class="kbd kbd-xs">Esc</kbd> close</span>
-      <span class="font-mono text-[10px] text-base-content/40 ml-auto"><kbd class="kbd kbd-xs">Ctrl+N/P</kbd> navigate</span>
-    </div>
+     <div class="flex items-center gap-4 px-3 py-1.5 border-t border-base-300 bg-base-300/30">
+       <span class="text-[10px] text-base-content/40"><kbd class="kbd kbd-xs">↑↓</kbd> navigate</span>
+       <span class="text-[10px] text-base-content/40"><kbd class="kbd kbd-xs">Enter</kbd> select</span>
+       <span class="text-[10px] text-base-content/40"><kbd class="kbd kbd-xs">Esc</kbd> close</span>
+       <span class="text-[10px] text-base-content/40 ml-auto"><kbd class="kbd kbd-xs">Ctrl+N/P</kbd> navigate</span>
+     </div>
   </div>
 </div>

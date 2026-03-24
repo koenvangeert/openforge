@@ -14,6 +14,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@fontsource/inter": "^5.2.8",
     "@fontsource/jetbrains-mono": "^5.2.8",
     "@git-diff-view/core": "^0.0.39",
     "@git-diff-view/svelte": "^0.0.13",

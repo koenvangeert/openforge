@@ -42,7 +42,7 @@
 
   <div class="flex items-center gap-2 text-xs">
     {#if hasConflict}
-      <span class="inline-flex items-center px-1.5 py-0.5 font-semibold text-error bg-error/15 rounded">Merge Conflict</span>
+      <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 bg-[var(--chip-error-bg)]"><span class="w-1.5 h-1.5 rounded-full bg-[var(--chip-error-dot)]"></span><span class="text-[10px] font-medium text-[var(--chip-error-text)]">Merge Conflict</span></span>
       <span class="text-base-300">•</span>
     {/if}
     <span class="font-medium text-base-content/50">{pr.changed_files} {pr.changed_files === 1 ? 'file' : 'files'}</span>

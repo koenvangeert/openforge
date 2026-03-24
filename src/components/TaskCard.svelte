@@ -49,12 +49,15 @@
 >
   <div class="flex items-center justify-between mb-1">
     <div class="flex items-center gap-1.5">
-      <span class="font-mono text-xs font-medium text-primary">{task.id}</span>
+      <span class="font-mono text-[11px] font-semibold text-primary">{task.id}</span>
       {#if task.jira_key}
-        <span class="badge badge-ghost badge-xs font-mono">{task.jira_key}</span>
+        <span class="badge badge-ghost badge-xs">{task.jira_key}</span>
       {/if}
       {#if needsInput}
-        <span class="badge badge-warning badge-xs font-mono">Needs Input</span>
+        <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 bg-[var(--chip-paused-bg)]">
+          <span class="w-1.5 h-1.5 rounded-full bg-[var(--chip-paused-dot)]"></span>
+          <span class="text-[10px] font-medium text-[var(--chip-paused-text)]">Needs Input</span>
+        </span>
       {/if}
     </div>
     <div class="flex items-center gap-1.5">
@@ -77,96 +80,120 @@
         </button>
       {/if}
       {#if isStarting}
-         <span
-           class="font-mono text-[0.6rem] font-medium px-1.5 py-0.5 rounded uppercase tracking-wider whitespace-nowrap leading-tight bg-primary/15 text-primary"
-           style="animation: badge-pulse 2s ease-in-out infinite;"
-         >
-           Starting
-         </span>
-      {:else if hasVisibleStatus}
-         <span
-           class="font-mono text-[0.6rem] font-medium px-1.5 py-0.5 rounded uppercase tracking-wider whitespace-nowrap leading-tight {statusClass === 'running' ? 'bg-success/15 text-success' : ''} {statusClass === 'completed' ? 'bg-info/20 text-info' : ''} {statusClass === 'paused' ? 'bg-warning/15 text-warning' : ''} {statusClass === 'failed' ? 'bg-error/15 text-error' : ''} {statusClass === 'interrupted' ? 'bg-base-content/15 text-base-content/50' : ''}"
-           style={statusClass === 'running' ? 'animation: badge-pulse 2s ease-in-out infinite;' : ''}
-         >
-          {#if statusClass === 'running'}
-            Running
-          {:else if statusClass === 'completed'}
-            Done
-          {:else if statusClass === 'paused'}
-            Paused
-          {:else if statusClass === 'failed'}
-            Error
-          {:else if statusClass === 'interrupted'}
-            Stopped
-          {/if}
+        <span
+          class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 bg-[var(--chip-starting-bg)]"
+          style="animation: badge-pulse 2s ease-in-out infinite;"
+        >
+          <span class="w-1.5 h-1.5 rounded-full bg-[var(--chip-starting-dot)]"></span>
+          <span class="text-[10px] font-medium text-[var(--chip-starting-text)]">Starting</span>
         </span>
+      {:else if hasVisibleStatus}
+        {#if statusClass === 'running'}
+          <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 bg-[var(--chip-running-bg)]" style="animation: badge-pulse 2s ease-in-out infinite;">
+            <span class="w-1.5 h-1.5 rounded-full bg-[var(--chip-running-dot)]"></span>
+            <span class="text-[10px] font-medium text-[var(--chip-running-text)]">Running</span>
+          </span>
+        {:else if statusClass === 'completed'}
+          <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 bg-[var(--chip-done-bg)]">
+            <span class="w-1.5 h-1.5 rounded-full bg-[var(--chip-done-dot)]"></span>
+            <span class="text-[10px] font-medium text-[var(--chip-done-text)]">Done</span>
+          </span>
+        {:else if statusClass === 'paused'}
+          <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 bg-[var(--chip-paused-bg)]">
+            <span class="w-1.5 h-1.5 rounded-full bg-[var(--chip-paused-dot)]"></span>
+            <span class="text-[10px] font-medium text-[var(--chip-paused-text)]">Paused</span>
+          </span>
+        {:else if statusClass === 'failed'}
+          <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 bg-[var(--chip-error-bg)]">
+            <span class="w-1.5 h-1.5 rounded-full bg-[var(--chip-error-dot)]"></span>
+            <span class="text-[10px] font-medium text-[var(--chip-error-text)]">Error</span>
+          </span>
+        {:else if statusClass === 'interrupted'}
+          <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 bg-[var(--chip-stopped-bg)]">
+            <span class="w-1.5 h-1.5 rounded-full bg-[var(--chip-stopped-dot)]"></span>
+            <span class="text-[10px] font-medium text-[var(--chip-stopped-text)]">Stopped</span>
+          </span>
+        {/if}
       {/if}
-      <span class="font-mono text-[0.6rem] text-base-content/40">{timeAgoFromSeconds(task.updated_at)}</span>
+      <span class="text-[11px] font-medium text-base-content/40">{timeAgoFromSeconds(task.updated_at)}</span>
     </div>
   </div>
-  <div class="font-mono text-sm font-medium leading-relaxed text-base-content mb-1">
+  <div class="text-[15px] font-medium leading-snug text-base-content mb-1">
     {truncate(firstLine(task.initial_prompt || (task.prompt?.split('\n')[0]) || task.id), 80)}
     {#if task.initial_prompt.includes('\n')}
-      <span class="font-mono text-[0.6rem] text-base-content/40 ml-1">+{task.initial_prompt.split('\n').length - 1} lines</span>
+      <span class="text-[10px] text-base-content/40 ml-1">+{task.initial_prompt.split('\n').length - 1} lines</span>
     {/if}
   </div>
   {#if task.summary}
     <div class="text-xs text-base-content/50 truncate mb-1">{task.summary.replace(/\\n/g, '\n')}</div>
   {/if}
   {#if task.jira_title}
-    <div class="text-secondary font-mono text-[11px] leading-relaxed mb-1.5">// {truncate(task.jira_title, 80)}</div>
+    <div class="text-xs text-base-content/50 leading-relaxed mb-1.5">{truncate(task.jira_title, 80)}</div>
   {/if}
 
   {#if pullRequests.length > 0}
-    <div class="flex flex-wrap gap-1 mb-1">
+    <div class="flex flex-wrap gap-1.5 mb-1">
       {#each pullRequests as pr}
-         <span
-           class="font-mono text-[10px] font-medium px-1.5 py-px rounded cursor-pointer transition-opacity hover:opacity-80 {pr.state === 'open' && !isReadyToMerge(pr) ? 'text-primary' : ''} {pr.state === 'merged' ? 'text-secondary' : ''} {isReadyToMerge(pr) ? 'text-info bg-info/10 border border-info/40' : ''} {pr.state === 'closed' ? 'text-base-content/40' : ''}"
-          role="link"
-          tabindex="0"
+        <button
+          class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-medium cursor-pointer transition-opacity hover:opacity-80 {pr.state === 'open' && !isReadyToMerge(pr) ? 'bg-base-200 text-base-content/70' : ''} {pr.state === 'merged' ? 'bg-base-200/50 text-secondary' : ''} {isReadyToMerge(pr) ? 'bg-info/10 text-info border border-info/40' : ''} {pr.state === 'closed' ? 'bg-base-200/50 text-base-content/40' : ''}"
+          type="button"
           onclick={(e: MouseEvent) => { e.stopPropagation(); openUrl(pr.url) }}
           onkeydown={(e: KeyboardEvent) => { e.stopPropagation(); if (e.key === 'Enter') openUrl(pr.url) }}
         >
-          $ pr #{pr.id}
-          {#if pr.draft && pr.state === 'open'}
-            <span class="text-base-content/30 mx-px">::</span>
-            <span class="font-mono text-base-content/50">Draft</span>
-          {/if}
-          {#if pr.ci_status && pr.ci_status !== 'none' && pr.state === 'open'}
-            <span class="text-base-content/30 mx-px">::</span>
-            <span
-              class="font-mono {pr.ci_status === 'success' ? 'text-success' : ''} {pr.ci_status === 'failure' ? 'text-error ci-failure-text' : ''} {pr.ci_status === 'pending' ? 'text-warning ci-pending-text' : ''}"
-            >{pr.ci_status === 'success' ? 'Passed' : pr.ci_status === 'failure' ? 'Failed' : 'Pending'}</span>
-          {/if}
-          {#if pr.review_status && pr.review_status !== 'none' && pr.state === 'open'}
-            <span class="text-base-content/30 mx-px">::</span>
-            <span
-              class="font-mono {pr.review_status === 'approved' ? 'text-success' : ''} {pr.review_status === 'changes_requested' ? 'text-warning' : ''} {pr.review_status === 'review_required' ? 'text-base-content/50 review-pending-text' : ''}"
-            >{pr.review_status === 'approved' ? 'Approved' : pr.review_status === 'changes_requested' ? 'Changes req.' : 'Needs review'}</span>
-          {/if}
-          {#if hasMergeConflicts(pr)}
-            <span class="text-base-content/30 mx-px">::</span>
-            <span class="font-mono text-error">Merge Conflict</span>
-          {/if}
-        </span>
+          <span class="font-mono">#{pr.id}</span>
+        </button>
+      {/each}
+    </div>
+    <div class="flex flex-wrap gap-1.5 mb-1">
+      {#each pullRequests as pr}
+        {#if pr.draft && pr.state === 'open'}
+          <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 bg-base-200 text-[10px] font-medium text-base-content/50">Draft</span>
+        {/if}
+        {#if pr.ci_status && pr.ci_status !== 'none' && pr.state === 'open'}
+          <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 {pr.ci_status === 'success' ? 'bg-[var(--chip-running-bg)]' : pr.ci_status === 'failure' ? 'bg-[var(--chip-error-bg)]' : 'bg-[var(--chip-paused-bg)]'}">
+            <span class="w-1.5 h-1.5 rounded-full {pr.ci_status === 'success' ? 'bg-[var(--chip-running-dot)]' : pr.ci_status === 'failure' ? 'bg-[var(--chip-error-dot)]' : 'bg-[var(--chip-paused-dot)]'}"></span>
+            <span class="text-[10px] font-medium {pr.ci_status === 'success' ? 'text-[var(--chip-running-text)]' : pr.ci_status === 'failure' ? 'text-[var(--chip-error-text)] ci-failure-text' : 'text-[var(--chip-paused-text)] ci-pending-text'}">{pr.ci_status === 'success' ? 'Passed' : pr.ci_status === 'failure' ? 'Failed' : 'Pending'}</span>
+          </span>
+        {/if}
+        {#if pr.review_status && pr.review_status !== 'none' && pr.state === 'open'}
+          <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 {pr.review_status === 'approved' ? 'bg-[var(--chip-running-bg)]' : pr.review_status === 'changes_requested' ? 'bg-[var(--chip-paused-bg)]' : 'bg-[var(--chip-stopped-bg)]'}">
+            <span class="w-1.5 h-1.5 rounded-full {pr.review_status === 'approved' ? 'bg-[var(--chip-running-dot)]' : pr.review_status === 'changes_requested' ? 'bg-[var(--chip-paused-dot)]' : 'bg-[var(--chip-stopped-dot)]'}"></span>
+            <span class="text-[10px] font-medium {pr.review_status === 'approved' ? 'text-[var(--chip-running-text)]' : pr.review_status === 'changes_requested' ? 'text-[var(--chip-paused-text)]' : 'text-[var(--chip-stopped-text)] review-pending-text'}">{pr.review_status === 'approved' ? 'Approved' : pr.review_status === 'changes_requested' ? 'Changes req.' : 'Needs review'}</span>
+          </span>
+        {/if}
+        {#if hasMergeConflicts(pr)}
+          <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 bg-[var(--chip-error-bg)]">
+            <span class="w-1.5 h-1.5 rounded-full bg-[var(--chip-error-dot)]"></span>
+            <span class="text-[10px] font-medium text-[var(--chip-error-text)]">Merge Conflict</span>
+          </span>
+        {/if}
       {/each}
     </div>
     {#each pullRequests as pr}
        {#if pr.state === 'merged'}
-         <div class="font-mono text-[10px] font-medium px-2 py-0.5 rounded mt-1 text-center text-secondary">// merged</div>
+         <div class="text-[10px] font-medium px-2 py-0.5 rounded mt-1 text-center text-secondary">merged</div>
        {:else if isQueuedForMerge(pr)}
-         <div class="font-mono text-[10px] font-medium px-2 py-0.5 rounded mt-1 w-fit text-info bg-info/10 border border-info/30">$ queued for merge</div>
+         <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 mt-1 w-fit bg-[var(--chip-done-bg)]">
+           <span class="w-1.5 h-1.5 rounded-full bg-[var(--chip-done-dot)]"></span>
+           <span class="text-[10px] font-medium text-[var(--chip-done-text)]">Queued for merge</span>
+         </span>
        {:else if isReadyToMerge(pr)}
-         <div class="font-mono text-[10px] font-medium px-2 py-0.5 rounded mt-1 w-fit text-info bg-info/10 border border-info/30">$ ready to merge</div>
+         <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 mt-1 w-fit bg-[var(--chip-done-bg)]">
+           <span class="w-1.5 h-1.5 rounded-full bg-[var(--chip-done-dot)]"></span>
+           <span class="text-[10px] font-medium text-[var(--chip-done-text)]">Ready to merge</span>
+         </span>
        {/if}
     {/each}
   {/if}
   {#if totalUnaddressed > 0}
     <div class="flex items-center gap-1 mt-1">
-      <span class="font-mono text-[10px] text-error">! {totalUnaddressed} unaddressed</span>
+      <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 bg-[var(--chip-error-bg)]">
+        <span class="w-1.5 h-1.5 rounded-full bg-[var(--chip-error-dot)]"></span>
+        <span class="text-[10px] font-medium text-[var(--chip-error-text)]">{totalUnaddressed} unaddressed</span>
+      </span>
     </div>
   {/if}
   {#if task.jira_assignee}
-    <div class="text-secondary font-mono text-[10px]">@{task.jira_assignee}</div>
+    <div class="text-[10px] text-base-content/50">@{task.jira_assignee}</div>
   {/if}
 </Card>

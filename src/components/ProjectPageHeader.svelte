@@ -12,8 +12,8 @@
 
 <div class="flex items-center justify-between px-6 py-3 shrink-0" style="background-color: var(--project-bg-alt, oklch(var(--b2)))">
   <div>
-     <h2 class="text-base font-semibold text-base-content tracking-tight m-0">{title}</h2>
-     <p class="text-xs text-base-content/40 mt-0.5 m-0">{subtitle}</p>
+      <h2 class="text-[22px] font-semibold text-base-content tracking-tight m-0">{title}</h2>
+      <p class="text-[13px] text-secondary mt-0.5 m-0">{subtitle}</p>
   </div>
   {#if actions}
     <div class="shrink-0">

@@ -237,31 +237,31 @@
 
   <div class="flex items-center justify-between px-6 pt-4 pb-2">
     <button
-      class="font-mono text-[11px] px-2.5 py-1 rounded cursor-pointer transition-colors {showBacklog ? 'bg-base-200 text-base-content' : 'text-base-content/50 hover:text-base-content hover:bg-base-200/50'}"
+      class="text-[11px] font-medium px-2.5 py-1 rounded cursor-pointer transition-colors {showBacklog ? 'bg-base-200 text-base-content' : 'text-base-content/50 hover:text-base-content hover:bg-base-200/50'}"
       onclick={toggleBacklog}
       title="Toggle backlog (b)"
     >
       {showBacklog ? '▾' : '▸'} {backlogColumn.name.toLowerCase()}
-       <span class="ml-1 text-[10px] text-base-content/40 bg-base-200 px-1 py-0.5 rounded">{backlogTasks.length}</span>
+       <span class="ml-1 text-[10px] font-semibold text-secondary bg-base-200 px-2 py-0.5 rounded-xl">{backlogTasks.length}</span>
     </button>
-    <button
-       class="font-mono text-[11px] px-2.5 py-1 rounded cursor-pointer transition-colors {showDoneDrawer ? 'bg-base-200 text-base-content' : 'text-base-content/50 hover:text-base-content hover:bg-base-200/50'}"
-      onclick={toggleDoneDrawer}
-      title="Toggle done drawer (c)"
-    >
-      {doneColumn.name.toLowerCase()}
-       <span class="ml-1 text-[10px] text-base-content/40 bg-base-200 px-1 py-0.5 rounded">{doneTasks.length}</span>
-      {showDoneDrawer ? '✕' : '▸'}
-    </button>
+     <button
+        class="text-[11px] font-medium px-2.5 py-1 rounded cursor-pointer transition-colors {showDoneDrawer ? 'bg-base-200 text-base-content' : 'text-base-content/50 hover:text-base-content hover:bg-base-200/50'}"
+       onclick={toggleDoneDrawer}
+       title="Toggle done drawer (c)"
+     >
+       {doneColumn.name.toLowerCase()}
+        <span class="ml-1 text-[10px] font-semibold text-secondary bg-base-200 px-2 py-0.5 rounded-xl">{doneTasks.length}</span>
+       {showDoneDrawer ? '✕' : '▸'}
+     </button>
   </div>
 
    <div class="flex gap-5 px-6 py-5 flex-1 overflow-hidden">
     {#if showBacklog}
       <div class="flex-1 min-w-0 flex flex-col max-w-[340px] transition-all duration-200">
-        <div class="flex items-center justify-between py-2 mb-2">
-           <span class="font-mono text-xs font-medium text-base-content/50">// {backlogColumn.name.toLowerCase()}</span>
-           <span class="font-mono text-[10px] text-base-content/40 bg-base-200 px-1.5 py-0.5 rounded">{backlogTasks.length}</span>
-        </div>
+         <div class="flex items-center justify-between py-2 mb-2">
+            <span class="text-xs font-semibold text-base-content/50">{backlogColumn.name.toLowerCase()}</span>
+            <span class="text-[10px] font-semibold text-secondary bg-base-200 px-2 py-0.5 rounded-xl">{backlogTasks.length}</span>
+         </div>
          <div class="flex-1 flex flex-col gap-3 overflow-y-auto" role="listbox" data-vim-column={backlogColumn.id}>
           {#each backlogTasks as task, i (task.id)}
             {@const isVimFocused = columns[focusedColumn]?.key === backlogColumn.id && vim.focusedIndex === i}
@@ -269,9 +269,9 @@
               <TaskCard {task} session={getSession($activeSessions, task.id)} pullRequests={$ticketPrs.get(task.id) || []} isStarting={$startingTasks.has(task.id)} onSelect={handleSelect} />
             </div>
           {/each}
-          {#if backlogTasks.length === 0}
-            <div class="text-center font-mono text-xs text-secondary py-5">No tasks</div>
-          {/if}
+           {#if backlogTasks.length === 0}
+             <div class="text-center text-xs text-secondary py-5">No tasks</div>
+           {/if}
         </div>
       </div>
        <div class="w-px bg-base-300/40 self-stretch my-2"></div>
@@ -279,10 +279,10 @@
 
      {#each middleColumnTasks as colData, colIdx (colData.config.id)}
       <div class="flex-1 min-w-0 flex flex-col">
-        <div class="flex items-center justify-between py-2 mb-2">
-           <span class="font-mono text-xs font-medium text-base-content/50">// {colData.config.name.toLowerCase()}</span>
-           <span class="font-mono text-[10px] text-base-content/40 bg-base-200 px-1.5 py-0.5 rounded">{colData.tasks.length}</span>
-        </div>
+         <div class="flex items-center justify-between py-2 mb-2">
+            <span class="text-xs font-semibold text-base-content/50">{colData.config.name.toLowerCase()}</span>
+            <span class="text-[10px] font-semibold text-secondary bg-base-200 px-2 py-0.5 rounded-xl">{colData.tasks.length}</span>
+         </div>
          <div class="flex-1 flex flex-col gap-3 overflow-y-auto" role="listbox" data-vim-column={colData.config.id}>
           {#each colData.tasks as task, i (task.id)}
             {@const isVimFocused = columns[focusedColumn]?.key === colData.config.id && vim.focusedIndex === i}
@@ -290,9 +290,9 @@
               <TaskCard {task} session={getSession($activeSessions, task.id)} pullRequests={$ticketPrs.get(task.id) || []} isStarting={$startingTasks.has(task.id)} onSelect={handleSelect} />
             </div>
           {/each}
-          {#if colData.tasks.length === 0}
-            <div class="text-center font-mono text-xs text-secondary py-5">No tasks</div>
-          {/if}
+           {#if colData.tasks.length === 0}
+             <div class="text-center text-xs text-secondary py-5">No tasks</div>
+           {/if}
         </div>
       </div>
        {#if colIdx < middleColumnTasks.length - 1}
@@ -311,20 +311,20 @@
   ></div>
    <div class="fixed top-0 right-0 h-full w-[400px] max-w-[85vw] bg-base-100 border-l border-base-300/50 z-50 shadow-2xl flex flex-col">
     <div class="flex items-center justify-between px-5 py-4 border-b border-base-300">
-      <div class="flex items-center gap-3">
-         <span class="font-mono text-xs font-medium text-base-content/50">// {doneColumn.name.toLowerCase()}</span>
-         <span class="font-mono text-[10px] text-base-content/40 bg-base-200 px-1.5 py-0.5 rounded">{doneTasks.length}</span>
-      </div>
+       <div class="flex items-center gap-3">
+          <span class="text-xs font-semibold text-base-content/50">{doneColumn.name.toLowerCase()}</span>
+          <span class="text-[10px] font-semibold text-secondary bg-base-200 px-2 py-0.5 rounded-xl">{doneTasks.length}</span>
+       </div>
       <div class="flex items-center gap-2">
         {#if doneTasks.length > 0}
-          <button
-            class="font-mono text-[11px] text-secondary hover:text-error cursor-pointer transition-colors"
-            onclick={handleClearDone}
-            disabled={isClearing}
-            title="Clear done tasks"
-          >
-            {#if isClearing}<span class="loading loading-spinner loading-xs"></span>{:else}$ clear{/if}
-          </button>
+           <button
+             class="text-[11px] font-medium text-secondary hover:text-error cursor-pointer transition-colors"
+             onclick={handleClearDone}
+             disabled={isClearing}
+             title="Clear done tasks"
+           >
+             {#if isClearing}<span class="loading loading-spinner loading-xs"></span>{:else}$ clear{/if}
+           </button>
         {/if}
         <button
           class="text-secondary hover:text-base-content cursor-pointer transition-colors text-lg leading-none"
@@ -341,9 +341,9 @@
           <TaskCard {task} session={getSession($activeSessions, task.id)} pullRequests={$ticketPrs.get(task.id) || []} isStarting={$startingTasks.has(task.id)} onSelect={handleSelect} />
         </div>
       {/each}
-      {#if doneTasks.length === 0}
-        <div class="text-center font-mono text-xs text-secondary py-10">No completed tasks</div>
-      {/if}
+       {#if doneTasks.length === 0}
+         <div class="text-center text-xs text-secondary py-10">No completed tasks</div>
+       {/if}
     </div>
   </div>
 {/if}

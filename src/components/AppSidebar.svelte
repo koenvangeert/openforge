@@ -71,24 +71,24 @@
   ]
 </script>
 
-<div class="{collapsed ? 'w-16' : 'w-48'} shrink-0 h-full bg-base-200 border-r border-base-300/50 flex flex-col font-mono transition-all duration-200">
+<div class="{collapsed ? 'w-16' : 'w-48'} shrink-0 h-full bg-base-200 border-r border-base-300/50 flex flex-col transition-all duration-200">
   {#if appMode === 'dev'}
     <div class="w-full dev-badge-gradient flex flex-col items-center justify-center {branchName && !collapsed ? 'py-1.5' : 'h-12'}">
-      <span class="font-mono text-sm font-black text-white tracking-[0.25em] uppercase">{collapsed ? 'D' : 'DEV MODE'}</span>
-      {#if branchName && !collapsed}
-        <span class="font-mono text-[10px] text-white/80 truncate max-w-full px-2" title={branchName}>{branchName}</span>
-      {/if}
-    </div>
+       <span class="text-sm font-black text-white tracking-[0.25em] uppercase">{collapsed ? 'D' : 'DEV MODE'}</span>
+       {#if branchName && !collapsed}
+         <span class="font-mono text-[10px] text-white/80 truncate max-w-full px-2" title={branchName}>{branchName}</span>
+       {/if}
+     </div>
   {/if}
 
   <div class="h-12 px-2 flex items-center border-b border-base-300/50">
     <div class="flex items-center gap-2 min-w-0 flex-1 {collapsed ? 'justify-center' : ''}">
       <div class="w-7 h-7 bg-primary flex items-center justify-center rounded shrink-0">
-        <span class="text-black font-bold font-mono text-xs">&gt;_</span>
-      </div>
-      {#if !collapsed}
-        <span class="font-mono text-xs font-semibold text-base-content truncate">open_forge</span>
-      {/if}
+         <span class="text-black font-bold text-xs">&gt;_</span>
+       </div>
+       {#if !collapsed}
+         <span class="text-xs font-semibold text-base-content truncate">open_forge</span>
+       {/if}
     </div>
     <button
       type="button"
@@ -104,10 +104,10 @@
     </button>
   </div>
 
-  <div class="h-10 px-3 flex items-center {collapsed ? 'justify-center' : 'justify-between'}">
-    {#if !collapsed}
-      <span class="font-mono text-[10px] text-secondary font-bold">PROJECTS</span>
-    {/if}
+   <div class="h-10 px-3 flex items-center {collapsed ? 'justify-center' : 'justify-between'}">
+     {#if !collapsed}
+       <span class="text-[10px] text-secondary font-bold">PROJECTS</span>
+     {/if}
     <button type="button" class="btn btn-ghost btn-xs" aria-label="Add project" onclick={() => onNewProject?.()}>
       <Plus size={14} />
     </button>
@@ -127,9 +127,9 @@
           onclick={() => selectProject(project.id)}
         >
           <div class="relative">
-            <div class="w-8 h-8 rounded-full {isActive ? 'bg-primary text-primary-content' : 'bg-base-content/10 text-base-content'} flex items-center justify-center font-mono text-xs font-bold uppercase">
-              {project.name.charAt(0)}
-            </div>
+            <div class="w-8 h-8 rounded-full {isActive ? 'bg-primary text-primary-content' : 'bg-base-content/10 text-base-content'} flex items-center justify-center text-xs font-bold uppercase">
+               {project.name.charAt(0)}
+             </div>
             <span class="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full {status.dot} ring-2 ring-base-300"></span>
           </div>
         </button>
@@ -140,11 +140,11 @@
           aria-current={isActive ? 'true' : undefined}
           onclick={() => selectProject(project.id)}
         >
-          <div class="font-mono text-xs {isActive ? 'font-bold text-base-content' : 'font-medium text-base-content'}">{project.name}</div>
-          <div class="mt-1 flex items-center gap-1.5">
-            <span class="w-1.5 h-1.5 rounded-full {status.dot}"></span>
-            <span class="font-mono text-[10px] {status.color}">{status.text}</span>
-          </div>
+           <div class="text-xs {isActive ? 'font-bold text-base-content' : 'font-medium text-base-content'}">{project.name}</div>
+           <div class="mt-1 flex items-center gap-1.5">
+             <span class="w-1.5 h-1.5 rounded-full {status.dot}"></span>
+             <span class="text-[10px] {status.color}">{status.text}</span>
+           </div>
         </button>
       {/if}
     {/each}
@@ -159,10 +159,10 @@
         title={collapsed ? label : undefined}
         onclick={() => onNavigate(view)}
       >
-        <Icon size={18} class="shrink-0" />
-        {#if !collapsed}
-          <span class="font-mono text-xs font-medium">{label}</span>
-        {/if}
+         <Icon size={18} class="shrink-0" />
+         {#if !collapsed}
+           <span class="text-xs font-medium">{label}</span>
+         {/if}
       </button>
     {/each}
   </div>

@@ -195,7 +195,7 @@
       <input
         bind:this={inputEl}
         type="text"
-        class="input input-sm w-full bg-base-100 border-base-300 focus:outline-none text-base-content placeholder:text-base-content/40 font-mono"
+        class="input input-sm w-full bg-base-100 border-base-300 focus:outline-none text-base-content placeholder:text-base-content/40"
         placeholder="Search tasks across all projects..."
         bind:value={searchQuery}
       />
@@ -229,33 +229,33 @@
             <div class="flex-1 min-w-0">
               <div class="flex items-center gap-1.5">
                 <span class="font-mono text-xs font-semibold text-primary shrink-0">{task.id}</span>
-                {#if task.jira_key}
-                  <span class="badge badge-ghost badge-xs font-mono shrink-0">{task.jira_key}</span>
-                {/if}
-                {#if label}
-                  <span class="badge {badgeClass} badge-xs font-mono shrink-0 {sessionStatus === 'paused' ? 'animate-pulse' : ''}">{label}</span>
-                {/if}
-                {#if projectName && isOtherProject}
-                  <span class="badge badge-outline badge-xs font-mono shrink-0 opacity-60">{projectName}</span>
-                {/if}
+                 {#if task.jira_key}
+                   <span class="badge badge-ghost badge-xs shrink-0">{task.jira_key}</span>
+                 {/if}
+                 {#if label}
+                   <span class="badge {badgeClass} badge-xs shrink-0 {sessionStatus === 'paused' ? 'animate-pulse' : ''}">{label}</span>
+                 {/if}
+                 {#if projectName && isOtherProject}
+                   <span class="badge badge-outline badge-xs shrink-0 opacity-60">{projectName}</span>
+                 {/if}
               </div>
               <div class="text-xs text-base-content/70 truncate mt-0.5">
                 {truncate(firstLine(task.initial_prompt), 80)}
               </div>
             </div>
 
-            <span class="font-mono text-[10px] text-base-content/30 shrink-0">{task.status}</span>
+            <span class="text-[10px] text-base-content/30 shrink-0">{task.status}</span>
           </button>
         {/each}
       {/if}
     </div>
 
     <!-- Hints bar -->
-    <div class="flex items-center gap-4 px-3 py-1.5 border-t border-base-300 bg-base-300/30">
-      <span class="font-mono text-[10px] text-base-content/40"><kbd class="kbd kbd-xs">↑↓</kbd> navigate</span>
-      <span class="font-mono text-[10px] text-base-content/40"><kbd class="kbd kbd-xs">Enter</kbd> open task</span>
-      <span class="font-mono text-[10px] text-base-content/40"><kbd class="kbd kbd-xs">Esc</kbd> close</span>
-      <span class="font-mono text-[10px] text-base-content/40 ml-auto"><kbd class="kbd kbd-xs">Ctrl+N/P</kbd> navigate</span>
-    </div>
+     <div class="flex items-center gap-4 px-3 py-1.5 border-t border-base-300 bg-base-300/30">
+       <span class="text-[10px] text-base-content/40"><kbd class="kbd kbd-xs">↑↓</kbd> navigate</span>
+       <span class="text-[10px] text-base-content/40"><kbd class="kbd kbd-xs">Enter</kbd> open task</span>
+       <span class="text-[10px] text-base-content/40"><kbd class="kbd kbd-xs">Esc</kbd> close</span>
+       <span class="text-[10px] text-base-content/40 ml-auto"><kbd class="kbd kbd-xs">Ctrl+N/P</kbd> navigate</span>
+     </div>
   </div>
 </div>
