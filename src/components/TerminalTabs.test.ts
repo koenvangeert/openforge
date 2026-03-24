@@ -114,6 +114,8 @@ describe('TerminalTabs', () => {
       props: {
         taskId: 'T-1',
         worktreePath: '/path/to/worktree',
+        isFullscreen: false,
+        onFullscreenToggle: null,
         onTabChange: null,
         onTabCountChange: null,
       },
@@ -129,6 +131,8 @@ describe('TerminalTabs', () => {
       props: {
         taskId: 'T-1',
         worktreePath: '/path/to/worktree',
+        isFullscreen: false,
+        onFullscreenToggle: null,
         onTabChange: null,
         onTabCountChange: null,
       },
@@ -152,6 +156,8 @@ describe('TerminalTabs', () => {
       props: {
         taskId: 'T-1',
         worktreePath: '/path/to/worktree',
+        isFullscreen: false,
+        onFullscreenToggle: null,
         onTabChange,
         onTabCountChange: null,
       },
@@ -183,6 +189,8 @@ describe('TerminalTabs', () => {
       props: {
         taskId: 'T-1',
         worktreePath: '/path/to/worktree',
+        isFullscreen: false,
+        onFullscreenToggle: null,
         onTabChange: null,
         onTabCountChange: null,
       },
@@ -206,6 +214,8 @@ describe('TerminalTabs', () => {
       props: {
         taskId: 'T-1',
         worktreePath: '/path/to/worktree',
+        isFullscreen: false,
+        onFullscreenToggle: null,
         onTabChange: null,
         onTabCountChange: null,
       },
@@ -235,6 +245,8 @@ describe('TerminalTabs', () => {
       props: {
         taskId: 'T-1',
         worktreePath: '/path/to/worktree',
+        isFullscreen: false,
+        onFullscreenToggle: null,
         onTabChange: null,
         onTabCountChange: null,
       },
@@ -267,6 +279,8 @@ describe('TerminalTabs', () => {
       props: {
         taskId: 'T-1',
         worktreePath: '/path/to/worktree',
+        isFullscreen: false,
+        onFullscreenToggle: null,
         onTabChange: null,
         onTabCountChange: null,
       },
@@ -306,6 +320,8 @@ describe('TerminalTabs', () => {
       props: {
         taskId: 'T-1',
         worktreePath: '/path/to/worktree',
+        isFullscreen: false,
+        onFullscreenToggle: null,
         onTabChange: null,
         onTabCountChange: null,
       },
@@ -328,6 +344,8 @@ describe('TerminalTabs', () => {
       props: {
         taskId: 'T-1',
         worktreePath: '/path/to/worktree',
+        isFullscreen: false,
+        onFullscreenToggle: null,
         onTabChange,
         onTabCountChange: null,
       },
@@ -352,6 +370,8 @@ describe('TerminalTabs', () => {
       props: {
         taskId: 'T-1',
         worktreePath: '/path/to/worktree',
+        isFullscreen: false,
+        onFullscreenToggle: null,
         onTabChange: null,
         onTabCountChange,
       },
@@ -380,6 +400,8 @@ describe('TerminalTabs', () => {
       props: {
         taskId: 'T-1',
         worktreePath: '/path/to/worktree',
+        isFullscreen: false,
+        onFullscreenToggle: null,
         onTabChange: null,
         onTabCountChange: null,
       },
@@ -413,6 +435,8 @@ describe('TerminalTabs', () => {
       props: {
         taskId: 'T-1',
         worktreePath: '/path/to/worktree',
+        isFullscreen: false,
+        onFullscreenToggle: null,
         onTabChange,
         onTabCountChange: null,
       },

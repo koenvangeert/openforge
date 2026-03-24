@@ -9,7 +9,7 @@ beforeEach(() => {
 describe('ResizableBottomPanel', () => {
   it('renders with default height', () => {
     const { container } = render(ResizableBottomPanel, {
-      props: { storageKey: 'test-panel', defaultHeight: 250 },
+      props: { storageKey: 'test-panel', defaultHeight: 250, minHeight: null, maxHeight: null, fillParent: false },
     })
     const panel = container.querySelector('[data-testid="resizable-bottom-panel"]') as HTMLElement
     expect(panel).toBeTruthy()
@@ -18,7 +18,7 @@ describe('ResizableBottomPanel', () => {
 
   it('renders the drag handle', () => {
     const { container } = render(ResizableBottomPanel, {
-      props: { storageKey: 'test-panel', defaultHeight: 250 },
+      props: { storageKey: 'test-panel', defaultHeight: 250, minHeight: null, maxHeight: null, fillParent: false },
     })
     const handle = container.querySelector('[data-testid="resize-handle"]')
     expect(handle).toBeTruthy()
@@ -27,7 +27,7 @@ describe('ResizableBottomPanel', () => {
   it('restores height from localStorage', () => {
     localStorage.setItem('resizable-panel:test-panel', '320')
     const { container } = render(ResizableBottomPanel, {
-      props: { storageKey: 'test-panel', defaultHeight: 250 },
+      props: { storageKey: 'test-panel', defaultHeight: 250, minHeight: null, maxHeight: null, fillParent: false },
     })
     const panel = container.querySelector('[data-testid="resizable-bottom-panel"]') as HTMLElement
     expect(panel.style.height).toBe('320px')
@@ -36,7 +36,7 @@ describe('ResizableBottomPanel', () => {
   it('ignores invalid localStorage values', () => {
     localStorage.setItem('resizable-panel:test-panel', 'garbage')
     const { container } = render(ResizableBottomPanel, {
-      props: { storageKey: 'test-panel', defaultHeight: 250 },
+      props: { storageKey: 'test-panel', defaultHeight: 250, minHeight: null, maxHeight: null, fillParent: false },
     })
     const panel = container.querySelector('[data-testid="resizable-bottom-panel"]') as HTMLElement
     expect(panel.style.height).toBe('250px')
@@ -45,7 +45,7 @@ describe('ResizableBottomPanel', () => {
   it('clamps restored height to minHeight', () => {
     localStorage.setItem('resizable-panel:test-panel', '50')
     const { container } = render(ResizableBottomPanel, {
-      props: { storageKey: 'test-panel', defaultHeight: 250, minHeight: 150 },
+      props: { storageKey: 'test-panel', defaultHeight: 250, minHeight: 150, maxHeight: null, fillParent: false },
     })
     const panel = container.querySelector('[data-testid="resizable-bottom-panel"]') as HTMLElement
     expect(panel.style.height).toBe('150px')
@@ -54,7 +54,7 @@ describe('ResizableBottomPanel', () => {
   it('clamps restored height to maxHeight', () => {
     localStorage.setItem('resizable-panel:test-panel', '900')
     const { container } = render(ResizableBottomPanel, {
-      props: { storageKey: 'test-panel', defaultHeight: 250, maxHeight: 500 },
+      props: { storageKey: 'test-panel', defaultHeight: 250, minHeight: null, maxHeight: 500, fillParent: false },
     })
     const panel = container.querySelector('[data-testid="resizable-bottom-panel"]') as HTMLElement
     expect(panel.style.height).toBe('500px')
@@ -62,7 +62,7 @@ describe('ResizableBottomPanel', () => {
 
   it('decreases height when dragging handle up (negative Y delta)', async () => {
     const { container } = render(ResizableBottomPanel, {
-      props: { storageKey: 'test-panel', defaultHeight: 250 },
+      props: { storageKey: 'test-panel', defaultHeight: 250, minHeight: null, maxHeight: null, fillParent: false },
     })
     const handle = container.querySelector('[data-testid="resize-handle"]') as HTMLElement
     const panel = container.querySelector('[data-testid="resizable-bottom-panel"]') as HTMLElement
@@ -81,7 +81,7 @@ describe('ResizableBottomPanel', () => {
 
   it('increases height when dragging handle down (positive Y delta)', async () => {
     const { container } = render(ResizableBottomPanel, {
-      props: { storageKey: 'test-panel', defaultHeight: 250 },
+      props: { storageKey: 'test-panel', defaultHeight: 250, minHeight: null, maxHeight: null, fillParent: false },
     })
     const handle = container.querySelector('[data-testid="resize-handle"]') as HTMLElement
     const panel = container.querySelector('[data-testid="resizable-bottom-panel"]') as HTMLElement
@@ -100,7 +100,7 @@ describe('ResizableBottomPanel', () => {
 
   it('persists height to localStorage after drag ends', async () => {
     const { container } = render(ResizableBottomPanel, {
-      props: { storageKey: 'test-persist', defaultHeight: 250 },
+      props: { storageKey: 'test-persist', defaultHeight: 250, minHeight: null, maxHeight: null, fillParent: false },
     })
     const handle = container.querySelector('[data-testid="resize-handle"]') as HTMLElement
     const panel = container.querySelector('[data-testid="resizable-bottom-panel"]') as HTMLElement
@@ -119,7 +119,7 @@ describe('ResizableBottomPanel', () => {
 
   it('respects minHeight during drag', async () => {
     const { container } = render(ResizableBottomPanel, {
-      props: { storageKey: 'test-min', defaultHeight: 250, minHeight: 150 },
+      props: { storageKey: 'test-min', defaultHeight: 250, minHeight: 150, maxHeight: null, fillParent: false },
     })
     const handle = container.querySelector('[data-testid="resize-handle"]') as HTMLElement
     const panel = container.querySelector('[data-testid="resizable-bottom-panel"]') as HTMLElement
@@ -138,7 +138,7 @@ describe('ResizableBottomPanel', () => {
 
   it('respects maxHeight during drag', async () => {
     const { container } = render(ResizableBottomPanel, {
-      props: { storageKey: 'test-max', defaultHeight: 250, maxHeight: 400 },
+      props: { storageKey: 'test-max', defaultHeight: 250, minHeight: null, maxHeight: 400, fillParent: false },
     })
     const handle = container.querySelector('[data-testid="resize-handle"]') as HTMLElement
     const panel = container.querySelector('[data-testid="resizable-bottom-panel"]') as HTMLElement
@@ -158,7 +158,7 @@ describe('ResizableBottomPanel', () => {
   it('resets to default height on double-click', async () => {
     localStorage.setItem('resizable-panel:test-reset', '400')
     const { container } = render(ResizableBottomPanel, {
-      props: { storageKey: 'test-reset', defaultHeight: 250 },
+      props: { storageKey: 'test-reset', defaultHeight: 250, minHeight: null, maxHeight: null, fillParent: false },
     })
     const handle = container.querySelector('[data-testid="resize-handle"]') as HTMLElement
     const panel = container.querySelector('[data-testid="resizable-bottom-panel"]') as HTMLElement
@@ -171,7 +171,7 @@ describe('ResizableBottomPanel', () => {
 
   it('decreases height with ArrowUp key', async () => {
     const { container } = render(ResizableBottomPanel, {
-      props: { storageKey: 'test-keys-up', defaultHeight: 250 },
+      props: { storageKey: 'test-keys-up', defaultHeight: 250, minHeight: null, maxHeight: null, fillParent: false },
     })
     const handle = container.querySelector('[data-testid="resize-handle"]') as HTMLElement
     const panel = container.querySelector('[data-testid="resizable-bottom-panel"]') as HTMLElement
@@ -182,7 +182,7 @@ describe('ResizableBottomPanel', () => {
 
   it('increases height with ArrowDown key', async () => {
     const { container } = render(ResizableBottomPanel, {
-      props: { storageKey: 'test-keys-down', defaultHeight: 250 },
+      props: { storageKey: 'test-keys-down', defaultHeight: 250, minHeight: null, maxHeight: null, fillParent: false },
     })
     const handle = container.querySelector('[data-testid="resize-handle"]') as HTMLElement
     const panel = container.querySelector('[data-testid="resizable-bottom-panel"]') as HTMLElement
@@ -194,7 +194,7 @@ describe('ResizableBottomPanel', () => {
   it('resets to default height on Enter key', async () => {
     localStorage.setItem('resizable-panel:test-key-reset', '400')
     const { container } = render(ResizableBottomPanel, {
-      props: { storageKey: 'test-key-reset', defaultHeight: 250 },
+      props: { storageKey: 'test-key-reset', defaultHeight: 250, minHeight: null, maxHeight: null, fillParent: false },
     })
     const handle = container.querySelector('[data-testid="resize-handle"]') as HTMLElement
     const panel = container.querySelector('[data-testid="resizable-bottom-panel"]') as HTMLElement
@@ -208,7 +208,7 @@ describe('ResizableBottomPanel', () => {
   it('resets to default height on Space key', async () => {
     localStorage.setItem('resizable-panel:test-space-reset', '400')
     const { container } = render(ResizableBottomPanel, {
-      props: { storageKey: 'test-space-reset', defaultHeight: 250 },
+      props: { storageKey: 'test-space-reset', defaultHeight: 250, minHeight: null, maxHeight: null, fillParent: false },
     })
     const handle = container.querySelector('[data-testid="resize-handle"]') as HTMLElement
     const panel = container.querySelector('[data-testid="resizable-bottom-panel"]') as HTMLElement
@@ -222,7 +222,7 @@ describe('ResizableBottomPanel', () => {
   it('uses default minHeight of 100 when not specified', () => {
     localStorage.setItem('resizable-panel:test-default-min', '50')
     const { container } = render(ResizableBottomPanel, {
-      props: { storageKey: 'test-default-min', defaultHeight: 250, minHeight: null },
+      props: { storageKey: 'test-default-min', defaultHeight: 250, minHeight: null, maxHeight: null, fillParent: false },
     })
     const panel = container.querySelector('[data-testid="resizable-bottom-panel"]') as HTMLElement
     expect(panel.style.height).toBe('100px')
@@ -233,9 +233,35 @@ describe('ResizableBottomPanel', () => {
     const expectedMax = Math.floor(windowHeight * 0.7)
     localStorage.setItem('resizable-panel:test-default-max', String(expectedMax + 100))
     const { container } = render(ResizableBottomPanel, {
-      props: { storageKey: 'test-default-max', defaultHeight: 250, maxHeight: null },
+      props: { storageKey: 'test-default-max', defaultHeight: 250, minHeight: null, maxHeight: null, fillParent: false },
     })
     const panel = container.querySelector('[data-testid="resizable-bottom-panel"]') as HTMLElement
     expect(panel.style.height).toBe(String(expectedMax) + 'px')
+  })
+
+  it('hides drag handle when fillParent is true', () => {
+    const { container } = render(ResizableBottomPanel, {
+      props: { storageKey: 'test-fillparent', defaultHeight: 250, minHeight: null, maxHeight: null, fillParent: true },
+    })
+    const handle = container.querySelector('[data-testid="resize-handle"]')
+    expect(handle).toBeNull()
+  })
+
+  it('uses flex-1 class when fillParent is true', () => {
+    const { container } = render(ResizableBottomPanel, {
+      props: { storageKey: 'test-fillparent-flex', defaultHeight: 250, minHeight: null, maxHeight: null, fillParent: true },
+    })
+    const panel = container.querySelector('[data-testid="resizable-bottom-panel"]') as HTMLElement
+    expect(panel.classList.contains('flex-1')).toBe(true)
+    expect(panel.classList.contains('shrink-0')).toBe(false)
+  })
+
+  it('uses shrink-0 class when fillParent is false', () => {
+    const { container } = render(ResizableBottomPanel, {
+      props: { storageKey: 'test-fillparent-shrink', defaultHeight: 250, minHeight: null, maxHeight: null, fillParent: false },
+    })
+    const panel = container.querySelector('[data-testid="resizable-bottom-panel"]') as HTMLElement
+    expect(panel.classList.contains('shrink-0')).toBe(true)
+    expect(panel.classList.contains('flex-1')).toBe(false)
   })
 })

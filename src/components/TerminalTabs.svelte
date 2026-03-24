@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte'
+  import { Maximize2, Minimize2 } from 'lucide-svelte'
   import { killPty } from '../lib/ipc'
   import { release, focusTerminal } from '../lib/terminalPool'
   import TaskTerminal from './TaskTerminal.svelte'
@@ -13,11 +14,13 @@
   interface Props {
     taskId: string
     worktreePath: string
+    isFullscreen: boolean
+    onFullscreenToggle: (() => void) | null
     onTabChange: ((index: number) => void) | null
     onTabCountChange: ((count: number) => void) | null
   }
 
-  let { taskId, worktreePath, onTabChange, onTabCountChange }: Props = $props()
+  let { taskId, worktreePath, isFullscreen, onFullscreenToggle, onTabChange, onTabCountChange }: Props = $props()
 
   let tabs = $state<Tab[]>([])
   let activeTabIndex = $state(0)
@@ -130,6 +133,15 @@
     >
       +
     </button>
+    {#if onFullscreenToggle}
+      <button class="btn btn-ghost btn-xs ml-auto mr-1" aria-label={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'} onclick={() => onFullscreenToggle?.()}>
+        {#if isFullscreen}
+          <Minimize2 size={14} />
+        {:else}
+          <Maximize2 size={14} />
+        {/if}
+      </button>
+    {/if}
   </div>
   <div class="flex-1 min-h-0 overflow-hidden relative">
     {#each tabs as tab (tab.index)}

@@ -246,16 +246,9 @@
     {/if}
   </div>
 
-  {#if terminalFullscreen && bottomPanelOpen}
-    <div data-testid="fullscreen-terminal" class="flex-1 overflow-hidden">
-      <ResizableBottomPanel storageKey="terminal-panel-height" defaultHeight={300} minHeight={100} maxHeight={null}>
-        {#if worktreePath !== null}
-          <TerminalTabs bind:this={terminalTabsRef} taskId={task.id} {worktreePath} onTabChange={null} onTabCountChange={null} />
-        {/if}
-      </ResizableBottomPanel>
-    </div>
-  {:else}
-    <div class="flex flex-col flex-1 overflow-hidden">
+  <div class="flex flex-col flex-1 overflow-hidden">
+    <!-- Upper area: hidden when fullscreen -->
+    {#if !(terminalFullscreen && bottomPanelOpen)}
       <div data-testid="upper-area" class="flex flex-1 overflow-hidden max-[800px]:flex-col">
         {#if reviewMode}
           <SelfReviewView {task} {agentStatus} onSendToAgent={handleSendToAgent} />
@@ -277,13 +270,23 @@
           </ResizablePanel>
         {/if}
       </div>
-      {#if bottomPanelOpen}
-        <ResizableBottomPanel storageKey="terminal-panel-height" defaultHeight={300} minHeight={100} maxHeight={null}>
-          {#if worktreePath !== null}
-            <TerminalTabs bind:this={terminalTabsRef} taskId={task.id} {worktreePath} onTabChange={null} onTabCountChange={null} />
-          {/if}
-        </ResizableBottomPanel>
-      {/if}
-    </div>
-  {/if}
+    {/if}
+
+    <!-- Bottom panel: ONE instance, uses fillParent when fullscreen -->
+    {#if bottomPanelOpen}
+      <ResizableBottomPanel storageKey="terminal-panel-height" defaultHeight={300} minHeight={100} maxHeight={null} fillParent={terminalFullscreen}>
+        {#if worktreePath !== null}
+          <TerminalTabs
+            bind:this={terminalTabsRef}
+            taskId={task.id}
+            {worktreePath}
+            isFullscreen={terminalFullscreen}
+            onFullscreenToggle={() => { terminalFullscreen = !terminalFullscreen }}
+            onTabChange={null}
+            onTabCountChange={null}
+          />
+        {/if}
+      </ResizableBottomPanel>
+    {/if}
+  </div>
 </div>

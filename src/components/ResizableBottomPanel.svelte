@@ -6,6 +6,7 @@
     defaultHeight: number
     minHeight: number | null
     maxHeight: number | null
+    fillParent: boolean
     children: Snippet
   }
 
@@ -14,6 +15,7 @@
     defaultHeight,
     minHeight = null,
     maxHeight = null,
+    fillParent = false,
     children,
   }: Props = $props()
 
@@ -110,23 +112,25 @@
 
 <div
   data-testid="resizable-bottom-panel"
-  class="relative flex flex-col shrink-0 w-full overflow-hidden"
-  style="height: {height}px"
+  class="relative flex flex-col {fillParent ? 'flex-1' : 'shrink-0'} w-full overflow-hidden"
+  style="{fillParent ? '' : `height: ${height}px`}"
   bind:this={panelEl}
 >
-  <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-  <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-  <div
-    data-testid="resize-handle"
-    class="absolute top-0 left-0 right-0 z-10 h-1 hover:bg-primary/30 transition-colors {isDragging ? 'bg-primary/40' : ''} focus-visible:bg-primary/40 focus-visible:outline-none"
-    style="cursor: row-resize"
-    role="separator"
-    aria-orientation="horizontal"
-    tabindex="0"
-    onmousedown={onMouseDown}
-    ondblclick={onDblClick}
-    onkeydown={onKeyDown}
-  ></div>
+  {#if !fillParent}
+    <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+    <div
+      data-testid="resize-handle"
+      class="absolute top-0 left-0 right-0 z-10 h-1 hover:bg-primary/30 transition-colors {isDragging ? 'bg-primary/40' : ''} focus-visible:bg-primary/40 focus-visible:outline-none"
+      style="cursor: row-resize"
+      role="separator"
+      aria-orientation="horizontal"
+      tabindex="0"
+      onmousedown={onMouseDown}
+      ondblclick={onDblClick}
+      onkeydown={onKeyDown}
+    ></div>
+  {/if}
   <div class="flex-1 overflow-hidden">
     {@render children?.()}
   </div>
