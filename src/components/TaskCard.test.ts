@@ -243,103 +243,6 @@ describe('TaskCard', () => {
     expect(onSelect).toHaveBeenCalledWith('T-42')
   })
 
-  it('renders CI status text for success', () => {
-    const pr = { ...basePr, ci_status: 'success' }
-    render(TaskCard, { props: { task: baseTask, pullRequests: [pr] } })
-    expect(screen.getByText('Passed')).toBeTruthy()
-  })
-
-  it('no CI text when ci_status is null', () => {
-    render(TaskCard, { props: { task: baseTask, pullRequests: [basePr] } })
-    expect(screen.queryByText('Passed')).toBeNull()
-    expect(screen.queryByText('Failed')).toBeNull()
-    expect(screen.queryByText('Pending')).toBeNull()
-  })
-
-  it('renders CI status text for failure', () => {
-    const pr = { ...basePr, ci_status: 'failure' }
-    render(TaskCard, { props: { task: baseTask, pullRequests: [pr] } })
-    expect(screen.getByText('Failed')).toBeTruthy()
-  })
-
-  it('renders CI status text for pending', () => {
-    const pr = { ...basePr, ci_status: 'pending' }
-    render(TaskCard, { props: { task: baseTask, pullRequests: [pr] } })
-    expect(screen.getByText('Pending')).toBeTruthy()
-  })
-
-  it('renders review status text for approved', () => {
-    const pr = { ...basePr, review_status: 'approved' }
-    render(TaskCard, { props: { task: baseTask, pullRequests: [pr] } })
-    expect(screen.getByText('Approved')).toBeTruthy()
-  })
-
-  it('renders review status text for changes requested', () => {
-    const pr = { ...basePr, review_status: 'changes_requested' }
-    render(TaskCard, { props: { task: baseTask, pullRequests: [pr] } })
-    expect(screen.getByText('Changes req.')).toBeTruthy()
-  })
-
-  it('renders review status text for review required', () => {
-    const pr = { ...basePr, review_status: 'review_required' }
-    render(TaskCard, { props: { task: baseTask, pullRequests: [pr] } })
-    expect(screen.getByText('Needs review')).toBeTruthy()
-  })
-
-  it('no review text when review_status is null', () => {
-    render(TaskCard, { props: { task: baseTask, pullRequests: [basePr] } })
-    expect(screen.queryByText('Approved')).toBeNull()
-    expect(screen.queryByText('Changes req.')).toBeNull()
-    expect(screen.queryByText('Needs review')).toBeNull()
-  })
-
-  it('no review text when PR is closed', () => {
-    const pr = { ...basePr, review_status: 'approved', state: 'closed' }
-    render(TaskCard, { props: { task: baseTask, pullRequests: [pr] } })
-    expect(screen.queryByText('Approved')).toBeNull()
-  })
-
-  it('shows unaddressed comment badge when comments exist', () => {
-    const pr = { ...basePr, unaddressed_comment_count: 3 }
-    render(TaskCard, { props: { task: baseTask, pullRequests: [pr] } })
-    expect(screen.getByText('3 unaddressed')).toBeTruthy()
-  })
-
-  it('hides unaddressed comment badge when count is 0', () => {
-    const pr = { ...basePr, unaddressed_comment_count: 0 }
-    render(TaskCard, { props: { task: baseTask, pullRequests: [pr] } })
-    expect(screen.queryByText('unaddressed')).toBeNull()
-  })
-
-  it('sums unaddressed counts across multiple PRs', () => {
-    const pr1 = { ...basePr, id: 1, unaddressed_comment_count: 2 }
-    const pr2 = { ...basePr, id: 2, unaddressed_comment_count: 1 }
-    render(TaskCard, { props: { task: baseTask, pullRequests: [pr1, pr2] } })
-    expect(screen.getByText('3 unaddressed')).toBeTruthy()
-  })
-
-  it('hides badge when no pull requests', () => {
-    render(TaskCard, { props: { task: baseTask } })
-    expect(screen.queryByText('unaddressed')).toBeNull()
-  })
-
-  it('shows Draft label when PR is draft', () => {
-    const pr = { ...basePr, draft: true }
-    render(TaskCard, { props: { task: baseTask, pullRequests: [pr] } })
-    expect(screen.getByText('Draft')).toBeTruthy()
-  })
-
-  it('shows Merge Conflict when a linked PR has merge conflicts', () => {
-    const pr = { ...basePr, mergeable: false, mergeable_state: 'dirty' }
-    render(TaskCard, { props: { task: baseTask, pullRequests: [pr] } })
-    expect(screen.getByText('Merge Conflict')).toBeTruthy()
-  })
-
-  it('hides Draft label when PR is not draft', () => {
-    render(TaskCard, { props: { task: baseTask, pullRequests: [basePr] } })
-    expect(screen.queryByText('Draft')).toBeNull()
-  })
-
   it('shows summary subtitle when task has summary', () => {
     const taskWithSummary = { ...baseTask, summary: 'Fixed auth bug, needs review' }
     render(TaskCard, { props: { task: taskWithSummary } })
@@ -391,5 +294,149 @@ describe('TaskCard', () => {
     const recentTask = { ...baseTask, updated_at: justNowSeconds }
     render(TaskCard, { props: { task: recentTask } })
     expect(screen.getByText('just now')).toBeTruthy()
+  })
+
+  it('shows CI status chip when isFeatured and PR has CI status', () => {
+    const pr = { ...basePr, ci_status: 'success' }
+    render(TaskCard, { props: { task: baseTask, pullRequests: [pr], isFeatured: true } })
+    expect(screen.getByText('Passed')).toBeTruthy()
+  })
+
+  it('hides CI status chip when not featured even with PR data', () => {
+    const pr = { ...basePr, ci_status: 'success' }
+    render(TaskCard, { props: { task: baseTask, pullRequests: [pr], isFeatured: false } })
+    expect(screen.queryByText('Passed')).toBeNull()
+  })
+
+  it('hides CI status chip by default (not featured)', () => {
+    const pr = { ...basePr, ci_status: 'success' }
+    render(TaskCard, { props: { task: baseTask, pullRequests: [pr] } })
+    expect(screen.queryByText('Passed')).toBeNull()
+  })
+
+  it('shows CI failure chip when featured', () => {
+    const pr = { ...basePr, ci_status: 'failure' }
+    render(TaskCard, { props: { task: baseTask, pullRequests: [pr], isFeatured: true } })
+    expect(screen.getByText('Failed')).toBeTruthy()
+  })
+
+  it('shows CI pending chip when featured', () => {
+    const pr = { ...basePr, ci_status: 'pending' }
+    render(TaskCard, { props: { task: baseTask, pullRequests: [pr], isFeatured: true } })
+    expect(screen.getByText('Pending')).toBeTruthy()
+  })
+
+  it('no CI text when ci_status is null even when featured', () => {
+    render(TaskCard, { props: { task: baseTask, pullRequests: [basePr], isFeatured: true } })
+    expect(screen.queryByText('Passed')).toBeNull()
+    expect(screen.queryByText('Failed')).toBeNull()
+    expect(screen.queryByText('Pending')).toBeNull()
+  })
+
+  it('shows review status chip when featured', () => {
+    const pr = { ...basePr, review_status: 'approved' }
+    render(TaskCard, { props: { task: baseTask, pullRequests: [pr], isFeatured: true } })
+    expect(screen.getByText('Approved')).toBeTruthy()
+  })
+
+  it('hides review status chip when not featured', () => {
+    const pr = { ...basePr, review_status: 'approved' }
+    render(TaskCard, { props: { task: baseTask, pullRequests: [pr], isFeatured: false } })
+    expect(screen.queryByText('Approved')).toBeNull()
+  })
+
+  it('shows changes requested chip when featured', () => {
+    const pr = { ...basePr, review_status: 'changes_requested' }
+    render(TaskCard, { props: { task: baseTask, pullRequests: [pr], isFeatured: true } })
+    expect(screen.getByText('Changes req.')).toBeTruthy()
+  })
+
+  it('shows needs review chip when featured', () => {
+    const pr = { ...basePr, review_status: 'review_required' }
+    render(TaskCard, { props: { task: baseTask, pullRequests: [pr], isFeatured: true } })
+    expect(screen.getByText('Needs review')).toBeTruthy()
+  })
+
+  it('no review chip when review_status is null even when featured', () => {
+    render(TaskCard, { props: { task: baseTask, pullRequests: [basePr], isFeatured: true } })
+    expect(screen.queryByText('Approved')).toBeNull()
+    expect(screen.queryByText('Changes req.')).toBeNull()
+    expect(screen.queryByText('Needs review')).toBeNull()
+  })
+
+  it('no review chip when PR is closed even when featured', () => {
+    const pr = { ...basePr, review_status: 'approved', state: 'closed' }
+    render(TaskCard, { props: { task: baseTask, pullRequests: [pr], isFeatured: true } })
+    expect(screen.queryByText('Approved')).toBeNull()
+  })
+
+  it('shows unaddressed comment chip when featured and comments exist', () => {
+    const pr = { ...basePr, unaddressed_comment_count: 3 }
+    render(TaskCard, { props: { task: baseTask, pullRequests: [pr], isFeatured: true } })
+    expect(screen.getByText('3 unaddressed')).toBeTruthy()
+  })
+
+  it('hides unaddressed comment chip when not featured', () => {
+    const pr = { ...basePr, unaddressed_comment_count: 3 }
+    render(TaskCard, { props: { task: baseTask, pullRequests: [pr], isFeatured: false } })
+    expect(screen.queryByText('3 unaddressed')).toBeNull()
+  })
+
+  it('hides unaddressed comment chip when featured but count is 0', () => {
+    const pr = { ...basePr, unaddressed_comment_count: 0 }
+    render(TaskCard, { props: { task: baseTask, pullRequests: [pr], isFeatured: true } })
+    expect(screen.queryByText('unaddressed')).toBeNull()
+  })
+
+  it('sums unaddressed counts across multiple PRs when featured', () => {
+    const pr1 = { ...basePr, id: 1, unaddressed_comment_count: 2 }
+    const pr2 = { ...basePr, id: 2, unaddressed_comment_count: 1 }
+    render(TaskCard, { props: { task: baseTask, pullRequests: [pr1, pr2], isFeatured: true } })
+    expect(screen.getByText('3 unaddressed')).toBeTruthy()
+  })
+
+  it('hides unaddressed chip when no pull requests even when featured', () => {
+    render(TaskCard, { props: { task: baseTask, isFeatured: true } })
+    expect(screen.queryByText('unaddressed')).toBeNull()
+  })
+
+  it('shows Draft label when featured and PR is draft', () => {
+    const pr = { ...basePr, draft: true }
+    render(TaskCard, { props: { task: baseTask, pullRequests: [pr], isFeatured: true } })
+    expect(screen.getByText('Draft')).toBeTruthy()
+  })
+
+  it('hides Draft label when not featured', () => {
+    const pr = { ...basePr, draft: true }
+    render(TaskCard, { props: { task: baseTask, pullRequests: [pr], isFeatured: false } })
+    expect(screen.queryByText('Draft')).toBeNull()
+  })
+
+  it('shows Merge Conflict when featured and PR has merge conflicts', () => {
+    const pr = { ...basePr, mergeable: false, mergeable_state: 'dirty' }
+    render(TaskCard, { props: { task: baseTask, pullRequests: [pr], isFeatured: true } })
+    expect(screen.getByText('Merge Conflict')).toBeTruthy()
+  })
+
+  it('hides Merge Conflict when not featured', () => {
+    const pr = { ...basePr, mergeable: false, mergeable_state: 'dirty' }
+    render(TaskCard, { props: { task: baseTask, pullRequests: [pr], isFeatured: false } })
+    expect(screen.queryByText('Merge Conflict')).toBeNull()
+  })
+
+  it('hides Draft label when featured but PR is not draft', () => {
+    render(TaskCard, { props: { task: baseTask, pullRequests: [basePr], isFeatured: true } })
+    expect(screen.queryByText('Draft')).toBeNull()
+  })
+
+  it('shows PR number as soft chip when featured', () => {
+    render(TaskCard, { props: { task: baseTask, pullRequests: [basePr], isFeatured: true } })
+    expect(screen.getByText('PR #42')).toBeTruthy()
+  })
+
+  it('hides PR number when not featured', () => {
+    render(TaskCard, { props: { task: baseTask, pullRequests: [basePr], isFeatured: false } })
+    expect(screen.queryByText('PR #42')).toBeNull()
+    expect(screen.queryByText('#42')).toBeNull()
   })
 })
