@@ -71,7 +71,7 @@
   ]
 </script>
 
-<div class="{collapsed ? 'w-16' : 'w-48'} shrink-0 h-full bg-base-300 border-r border-base-content/10 flex flex-col font-mono transition-all duration-200">
+<div class="{collapsed ? 'w-16' : 'w-48'} shrink-0 h-full bg-base-200 border-r border-base-300/50 flex flex-col font-mono transition-all duration-200">
   {#if appMode === 'dev'}
     <div class="w-full dev-badge-gradient flex flex-col items-center justify-center {branchName && !collapsed ? 'py-1.5' : 'h-12'}">
       <span class="font-mono text-sm font-black text-white tracking-[0.25em] uppercase">{collapsed ? 'D' : 'DEV MODE'}</span>
@@ -81,7 +81,7 @@
     </div>
   {/if}
 
-  <div class="h-12 px-2 flex items-center border-b border-base-content/10">
+  <div class="h-12 px-2 flex items-center border-b border-base-300/50">
     <div class="flex items-center gap-2 min-w-0 flex-1 {collapsed ? 'justify-center' : ''}">
       <div class="w-7 h-7 bg-primary flex items-center justify-center rounded shrink-0">
         <span class="text-black font-bold font-mono text-xs">&gt;_</span>
@@ -121,7 +121,7 @@
       {#if collapsed}
         <button
           type="button"
-          class="w-full flex justify-center py-2 transition-colors {isActive ? 'bg-base-100' : 'hover:bg-base-200'}"
+           class="w-full flex justify-center py-2 transition-colors {isActive ? 'bg-base-100' : 'hover:bg-base-300/30'}"
           aria-current={isActive ? 'true' : undefined}
           title={project.name}
           onclick={() => selectProject(project.id)}
@@ -136,7 +136,7 @@
       {:else}
         <button
           type="button"
-          class="w-full px-3 py-2 text-left border-l-2 transition-colors {isActive ? 'border-primary bg-base-100' : 'border-transparent hover:bg-base-200'}"
+           class="w-full px-3 py-2 text-left border-l-2 transition-colors {isActive ? 'border-primary bg-base-100' : 'border-transparent hover:bg-base-300/30'}"
           aria-current={isActive ? 'true' : undefined}
           onclick={() => selectProject(project.id)}
         >
@@ -150,7 +150,7 @@
     {/each}
   </div>
 
-  <div class="border-t border-base-content/10 py-2">
+  <div class="border-t border-base-300/50 py-2">
     {#each bottomNavItems as { view, Icon, label }}
       {@const isActive = currentView === view}
       <button

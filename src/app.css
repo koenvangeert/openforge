@@ -12,34 +12,34 @@
   prefersdark: false;
   color-scheme: light;
 
-  --color-base-100: #FFFFFF;
-  --color-base-200: #F5F5F5;
-  --color-base-300: #E0E0E0;
-  --color-base-content: #000000;
-  --color-primary: #00D084;
-  --color-primary-content: #000000;
-  --color-secondary: #888888;
+  --color-base-100: #FAF8F5;
+  --color-base-200: #F0EDE6;
+  --color-base-300: #E8E4DF;
+  --color-base-content: #2D2D3F;
+  --color-primary: #6C63C9;
+  --color-primary-content: #FFFFFF;
+  --color-secondary: #8A8AA0;
   --color-secondary-content: #FFFFFF;
-  --color-accent: #00D084;
-  --color-accent-content: #000000;
-  --color-neutral: #000000;
-  --color-neutral-content: #FFFFFF;
-  --color-info: #3B82F6;
+  --color-accent: #6C63C9;
+  --color-accent-content: #FFFFFF;
+  --color-neutral: #2D2D3F;
+  --color-neutral-content: #FAF8F5;
+  --color-info: #6C63C9;
   --color-info-content: #FFFFFF;
-  --color-success: #00D084;
-  --color-success-content: #000000;
-  --color-warning: #FFB800;
-  --color-warning-content: #000000;
-  --color-error: #FF4444;
+  --color-success: #4CAF50;
+  --color-success-content: #166534;
+  --color-warning: #E8A820;
+  --color-warning-content: #7C4A00;
+  --color-error: #DC2626;
   --color-error-content: #FFFFFF;
 
-  --radius-selector: 0.25rem;
-  --radius-field: 0.25rem;
-  --radius-box: 0.5rem;
+  --radius-selector: 0.625rem;
+  --radius-field: 0.625rem;
+  --radius-box: 1.125rem;
   --size-selector: 0.25rem;
   --size-field: 0.25rem;
   --border: 1px;
-  --depth: 0;
+  --depth: 1;
   --noise: 0;
 }
 
@@ -49,34 +49,34 @@
   prefersdark: true;
   color-scheme: dark;
 
-  --color-base-100: #1E293B;
-  --color-base-200: #0A0F1C;
-  --color-base-300: #2A3A4E;
-  --color-base-content: #E2E8F0;
-  --color-primary: #00D084;
-  --color-primary-content: #000000;
-  --color-secondary: #94A3B8;
-  --color-secondary-content: #000000;
-  --color-accent: #00D084;
-  --color-accent-content: #000000;
-  --color-neutral: #0F172A;
-  --color-neutral-content: #FFFFFF;
-  --color-info: #3B82F6;
+  --color-base-100: #1C1A1F;
+  --color-base-200: #14121A;
+  --color-base-300: #2E2A34;
+  --color-base-content: #D8D4DE;
+  --color-primary: #8B82E0;
+  --color-primary-content: #FFFFFF;
+  --color-secondary: #9A98AE;
+  --color-secondary-content: #1C1A1F;
+  --color-accent: #8B82E0;
+  --color-accent-content: #FFFFFF;
+  --color-neutral: #14121A;
+  --color-neutral-content: #E8E4EE;
+  --color-info: #8B82E0;
   --color-info-content: #FFFFFF;
-  --color-success: #00D084;
-  --color-success-content: #000000;
-  --color-warning: #FFB800;
-  --color-warning-content: #000000;
-  --color-error: #FF4444;
+  --color-success: #4CAF50;
+  --color-success-content: #166534;
+  --color-warning: #E8A820;
+  --color-warning-content: #7C4A00;
+  --color-error: #DC2626;
   --color-error-content: #FFFFFF;
 
-  --radius-selector: 0.25rem;
-  --radius-field: 0.25rem;
-  --radius-box: 0.5rem;
+  --radius-selector: 0.625rem;
+  --radius-field: 0.625rem;
+  --radius-box: 1.125rem;
   --size-selector: 0.25rem;
   --size-field: 0.25rem;
   --border: 1px;
-  --depth: 0;
+  --depth: 1;
   --noise: 0;
 }
 
@@ -106,7 +106,7 @@
     color-mix(in oklch, var(--color-success) 50%, transparent) 90%,
     var(--color-success)
   );
-  animation: border-glow-spin 3s linear infinite;
+  animation: border-glow-spin 4s linear infinite;
   z-index: -1;
   will-change: transform;
 }
@@ -149,11 +149,11 @@
 }
 /* Vim navigation focus highlight */
 .vim-focus {
-  box-shadow: 0 0 0 2px color-mix(in oklch, var(--color-base-content) 40%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in oklch, var(--color-base-content) 25%, transparent);
   border-radius: var(--radius-box);
 }
 .vim-focus > * {
-  background-image: linear-gradient(to right, color-mix(in oklch, var(--color-base-content) 8%, transparent), transparent 40%);
+  background-image: linear-gradient(to right, color-mix(in oklch, var(--color-base-content) 5%, transparent), transparent 40%);
 }
 @keyframes border-glow-spin {
   from { transform: rotate(0deg); }
@@ -161,11 +161,11 @@
 }
 @keyframes badge-pulse {
   0%, 100% { opacity: 1; }
-  50% { opacity: 0.6; }
+  50% { opacity: 0.7; }
 }
 @keyframes ci-pulse {
   0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
+  50% { opacity: 0.6; }
 }
 @keyframes slideIn {
   from { transform: translateY(20px); opacity: 0; }
@@ -341,7 +341,7 @@
   100% { background-position: 0% 50%; }
 }
 .dev-badge-gradient {
-  background: linear-gradient(270deg, #00D084, #3B82F6, #A855F7, #00D084);
+  background: linear-gradient(270deg, #6C63C9, #3B82F6, #A855F7, #6C63C9);
   background-size: 300% 300%;
   animation: gradient-shift 4s ease infinite;
 }
