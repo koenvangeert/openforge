@@ -100,6 +100,8 @@ impl ServerManager {
         }
 
         info!("Spawning OpenCode server for task {} in {:?}", task_id, worktree_path);
+        debug!("Spawning command: opencode");
+        debug!("OpenCode server working directory: {}", worktree_path.display());
 
         let pid_dir = self.get_pid_dir()?;
         std::fs::create_dir_all(&pid_dir)?;
@@ -281,23 +283,56 @@ impl ServerManager {
         Ok(home.join(".openforge").join(pids_dir_name))
     }
 
-    /// Detects the dynamically assigned port by parsing stdout for "127.0.0.1:(\d+)"
+    /// Detects the dynamically assigned port by parsing stdout and stderr for "127.0.0.1:(\d+)"
     async fn detect_port(&self, child: &mut Child) -> Result<u16, ServerError> {
         let stdout = child.stdout.take()
             .ok_or_else(|| ServerError::SpawnFailed("Failed to capture stdout".to_string()))?;
+        let stderr = child.stderr.take()
+            .ok_or_else(|| ServerError::SpawnFailed("Failed to capture stderr".to_string()))?;
 
         let port_regex = Regex::new(r"127\.0\.0\.1:(\d+)")
             .map_err(|e| ServerError::SpawnFailed(format!("Regex error: {}", e)))?;
 
         let detect_task = async {
-            let reader = BufReader::new(stdout);
-            let mut lines = reader.lines();
+            let mut stdout_lines = BufReader::new(stdout).lines();
+            let mut stderr_lines = BufReader::new(stderr).lines();
+            let mut stdout_open = true;
+            let mut stderr_open = true;
 
-            while let Some(line) = lines.next_line().await.map_err(ServerError::IoError)? {
-                if let Some(captures) = port_regex.captures(&line) {
-                    if let Some(port_match) = captures.get(1) {
-                        if let Ok(port) = port_match.as_str().parse::<u16>() {
-                            return Ok(port);
+            while stdout_open || stderr_open {
+                tokio::select! {
+                    line = stdout_lines.next_line(), if stdout_open => {
+                        match line.map_err(ServerError::IoError)? {
+                            Some(line) => {
+                                debug!("opencode stdout: {}", line);
+                                if let Some(captures) = port_regex.captures(&line) {
+                                    if let Some(port_match) = captures.get(1) {
+                                        if let Ok(port) = port_match.as_str().parse::<u16>() {
+                                            return Ok(port);
+                                        }
+                                    }
+                                }
+                            }
+                            None => {
+                                stdout_open = false;
+                            }
+                        }
+                    }
+                    line = stderr_lines.next_line(), if stderr_open => {
+                        match line.map_err(ServerError::IoError)? {
+                            Some(line) => {
+                                debug!("opencode stderr: {}", line);
+                                if let Some(captures) = port_regex.captures(&line) {
+                                    if let Some(port_match) = captures.get(1) {
+                                        if let Ok(port) = port_match.as_str().parse::<u16>() {
+                                            return Ok(port);
+                                        }
+                                    }
+                                }
+                            }
+                            None => {
+                                stderr_open = false;
+                            }
                         }
                     }
                 }
@@ -387,6 +422,28 @@ mod tests {
         // Should return None when no servers are running
         let port = manager.get_any_server_port_for_project(&task_ids).await;
         assert_eq!(port, None);
+    }
+
+    #[tokio::test]
+    async fn test_detect_port_from_stderr() {
+        let manager = ServerManager::new();
+
+        let mut child = Command::new("sh")
+            .arg("-c")
+            .arg("echo \"127.0.0.1:12345\" >&2")
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("should spawn stderr writer process");
+
+        let port = manager
+            .detect_port(&mut child)
+            .await
+            .expect("should detect port from stderr output");
+
+        assert_eq!(port, 12345);
+
+        let _ = child.wait().await;
     }
 
     #[test]
