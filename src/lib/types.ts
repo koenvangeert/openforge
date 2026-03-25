@@ -417,6 +417,20 @@ export function parseCheckRuns(json: string | null): CheckRunInfo[] {
   }
 }
 
+/** Split check runs into visible (non-passing) and a count of hidden passing checks. */
+export function splitCheckRuns(checks: CheckRunInfo[]): { visible: CheckRunInfo[]; passingCount: number } {
+  const visible: CheckRunInfo[] = [];
+  let passingCount = 0;
+  for (const check of checks) {
+    if (check.status === 'completed' && check.conclusion === 'success') {
+      passingCount++;
+    } else {
+      visible.push(check);
+    }
+  }
+  return { visible, passingCount };
+}
+
 export type KanbanColumn = "backlog" | "doing" | "done";
 
 import type { TaskState } from './taskState';

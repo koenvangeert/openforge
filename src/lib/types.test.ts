@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { type PullRequestInfo, hasMergeConflicts, isReadyToMerge, isQueuedForMerge } from './types'
+import { type PullRequestInfo, type CheckRunInfo, hasMergeConflicts, isReadyToMerge, isQueuedForMerge, splitCheckRuns } from './types'
 
 function createPullRequest(overrides: Partial<PullRequestInfo> = {}): PullRequestInfo {
   return {
@@ -142,5 +142,79 @@ describe('isQueuedForMerge', () => {
   it('returns false when state is merged even if is_queued is true', () => {
     const pr = createPullRequest({ state: 'merged', is_queued: true, mergeable: true })
     expect(isQueuedForMerge(pr)).toBe(false)
+  })
+})
+
+function makeCheck(overrides: Partial<CheckRunInfo> = {}): CheckRunInfo {
+  return {
+    id: 1,
+    name: 'CI / build',
+    status: 'completed',
+    conclusion: 'success',
+    html_url: 'https://github.com/check/1',
+    ...overrides,
+  }
+}
+
+describe('splitCheckRuns', () => {
+  it('returns empty arrays for empty input', () => {
+    const { visible, passingCount } = splitCheckRuns([])
+    expect(visible).toEqual([])
+    expect(passingCount).toBe(0)
+  })
+
+  it('puts failing checks into visible', () => {
+    const checks = [makeCheck({ id: 1, name: 'build', conclusion: 'failure' })]
+    const { visible, passingCount } = splitCheckRuns(checks)
+    expect(visible).toHaveLength(1)
+    expect(visible[0].name).toBe('build')
+    expect(passingCount).toBe(0)
+  })
+
+  it('puts in-progress checks into visible', () => {
+    const checks = [makeCheck({ id: 1, name: 'deploy', status: 'in_progress', conclusion: null })]
+    const { visible, passingCount } = splitCheckRuns(checks)
+    expect(visible).toHaveLength(1)
+    expect(visible[0].name).toBe('deploy')
+    expect(passingCount).toBe(0)
+  })
+
+  it('puts queued checks into visible', () => {
+    const checks = [makeCheck({ id: 1, name: 'test', status: 'queued', conclusion: null })]
+    const { visible, passingCount } = splitCheckRuns(checks)
+    expect(visible).toHaveLength(1)
+    expect(visible[0].name).toBe('test')
+    expect(passingCount).toBe(0)
+  })
+
+  it('hides passing checks and reports count', () => {
+    const checks = [
+      makeCheck({ id: 1, name: 'build', conclusion: 'success' }),
+      makeCheck({ id: 2, name: 'lint', conclusion: 'success' }),
+    ]
+    const { visible, passingCount } = splitCheckRuns(checks)
+    expect(visible).toHaveLength(0)
+    expect(passingCount).toBe(2)
+  })
+
+  it('splits mixed checks correctly', () => {
+    const checks = [
+      makeCheck({ id: 1, name: 'build', conclusion: 'success' }),
+      makeCheck({ id: 2, name: 'test', conclusion: 'failure' }),
+      makeCheck({ id: 3, name: 'deploy', status: 'in_progress', conclusion: null }),
+      makeCheck({ id: 4, name: 'lint', conclusion: 'success' }),
+      makeCheck({ id: 5, name: 'e2e', status: 'queued', conclusion: null }),
+    ]
+    const { visible, passingCount } = splitCheckRuns(checks)
+    expect(visible).toHaveLength(3)
+    expect(visible.map(c => c.name)).toEqual(['test', 'deploy', 'e2e'])
+    expect(passingCount).toBe(2)
+  })
+
+  it('treats completed checks with non-success conclusion as visible', () => {
+    const checks = [makeCheck({ id: 1, name: 'check', status: 'completed', conclusion: 'skipped' })]
+    const { visible, passingCount } = splitCheckRuns(checks)
+    expect(visible).toHaveLength(1)
+    expect(passingCount).toBe(0)
   })
 })
