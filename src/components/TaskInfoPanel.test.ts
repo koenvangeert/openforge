@@ -230,15 +230,15 @@ describe('TaskInfoPanel', () => {
     expect(screen.queryByText('Draft')).toBeNull()
   })
 
-  it('renders worktree path section when worktreePath is provided', () => {
+  it('renders workspace path section when worktreePath is provided', () => {
     render(TaskInfoPanel, { props: { task: baseTask, worktreePath: '/home/user/worktrees/T-42', jiraBaseUrl: '' } })
-    expect(screen.getByText('// WORKTREE')).toBeTruthy()
+    expect(screen.getByText('// WORKSPACE')).toBeTruthy()
     expect(screen.getByText('/home/user/worktrees/T-42')).toBeTruthy()
   })
 
-  it('does not render worktree section when worktreePath is null', () => {
+  it('does not render workspace section when worktreePath is null', () => {
     render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null, jiraBaseUrl: '' } })
-    expect(screen.queryByText('// WORKTREE')).toBeNull()
+    expect(screen.queryByText('// WORKSPACE')).toBeNull()
   })
 
   it('renders // JIRA section when task has jira_key and jiraBaseUrl', () => {
