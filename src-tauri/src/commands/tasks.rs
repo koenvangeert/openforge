@@ -95,6 +95,9 @@ pub async fn update_task_status(
         let db = crate::db::acquire_db(&db);
         db.update_task_status(&id, &status)
             .map_err(|e| format!("Failed to update task status: {}", e))?;
+        if status == "done" {
+            let _ = db.update_task_workspace_status(&id, "completed");
+        }
     }
     let _ = app.emit("task-changed", serde_json::json!({ "action": "updated", "task_id": id }));
 

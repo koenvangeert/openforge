@@ -119,13 +119,14 @@ pub(crate) fn activate_task(
 pub(crate) fn build_start_response(
     task_id: &str,
     session_id: &str,
-    worktree_path: &str,
+    workspace_path: &str,
     port: u16,
 ) -> serde_json::Value {
     serde_json::json!({
         "task_id": task_id,
         "session_id": session_id,
-        "worktree_path": worktree_path,
+        "worktree_path": workspace_path,
+        "workspace_path": workspace_path,
         "port": port,
     })
 }
@@ -167,6 +168,7 @@ pub(crate) fn build_start_response(
     if provider_name != "claude-code" {
         let db = crate::db::acquire_db(db);
         let _ = db.update_worktree_status(task_id, "stopped");
+        let _ = db.update_task_workspace_status(task_id, "stopped");
     }
 
     Ok(())
@@ -212,7 +214,7 @@ pub async fn start_implementation(
         sse_mgr.inner().clone(),
     ).map_err(|e| format!("Unknown provider: {}", e))?;
 
-    let working_dir = if use_worktrees {
+    let (working_dir, workspace_kind, branch_name) = if use_worktrees {
         let branch = git_worktree::slugify_branch_name(&task_id, task.prompt.as_deref().unwrap_or(&task.initial_prompt));
         let home = dirs::home_dir().ok_or("Failed to get home directory")?;
         let repo_name = std::path::Path::new(&repo_path)
@@ -246,9 +248,9 @@ pub async fn start_implementation(
             .map_err(|e| e.to_string())?;
         }
 
-        worktree_path
+        (worktree_path, "git_worktree", Some(branch))
     } else {
-        std::path::PathBuf::from(&repo_path)
+        (std::path::PathBuf::from(&repo_path), "project_dir", None)
     };
 
     let prompt = build_task_prompt(&task, additional_instructions.as_deref(), code_cleanup_enabled);
@@ -263,6 +265,22 @@ pub async fn start_implementation(
             &app,
         )
         .await?;
+
+    {
+        let db = crate::db::acquire_db(&db);
+        db.upsert_task_workspace_record(
+            &task_id,
+            &project_id_owned,
+            working_dir.to_str().ok_or("Invalid workspace path")?,
+            &repo_path,
+            workspace_kind,
+            branch_name.as_deref(),
+            provider.provider_name(),
+            if provider_name == "claude-code" { None } else { Some(result.port as i64) },
+            "active",
+        )
+        .map_err(|e| format!("Failed to persist task workspace: {}", e))?;
+    }
 
     if use_worktrees && provider_name != "claude-code" {
         let db = crate::db::acquire_db(&db);
@@ -757,6 +775,7 @@ mod tests {
         assert_eq!(response["task_id"], "T-100");
         assert_eq!(response["session_id"], "sess-abc");
         assert_eq!(response["worktree_path"], "/path/to/worktree");
+        assert_eq!(response["workspace_path"], "/path/to/worktree");
         assert_eq!(response["port"], 3000);
     }
 
