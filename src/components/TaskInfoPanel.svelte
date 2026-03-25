@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Task, PullRequestInfo } from '../lib/types'
-  import { parseCheckRuns, isReadyToMerge, isQueuedForMerge } from '../lib/types'
+  import { parseCheckRuns, splitCheckRuns, isReadyToMerge, isQueuedForMerge } from '../lib/types'
   import { ticketPrs } from '../lib/stores'
   import { forceGithubSync, getPullRequests, mergePullRequest, openUrl } from '../lib/ipc'
   import MarkdownContent from './MarkdownContent.svelte'
@@ -278,6 +278,7 @@
       {#each taskPrs as pr (pr.id)}
         {#if pr.ci_status}
           {@const checkRuns = parseCheckRuns(pr.ci_check_runs)}
+          {@const { visible, passingCount } = splitCheckRuns(checkRuns)}
           <div class="mb-3">
             <div class="flex items-center justify-between gap-2 mb-1.5">
               <span class="text-xs text-base-content/50">{pr.title}</span>
@@ -289,19 +290,24 @@
                 {/if}
               </span>
             </div>
-            {#if checkRuns.length > 0}
+            {#if visible.length > 0 || passingCount > 0}
               <div class="flex flex-col gap-1">
-                {#each checkRuns as check (check.id)}
+                {#each visible as check (check.id)}
                   <div class="flex items-center gap-1.5 text-xs">
-                    <span class="w-4 text-center font-semibold {check.conclusion === 'success' ? 'text-success' : check.conclusion === 'failure' ? 'text-error' : check.status !== 'completed' ? 'text-warning' : 'text-base-content/50'}">
-                      {#if check.conclusion === 'success'}✓
-                      {:else if check.conclusion === 'failure'}✗
+                    <span class="w-4 text-center font-semibold {check.conclusion === 'failure' ? 'text-error' : check.status !== 'completed' ? 'text-warning' : 'text-base-content/50'}">
+                      {#if check.conclusion === 'failure'}✗
                       {:else if check.status !== 'completed'}⏳
                       {:else}—{/if}
                     </span>
                     <span class="text-base-content">{check.name}</span>
                   </div>
                 {/each}
+                {#if passingCount > 0}
+                  <div class="flex items-center gap-1.5 text-xs">
+                    <span class="w-4 text-center font-semibold text-success">✓</span>
+                    <span class="text-base-content/50">{passingCount} passing</span>
+                  </div>
+                {/if}
               </div>
             {/if}
           </div>

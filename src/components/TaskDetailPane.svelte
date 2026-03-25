@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Task, PullRequestInfo, PrComment } from '../lib/types'
-  import { parseCheckRuns } from '../lib/types'
+  import { parseCheckRuns, splitCheckRuns } from '../lib/types'
   import { getPrComments, markCommentAddressed, openUrl } from '../lib/ipc'
 
   interface Props {
@@ -97,6 +97,7 @@
         {#each pullRequests as pr (pr.id)}
           {#if pr.ci_status}
             {@const checkRuns = parseCheckRuns(pr.ci_check_runs)}
+            {@const { visible, passingCount } = splitCheckRuns(checkRuns)}
             <div class="flex flex-col gap-1.5">
               <div class="flex items-center justify-between gap-2">
                 <span class="text-xs text-base-content/50">{pr.title}</span>
@@ -107,19 +108,24 @@
                   {:else}— No CI{/if}
                 </span>
               </div>
-              {#if checkRuns.length > 0}
+              {#if visible.length > 0 || passingCount > 0}
                 <div class="flex flex-col gap-1 pl-1">
-                  {#each checkRuns as check (check.id)}
+                  {#each visible as check (check.id)}
                     <div class="flex items-center gap-1.5 font-mono text-[10px]">
-                      <span class="{check.conclusion === 'success' ? 'text-success' : check.conclusion === 'failure' ? 'text-error' : check.status !== 'completed' ? 'text-warning' : 'text-base-content/40'}">
-                        {#if check.conclusion === 'success'}✓
-                        {:else if check.conclusion === 'failure'}✗
+                      <span class="{check.conclusion === 'failure' ? 'text-error' : check.status !== 'completed' ? 'text-warning' : 'text-base-content/40'}">
+                        {#if check.conclusion === 'failure'}✗
                         {:else if check.status !== 'completed'}⏳
                         {:else}—{/if}
                       </span>
                       <span class="text-base-content/70">{check.name}</span>
                     </div>
                   {/each}
+                  {#if passingCount > 0}
+                    <div class="flex items-center gap-1.5 font-mono text-[10px]">
+                      <span class="text-success">✓</span>
+                      <span class="text-base-content/40">{passingCount} passing</span>
+                    </div>
+                  {/if}
                 </div>
               {/if}
             </div>

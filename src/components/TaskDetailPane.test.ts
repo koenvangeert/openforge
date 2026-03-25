@@ -288,7 +288,7 @@ describe('TaskDetailPane', () => {
       expect(screen.getByText('// PIPELINE_STATUS')).toBeTruthy()
     })
 
-    it('renders check run names from ci_check_runs', () => {
+    it('renders only failing check runs and a passing summary', () => {
       render(TaskDetailPane, {
         props: {
           task: baseTask,
@@ -297,8 +297,9 @@ describe('TaskDetailPane', () => {
           onOpenFullView: vi.fn(),
         },
       })
-      expect(screen.getByText('CI / build')).toBeTruthy()
+      expect(screen.queryByText('CI / build')).toBeNull()
       expect(screen.getByText('CI / test')).toBeTruthy()
+      expect(screen.getByText('1 passing')).toBeTruthy()
     })
 
     it('renders ci_status badge', () => {
@@ -310,7 +311,7 @@ describe('TaskDetailPane', () => {
           onOpenFullView: vi.fn(),
         },
       })
-      expect(screen.getByText(/passing/i)).toBeTruthy()
+      expect(screen.getByText(/✓ Passing/)).toBeTruthy()
     })
 
     it('does not render pipeline section when no PR has ci_status', () => {
