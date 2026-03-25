@@ -218,7 +218,7 @@ describe('AgentPanel starting animation', () => {
     render(AgentPanel, { props: { taskId: 'T-1', isStarting: true } })
     await vi.waitFor(() => {
       expect(screen.getByText('Starting agent session...')).toBeTruthy()
-      expect(screen.getByText('Creating worktree and launching agent')).toBeTruthy()
+      expect(screen.getByText('Preparing workspace and launching agent')).toBeTruthy()
       expect(screen.queryByText('No active agent session')).toBeNull()
     })
   })

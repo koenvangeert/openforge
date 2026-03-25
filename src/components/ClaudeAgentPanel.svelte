@@ -56,7 +56,9 @@
   })
 
   onDestroy(() => {
-    unlisteners.forEach(fn => fn())
+    unlisteners.forEach((fn) => {
+      fn()
+    })
     if (poolEntry) {
       detach(poolEntry)
     }
@@ -150,7 +152,7 @@
         {#if isStarting}
           <span class="loading loading-spinner loading-lg text-primary"></span>
           <div class="text-base font-semibold text-base-content" style="animation: badge-pulse 2s ease-in-out infinite;">Starting agent session...</div>
-          <div class="text-sm text-base-content/50 text-center max-w-[320px] leading-relaxed">Creating worktree and launching agent</div>
+          <div class="text-sm text-base-content/50 text-center max-w-[320px] leading-relaxed">Preparing workspace and launching agent</div>
         {:else}
           <svg class="w-16 h-16 text-base-content/40" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
             <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
