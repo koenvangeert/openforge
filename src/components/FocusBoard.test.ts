@@ -96,6 +96,7 @@ function renderBoard(overrides?: {
 
   return render(FocusBoard, {
     props: {
+      projectName: 'Test Project',
       tasks,
       activeSessions: sessions,
       ticketPrs: prs,

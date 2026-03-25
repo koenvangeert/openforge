@@ -1017,13 +1017,14 @@
                <span>Loading tasks...</span>
              </div>
            {:else if boardLayout === 'focus'}
-             <FocusBoard
-               tasks={$tasks}
-               activeSessions={$activeSessions}
-               ticketPrs={$ticketPrs}
-               onOpenTask={handleOpenTask}
-               onRunAction={handleRunAction}
-             />
+              <FocusBoard
+                projectName={activeProject?.name ?? ''}
+                tasks={$tasks}
+                activeSessions={$activeSessions}
+                ticketPrs={$ticketPrs}
+                onOpenTask={handleOpenTask}
+                onRunAction={handleRunAction}
+              />
            {:else}
              <KanbanBoard onRunAction={handleRunAction} projectName={activeProject?.name ?? ''} />
            {/if}
