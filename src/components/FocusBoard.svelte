@@ -15,6 +15,7 @@
   import type { Task, AgentSession, PullRequestInfo, Action } from '../lib/types'
 
   interface Props {
+    projectName: string
     tasks: Task[]
     activeSessions: Map<string, AgentSession>
     ticketPrs: Map<string, PullRequestInfo[]>
@@ -28,7 +29,7 @@
     { value: 'backlog' as BoardFilter, label: 'Backlog' },
   ] as const
 
-  let { tasks, activeSessions, ticketPrs, onOpenTask, onRunAction }: Props = $props()
+  let { projectName, tasks, activeSessions, ticketPrs, onOpenTask, onRunAction }: Props = $props()
 
   let activeFilter: BoardFilter = $state('focus')
   let selectedTaskIdLocal: string | null = $state(null)
@@ -152,7 +153,7 @@
     <span class="font-mono text-[10px] font-semibold text-base-content/40 tracking-widest uppercase">BOARD</span>
     <div class="flex items-center justify-between">
       <div>
-        <h1 class="text-2xl font-bold text-base-content">A calmer board</h1>
+        <h1 class="text-2xl font-bold text-base-content">{projectName}</h1>
         <p class="text-sm text-base-content/50">Focus on what needs attention first, with context always visible.</p>
       </div>
       <div class="flex items-center gap-2">

@@ -96,6 +96,7 @@ function renderBoard(overrides?: {
 
   return render(FocusBoard, {
     props: {
+      projectName: 'Test Project',
       tasks,
       activeSessions: sessions,
       ticketPrs: prs,
@@ -109,6 +110,11 @@ describe('FocusBoard', () => {
   beforeEach(() => {
     Element.prototype.scrollIntoView = vi.fn()
     vi.clearAllMocks()
+  })
+
+  it('renders the project name as the board heading', async () => {
+    renderBoard()
+    expect(await screen.findByRole('heading', { name: 'Test Project' })).toBeTruthy()
   })
 
   it('has Focus now chip active by default', async () => {
