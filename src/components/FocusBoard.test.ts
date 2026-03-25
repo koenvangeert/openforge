@@ -112,6 +112,11 @@ describe('FocusBoard', () => {
     vi.clearAllMocks()
   })
 
+  it('renders the project name as the board heading', async () => {
+    renderBoard()
+    expect(await screen.findByRole('heading', { name: 'Test Project' })).toBeTruthy()
+  })
+
   it('has Focus now chip active by default', async () => {
     renderBoard()
     const chip = await screen.findByRole('button', { name: /Focus now 1/i })
