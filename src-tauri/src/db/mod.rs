@@ -14,6 +14,7 @@ mod pull_requests;
 mod review;
 mod self_review;
 mod shepherd;
+mod task_workspaces;
 mod tasks;
 mod worktrees;
 
@@ -27,6 +28,7 @@ pub use pull_requests::{PrCommentRow, PrRow};
 pub use review::ReviewPrRow;
 pub use self_review::SelfReviewCommentRow;
 pub use shepherd::ShepherdMessageRow;
+pub use task_workspaces::TaskWorkspaceRow;
 pub use tasks::{TaskRow, WorkQueueTaskRow};
 pub use worktrees::WorktreeRow;
 
@@ -845,6 +847,26 @@ CREATE INDEX IF NOT EXISTS idx_shepherd_messages_project_created ON shepherd_mes
 
             Ok(())
         }),
+        M::up(
+            r#"
+CREATE TABLE IF NOT EXISTS task_workspaces (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_id TEXT NOT NULL UNIQUE REFERENCES tasks(id) ON DELETE CASCADE,
+    project_id TEXT NOT NULL REFERENCES projects(id),
+    workspace_path TEXT NOT NULL,
+    repo_path TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    branch_name TEXT,
+    provider_name TEXT NOT NULL,
+    opencode_port INTEGER,
+    status TEXT NOT NULL DEFAULT 'active',
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_task_workspaces_status ON task_workspaces(status);
+CREATE INDEX IF NOT EXISTS idx_task_workspaces_project ON task_workspaces(project_id, updated_at DESC);
+            "#,
+        ),
     ])
 }
 #[cfg(test)]
@@ -892,13 +914,13 @@ mod tests {
 
         let table_count: i32 = conn
             .query_row(
-                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('tasks', 'agent_sessions', 'pull_requests', 'pr_comments', 'config', 'projects', 'project_config', 'worktrees', 'review_prs', 'self_review_comments', 'agent_review_comments', 'authored_prs', 'shepherd_messages', 'action_items')",
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('tasks', 'agent_sessions', 'pull_requests', 'pr_comments', 'config', 'projects', 'project_config', 'worktrees', 'task_workspaces', 'review_prs', 'self_review_comments', 'agent_review_comments', 'authored_prs', 'shepherd_messages', 'action_items')",
                 [],
                 |row| row.get(0),
             )
             .expect("Failed to count tables");
 
-        assert_eq!(table_count, 14, "All 14 tables should be created");
+        assert_eq!(table_count, 15, "All 15 tables should be created");
 
         let config_count: i32 = conn
             .query_row("SELECT COUNT(*) FROM config", [], |row| row.get(0))
@@ -1138,8 +1160,8 @@ mod tests {
             .query_row("PRAGMA user_version", [], |r| r.get(0))
             .unwrap();
         assert_eq!(
-            uv, 17,
-            "Fresh DB should have user_version=17 after migrations, got {}",
+            uv, 18,
+            "Fresh DB should have user_version=18 after migrations, got {}",
             uv
         );
 
@@ -1397,7 +1419,7 @@ mod tests {
         let uv: i32 = conn
             .query_row("PRAGMA user_version", [], |r| r.get(0))
             .expect("read repaired user_version");
-        assert_eq!(uv, 17, "V13 database should upgrade to schema version 17");
+        assert_eq!(uv, 18, "V13 database should upgrade to schema version 18");
 
         drop(conn);
         drop(db);
