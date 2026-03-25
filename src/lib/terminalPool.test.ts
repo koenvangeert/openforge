@@ -72,7 +72,7 @@ vi.mock('./ipc', () => ({
   openUrl: vi.fn().mockResolvedValue(undefined),
 }))
 
-import { acquire, attach, detach, release, releaseAll, releaseAllForTask, _getPool, isPtyActive, focusTerminal } from './terminalPool'
+import { acquire, attach, detach, release, releaseAll, releaseAllForTask, _getPool, isPtyActive, focusTerminal, markPtySpawnPending, clearPtySpawnPending, shouldSpawnPty, setCurrentPtyInstance, isShellExited, getTaskTerminalTabsSession, updateTaskTerminalTabsSession, clearTaskTerminalTabsSession, getShellLifecycleState, updateShellLifecycleState } from './terminalPool'
 import { openUrl } from './ipc'
 
 // Stub browser APIs not available in jsdom
@@ -248,6 +248,18 @@ describe('terminalPool', () => {
     expect(entry.ptyActive).toBe(true)
   })
 
+  it('pty-output listener ignores stale instance ids', async () => {
+    const entry = await acquire('task-10-stale-output')
+    const writeSpy = entry.terminal.write as ReturnType<typeof vi.fn>
+    setCurrentPtyInstance(entry, 2)
+
+    const outputCb = listenCallbacks.get('pty-output-task-10-stale-output')!
+    outputCb({ payload: { data: 'old output', instance_id: 1 } })
+
+    expect(writeSpy).not.toHaveBeenCalled()
+    expect(entry.ptyActive).toBe(false)
+  })
+
   it('pty-exit listener marks ptyActive false and needsClear true', async () => {
     const entry = await acquire('task-11')
     entry.ptyActive = true
@@ -257,6 +269,18 @@ describe('terminalPool', () => {
 
     expect(entry.ptyActive).toBe(false)
     expect(entry.needsClear).toBe(true)
+  })
+
+  it('pty-exit listener ignores stale instance ids', async () => {
+    const entry = await acquire('task-11-stale-exit')
+    entry.ptyActive = true
+    setCurrentPtyInstance(entry, 2)
+
+    const exitCb = listenCallbacks.get('pty-exit-task-11-stale-exit')!
+    exitCb({ payload: { instance_id: 1 } })
+
+    expect(entry.ptyActive).toBe(true)
+    expect(entry.needsClear).toBe(false)
   })
 
   it('needsClear causes terminal.reset on next pty-output', async () => {
@@ -317,6 +341,118 @@ describe('terminalPool', () => {
 
     it('returns false for unknown task', () => {
       expect(isPtyActive('nonexistent')).toBe(false)
+    })
+  })
+
+  describe('shell exited state', () => {
+    it('reports shell exited when entry is inactive and needs clear', async () => {
+      const entry = await acquire('task-shell-exited')
+      entry.ptyActive = false
+      entry.needsClear = true
+
+      expect(isShellExited('task-shell-exited')).toBe(true)
+    })
+
+    it('reports false when shell entry is active', async () => {
+      const entry = await acquire('task-shell-active')
+      entry.ptyActive = true
+      entry.needsClear = false
+
+      expect(isShellExited('task-shell-active')).toBe(false)
+    })
+
+    it('exposes pool-owned shell lifecycle state object', async () => {
+      const entry = await acquire('task-shell-state')
+      entry.ptyActive = false
+      entry.needsClear = true
+
+      const state = getShellLifecycleState('task-shell-state')
+
+      expect(state.ptyActive).toBe(false)
+      expect(state.shellExited).toBe(true)
+      expect(state.currentPtyInstance).toBeNull()
+    })
+
+    it('updates pool-owned shell lifecycle state through helper', async () => {
+      await acquire('task-shell-update')
+
+      updateShellLifecycleState('task-shell-update', {
+        ptyActive: true,
+        shellExited: false,
+        currentPtyInstance: 42,
+      })
+
+      const state = getShellLifecycleState('task-shell-update')
+      expect(state.ptyActive).toBe(true)
+      expect(state.shellExited).toBe(false)
+      expect(state.currentPtyInstance).toBe(42)
+    })
+  })
+
+  describe('task terminal tab sessions', () => {
+    it('creates a default task tab session in the pool', () => {
+      const session = getTaskTerminalTabsSession('T-100')
+
+      expect(session.activeTabIndex).toBe(0)
+      expect(session.nextIndex).toBe(1)
+      expect(session.tabs).toEqual([{ index: 0, key: 'T-100-shell-0', label: 'Shell 1' }])
+    })
+
+    it('persists task tab session updates in the pool', () => {
+      updateTaskTerminalTabsSession('T-101', {
+        tabs: [
+          { index: 0, key: 'T-101-shell-0', label: 'Shell 1' },
+          { index: 1, key: 'T-101-shell-1', label: 'Shell 2' },
+        ],
+        activeTabIndex: 1,
+        nextIndex: 2,
+      })
+
+      const session = getTaskTerminalTabsSession('T-101')
+      expect(session.tabs).toHaveLength(2)
+      expect(session.activeTabIndex).toBe(1)
+      expect(session.nextIndex).toBe(2)
+    })
+
+    it('clears only the requested task tab session', () => {
+      getTaskTerminalTabsSession('T-102')
+      getTaskTerminalTabsSession('T-103')
+
+      clearTaskTerminalTabsSession('T-102')
+
+      expect(getTaskTerminalTabsSession('T-102')).toEqual({
+        tabs: [{ index: 0, key: 'T-102-shell-0', label: 'Shell 1' }],
+        activeTabIndex: 0,
+        nextIndex: 1,
+      })
+      expect(getTaskTerminalTabsSession('T-103').tabs).toHaveLength(1)
+    })
+  })
+
+  describe('spawn state tracking', () => {
+    it('shouldSpawnPty returns false while a spawn is pending for the entry', async () => {
+      const entry = await acquire('task-spawn-pending')
+      expect(shouldSpawnPty(entry)).toBe(true)
+
+      markPtySpawnPending(entry)
+
+      expect(shouldSpawnPty(entry)).toBe(false)
+    })
+
+    it('clearPtySpawnPending allows spawning again when PTY is still inactive', async () => {
+      const entry = await acquire('task-spawn-clear')
+      markPtySpawnPending(entry)
+
+      clearPtySpawnPending(entry)
+
+      expect(shouldSpawnPty(entry)).toBe(true)
+    })
+
+    it('shouldSpawnPty stays false when PTY is already active', async () => {
+      const entry = await acquire('task-spawn-active')
+      entry.ptyActive = true
+
+      expect(shouldSpawnPty(entry)).toBe(false)
     })
   })
 

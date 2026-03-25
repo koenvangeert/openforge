@@ -59,14 +59,44 @@ const { mockPoolEntry } = vi.hoisted(() => ({
     visibilityObserver: null,
     resizeTimeout: null,
     attached: false,
+    spawnPending: false,
+    currentPtyInstance: null,
   },
 }))
 
 vi.mock('../lib/terminalPool', () => ({
-  acquire: vi.fn().mockResolvedValue(mockPoolEntry),
+  acquire: vi.fn().mockImplementation(async (taskId: string) => {
+    mockPoolEntry.taskId = taskId
+    return mockPoolEntry
+  }),
   attach: vi.fn(),
   detach: vi.fn(),
   release: vi.fn(),
+  shouldSpawnPty: vi.fn((entry) => !entry.ptyActive && !entry.spawnPending && !entry.needsClear),
+  markPtySpawnPending: vi.fn((entry) => {
+    entry.spawnPending = true
+  }),
+  clearPtySpawnPending: vi.fn((entry) => {
+    entry.spawnPending = false
+  }),
+  setCurrentPtyInstance: vi.fn((entry, instanceId) => {
+    entry.currentPtyInstance = instanceId
+  }),
+  getShellLifecycleState: vi.fn(() => ({
+    ptyActive: mockPoolEntry.ptyActive,
+    shellExited: !mockPoolEntry.ptyActive && mockPoolEntry.needsClear,
+    currentPtyInstance: mockPoolEntry.currentPtyInstance,
+  })),
+  updateShellLifecycleState: vi.fn((taskId, state) => {
+    if (taskId === mockPoolEntry.taskId) {
+      mockPoolEntry.ptyActive = state.ptyActive
+      mockPoolEntry.needsClear = state.shellExited
+      mockPoolEntry.currentPtyInstance = state.currentPtyInstance
+    }
+  }),
+  isShellExited: vi.fn(() => {
+    return !mockPoolEntry.ptyActive && mockPoolEntry.needsClear
+  }),
 }))
 
 import TaskTerminal from './TaskTerminal.svelte'
@@ -74,14 +104,16 @@ import TaskTerminal from './TaskTerminal.svelte'
 describe('TaskTerminal', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockPoolEntry.taskId = ''
     mockPoolEntry.ptyActive = false
     mockPoolEntry.attached = false
     mockPoolEntry.needsClear = false
+    mockPoolEntry.currentPtyInstance = null
     listenCallback = null
   })
 
   it('renders terminal wrapper div', async () => {
-    render(TaskTerminal, { props: { taskId: 'T-1', worktreePath: '/path/to/worktree', terminalKey: 'T-1-shell-0', terminalIndex: 0 } })
+    render(TaskTerminal, { props: { taskId: 'T-1', worktreePath: '/path/to/worktree', terminalKey: 'T-1-shell-0', terminalIndex: 0, isActive: true } })
     await vi.waitFor(() => {
       const termWrapper = document.querySelector('.shell-terminal-wrapper')
       expect(termWrapper).toBeTruthy()
@@ -91,7 +123,7 @@ describe('TaskTerminal', () => {
   it('calls acquire with terminalKey prop on mount', async () => {
     const { acquire } = await import('../lib/terminalPool')
 
-    render(TaskTerminal, { props: { taskId: 'T-1', worktreePath: '/path/to/worktree', terminalKey: 'T-1-shell-0', terminalIndex: 0 } })
+    render(TaskTerminal, { props: { taskId: 'T-1', worktreePath: '/path/to/worktree', terminalKey: 'T-1-shell-0', terminalIndex: 0, isActive: true } })
     await vi.waitFor(() => {
       expect(acquire).toHaveBeenCalledWith('T-1-shell-0')
     })
@@ -100,16 +132,50 @@ describe('TaskTerminal', () => {
   it('calls attach with pool entry and wrapper element', async () => {
     const { attach } = await import('../lib/terminalPool')
 
-    render(TaskTerminal, { props: { taskId: 'T-1', worktreePath: '/path/to/worktree', terminalKey: 'T-1-shell-0', terminalIndex: 0 } })
+    render(TaskTerminal, { props: { taskId: 'T-1', worktreePath: '/path/to/worktree', terminalKey: 'T-1-shell-0', terminalIndex: 0, isActive: true } })
     await vi.waitFor(() => {
       expect(attach).toHaveBeenCalledWith(mockPoolEntry, expect.any(HTMLDivElement))
     })
   })
 
+  it('does not attach when inactive, then attaches when activated', async () => {
+    const { attach } = await import('../lib/terminalPool')
+
+    const { rerender } = render(TaskTerminal, { props: { taskId: 'T-1', worktreePath: '/path/to/worktree', terminalKey: 'T-1-shell-0', terminalIndex: 0, isActive: false } })
+
+    await vi.waitFor(() => {
+      expect(document.querySelector('.shell-terminal-wrapper')).toBeTruthy()
+    })
+
+    expect(attach).not.toHaveBeenCalled()
+
+    await rerender({ taskId: 'T-1', worktreePath: '/path/to/worktree', terminalKey: 'T-1-shell-0', terminalIndex: 0, isActive: true })
+
+    await vi.waitFor(() => {
+      expect(attach).toHaveBeenCalledWith(mockPoolEntry, expect.any(HTMLDivElement))
+    })
+  })
+
+  it('does not detach when becoming inactive, so pooled terminal stays mounted in place', async () => {
+    const { attach, detach } = await import('../lib/terminalPool')
+
+    const { rerender } = render(TaskTerminal, { props: { taskId: 'T-1', worktreePath: '/path/to/worktree', terminalKey: 'T-1-shell-0', terminalIndex: 0, isActive: true } })
+
+    await vi.waitFor(() => {
+      expect(attach).toHaveBeenCalled()
+    })
+
+    vi.mocked(detach).mockClear()
+
+    await rerender({ taskId: 'T-1', worktreePath: '/path/to/worktree', terminalKey: 'T-1-shell-0', terminalIndex: 0, isActive: false })
+
+    expect(detach).not.toHaveBeenCalled()
+  })
+
   it('calls detach on component destroy', async () => {
     const { detach, attach } = await import('../lib/terminalPool')
 
-    const { unmount } = render(TaskTerminal, { props: { taskId: 'T-1', worktreePath: '/path/to/worktree', terminalKey: 'T-1-shell-0', terminalIndex: 0 } })
+    const { unmount } = render(TaskTerminal, { props: { taskId: 'T-1', worktreePath: '/path/to/worktree', terminalKey: 'T-1-shell-0', terminalIndex: 0, isActive: true } })
     await vi.waitFor(() => {
       expect(attach).toHaveBeenCalled()
     })
@@ -122,7 +188,7 @@ describe('TaskTerminal', () => {
     const { spawnShellPty } = await import('../lib/ipc')
     mockPoolEntry.ptyActive = false
 
-    render(TaskTerminal, { props: { taskId: 'T-1', worktreePath: '/path/to/worktree', terminalKey: 'T-1-shell-2', terminalIndex: 2 } })
+    render(TaskTerminal, { props: { taskId: 'T-1', worktreePath: '/path/to/worktree', terminalKey: 'T-1-shell-2', terminalIndex: 2, isActive: true } })
     await vi.waitFor(() => {
       expect(spawnShellPty).toHaveBeenCalledWith('T-1', '/path/to/worktree', 80, 24, 2)
     })
@@ -133,7 +199,7 @@ describe('TaskTerminal', () => {
     const { acquire } = await import('../lib/terminalPool')
     mockPoolEntry.ptyActive = true
 
-    render(TaskTerminal, { props: { taskId: 'T-1', worktreePath: '/path/to/worktree', terminalKey: 'T-1-shell-0', terminalIndex: 0 } })
+    render(TaskTerminal, { props: { taskId: 'T-1', worktreePath: '/path/to/worktree', terminalKey: 'T-1-shell-0', terminalIndex: 0, isActive: true } })
     await vi.waitFor(() => {
       expect(acquire).toHaveBeenCalled()
     })
@@ -141,8 +207,21 @@ describe('TaskTerminal', () => {
     expect(spawnShellPty).not.toHaveBeenCalled()
   })
 
+  it('does not spawn shell PTY while inactive', async () => {
+    const { spawnShellPty } = await import('../lib/ipc')
+    mockPoolEntry.ptyActive = false
+
+    render(TaskTerminal, { props: { taskId: 'T-1', worktreePath: '/path/to/worktree', terminalKey: 'T-1-shell-0', terminalIndex: 0, isActive: false } })
+
+    await vi.waitFor(() => {
+      expect(document.querySelector('.shell-terminal-wrapper')).toBeTruthy()
+    })
+
+    expect(spawnShellPty).not.toHaveBeenCalled()
+  })
+
   it('shows shell exited overlay when PTY exits', async () => {
-    render(TaskTerminal, { props: { taskId: 'T-1', worktreePath: '/path/to/worktree', terminalKey: 'T-1-shell-0', terminalIndex: 0 } })
+    render(TaskTerminal, { props: { taskId: 'T-1', worktreePath: '/path/to/worktree', terminalKey: 'T-1-shell-0', terminalIndex: 0, isActive: true } })
 
     await vi.waitFor(() => {
       expect(listenCallback).not.toBeNull()
@@ -155,8 +234,26 @@ describe('TaskTerminal', () => {
     })
   })
 
+  it('ignores stale pty-exit events from older shell instances', async () => {
+    const { spawnShellPty } = await import('../lib/ipc')
+    vi.mocked(spawnShellPty).mockResolvedValue(2)
+
+    render(TaskTerminal, { props: { taskId: 'T-1', worktreePath: '/path/to/worktree', terminalKey: 'T-1-shell-0', terminalIndex: 0, isActive: true } })
+
+    await vi.waitFor(() => {
+      expect(listenCallback).not.toBeNull()
+      expect(spawnShellPty).toHaveBeenCalled()
+    })
+
+    listenCallback!({ payload: { instance_id: 1 } })
+
+    await new Promise(resolve => setTimeout(resolve, 0))
+
+    expect(screen.queryByText('Shell exited')).toBeNull()
+  })
+
   it('shows restart button when shell has exited', async () => {
-    render(TaskTerminal, { props: { taskId: 'T-1', worktreePath: '/path/to/worktree', terminalKey: 'T-1-shell-0', terminalIndex: 0 } })
+    render(TaskTerminal, { props: { taskId: 'T-1', worktreePath: '/path/to/worktree', terminalKey: 'T-1-shell-0', terminalIndex: 0, isActive: true } })
 
     await vi.waitFor(() => {
       expect(listenCallback).not.toBeNull()
@@ -176,7 +273,7 @@ describe('TaskTerminal', () => {
     const originalTheme = { background: '#POOLBG', foreground: '#POOLFG' }
     mockPoolEntry.terminal.options.theme = { ...originalTheme }
 
-    render(TaskTerminal, { props: { taskId: 'T-1', worktreePath: '/path/to/worktree', terminalKey: 'T-1-shell-0', terminalIndex: 0 } })
+    render(TaskTerminal, { props: { taskId: 'T-1', worktreePath: '/path/to/worktree', terminalKey: 'T-1-shell-0', terminalIndex: 0, isActive: true } })
     await vi.waitFor(() => {
       expect(attach).toHaveBeenCalled()
     })
@@ -190,17 +287,28 @@ describe('TaskTerminal', () => {
   it('listens for pty-exit event with terminalKey', async () => {
     const { listen } = await import('@tauri-apps/api/event')
 
-    render(TaskTerminal, { props: { taskId: 'T-1', worktreePath: '/path/to/worktree', terminalKey: 'T-1-shell-2', terminalIndex: 2 } })
+    render(TaskTerminal, { props: { taskId: 'T-1', worktreePath: '/path/to/worktree', terminalKey: 'T-1-shell-2', terminalIndex: 2, isActive: true } })
 
     await vi.waitFor(() => {
       expect(listen).toHaveBeenCalledWith('pty-exit-T-1-shell-2', expect.any(Function))
     })
   })
 
+  it('shows shell exited overlay immediately when pool says shell already exited', async () => {
+    mockPoolEntry.ptyActive = false
+    mockPoolEntry.needsClear = true
+
+    render(TaskTerminal, { props: { taskId: 'T-1', worktreePath: '/path/to/worktree', terminalKey: 'T-1-shell-2', terminalIndex: 2, isActive: true } })
+
+    await vi.waitFor(() => {
+      expect(screen.getByText('Shell exited')).toBeTruthy()
+    })
+  })
+
   it('restart button calls killPty with terminalKey and spawnShellPty with terminalIndex', async () => {
     const { killPty, spawnShellPty } = await import('../lib/ipc')
 
-    render(TaskTerminal, { props: { taskId: 'T-1', worktreePath: '/path/to/worktree', terminalKey: 'T-1-shell-2', terminalIndex: 2 } })
+    render(TaskTerminal, { props: { taskId: 'T-1', worktreePath: '/path/to/worktree', terminalKey: 'T-1-shell-2', terminalIndex: 2, isActive: true } })
 
     // Wait for mount to complete and listener to be set up
     await vi.waitFor(() => {
@@ -229,5 +337,48 @@ describe('TaskTerminal', () => {
       expect(spawnShellPty).toHaveBeenCalledTimes(2)
       expect(spawnShellPty).toHaveBeenLastCalledWith('T-1', '/path/to/worktree', 80, 24, 2)
     })
+  })
+
+  it('restart marks pool entry active immediately', async () => {
+    render(TaskTerminal, { props: { taskId: 'T-1', worktreePath: '/path/to/worktree', terminalKey: 'T-1-shell-2', terminalIndex: 2, isActive: true } })
+
+    await vi.waitFor(() => {
+      expect(listenCallback).not.toBeNull()
+    })
+
+    listenCallback!({ payload: {} })
+
+    await vi.waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Restart' })).toBeTruthy()
+    })
+
+    mockPoolEntry.ptyActive = false
+    const restartButton = screen.getByRole('button', { name: 'Restart' })
+    await fireEvent.click(restartButton)
+
+    expect(mockPoolEntry.ptyActive).toBe(true)
+  })
+
+  it('does not spawn the same shell twice while the initial spawn is still in flight', async () => {
+    const { spawnShellPty } = await import('../lib/ipc')
+
+    let resolveSpawn!: () => void
+    vi.mocked(spawnShellPty).mockImplementation(() => new Promise<number>((resolve) => {
+      resolveSpawn = () => resolve(1)
+    }))
+
+    const first = render(TaskTerminal, { props: { taskId: 'T-1', worktreePath: '/path/to/worktree', terminalKey: 'T-1-shell-2', terminalIndex: 2, isActive: true } })
+
+    await vi.waitFor(() => {
+      expect(spawnShellPty).toHaveBeenCalledTimes(1)
+    })
+
+    first.unmount()
+
+    render(TaskTerminal, { props: { taskId: 'T-1', worktreePath: '/path/to/worktree', terminalKey: 'T-1-shell-2', terminalIndex: 2, isActive: true } })
+
+    expect(spawnShellPty).toHaveBeenCalledTimes(1)
+
+    resolveSpawn()
   })
 })

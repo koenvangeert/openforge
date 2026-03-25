@@ -21,10 +21,39 @@ export interface PoolEntry {
   visibilityObserver: IntersectionObserver | null
   resizeTimeout: ReturnType<typeof setTimeout> | null
   attached: boolean
+  spawnPending: boolean
+  currentPtyInstance: number | null
+}
+
+export interface TerminalTab {
+  index: number
+  key: string
+  label: string
+}
+
+export interface TaskTerminalTabsSession {
+  tabs: TerminalTab[]
+  activeTabIndex: number
+  nextIndex: number
+}
+
+export interface ShellLifecycleState {
+  ptyActive: boolean
+  shellExited: boolean
+  currentPtyInstance: number | null
 }
 
 const pool = new Map<string, PoolEntry>()
+const taskTabSessions = new Map<string, TaskTerminalTabsSession>()
 const openedTerminals = new WeakSet<Terminal>()
+
+function createDefaultTaskTabsSession(taskId: string): TaskTerminalTabsSession {
+  return {
+    tabs: [{ index: 0, key: `${taskId}-shell-0`, label: 'Shell 1' }],
+    activeTabIndex: 0,
+    nextIndex: 1,
+  }
+}
 
 function createHostDiv(): HTMLDivElement {
   const div = document.createElement('div')
@@ -116,6 +145,8 @@ export async function acquire(taskId: string): Promise<PoolEntry> {
     visibilityObserver: null,
     resizeTimeout: null,
     attached: false,
+    spawnPending: false,
+    currentPtyInstance: null,
   }
 
   // Replay buffered output from backend
@@ -131,6 +162,10 @@ export async function acquire(taskId: string): Promise<PoolEntry> {
 
   // Persistent PTY output listener (survives component unmount)
   entry.unlisteners.push(await listen<PtyEvent>(`pty-output-${taskId}`, (event) => {
+    const instanceId = event.payload.instance_id
+    if (instanceId != null && entry.currentPtyInstance != null && instanceId !== entry.currentPtyInstance) {
+      return
+    }
     if (event.payload.data) {
       if (entry.needsClear) {
         entry.terminal.reset()
@@ -142,7 +177,11 @@ export async function acquire(taskId: string): Promise<PoolEntry> {
   }))
 
   // Persistent PTY exit listener
-  entry.unlisteners.push(await listen<PtyEvent>(`pty-exit-${taskId}`, () => {
+  entry.unlisteners.push(await listen<PtyEvent>(`pty-exit-${taskId}`, (event) => {
+    const instanceId = event.payload.instance_id
+    if (instanceId != null && entry.currentPtyInstance != null && instanceId !== entry.currentPtyInstance) {
+      return
+    }
     entry.ptyActive = false
     entry.needsClear = true
   }))
@@ -248,10 +287,68 @@ export function release(taskId: string): void {
   pool.delete(taskId)
 }
 
+export function shouldSpawnPty(entry: PoolEntry): boolean {
+  return !entry.ptyActive && !entry.spawnPending && !entry.needsClear
+}
+
+export function markPtySpawnPending(entry: PoolEntry): void {
+  entry.spawnPending = true
+}
+
+export function clearPtySpawnPending(entry: PoolEntry): void {
+  entry.spawnPending = false
+}
+
+export function setCurrentPtyInstance(entry: PoolEntry, instanceId: number | null): void {
+  entry.currentPtyInstance = instanceId
+}
+
+export function isShellExited(taskId: string): boolean {
+  const entry = pool.get(taskId)
+  if (!entry) return false
+  return !entry.ptyActive && entry.needsClear
+}
+
+export function getShellLifecycleState(taskId: string): ShellLifecycleState {
+  const entry = pool.get(taskId)
+  return {
+    ptyActive: entry?.ptyActive ?? false,
+    shellExited: entry ? !entry.ptyActive && entry.needsClear : false,
+    currentPtyInstance: entry?.currentPtyInstance ?? null,
+  }
+}
+
+export function updateShellLifecycleState(taskId: string, state: ShellLifecycleState): void {
+  const entry = pool.get(taskId)
+  if (!entry) return
+
+  entry.ptyActive = state.ptyActive
+  entry.needsClear = state.shellExited
+  entry.currentPtyInstance = state.currentPtyInstance
+}
+
+export function getTaskTerminalTabsSession(taskId: string): TaskTerminalTabsSession {
+  const existing = taskTabSessions.get(taskId)
+  if (existing) return existing
+
+  const session = createDefaultTaskTabsSession(taskId)
+  taskTabSessions.set(taskId, session)
+  return session
+}
+
+export function updateTaskTerminalTabsSession(taskId: string, session: TaskTerminalTabsSession): void {
+  taskTabSessions.set(taskId, session)
+}
+
+export function clearTaskTerminalTabsSession(taskId: string): void {
+  taskTabSessions.delete(taskId)
+}
+
 export function releaseAll(): void {
   for (const taskId of [...pool.keys()]) {
     release(taskId)
   }
+  taskTabSessions.clear()
 }
 
 export function releaseAllForTask(taskId: string): number {
