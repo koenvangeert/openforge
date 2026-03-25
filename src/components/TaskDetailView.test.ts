@@ -1130,6 +1130,27 @@ describe('TaskDetailView', () => {
         vi.mocked(getWorktreeForTask).mockResolvedValue(null)
       })
 
+      it('does NOT call releaseAllForTask when task prop changes with same ID', async () => {
+        const { getWorktreeForTask } = await import('../lib/ipc')
+        const { releaseAllForTask } = await import('../lib/terminalPool')
+        
+        vi.mocked(getWorktreeForTask).mockResolvedValue({ worktree_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' } as any)
+        vi.mocked(releaseAllForTask).mockClear()
+        
+        const { rerender } = render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+        
+        await waitFor(() => expect(screen.getByText('code_view')).toBeTruthy())
+        
+        const refreshedTask = { ...baseTask, summary: 'updated summary' }
+        rerender({ task: refreshedTask, onRunAction: mockOnRunAction })
+        
+        await new Promise(r => setTimeout(r, 50))
+        
+        expect(releaseAllForTask).not.toHaveBeenCalled()
+        
+        vi.mocked(getWorktreeForTask).mockResolvedValue(null)
+      })
+
       it('cleanup only releases shell entries, not agent terminal', async () => {
         const { getWorktreeForTask } = await import('../lib/ipc')
         const { releaseAllForTask } = await import('../lib/terminalPool')
