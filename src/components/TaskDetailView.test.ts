@@ -665,6 +665,27 @@ describe('TaskDetailView', () => {
     expect(resetToBoard).toHaveBeenCalled()
   })
 
+  it('navigates to board immediately before IPC call when moved to done', async () => {
+    const { updateTaskStatus } = await import('../lib/ipc')
+    const { resetToBoard } = await import('../lib/navigation')
+
+    const callOrder: string[] = []
+    vi.mocked(resetToBoard).mockImplementation(() => { callOrder.push('resetToBoard') })
+    vi.mocked(updateTaskStatus).mockImplementation(async () => { callOrder.push('updateTaskStatus') })
+
+    const doingTask: Task = { ...baseTask, status: 'doing' }
+    render(TaskDetailView, { props: { task: doingTask, onRunAction: mockOnRunAction } })
+    await fireEvent.click(screen.getByText('Move to Done'))
+
+    await vi.waitFor(() => {
+      expect(callOrder).toEqual(['resetToBoard', 'updateTaskStatus'])
+    })
+
+    vi.mocked(resetToBoard).mockReset()
+    vi.mocked(updateTaskStatus).mockReset()
+    vi.mocked(updateTaskStatus).mockResolvedValue(undefined)
+  })
+
   it('shows action buttons in dropdown when actions exist', async () => {
     const { loadActions } = await import('../lib/actions')
     vi.mocked(loadActions).mockResolvedValue([

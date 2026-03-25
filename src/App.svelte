@@ -392,8 +392,8 @@
         break
       case 'move-to-done':
         if (task) {
-          await updateTaskStatus(task.id, 'done')
           resetToBoard()
+          await updateTaskStatus(task.id, 'done')
           await loadTasks()
         }
         break

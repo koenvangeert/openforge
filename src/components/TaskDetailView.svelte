@@ -97,11 +97,12 @@
 
   async function handleStatusChange(newStatus: string) {
     if (newStatus === task.status) return
+    const taskId = task.id
+    if (newStatus === 'done') {
+      resetToBoard()
+    }
     try {
-      await updateTaskStatus(task.id, newStatus)
-      if (newStatus === 'done') {
-        resetToBoard()
-      }
+      await updateTaskStatus(taskId, newStatus)
     } catch (e) {
       console.error('Failed to update status:', e)
     }

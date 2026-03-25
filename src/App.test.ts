@@ -588,6 +588,73 @@ describe('App onMount initialization order', () => {
       expect(nav.resetToBoard).toHaveBeenCalled()
     })
 
+    it('action palette move-to-done navigates before IPC call', async () => {
+      const App = (await import('./App.svelte')).default
+      const stores = await import('./lib/stores')
+      const nav = await import('./lib/navigation')
+      const { getTasksForProject, updateTaskStatus } = await import('./lib/ipc')
+      const actionPaletteModule = await import('./components/ActionPalette.svelte')
+
+      vi.mocked(getTasksForProject).mockResolvedValue([
+        {
+          id: 'task-200',
+          initial_prompt: 'Order test',
+          prompt: null,
+          summary: null,
+          status: 'doing',
+          jira_key: null,
+          jira_title: null,
+          jira_status: null,
+          jira_assignee: null,
+          jira_description: null,
+          agent: null,
+          permission_mode: null,
+          project_id: 'proj-1',
+          created_at: 1000,
+          updated_at: 1000,
+        },
+      ])
+
+      render(App)
+
+      await vi.waitFor(() => {
+        expect(getTasksForProject).toHaveBeenCalled()
+      })
+
+      stores.selectedTaskId.set('task-200')
+
+      await fireEvent.keyDown(window, { key: 'k', metaKey: true, bubbles: true })
+
+      await vi.waitFor(() => {
+        expect(actionPaletteModule.default).toHaveBeenCalled()
+      })
+
+      const lastCall = vi.mocked(actionPaletteModule.default).mock.calls.at(-1)
+      if (!lastCall) throw new Error('Expected ActionPalette to receive props')
+
+      const propsCandidate = lastCall
+        .flatMap((arg) => {
+          if (typeof arg !== 'object' || arg === null) return []
+          if ('props' in arg && typeof arg.props === 'object' && arg.props !== null) return [arg, arg.props]
+          return [arg]
+        })
+        .find((arg): arg is { onExecute: (actionId: string) => Promise<void> } => 'onExecute' in arg && typeof arg.onExecute === 'function')
+
+      if (!propsCandidate) throw new Error('Expected ActionPalette props to include onExecute')
+
+      const callOrder: string[] = []
+      vi.mocked(nav.resetToBoard).mockImplementation(() => { callOrder.push('resetToBoard') })
+      vi.mocked(updateTaskStatus).mockImplementation(async () => { callOrder.push('updateTaskStatus') })
+
+      await propsCandidate.onExecute('move-to-done')
+
+      expect(callOrder).toEqual(['resetToBoard', 'updateTaskStatus'])
+
+      vi.mocked(nav.resetToBoard).mockReset()
+      vi.mocked(updateTaskStatus).mockReset()
+      vi.mocked(updateTaskStatus).mockResolvedValue(undefined)
+    })
+
     it('CMD+SHIFT+F opens search tasks', async () => {
       const App = (await import('./App.svelte')).default
       const commandPaletteModule = await import('./components/CommandPalette.svelte')
