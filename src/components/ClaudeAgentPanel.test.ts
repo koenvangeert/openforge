@@ -54,7 +54,7 @@ vi.mock('../lib/audioRecorder', () => ({
 }))
 
 // Mock terminalPool to avoid xterm constructor issues in test environment
-const { mockPoolEntry } = vi.hoisted(() => ({
+const { mockPoolEntry, mockShellLifecycleState } = vi.hoisted(() => ({
   mockPoolEntry: {
     taskId: '',
     terminal: { write: vi.fn(), dispose: vi.fn(), reset: vi.fn(), cols: 80, rows: 24 },
@@ -68,6 +68,9 @@ const { mockPoolEntry } = vi.hoisted(() => ({
     resizeTimeout: null,
     attached: false,
   },
+  mockShellLifecycleState: {
+    ptyActive: false,
+  },
 }))
 
 vi.mock('../lib/terminalPool', () => ({
@@ -75,6 +78,7 @@ vi.mock('../lib/terminalPool', () => ({
   attach: vi.fn(),
   detach: vi.fn(),
   release: vi.fn(),
+  isPtyActive: vi.fn().mockImplementation(() => mockShellLifecycleState.ptyActive),
 }))
 
 import ClaudeAgentPanel from './ClaudeAgentPanel.svelte'
@@ -99,6 +103,7 @@ describe('ClaudeAgentPanel', () => {
     activeSessions.set(new Map())
     mockPoolEntry.ptyActive = false
     mockPoolEntry.attached = false
+    mockShellLifecycleState.ptyActive = false
   })
 
   it('renders the terminal container element', async () => {
@@ -261,6 +266,17 @@ describe('ClaudeAgentPanel', () => {
 
     render(ClaudeAgentPanel, { props: { taskId: 'T-1', isStarting: true } })
     expect(screen.queryByText('Starting agent session...')).toBeNull()
+  })
+
+  it('hides the empty-state overlay when terminal pool reports an active PTY', async () => {
+    mockPoolEntry.ptyActive = false
+    mockShellLifecycleState.ptyActive = true
+
+    render(ClaudeAgentPanel, { props: { taskId: 'T-1' } })
+
+    await vi.waitFor(() => {
+      expect(screen.queryByText('No active agent session')).toBeNull()
+    })
   })
 
   it('test_abort_button_visible_only_when_running', async () => {
