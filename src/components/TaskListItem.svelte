@@ -29,6 +29,7 @@
     switch (s) {
       case 'active': return 'badge-success'
       case 'needs-input': return 'badge-warning'
+      case 'unaddressed-comments': return 'badge-warning'
       case 'ci-failed':
       case 'sad':
       case 'changes-requested': return 'badge-error'
@@ -44,6 +45,7 @@
     switch (s) {
       case 'active': return 'Active'
       case 'needs-input': return 'Needs Input'
+      case 'unaddressed-comments': return 'Unaddressed Comments'
       case 'ci-failed': return 'CI Failed'
       case 'sad': return 'Failed'
       case 'changes-requested': return 'Changes Req.'

@@ -194,6 +194,9 @@
 .ci-failed {
   border: 2px solid var(--color-error);
 }
+.unaddressed-comments {
+  border: 2px solid var(--color-warning);
+}
 .ci-running {
   border-left: 3px solid var(--color-info);
 }
