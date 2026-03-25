@@ -81,13 +81,13 @@ function createPr(overrides: Partial<PullRequestInfo> = {}): PullRequestInfo {
 
 describe('computeTaskState - getPrState behavior (PART 1)', () => {
   describe('PR state detection', () => {
-    it('test 1: no PRs with completed session → celebrating', () => {
+    it('test 1: no PRs with completed session → agent-done', () => {
       const task = createTask({ status: 'doing' })
       const session = createSession({ status: 'completed' })
       const prs: PullRequestInfo[] = []
 
       const state = computeTaskState(task, session, prs)
-      expect(state).toBe('celebrating')
+      expect(state).toBe('agent-done')
     })
 
     it('test 2: merged PR → pr-merged', () => {
@@ -166,13 +166,13 @@ describe('computeTaskState - getPrState behavior (PART 1)', () => {
       expect(state).toBe('ci-failed')
     })
 
-    it('test 9: closed PR (not merged) → falls to celebrating', () => {
+    it('test 9: closed PR (not merged) → falls to agent-done', () => {
       const task = createTask({ status: 'doing' })
       const session = createSession({ status: 'completed' })
       const prs = [createPr({ state: 'closed' })]
 
       const state = computeTaskState(task, session, prs)
-      expect(state).toBe('celebrating')
+      expect(state).toBe('agent-done')
     })
 
     it('test 10: prefers open PR over merged PR when both exist', () => {
@@ -361,20 +361,20 @@ describe('taskStateToBorderClass', () => {
     expect(taskStateToBorderClass('needs-input')).toBe('needs-input')
   })
 
-  it('maps resting to paused', () => {
-    expect(taskStateToBorderClass('resting')).toBe('paused')
+  it('maps paused to paused', () => {
+    expect(taskStateToBorderClass('paused')).toBe('paused')
   })
 
-  it('maps celebrating to completed', () => {
-    expect(taskStateToBorderClass('celebrating')).toBe('completed')
+  it('maps agent-done to completed', () => {
+    expect(taskStateToBorderClass('agent-done')).toBe('completed')
   })
 
-  it('maps sad to failed', () => {
-    expect(taskStateToBorderClass('sad')).toBe('failed')
+  it('maps failed to failed', () => {
+    expect(taskStateToBorderClass('failed')).toBe('failed')
   })
 
-  it('maps frozen to interrupted', () => {
-    expect(taskStateToBorderClass('frozen')).toBe('interrupted')
+  it('maps interrupted to interrupted', () => {
+    expect(taskStateToBorderClass('interrupted')).toBe('interrupted')
   })
 
   it('maps ci-failed to ci-failed', () => {

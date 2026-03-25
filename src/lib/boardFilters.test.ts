@@ -92,17 +92,17 @@ describe('isFocusTask', () => {
     expect(result).toBe(true)
   })
 
-  it('returns true for sad state', () => {
+  it('returns true for failed state', () => {
     const task = makeTask({ id: 'T-1' })
-    const result = isFocusTask(task, 'sad', [])
+    const result = isFocusTask(task, 'failed', [])
     expect(result).toBe(true)
   })
 
-  it('returns false for idle state with no unaddressed comments', () => {
+  it('returns true for idle state (included in defaults)', () => {
     const task = makeTask({ id: 'T-1' })
     const pr = makePr({ id: 1, ticket_id: 'T-1', unaddressed_comment_count: 0 })
     const result = isFocusTask(task, 'idle', [pr])
-    expect(result).toBe(false)
+    expect(result).toBe(true)
   })
 
   it('returns true when PR has unaddressed comments', () => {
@@ -297,8 +297,8 @@ describe('getFilterCounts', () => {
 
     const counts = getFilterCounts(tasks, sessions, prs)
     expect(counts).toEqual({
-      focus: 0,
-      'in-progress': 1,
+      focus: 1,
+      'in-progress': 0,
       backlog: 1,
     })
   })

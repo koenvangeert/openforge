@@ -90,31 +90,31 @@ describe('getTaskReasonText', () => {
       expect(reason).toBe('Agent needs your input to continue.')
     })
 
-    it('returns "Agent paused." for resting state', () => {
+    it('returns "Agent paused." for paused state', () => {
       const task = makeTask({ id: 'T-1' })
       const session = makeSession({ id: 's-1', status: 'paused', checkpoint_data: null })
-      const reason = getTaskReasonText(task, 'resting', session, [])
+      const reason = getTaskReasonText(task, 'paused', session, [])
       expect(reason).toBe('Agent paused.')
     })
 
-    it('returns "Agent completed — review the changes." for celebrating state', () => {
+    it('returns "Agent completed — review the changes." for agent-done state', () => {
       const task = makeTask({ id: 'T-1' })
       const session = makeSession({ id: 's-1', status: 'completed' })
-      const reason = getTaskReasonText(task, 'celebrating', session, [])
+      const reason = getTaskReasonText(task, 'agent-done', session, [])
       expect(reason).toBe('Agent completed — review the changes.')
     })
 
-    it('returns "Agent failed — check the error log." for sad state', () => {
+    it('returns "Agent failed — check the error log." for failed state', () => {
       const task = makeTask({ id: 'T-1' })
       const session = makeSession({ id: 's-1', status: 'failed' })
-      const reason = getTaskReasonText(task, 'sad', session, [])
+      const reason = getTaskReasonText(task, 'failed', session, [])
       expect(reason).toBe('Agent failed — check the error log.')
     })
 
-    it('returns "Agent was interrupted." for frozen state', () => {
+    it('returns "Agent was interrupted." for interrupted state', () => {
       const task = makeTask({ id: 'T-1' })
       const session = makeSession({ id: 's-1', status: 'interrupted' })
-      const reason = getTaskReasonText(task, 'frozen', session, [])
+      const reason = getTaskReasonText(task, 'interrupted', session, [])
       expect(reason).toBe('Agent was interrupted.')
     })
 

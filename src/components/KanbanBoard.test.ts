@@ -18,10 +18,10 @@ vi.mock('../lib/ipc', () => ({
 
 vi.mock('../lib/boardColumns', () => ({
   loadBoardColumns: vi.fn(() => Promise.resolve([
-    { id: 'col-doing', name: 'Doing', statuses: ['idle', 'active', 'needs-input', 'resting', 'celebrating', 'sad', 'frozen', 'pr-draft', 'pr-open', 'ci-failed', 'changes-requested', 'ready-to-merge', 'pr-merged'], underlyingStatus: 'doing' },
+    { id: 'col-doing', name: 'Doing', statuses: ['idle', 'active', 'needs-input', 'paused', 'agent-done', 'failed', 'interrupted', 'pr-draft', 'pr-open', 'ci-failed', 'changes-requested', 'ready-to-merge', 'pr-merged'], underlyingStatus: 'doing' },
   ])),
   DEFAULT_BOARD_COLUMNS: [
-    { id: 'col-doing', name: 'Doing', statuses: ['idle', 'active', 'needs-input', 'resting', 'celebrating', 'sad', 'frozen', 'pr-draft', 'pr-open', 'ci-failed', 'changes-requested', 'ready-to-merge', 'pr-merged'], underlyingStatus: 'doing' },
+    { id: 'col-doing', name: 'Doing', statuses: ['idle', 'active', 'needs-input', 'paused', 'agent-done', 'failed', 'interrupted', 'pr-draft', 'pr-open', 'ci-failed', 'changes-requested', 'ready-to-merge', 'pr-merged'], underlyingStatus: 'doing' },
   ],
   BACKLOG_COLUMN: { id: 'col-backlog', name: 'Backlog', statuses: ['egg'], underlyingStatus: 'backlog' },
   DONE_COLUMN: { id: 'col-done', name: 'Done', statuses: ['done'], underlyingStatus: 'done' },
@@ -184,7 +184,7 @@ describe('KanbanBoard', () => {
     const { loadBoardColumns } = await import('../lib/boardColumns')
     vi.mocked(loadBoardColumns).mockResolvedValueOnce([
       { id: 'col-2', name: 'In Progress', statuses: ['active'], underlyingStatus: 'doing' },
-      { id: 'col-3', name: 'Blocked', statuses: ['needs-input', 'sad', 'frozen'], underlyingStatus: 'doing' },
+      { id: 'col-3', name: 'Blocked', statuses: ['needs-input', 'failed', 'interrupted'], underlyingStatus: 'doing' },
       { id: 'col-4', name: 'Review', statuses: ['pr-draft', 'pr-open', 'ci-failed', 'changes-requested', 'ready-to-merge', 'pr-merged'], underlyingStatus: 'doing' },
     ])
 

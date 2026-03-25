@@ -33,10 +33,10 @@ vi.mock('../lib/boardColumns', () => ({
   loadBoardColumns: vi.fn(() => Promise.resolve([])),
   saveBoardColumns: vi.fn(() => Promise.resolve(undefined)),
   validateBoardColumns: vi.fn(() => ({ valid: true, errors: [] })),
-  ALL_TASK_STATES: ['idle', 'active', 'needs-input', 'resting', 'celebrating', 'sad', 'frozen', 'pr-draft', 'pr-open', 'ci-running', 'review-pending', 'ci-failed', 'changes-requested', 'unaddressed-comments', 'ready-to-merge', 'pr-queued', 'pr-merged'],
+  ALL_TASK_STATES: ['idle', 'active', 'needs-input', 'paused', 'agent-done', 'failed', 'interrupted', 'pr-draft', 'pr-open', 'ci-running', 'review-pending', 'ci-failed', 'changes-requested', 'unaddressed-comments', 'ready-to-merge', 'pr-queued', 'pr-merged'],
   TASK_STATE_LABELS: {
-    idle: 'Idle', active: 'Running', 'needs-input': 'Needs Input', resting: 'Paused',
-    celebrating: 'Agent Done', sad: 'Failed', frozen: 'Interrupted', 'pr-draft': 'PR Draft',
+    idle: 'Idle', active: 'Running', 'needs-input': 'Needs Input', 'paused': 'Paused',
+    'agent-done': 'Agent Done', 'failed': 'Failed', 'interrupted': 'Interrupted', 'pr-draft': 'PR Draft',
     'pr-open': 'PR Open', 'ci-running': 'CI Running', 'review-pending': 'Awaiting Review',
     'ci-failed': 'CI Failed', 'changes-requested': 'Changes Requested', 'unaddressed-comments': 'Unaddressed Comments',
     'ready-to-merge': 'Ready to Merge', 'pr-queued': 'In Merge Queue', 'pr-merged': 'PR Merged',
@@ -45,9 +45,9 @@ vi.mock('../lib/boardColumns', () => ({
 }))
 
 vi.mock('../lib/boardFilters', () => ({
-  loadFocusFilterStates: vi.fn(() => Promise.resolve(['needs-input', 'ci-failed', 'changes-requested', 'unaddressed-comments', 'sad'])),
+  loadFocusFilterStates: vi.fn(() => Promise.resolve(['idle', 'needs-input', 'paused', 'agent-done', 'failed', 'interrupted', 'pr-draft', 'pr-open', 'ci-failed', 'changes-requested', 'unaddressed-comments', 'ready-to-merge', 'pr-merged'])),
   saveFocusFilterStates: vi.fn(() => Promise.resolve(undefined)),
-  DEFAULT_FOCUS_STATES: ['needs-input', 'ci-failed', 'changes-requested', 'unaddressed-comments', 'sad'],
+  DEFAULT_FOCUS_STATES: ['idle', 'needs-input', 'paused', 'agent-done', 'failed', 'interrupted', 'pr-draft', 'pr-open', 'ci-failed', 'changes-requested', 'unaddressed-comments', 'ready-to-merge', 'pr-merged'],
 }))
 
 vi.mock('../lib/stores', () => ({

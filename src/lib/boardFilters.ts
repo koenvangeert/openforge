@@ -6,7 +6,11 @@ import { getProjectConfig, setProjectConfig } from './ipc'
 
 export type BoardFilter = 'focus' | 'in-progress' | 'backlog'
 
-export const DEFAULT_FOCUS_STATES: TaskState[] = ['needs-input', 'ci-failed', 'changes-requested', 'unaddressed-comments', 'sad']
+export const DEFAULT_FOCUS_STATES: TaskState[] = [
+  'idle', 'needs-input', 'paused', 'agent-done', 'failed', 'interrupted',
+  'pr-draft', 'pr-open', 'ci-failed', 'changes-requested', 'unaddressed-comments',
+  'ready-to-merge', 'pr-merged',
+]
 
 const FOCUS_FILTER_CONFIG_KEY = 'focus_filter_states'
 

@@ -2,19 +2,19 @@ import { render, screen, fireEvent } from '@testing-library/svelte'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 vi.mock('../lib/boardColumns', () => ({
-	ALL_TASK_STATES: ['idle', 'active', 'needs-input', 'ci-failed', 'changes-requested', 'sad'],
+	ALL_TASK_STATES: ['idle', 'active', 'needs-input', 'ci-failed', 'changes-requested', 'failed'],
 	TASK_STATE_LABELS: {
 		idle: 'Idle',
 		active: 'Running',
 		'needs-input': 'Needs Input',
 		'ci-failed': 'CI Failed',
 		'changes-requested': 'Changes Requested',
-		sad: 'Failed',
+		failed: 'Failed',
 	},
 }))
 
 vi.mock('../lib/boardFilters', () => ({
-	DEFAULT_FOCUS_STATES: ['needs-input', 'ci-failed', 'changes-requested', 'sad'],
+	DEFAULT_FOCUS_STATES: ['idle', 'needs-input', 'paused', 'agent-done', 'failed', 'interrupted', 'pr-draft', 'pr-open', 'ci-failed', 'changes-requested', 'unaddressed-comments', 'ready-to-merge', 'pr-merged'],
 }))
 
 import SettingsFocusFilterCard from './SettingsFocusFilterCard.svelte'

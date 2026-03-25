@@ -2,7 +2,7 @@ import type { Task, AgentSession, PullRequestInfo } from './types'
 import { isReadyToMerge } from './types'
 
 export type TaskState =
-  | 'egg' | 'idle' | 'active' | 'needs-input' | 'resting' | 'celebrating' | 'sad' | 'frozen' | 'done'
+  | 'egg' | 'idle' | 'active' | 'needs-input' | 'paused' | 'agent-done' | 'failed' | 'interrupted' | 'done'
   | 'pr-draft' | 'pr-open' | 'ci-failed' | 'changes-requested' | 'ready-to-merge' | 'pr-queued' | 'pr-merged' | 'ci-running' | 'review-pending' | 'unaddressed-comments'
 
 function getPrState(prs: PullRequestInfo[]): TaskState | null {
@@ -32,10 +32,10 @@ function getPrState(prs: PullRequestInfo[]): TaskState | null {
 const BORDER_CLASS: Record<string, string> = {
   'active': 'running',
   'needs-input': 'needs-input',
-  'resting': 'paused',
-  'celebrating': 'completed',
-  'sad': 'failed',
-  'frozen': 'interrupted',
+  'paused': 'paused',
+  'agent-done': 'completed',
+  'failed': 'failed',
+  'interrupted': 'interrupted',
   'ci-failed': 'ci-failed',
   'ci-running': 'ci-running',
   'review-pending': 'review-pending',
@@ -66,11 +66,11 @@ export function computeTaskState(task: Task, session: AgentSession | null, prs: 
         case 'running':
           return 'active'
         case 'paused':
-          return session.checkpoint_data !== null ? 'needs-input' : 'resting'
+          return session.checkpoint_data !== null ? 'needs-input' : 'paused'
         case 'failed':
-          return 'sad'
+          return 'failed'
         case 'interrupted':
-          return 'frozen'
+          return 'interrupted'
         case 'completed':
           // Fall through to PR checks below
           break
@@ -85,7 +85,7 @@ export function computeTaskState(task: Task, session: AgentSession | null, prs: 
     if (prState) return prState
 
     // Session completed with no PR context
-    if (session?.status === 'completed') return 'celebrating'
+    if (session?.status === 'completed') return 'agent-done'
 
     // No session, no PR
     return 'idle'

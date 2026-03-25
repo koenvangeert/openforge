@@ -17,7 +17,7 @@ vi.mock('../lib/boardFilters', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../lib/boardFilters')>()
   return {
     ...actual,
-    loadFocusFilterStates: vi.fn().mockResolvedValue(['needs-input', 'ci-failed', 'changes-requested', 'unaddressed-comments', 'sad']),
+    loadFocusFilterStates: vi.fn().mockResolvedValue(['idle', 'needs-input', 'paused', 'agent-done', 'failed', 'interrupted', 'pr-draft', 'pr-open', 'ci-failed', 'changes-requested', 'unaddressed-comments', 'ready-to-merge', 'pr-merged']),
   }
 })
 
@@ -91,6 +91,7 @@ function renderBoard(overrides?: {
   const tasks = overrides?.tasks ?? [taskFocus, taskDoing, taskDone, taskBacklog]
   const sessions = overrides?.sessions ?? new Map([
     [taskFocus.id, makeSession(taskFocus.id, 'paused', 'needs-review')],
+    [taskDoing.id, makeSession(taskDoing.id, 'running', null)],
   ])
   const prs = overrides?.prs ?? new Map<string, PullRequestInfo[]>()
 
@@ -251,7 +252,7 @@ describe('FocusBoard', () => {
   it('shows empty state when no tasks match active filter', async () => {
     renderBoard({
       tasks: [taskDoing, taskDone],
-      sessions: new Map(),
+      sessions: new Map([[taskDoing.id, makeSession(taskDoing.id, 'running', null)]]),
       prs: new Map(),
     })
 
