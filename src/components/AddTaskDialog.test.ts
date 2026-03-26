@@ -59,7 +59,7 @@ const mockTask: Task = {
 describe('AddTaskDialog', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(getProjectConfig).mockImplementation(async (projectId, key) => {
+    vi.mocked(getProjectConfig).mockImplementation(async (_projectId, key) => {
       if (key === 'jira_board_id') return 'board-123'
       return 'claude-code'
     })
@@ -72,7 +72,7 @@ describe('AddTaskDialog', () => {
   
   describe('Jira Key Visibility', () => {
     it('shows Jira field when jira_board_id is configured in create mode', async () => {
-      vi.mocked(getProjectConfig).mockImplementation(async (projectId, key) => {
+      vi.mocked(getProjectConfig).mockImplementation(async (_projectId, key) => {
         if (key === 'jira_board_id') return 'board-123'
         if (key === 'ai_provider') return 'claude-code'
         return null
@@ -84,7 +84,7 @@ describe('AddTaskDialog', () => {
     })
 
     it('hides Jira field when jira_board_id is not configured in create mode', async () => {
-      vi.mocked(getProjectConfig).mockImplementation(async (projectId, key) => {
+      vi.mocked(getProjectConfig).mockImplementation(async (_projectId, key) => {
         if (key === 'jira_board_id') return null
         if (key === 'ai_provider') return 'claude-code'
         return null
@@ -95,7 +95,7 @@ describe('AddTaskDialog', () => {
     })
 
     it('shows Jira field in edit mode if task has a jira_key, even if not configured', async () => {
-      vi.mocked(getProjectConfig).mockImplementation(async (projectId, key) => {
+      vi.mocked(getProjectConfig).mockImplementation(async (_projectId, key) => {
         if (key === 'jira_board_id') return null
         if (key === 'ai_provider') return 'claude-code'
         return null
@@ -182,7 +182,7 @@ describe('AddTaskDialog', () => {
   })
 
   it('shows permission mode dropdown when ai_provider is claude-code', async () => {
-    vi.mocked(getProjectConfig).mockImplementation(async (projectId, key) => {
+    vi.mocked(getProjectConfig).mockImplementation(async (_projectId, key) => {
       if (key === 'jira_board_id') return 'board-123'
       return 'claude-code'
     })
@@ -194,7 +194,7 @@ describe('AddTaskDialog', () => {
   })
 
   it('hides agent dropdown when ai_provider is claude-code even with agents', async () => {
-    vi.mocked(getProjectConfig).mockImplementation(async (projectId, key) => {
+    vi.mocked(getProjectConfig).mockImplementation(async (_projectId, key) => {
       if (key === 'jira_board_id') return 'board-123'
       return 'claude-code'
     })
@@ -222,7 +222,7 @@ describe('AddTaskDialog', () => {
   })
 
   it('never shows agent dropdown when ai_provider is claude-code regardless of agents', async () => {
-    vi.mocked(getProjectConfig).mockImplementation(async (projectId, key) => {
+    vi.mocked(getProjectConfig).mockImplementation(async (_projectId, key) => {
       if (key === 'jira_board_id') return 'board-123'
       return 'claude-code'
     })
@@ -238,7 +238,7 @@ describe('AddTaskDialog', () => {
   })
 
   it('hides agent dropdown when ai_provider is claude-code and no agents', async () => {
-    vi.mocked(getProjectConfig).mockImplementation(async (projectId, key) => {
+    vi.mocked(getProjectConfig).mockImplementation(async (_projectId, key) => {
       if (key === 'jira_board_id') return 'board-123'
       return 'claude-code'
     })
