@@ -1,5 +1,6 @@
 <script lang="ts">
   import { untrack } from 'svelte'
+  import { focusBoardFilters } from '../lib/stores'
   import { filterTasks, getFilterCounts, DEFAULT_FOCUS_STATES, loadFocusFilterStates } from '../lib/boardFilters'
   import type { BoardFilter } from '../lib/boardFilters'
   import { getTaskReasonText } from '../lib/taskReason'
@@ -15,6 +16,7 @@
   import type { Task, AgentSession, PullRequestInfo, Action } from '../lib/types'
 
   interface Props {
+    projectId: string | null
     projectName: string
     tasks: Task[]
     activeSessions: Map<string, AgentSession>
@@ -29,14 +31,19 @@
     { value: 'backlog' as BoardFilter, label: 'Backlog' },
   ] as const
 
-  let { projectName, tasks, activeSessions, ticketPrs, onOpenTask, onRunAction }: Props = $props()
+  let { projectId, projectName, tasks, activeSessions, ticketPrs, onOpenTask, onRunAction }: Props = $props()
 
-  let activeFilter: BoardFilter = $state('focus')
   let selectedTaskIdLocal: string | null = $state(null)
   let paneHasFocus = $state(false)
   let contextMenu = $state({ visible: false, x: 0, y: 0, taskId: '' })
   let projectActions = $state<Action[]>([])
   let focusStates = $state<TaskState[]>(DEFAULT_FOCUS_STATES)
+  let fallbackFilter: BoardFilter = $state('focus')
+
+  let activeFilter = $derived.by(() => {
+    if (!projectId) return fallbackFilter
+    return $focusBoardFilters.get(projectId) ?? 'focus'
+  })
 
   let filteredTasks = $derived.by(() => {
     const filtered = filterTasks(tasks, activeFilter, activeSessions, ticketPrs, focusStates)
@@ -49,6 +56,16 @@
     if (!selectedTaskIdLocal) return null
     return filteredTasks.find(t => t.id === selectedTaskIdLocal) ?? null
   })
+
+  function setActiveFilter(filter: BoardFilter) {
+    if (!projectId) {
+      fallbackFilter = filter
+      return
+    }
+    const nextFilters = new Map($focusBoardFilters)
+    nextFilters.set(projectId, filter)
+    focusBoardFilters.set(nextFilters)
+  }
 
   $effect(() => {
     if (selectedTaskIdLocal && !filteredTasks.find(t => t.id === selectedTaskIdLocal)) {
@@ -129,7 +146,7 @@
       const filter = filterMap[e.key]
       if (filter) {
         e.preventDefault()
-        activeFilter = filter
+        setActiveFilter(filter)
         selectedTaskIdLocal = null
         vim.setFocusedIndex(0)
         return
@@ -164,7 +181,7 @@
               : 'bg-base-200 text-base-content/50 hover:text-base-content/70'}"
             aria-pressed={activeFilter === opt.value}
             onclick={() => {
-              activeFilter = opt.value
+              setActiveFilter(opt.value)
               selectedTaskIdLocal = null
               vim.setFocusedIndex(0)
             }}

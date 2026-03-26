@@ -47,6 +47,7 @@ vi.mock('./lib/stores', () => ({
   reviewPullRequestDiff: writable(null),
   authoredPrCount: writable(0),
   commandHeld: writable(false),
+  focusBoardFilters: writable(new Map()),
   startingTasks: writable<Set<string>>(new Set()),
   codeCleanupTasksEnabled: writable(false),
    shepherdEnabled: writable(false),
@@ -787,6 +788,46 @@ describe('App onMount initialization order', () => {
 
       expect(get(stores.activeProjectId)).toBe('proj-2')
       expect(nav.resetToBoard).toHaveBeenCalled()
+    })
+
+    it('resets remembered Flow board tab when switching projects', async () => {
+      const App = (await import('./App.svelte')).default
+      const stores = await import('./lib/stores')
+      const ipc = await import('./lib/ipc')
+      const { get } = await import('svelte/store')
+
+      const projectList: Project[] = [
+        { id: 'proj-1', name: 'Project One', path: '/test/one', created_at: 0, updated_at: 0 },
+        { id: 'proj-2', name: 'Project Two', path: '/test/two', created_at: 0, updated_at: 0 },
+      ]
+      vi.mocked(ipc.getProjects).mockResolvedValue(projectList)
+
+      render(App)
+
+      await vi.waitFor(() => {
+        expect(get(stores.projects)).toHaveLength(2)
+      })
+
+      stores.focusBoardFilters.set(new Map([
+        ['proj-1', 'backlog'],
+        ['proj-2', 'in-progress'],
+      ]))
+
+      stores.activeProjectId.set('proj-1')
+      await vi.waitFor(() => {
+        expect(get(stores.focusBoardFilters).get('proj-1')).toBeUndefined()
+      })
+
+      stores.focusBoardFilters.set(new Map([
+        ['proj-1', 'backlog'],
+        ['proj-2', 'in-progress'],
+      ]))
+
+      stores.activeProjectId.set('proj-2')
+      await vi.waitFor(() => {
+        expect(get(stores.focusBoardFilters).get('proj-2')).toBeUndefined()
+      })
+      expect(get(stores.focusBoardFilters).get('proj-1')).toBe('backlog')
     })
 
     it('pressing 1 cycles to previous project', async () => {

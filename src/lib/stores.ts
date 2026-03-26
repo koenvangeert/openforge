@@ -1,5 +1,6 @@
 import { writable } from "svelte/store";
 import type { Task, AgentSession, PullRequestInfo, Project, AgentEvent, CheckpointNotification, CiFailureNotification, RateLimitNotification, ReviewPullRequest, AuthoredPullRequest, PrFileDiff, AppView, ReviewComment, ReviewSubmissionComment, SelfReviewComment, AgentReviewComment, PrOverviewComment, ProjectAttention, ClaudeSessionState, SkillInfo, ShepherdMessage, ShepherdStatus } from "./types";
+import type { BoardFilter } from './boardFilters'
 
 export interface TaskRuntimeInfo {
   workspacePath: string;
@@ -63,6 +64,8 @@ export const taskTerminalOpen = writable<Map<string, boolean>>(new Map());
 
 /** Per-task draft note text — preserved across navigation */
 export const taskDraftNotes = writable<Map<string, string>>(new Map());
+
+export const focusBoardFilters = writable<Map<string, BoardFilter>>(new Map())
 
 export const authoredPrs = writable<AuthoredPullRequest[]>([]);
 export const authoredPrCount = writable<number>(0);

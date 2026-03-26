@@ -2,7 +2,7 @@
   import { onMount, onDestroy } from 'svelte'
   import { listen } from '@tauri-apps/api/event'
   import type { UnlistenFn, Event } from '@tauri-apps/api/event'
-  import { tasks, selectedTaskId, activeSessions, checkpointNotification, ciFailureNotification, ticketPrs, error, isLoading, projects, activeProjectId, currentView, reviewRequestCount, authoredPrCount, projectAttention, taskSpawned, startingTasks, codeCleanupTasksEnabled, rateLimitNotification, shepherdEnabled, shepherdMessages, shepherdStatus, actionItemCount, taskRuntimeInfo } from './lib/stores'
+  import { tasks, selectedTaskId, activeSessions, checkpointNotification, ciFailureNotification, ticketPrs, error, isLoading, projects, activeProjectId, currentView, reviewRequestCount, authoredPrCount, projectAttention, taskSpawned, startingTasks, codeCleanupTasksEnabled, rateLimitNotification, shepherdEnabled, shepherdMessages, shepherdStatus, actionItemCount, taskRuntimeInfo, focusBoardFilters } from './lib/stores'
   import { getProjects, getTasksForProject, getPullRequests, startImplementation, getSessionStatus, getLatestSession, getLatestSessions, forceGithubSync, createTask, updateTask, updateTaskStatus, deleteTask, getProjectAttention, getAppMode, finalizeClaudeSession, getConfig, getProjectConfig, listOpenCodeAgents, getReviewPrs, getAuthoredPrs, notifyShepherdEvent, getShepherdEnabled, getActionItemCount } from './lib/ipc'
   import { writePtyWithSubmit } from './lib/ptySubmit'
   import SearchableSelect from './components/SearchableSelect.svelte'
@@ -88,6 +88,17 @@
   useCommandHeld()
 
   let selectedTask = $derived($tasks.find(t => t.id === $selectedTaskId) || null)
+  let previousActiveProjectId: string | null = $state(null)
+
+  $effect(() => {
+    const projectId = $activeProjectId
+    if (projectId && projectId !== previousActiveProjectId) {
+      const nextFilters = new Map($focusBoardFilters)
+      nextFilters.delete(projectId)
+      focusBoardFilters.set(nextFilters)
+    }
+    previousActiveProjectId = projectId
+  })
 
 
   // Navigation logic - clear selected task when switching views
@@ -1033,10 +1044,11 @@
                <span>Loading tasks...</span>
              </div>
            {:else if boardLayout === 'focus'}
-              <FocusBoard
-                projectName={activeProject?.name ?? ''}
-                tasks={$tasks}
-                activeSessions={$activeSessions}
+               <FocusBoard
+                 projectId={$activeProjectId}
+                 projectName={activeProject?.name ?? ''}
+                 tasks={$tasks}
+                 activeSessions={$activeSessions}
                 ticketPrs={$ticketPrs}
                 onOpenTask={handleOpenTask}
                 onRunAction={handleRunAction}

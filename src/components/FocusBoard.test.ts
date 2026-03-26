@@ -2,6 +2,7 @@ import { render, screen, fireEvent, waitFor, within } from '@testing-library/sve
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import FocusBoard from './FocusBoard.svelte'
 import type { Task, AgentSession, PullRequestInfo } from '../lib/types'
+import { focusBoardFilters } from '../lib/stores'
 
 vi.mock('../lib/ipc', () => ({
   getPrComments: vi.fn().mockResolvedValue([]),
@@ -84,10 +85,12 @@ const onOpenTask = vi.fn()
 const onRunAction = vi.fn()
 
 function renderBoard(overrides?: {
+  projectId?: string | null
   tasks?: Task[]
   sessions?: Map<string, AgentSession>
   prs?: Map<string, PullRequestInfo[]>
 }) {
+  const projectId = overrides?.projectId ?? 'proj-1'
   const tasks = overrides?.tasks ?? [taskFocus, taskDoing, taskDone, taskBacklog]
   const sessions = overrides?.sessions ?? new Map([
     [taskFocus.id, makeSession(taskFocus.id, 'paused', 'needs-review')],
@@ -97,6 +100,7 @@ function renderBoard(overrides?: {
 
   return render(FocusBoard, {
     props: {
+      projectId,
       projectName: 'Test Project',
       tasks,
       activeSessions: sessions,
@@ -111,6 +115,7 @@ describe('FocusBoard', () => {
   beforeEach(() => {
     Element.prototype.scrollIntoView = vi.fn()
     vi.clearAllMocks()
+    focusBoardFilters.set(new Map())
   })
 
   it('renders the project name as the board heading', async () => {
@@ -316,6 +321,32 @@ describe('FocusBoard', () => {
     await fireEvent.keyDown(window, { key: '3', metaKey: true })
     const chip = screen.getByRole('button', { name: /Backlog 1/i })
     expect(chip.getAttribute('aria-pressed')).toBe('true')
+  })
+
+  it('restores the previously selected filter when remounted for the same project', async () => {
+    const firstRender = renderBoard()
+
+    await fireEvent.click(await screen.findByRole('button', { name: /Backlog 1/i }))
+
+    expect(screen.getByRole('button', { name: /Backlog 1/i }).getAttribute('aria-pressed')).toBe('true')
+
+    firstRender.unmount()
+    renderBoard({ tasks: [taskFocus, taskDoing, taskDone, taskBacklog] })
+
+    expect((await screen.findByRole('button', { name: /Backlog 1/i })).getAttribute('aria-pressed')).toBe('true')
+  })
+
+  it('does not carry the selected filter over to a different project board', async () => {
+    const firstRender = renderBoard({ projectId: 'proj-1' })
+
+    await fireEvent.click(await screen.findByRole('button', { name: /In progress 1/i }))
+    expect(screen.getByRole('button', { name: /In progress 1/i }).getAttribute('aria-pressed')).toBe('true')
+
+    firstRender.unmount()
+
+    const secondRender = renderBoard({ projectId: 'proj-2' })
+    expect((await screen.findByRole('button', { name: /Focus now 1/i })).getAttribute('aria-pressed')).toBe('true')
+    secondRender.unmount()
   })
 
   it('clicking an unselected task selects it without navigating', async () => {
