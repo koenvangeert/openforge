@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { Task, AgentSession, PrComment, PollResult, PullRequestInfo, AgentInfo, Project, ProjectAttention, WorktreeInfo, TaskWorkspaceInfo, ImplementationStatus, ReviewPullRequest, AuthoredPullRequest, PrFileDiff, ReviewComment, ReviewSubmissionComment, SelfReviewComment, AgentReviewComment, CommandInfo, AutocompleteAgentInfo, PrOverviewComment, TranscriptionResult, WhisperModelStatus, WhisperModelSizeId, SkillInfo, WorkQueueEntry, ProviderModelInfo } from "./types";
+import type { Task, AgentSession, PrComment, PollResult, PullRequestInfo, AgentInfo, Project, ProjectAttention, WorktreeInfo, TaskWorkspaceInfo, ImplementationStatus, ReviewPullRequest, AuthoredPullRequest, PrFileDiff, ReviewComment, ReviewSubmissionComment, SelfReviewComment, AgentReviewComment, CommandInfo, AutocompleteAgentInfo, PrOverviewComment, TranscriptionResult, WhisperModelStatus, WhisperModelSizeId, SkillInfo, WorkQueueEntry, ProviderModelInfo, CommitInfo } from "./types";
 
 export async function createTask(initialPrompt: string, status: string, jiraKey: string | null, projectId: string | null, agent: string | null, permissionMode: string | null): Promise<Task> {
   return invoke<Task>("create_task", { initialPrompt, status, jiraKey, projectId, agent, permissionMode });
@@ -266,6 +266,22 @@ export async function deleteSelfReviewComment(commentId: number): Promise<void> 
 
 export async function archiveSelfReviewComments(taskId: string): Promise<void> {
   return invoke<void>("archive_self_review_comments", { taskId });
+}
+
+export async function getTaskCommits(taskId: string): Promise<CommitInfo[]> {
+  return invoke<CommitInfo[]>("get_task_commits", { taskId });
+}
+
+export async function getCommitDiff(taskId: string, commitSha: string): Promise<PrFileDiff[]> {
+  return invoke<PrFileDiff[]>("get_commit_diff", { taskId, commitSha });
+}
+
+export async function getCommitFileContents(taskId: string, commitSha: string, path: string, oldPath: string | null, status: string): Promise<[string, string]> {
+  return invoke<[string, string]>("get_commit_file_contents", { taskId, commitSha, path, oldPath, status });
+}
+
+export async function getCommitBatchFileContents(taskId: string, commitSha: string, files: FileContentRequest[]): Promise<[string, string][]> {
+  return invoke<[string, string][]>("get_commit_batch_file_contents", { taskId, commitSha, files: files.map(f => ({ path: f.path, old_path: f.oldPath, status: f.status })) });
 }
 
 export async function startAgentReview(repoOwner: string, repoName: string, prNumber: number, headRef: string, baseRef: string, prTitle: string, prBody: string | null, reviewPrId: number): Promise<{ review_session_key: string }> {

@@ -327,6 +327,15 @@ export interface PrFileDiff {
   patch_line_count: number | null;
 }
 
+/** Commit info from git log for per-commit diff viewing */
+export interface CommitInfo {
+  sha: string;
+  short_sha: string;
+  message: string;
+  author: string;
+  date: string;
+}
+
 /** PR overview comment (both review and general comments) */
 export interface PrOverviewComment {
   id: number;
