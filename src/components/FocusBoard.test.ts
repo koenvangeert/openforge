@@ -261,7 +261,7 @@ describe('FocusBoard', () => {
       prs: new Map(),
     })
 
-    expect(await screen.findByText('No tasks match this filter.')).toBeTruthy()
+    expect(await screen.findByText('All clear')).toBeTruthy()
   })
 
   it('opens task context menu on right click', async () => {

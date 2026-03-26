@@ -13,6 +13,7 @@
   import TaskListItem from './TaskListItem.svelte'
   import TaskDetailPane from './TaskDetailPane.svelte'
   import TaskContextMenu from './TaskContextMenu.svelte'
+  import FocusEmptyState from './FocusEmptyState.svelte'
   import type { Task, AgentSession, PullRequestInfo, Action } from '../lib/types'
 
   interface Props {
@@ -206,7 +207,7 @@
       {/if}
 
       {#if filteredTasks.length === 0}
-        <p class="text-xs text-base-content/40 px-2">No tasks match this filter.</p>
+        <FocusEmptyState filter={activeFilter} />
       {:else}
         {#each filteredTasks as task, i (task.id)}
           {@const session = activeSessions.get(task.id) ?? null}
