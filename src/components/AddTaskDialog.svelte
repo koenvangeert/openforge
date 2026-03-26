@@ -48,11 +48,13 @@
       const boardId = await getProjectConfig($activeProjectId, 'jira_board_id')
       hasJiraConfigured = !!boardId
 
-      try {
-        const agents = await listOpenCodeAgents($activeProjectId)
-        availableAgents = agents.filter(a => !a.hidden)
-      } catch {
-        availableAgents = []
+      if (aiProvider !== 'claude-code') {
+        try {
+          const agents = await listOpenCodeAgents($activeProjectId)
+          availableAgents = agents.filter(a => !a.hidden)
+        } catch {
+          availableAgents = []
+        }
       }
     } else {
       aiProvider = 'claude-code'

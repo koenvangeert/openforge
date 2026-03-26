@@ -251,6 +251,19 @@ describe('AddTaskDialog', () => {
     })
   })
 
+  it('does not call listOpenCodeAgents when ai_provider is claude-code', async () => {
+    vi.mocked(getProjectConfig).mockImplementation(async (projectId, key) => {
+      if (key === 'jira_board_id') return 'board-123'
+      return 'claude-code'
+    })
+    render(AddTaskDialog, { props: { mode: 'create' } })
+
+    await waitFor(() => {
+      expect(screen.queryByLabelText('Permission Mode')).toBeTruthy()
+    })
+    expect(listOpenCodeAgents).not.toHaveBeenCalled()
+  })
+
   it('shows agent dropdown when ai_provider is opencode', async () => {
     vi.mocked(getProjectConfig).mockResolvedValue('opencode')
     render(AddTaskDialog, { props: { mode: 'create' } })
