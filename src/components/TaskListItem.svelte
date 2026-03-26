@@ -101,7 +101,7 @@
   </div>
 
   {#if reasonText}
-    <div class="text-xs text-base-content/60">{reasonText}</div>
+    <div class="text-xs text-base-content/60 truncate">{reasonText}</div>
   {/if}
 
   {#if firstPr}

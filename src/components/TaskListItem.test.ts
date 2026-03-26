@@ -97,6 +97,12 @@ describe('TaskListItem', () => {
     expect(screen.getByText('Agent is running.')).toBeTruthy()
   })
 
+  it('truncates reasonText visually using Tailwind truncate class when selected', () => {
+    render(TaskListItem, { props: { ...baseProps, isSelected: true, reasonText: 'A very long reason text that should be ellipsized' } })
+    const reasonTextElement = screen.getByText('A very long reason text that should be ellipsized')
+    expect(reasonTextElement.classList.contains('truncate')).toBe(true)
+  })
+
   it('calls onSelect when clicked', async () => {
     const onSelect = vi.fn()
     render(TaskListItem, { props: { ...baseProps, onSelect } })
