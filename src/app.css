@@ -392,6 +392,14 @@
   animation: slide-in-right 0.2s ease-out;
 }
 
+@keyframes focus-empty-enter {
+  from { opacity: 0; transform: translateY(16px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.focus-empty-enter {
+  animation: focus-empty-enter 0.5s ease-out;
+}
+
 @keyframes gradient-shift {
   0% { background-position: 0% 50%; }
   50% { background-position: 100% 50%; }
