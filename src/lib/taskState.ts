@@ -15,12 +15,15 @@ function getPrState(prs: PullRequestInfo[]): TaskState | null {
 
   if (pr.state === 'merged') return 'pr-merged'
 
+  // CI failures always take priority over merge readiness
+  if (pr.ci_status === 'failure') return 'ci-failed'
+
   // GitHub's source of truth: mergeable_state tells us if all requirements are met
-  if (isReadyToMerge(pr))
+  // But only when CI is not pending — pending CI means the result isn't final yet
+  if (isReadyToMerge(pr) && pr.ci_status !== 'pending')
     return pr.is_queued ? 'pr-queued' : 'ready-to-merge'
 
   // Open PR checks in priority order (when not merge-ready)
-  if (pr.ci_status === 'failure') return 'ci-failed'
   if (pr.review_status === 'changes_requested') return 'changes-requested'
   if ((pr.unaddressed_comment_count ?? 0) > 0) return 'unaddressed-comments'
   if (pr.draft) return 'pr-draft'

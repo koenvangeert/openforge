@@ -528,12 +528,18 @@ describe('computeTaskState - mergeable_state based ready-to-merge (PART 5)', () 
     expect(computeTaskState(task, session, prs)).toBe('ci-failed')
   })
 
-  it('test 5: ISOLATION — mergeable_state clean with ci_status failure → ready-to-merge (trusts GitHub)', () => {
-    // ci_status failure with mergeable_state clean = non-required check failing
+  it('test 5: mergeable_state clean with ci_status failure → ci-failed (CI failure always takes priority)', () => {
     const task = createTask({ status: 'doing' })
     const session = createSession({ status: 'completed' })
     const prs = [createPr({ state: 'open', mergeable_state: 'clean', ci_status: 'failure' })]
-    expect(computeTaskState(task, session, prs)).toBe('ready-to-merge')
+    expect(computeTaskState(task, session, prs)).toBe('ci-failed')
+  })
+
+  it('test 15: mergeable_state clean with ci_status pending → ci-running (pending CI blocks merge readiness)', () => {
+    const task = createTask({ status: 'doing' })
+    const session = createSession({ status: 'completed' })
+    const prs = [createPr({ state: 'open', mergeable_state: 'clean', ci_status: 'pending' })]
+    expect(computeTaskState(task, session, prs)).toBe('ci-running')
   })
 
   it('test 6: ISOLATION — mergeable_state clean with review_status review_required → ready-to-merge (trusts GitHub)', () => {
