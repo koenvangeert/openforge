@@ -28,7 +28,7 @@
   import CommandPalette from './components/CommandPalette.svelte'
   import ActionPalette from './components/ActionPalette.svelte'
 
-  import { pushNavState, navigateBack, resetToBoard } from './lib/navigation'
+  import { useAppRouter } from './lib/router.svelte'
   import { loadActions, getEnabledActions } from './lib/actions'
   import { getProjectColor } from './lib/projectColors'
   import { themeMode } from './lib/theme'
@@ -85,6 +85,7 @@
   let actionPaletteActions = $state<Action[]>([])
   let workQueueRefreshTrigger = $state(0)
   let boardLayout = $state<'kanban' | 'focus'>('kanban')
+  let router = useAppRouter()
 
   useCommandHeld()
 
@@ -101,31 +102,7 @@
     previousActiveProjectId = projectId
   })
 
-
-  // Navigation logic - clear selected task when switching views
-  $effect(() => {
-    if ($currentView === 'pr_review') {
-      $selectedTaskId = null
-    }
-  })
-
-  $effect(() => {
-    if ($currentView === 'settings') {
-      $selectedTaskId = null
-    }
-  })
-   $effect(() => {
-     if ($currentView === 'workqueue') {
-       $selectedTaskId = null
-     }
-   })
-   $effect(() => {
-     if ($currentView === 'global_settings') {
-       $selectedTaskId = null
-     }
-   })
-
-    // Reload tasks when active project changes
+     // Reload tasks when active project changes
    $effect(() => {
       if ($activeProjectId) {
         loadTasks()
@@ -389,7 +366,7 @@
         break
       case 'move-to-done':
         if (task) {
-          resetToBoard()
+          router.resetToBoard()
           void updateTaskStatus(task.id, 'done').catch((e) => {
             console.error('Failed to update task status:', e)
             $error = 'Task completion may have succeeded, but background cleanup failed.'
@@ -404,11 +381,10 @@
         }
         break
       case 'go-back':
-        navigateBack()
+        router.back()
         break
       case 'open-workqueue':
-        pushNavState()
-        $currentView = 'workqueue'
+        router.navigate('workqueue')
         break
       case 'search-tasks':
         showCommandPalette = true
@@ -442,18 +418,11 @@
   }
 
   function handleNavigate(view: AppView) {
-    if (view === 'board') {
-      resetToBoard()
-      return
-    }
-
-    pushNavState()
-    $currentView = view
+    router.navigate(view)
   }
 
   function handleOpenTask(taskId: string) {
-    pushNavState()
-    $selectedTaskId = taskId
+    router.navigateToTask(taskId)
   }
 
   function handleKeydown(e: KeyboardEvent) {
@@ -491,10 +460,10 @@
       }
     })
 
-    shortcuts.register('⌘[', navigateBack)
-    shortcuts.register('⌘arrowleft', navigateBack)
-    shortcuts.register('⌃[', navigateBack)
-    shortcuts.register('⌃arrowleft', navigateBack)
+    shortcuts.register('⌘[', () => { router.back() })
+    shortcuts.register('⌘arrowleft', () => { router.back() })
+    shortcuts.register('⌃[', () => { router.back() })
+    shortcuts.register('⌃arrowleft', () => { router.back() })
 
     shortcuts.register('⌘⇧r', triggerGithubSync)
     shortcuts.register('⌃⇧r', triggerGithubSync)
@@ -511,16 +480,14 @@
     })
 
     shortcuts.register('⌘r', () => {
-      pushNavState()
-      $currentView = 'workqueue'
+      router.navigate('workqueue')
     })
     shortcuts.register('⌃r', () => {
-      pushNavState()
-      $currentView = 'workqueue'
+      router.navigate('workqueue')
     })
 
     shortcuts.register('⌘h', () => {
-      resetToBoard()
+      router.resetToBoard()
     })
 
     shortcuts.register('⌘g', () => {
@@ -541,7 +508,7 @@
       const currentIndex = projectList.findIndex((p) => p.id === $activeProjectId)
       const nextIndex = currentIndex <= 0 ? projectList.length - 1 : currentIndex - 1
       $activeProjectId = projectList[nextIndex].id
-      resetToBoard()
+      router.resetToBoard()
     })
 
     shortcuts.register('2', () => {
@@ -550,7 +517,7 @@
       const currentIndex = projectList.findIndex((p) => p.id === $activeProjectId)
       const nextIndex = currentIndex < 0 ? 0 : (currentIndex + 1) % projectList.length
       $activeProjectId = projectList[nextIndex].id
-      resetToBoard()
+      router.resetToBoard()
     })
 
     // Phase 1: Register ALL event listeners
@@ -913,9 +880,9 @@
   <div class="flex flex-col flex-1 min-w-0 relative" style="background: linear-gradient(180deg, var(--project-bg-alt) 0%, var(--project-bg) 100%)">
     <main class="flex-1 overflow-hidden flex flex-col">
       {#if $currentView === 'settings'}
-        <SettingsView mode="project" onClose={() => { pushNavState(); $currentView = 'board' }} onProjectDeleted={loadProjects} />
+        <SettingsView mode="project" onClose={() => { router.navigate('board') }} onProjectDeleted={loadProjects} />
       {:else if $currentView === 'global_settings'}
-        <SettingsView mode="global" onClose={() => { pushNavState(); $currentView = 'board' }} onProjectDeleted={loadProjects} />
+        <SettingsView mode="global" onClose={() => { router.navigate('board') }} onProjectDeleted={loadProjects} />
       {:else if $currentView === 'pr_review'}
         <PrReviewView projectName={activeProject?.name ?? ''} />
        {:else if $currentView === 'skills'}
