@@ -1,418 +1,570 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { writable, get } from 'svelte/store'
-import type { PrComment, PullRequestInfo, PrFileDiff, SelfReviewComment, CommitInfo } from './types'
+import { get, writable } from "svelte/store";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import type {
+	CommitInfo,
+	PrComment,
+	PrFileDiff,
+	PullRequestInfo,
+	SelfReviewComment,
+} from "./types";
 
 // ============================================================================
 // Module Mocks
 // ============================================================================
 
-vi.mock('./stores', () => ({
-  selfReviewDiffFiles: writable<PrFileDiff[]>([]),
-  selfReviewGeneralComments: writable<SelfReviewComment[]>([]),
-  selfReviewArchivedComments: writable<SelfReviewComment[]>([]),
-  pendingManualComments: writable<{ path: string; line: number; body: string; side: string }[]>([]),
-  ticketPrs: writable<Map<string, PullRequestInfo[]>>(new Map()),
-}))
+vi.mock("./stores", () => ({
+	selfReviewDiffFiles: writable<PrFileDiff[]>([]),
+	selfReviewGeneralComments: writable<SelfReviewComment[]>([]),
+	selfReviewArchivedComments: writable<SelfReviewComment[]>([]),
+	pendingManualComments: writable<
+		{ path: string; line: number; body: string; side: string }[]
+	>([]),
+	ticketPrs: writable<Map<string, PullRequestInfo[]>>(new Map()),
+}));
 
-vi.mock('./ipc', () => ({
-  getTaskDiff: vi.fn<(taskId: string, includeUncommitted: boolean) => Promise<PrFileDiff[]>>(),
-  getTaskCommits: vi.fn<(taskId: string) => Promise<CommitInfo[]>>(),
-  getCommitDiff: vi.fn<(taskId: string, commitSha: string) => Promise<PrFileDiff[]>>(),
-  getActiveSelfReviewComments: vi.fn<(taskId: string) => Promise<SelfReviewComment[]>>(),
-  getArchivedSelfReviewComments: vi.fn<(taskId: string) => Promise<SelfReviewComment[]>>(),
-  getPrComments: vi.fn<(prId: number) => Promise<PrComment[]>>(),
-}))
+vi.mock("./ipc", () => ({
+	getTaskDiff:
+		vi.fn<
+			(taskId: string, includeUncommitted: boolean) => Promise<PrFileDiff[]>
+		>(),
+	getTaskCommits: vi.fn<(taskId: string) => Promise<CommitInfo[]>>(),
+	getCommitDiff:
+		vi.fn<(taskId: string, commitSha: string) => Promise<PrFileDiff[]>>(),
+	getActiveSelfReviewComments:
+		vi.fn<(taskId: string) => Promise<SelfReviewComment[]>>(),
+	getArchivedSelfReviewComments:
+		vi.fn<(taskId: string) => Promise<SelfReviewComment[]>>(),
+	getPrComments: vi.fn<(prId: number) => Promise<PrComment[]>>(),
+}));
 
-import { createDiffLoader } from './useDiffLoader.svelte'
-import * as ipc from './ipc'
-import { selfReviewDiffFiles, selfReviewGeneralComments, selfReviewArchivedComments, pendingManualComments, ticketPrs } from './stores'
+import * as ipc from "./ipc";
+import {
+	pendingManualComments,
+	selfReviewArchivedComments,
+	selfReviewDiffFiles,
+	selfReviewGeneralComments,
+	ticketPrs,
+} from "./stores";
+import { createDiffLoader } from "./useDiffLoader.svelte";
 
-const mockGetTaskDiff = vi.mocked(ipc.getTaskDiff)
-const mockGetTaskCommits = vi.mocked(ipc.getTaskCommits)
-const mockGetCommitDiff = vi.mocked(ipc.getCommitDiff)
-const mockGetActiveSelfReviewComments = vi.mocked(ipc.getActiveSelfReviewComments)
-const mockGetArchivedSelfReviewComments = vi.mocked(ipc.getArchivedSelfReviewComments)
-const mockGetPrComments = vi.mocked(ipc.getPrComments)
+const mockGetTaskDiff = vi.mocked(ipc.getTaskDiff);
+const mockGetTaskCommits = vi.mocked(ipc.getTaskCommits);
+const mockGetCommitDiff = vi.mocked(ipc.getCommitDiff);
+const mockGetActiveSelfReviewComments = vi.mocked(
+	ipc.getActiveSelfReviewComments,
+);
+const mockGetArchivedSelfReviewComments = vi.mocked(
+	ipc.getArchivedSelfReviewComments,
+);
+const mockGetPrComments = vi.mocked(ipc.getPrComments);
 
 // ============================================================================
 // Fixtures
 // ============================================================================
 
 const baseDiff: PrFileDiff = {
-  sha: 'abc123',
-  filename: 'src/main.rs',
-  status: 'modified',
-  additions: 5,
-  deletions: 2,
-  changes: 7,
-  patch: '@@ -1,3 +1,4 @@\n line1\n+added\n line2',
-  previous_filename: null,
-  is_truncated: false,
-  patch_line_count: null,
-}
+	sha: "abc123",
+	filename: "src/main.rs",
+	status: "modified",
+	additions: 5,
+	deletions: 2,
+	changes: 7,
+	patch: "@@ -1,3 +1,4 @@\n line1\n+added\n line2",
+	previous_filename: null,
+	is_truncated: false,
+	patch_line_count: null,
+};
 
 const basePrComment: PrComment = {
-  id: 1,
-  pr_id: 10,
-  author: 'reviewer',
-  body: 'Fix this',
-  comment_type: 'inline',
-  file_path: 'src/main.rs',
-  line_number: 5,
-  addressed: 0,
-  created_at: 1700000000,
-}
+	id: 1,
+	pr_id: 10,
+	author: "reviewer",
+	body: "Fix this",
+	comment_type: "inline",
+	file_path: "src/main.rs",
+	line_number: 5,
+	addressed: 0,
+	created_at: 1700000000,
+};
 
 const baseLinkedPr: PullRequestInfo = {
-  id: 10,
-  ticket_id: 'task-1',
-  repo_owner: 'org',
-  repo_name: 'repo',
-  title: 'My PR',
-  url: 'https://github.com/org/repo/pull/1',
-  state: 'open',
-  head_sha: 'abc',
-  ci_status: null,
-  ci_check_runs: null,
-  review_status: null,
-  mergeable: null,
-  mergeable_state: null,
-  merged_at: null,
-  created_at: 1700000000,
-  updated_at: 1700000000,
-  draft: false,
-  is_queued: false,
-  unaddressed_comment_count: 1,
-}
+	id: 10,
+	ticket_id: "task-1",
+	repo_owner: "org",
+	repo_name: "repo",
+	title: "My PR",
+	url: "https://github.com/org/repo/pull/1",
+	state: "open",
+	head_sha: "abc",
+	ci_status: null,
+	ci_check_runs: null,
+	review_status: null,
+	mergeable: null,
+	mergeable_state: null,
+	merged_at: null,
+	created_at: 1700000000,
+	updated_at: 1700000000,
+	draft: false,
+	is_queued: false,
+	unaddressed_comment_count: 1,
+};
 
 const baseSelfReviewComment: SelfReviewComment = {
-  id: 1,
-  task_id: 'task-1',
-  round: 1,
-  comment_type: 'general',
-  file_path: null,
-  line_number: null,
-  body: 'General note',
-  created_at: 1700000000,
-  archived_at: null,
-}
+	id: 1,
+	task_id: "task-1",
+	round: 1,
+	comment_type: "general",
+	file_path: null,
+	line_number: null,
+	body: "General note",
+	created_at: 1700000000,
+	archived_at: null,
+};
 
 // ============================================================================
 // Tests
 // ============================================================================
 
-describe('createDiffLoader', () => {
-  const baseCommit: CommitInfo = {
-    sha: 'abc1234def',
-    short_sha: 'abc1234',
-    message: 'Fix login bug',
-    author: 'dev',
-    date: '2025-01-01T00:00:00Z',
-  }
-
-  beforeEach(() => {
-    vi.clearAllMocks()
-    selfReviewDiffFiles.set([])
-    selfReviewGeneralComments.set([])
-    selfReviewArchivedComments.set([])
-    pendingManualComments.set([])
-    ticketPrs.set(new Map())
-
-    mockGetTaskDiff.mockResolvedValue([])
-    mockGetTaskCommits.mockResolvedValue([])
-    mockGetCommitDiff.mockResolvedValue([])
-    mockGetActiveSelfReviewComments.mockResolvedValue([])
-    mockGetArchivedSelfReviewComments.mockResolvedValue([])
-    mockGetPrComments.mockResolvedValue([])
-  })
-
-  it('starts with isLoading=false and error=null', () => {
-    const loader = createDiffLoader({
-      getTaskId: () => 'task-1',
-      getIncludeUncommitted: () => false,
-    })
-
-    expect(loader.isLoading).toBe(false)
-    expect(loader.error).toBeNull()
-    expect(loader.prComments).toEqual([])
-    expect(loader.linkedPr).toBeNull()
-  })
-
-  it('loadDiff sets isLoading=true during execution', async () => {
-    let resolveGetTaskDiff!: (value: PrFileDiff[]) => void
-    mockGetTaskDiff.mockReturnValue(new Promise(resolve => { resolveGetTaskDiff = resolve }))
-
-    const loader = createDiffLoader({
-      getTaskId: () => 'task-1',
-      getIncludeUncommitted: () => false,
-    })
-
-    const promise = loader.loadDiff()
-    expect(loader.isLoading).toBe(true)
-
-    resolveGetTaskDiff([baseDiff])
-    await promise
-
-    expect(loader.isLoading).toBe(false)
-  })
-
-  it('loadDiff populates selfReviewDiffFiles store on success', async () => {
-    mockGetTaskDiff.mockResolvedValue([baseDiff])
-
-    const loader = createDiffLoader({
-      getTaskId: () => 'task-1',
-      getIncludeUncommitted: () => false,
-    })
-
-    await loader.loadDiff()
-
-    expect(get(selfReviewDiffFiles)).toEqual([baseDiff])
-  })
-
-  it('loadDiff populates prComments from linked PR', async () => {
-    mockGetTaskDiff.mockResolvedValue([baseDiff])
-    mockGetActiveSelfReviewComments.mockResolvedValue([])
-    mockGetArchivedSelfReviewComments.mockResolvedValue([])
-    mockGetPrComments.mockResolvedValue([basePrComment])
-    ticketPrs.set(new Map([['task-1', [baseLinkedPr]]]))
-
-    const loader = createDiffLoader({
-      getTaskId: () => 'task-1',
-      getIncludeUncommitted: () => false,
-    })
-
-    await loader.loadDiff()
-
-    expect(loader.linkedPr).toEqual(baseLinkedPr)
-    expect(loader.prComments).toEqual([basePrComment])
-    expect(mockGetPrComments).toHaveBeenCalledWith(baseLinkedPr.id)
-  })
-
-  it('loadDiff sets human-readable error on failure', async () => {
-    mockGetTaskDiff.mockRejectedValue(new Error('network error'))
-
-    const loader = createDiffLoader({
-      getTaskId: () => 'task-1',
-      getIncludeUncommitted: () => false,
-    })
-
-    await loader.loadDiff()
-
-    expect(loader.error).toBe('Failed to load diff. Please try again.')
-    expect(loader.isLoading).toBe(false)
-  })
-
-  it('loadDiff calls IPC with correct taskId and includeUncommitted', async () => {
-    mockGetTaskDiff.mockResolvedValue([])
+describe("createDiffLoader", () => {
+	const baseCommit: CommitInfo = {
+		sha: "abc1234def",
+		short_sha: "abc1234",
+		message: "Fix login bug",
+		author: "dev",
+		date: "2025-01-01T00:00:00Z",
+	};
+
+	beforeEach(() => {
+		vi.clearAllMocks();
+		selfReviewDiffFiles.set([]);
+		selfReviewGeneralComments.set([]);
+		selfReviewArchivedComments.set([]);
+		pendingManualComments.set([]);
+		ticketPrs.set(new Map());
+
+		mockGetTaskDiff.mockResolvedValue([]);
+		mockGetTaskCommits.mockResolvedValue([]);
+		mockGetCommitDiff.mockResolvedValue([]);
+		mockGetActiveSelfReviewComments.mockResolvedValue([]);
+		mockGetArchivedSelfReviewComments.mockResolvedValue([]);
+		mockGetPrComments.mockResolvedValue([]);
+	});
+
+	it("starts with isLoading=false and error=null", () => {
+		const loader = createDiffLoader({
+			getTaskId: () => "task-1",
+			getIncludeUncommitted: () => false,
+		});
+
+		expect(loader.isLoading).toBe(false);
+		expect(loader.error).toBeNull();
+		expect(loader.prComments).toEqual([]);
+		expect(loader.linkedPr).toBeNull();
+	});
+
+	it("loadDiff sets isLoading=true during execution", async () => {
+		let resolveGetTaskDiff!: (value: PrFileDiff[]) => void;
+		mockGetTaskDiff.mockReturnValue(
+			new Promise((resolve) => {
+				resolveGetTaskDiff = resolve;
+			}),
+		);
+
+		const loader = createDiffLoader({
+			getTaskId: () => "task-1",
+			getIncludeUncommitted: () => false,
+		});
+
+		const promise = loader.loadDiff();
+		expect(loader.isLoading).toBe(true);
+
+		resolveGetTaskDiff([baseDiff]);
+		await promise;
+
+		expect(loader.isLoading).toBe(false);
+	});
+
+	it("loadDiff populates selfReviewDiffFiles store on success", async () => {
+		mockGetTaskDiff.mockResolvedValue([baseDiff]);
+
+		const loader = createDiffLoader({
+			getTaskId: () => "task-1",
+			getIncludeUncommitted: () => false,
+		});
+
+		await loader.loadDiff();
+
+		expect(get(selfReviewDiffFiles)).toEqual([baseDiff]);
+	});
+
+	it("loadDiff populates prComments from linked PR", async () => {
+		mockGetTaskDiff.mockResolvedValue([baseDiff]);
+		mockGetActiveSelfReviewComments.mockResolvedValue([]);
+		mockGetArchivedSelfReviewComments.mockResolvedValue([]);
+		mockGetPrComments.mockResolvedValue([basePrComment]);
+		ticketPrs.set(new Map([["task-1", [baseLinkedPr]]]));
+
+		const loader = createDiffLoader({
+			getTaskId: () => "task-1",
+			getIncludeUncommitted: () => false,
+		});
+
+		await loader.loadDiff();
+
+		expect(loader.linkedPr).toEqual(baseLinkedPr);
+		expect(loader.prComments).toEqual([basePrComment]);
+		expect(mockGetPrComments).toHaveBeenCalledWith(baseLinkedPr.id);
+	});
+
+	it("loadDiff sets human-readable error on failure", async () => {
+		mockGetTaskDiff.mockRejectedValue(new Error("network error"));
+
+		const loader = createDiffLoader({
+			getTaskId: () => "task-1",
+			getIncludeUncommitted: () => false,
+		});
+
+		await loader.loadDiff();
+
+		expect(loader.error).toBe("Failed to load diff. Please try again.");
+		expect(loader.isLoading).toBe(false);
+	});
 
-    const loader = createDiffLoader({
-      getTaskId: () => 'task-42',
-      getIncludeUncommitted: () => true,
-    })
+	it("loadDiff calls IPC with correct taskId and includeUncommitted", async () => {
+		mockGetTaskDiff.mockResolvedValue([]);
 
-    await loader.loadDiff()
+		const loader = createDiffLoader({
+			getTaskId: () => "task-42",
+			getIncludeUncommitted: () => true,
+		});
 
-    expect(mockGetTaskDiff).toHaveBeenCalledWith('task-42', true)
-    expect(mockGetActiveSelfReviewComments).toHaveBeenCalledWith('task-42')
-  })
+		await loader.loadDiff();
 
-  it('refresh reloads diff data', async () => {
-    mockGetTaskDiff.mockResolvedValue([baseDiff])
+		expect(mockGetTaskDiff).toHaveBeenCalledWith("task-42", true);
+		expect(mockGetActiveSelfReviewComments).toHaveBeenCalledWith("task-42");
+	});
 
-    const loader = createDiffLoader({
-      getTaskId: () => 'task-1',
-      getIncludeUncommitted: () => false,
-    })
+	it("refresh reloads diff data", async () => {
+		mockGetTaskDiff.mockResolvedValue([baseDiff]);
 
-    await loader.refresh()
+		const loader = createDiffLoader({
+			getTaskId: () => "task-1",
+			getIncludeUncommitted: () => false,
+		});
 
-    expect(mockGetTaskDiff).toHaveBeenCalledWith('task-1', false)
-    expect(get(selfReviewDiffFiles)).toEqual([baseDiff])
-  })
+		await loader.refresh();
 
-  it('refresh sets human-readable error on failure', async () => {
-    mockGetTaskDiff.mockRejectedValue(new Error('network error'))
+		expect(mockGetTaskDiff).toHaveBeenCalledWith("task-1", false);
+		expect(get(selfReviewDiffFiles)).toEqual([baseDiff]);
+	});
 
-    const loader = createDiffLoader({
-      getTaskId: () => 'task-1',
-      getIncludeUncommitted: () => false,
-    })
+	it("refresh sets human-readable error on failure", async () => {
+		mockGetTaskDiff.mockRejectedValue(new Error("network error"));
 
-    await loader.refresh()
+		const loader = createDiffLoader({
+			getTaskId: () => "task-1",
+			getIncludeUncommitted: () => false,
+		});
 
-    expect(loader.error).toBe('Failed to refresh diff.')
-    expect(loader.isLoading).toBe(false)
-  })
+		await loader.refresh();
 
-  it('cleanup clears all store state', async () => {
-    mockGetTaskDiff.mockResolvedValue([baseDiff])
-    mockGetActiveSelfReviewComments.mockResolvedValue([baseSelfReviewComment])
-    mockGetArchivedSelfReviewComments.mockResolvedValue([])
+		expect(loader.error).toBe("Failed to refresh diff.");
+		expect(loader.isLoading).toBe(false);
+	});
 
-    const loader = createDiffLoader({
-      getTaskId: () => 'task-1',
-      getIncludeUncommitted: () => false,
-    })
+	it("cleanup clears all store state", async () => {
+		mockGetTaskDiff.mockResolvedValue([baseDiff]);
+		mockGetActiveSelfReviewComments.mockResolvedValue([baseSelfReviewComment]);
+		mockGetArchivedSelfReviewComments.mockResolvedValue([]);
 
-    await loader.loadDiff()
-    expect(get(selfReviewDiffFiles)).toEqual([baseDiff])
+		const loader = createDiffLoader({
+			getTaskId: () => "task-1",
+			getIncludeUncommitted: () => false,
+		});
 
-    loader.cleanup()
+		await loader.loadDiff();
+		expect(get(selfReviewDiffFiles)).toEqual([baseDiff]);
 
-    expect(get(selfReviewDiffFiles)).toEqual([])
-    expect(get(selfReviewGeneralComments)).toEqual([])
-    expect(get(selfReviewArchivedComments)).toEqual([])
-    expect(get(pendingManualComments)).toEqual([])
-  })
+		loader.cleanup();
 
-  it('starts with empty commits and null selectedCommitSha', () => {
-    const loader = createDiffLoader({
-      getTaskId: () => 'task-1',
-      getIncludeUncommitted: () => false,
-    })
+		expect(get(selfReviewDiffFiles)).toEqual([]);
+		expect(get(selfReviewGeneralComments)).toEqual([]);
+		expect(get(selfReviewArchivedComments)).toEqual([]);
+		expect(get(pendingManualComments)).toEqual([]);
+	});
 
-    expect(loader.commits).toEqual([])
-    expect(loader.selectedCommitSha).toBeNull()
-  })
+	it("starts with empty commits and null selectedCommitSha", () => {
+		const loader = createDiffLoader({
+			getTaskId: () => "task-1",
+			getIncludeUncommitted: () => false,
+		});
 
-  it('loadDiff with no commit selected calls getTaskDiff', async () => {
-    mockGetTaskDiff.mockResolvedValue([baseDiff])
+		expect(loader.commits).toEqual([]);
+		expect(loader.selectedCommitSha).toBeNull();
+	});
 
-    const loader = createDiffLoader({
-      getTaskId: () => 'task-1',
-      getIncludeUncommitted: () => false,
-    })
+	it("loadDiff with no commit selected calls getTaskDiff", async () => {
+		mockGetTaskDiff.mockResolvedValue([baseDiff]);
 
-    await loader.loadDiff()
+		const loader = createDiffLoader({
+			getTaskId: () => "task-1",
+			getIncludeUncommitted: () => false,
+		});
 
-    expect(mockGetTaskDiff).toHaveBeenCalledWith('task-1', false)
-    expect(mockGetCommitDiff).not.toHaveBeenCalled()
-    expect(get(selfReviewDiffFiles)).toEqual([baseDiff])
-  })
+		await loader.loadDiff();
 
-  it('loadDiff with commit selected calls getCommitDiff, not getTaskDiff', async () => {
-    mockGetCommitDiff.mockResolvedValue([baseDiff])
+		expect(mockGetTaskDiff).toHaveBeenCalledWith("task-1", false);
+		expect(mockGetCommitDiff).not.toHaveBeenCalled();
+		expect(get(selfReviewDiffFiles)).toEqual([baseDiff]);
+	});
 
-    const loader = createDiffLoader({
-      getTaskId: () => 'task-1',
-      getIncludeUncommitted: () => false,
-    })
+	it("loadDiff with commit selected calls getCommitDiff, not getTaskDiff", async () => {
+		mockGetCommitDiff.mockResolvedValue([baseDiff]);
 
-    await loader.selectCommit('abc1234')
-    await loader.loadDiff()
+		const loader = createDiffLoader({
+			getTaskId: () => "task-1",
+			getIncludeUncommitted: () => false,
+		});
 
-    expect(mockGetCommitDiff).toHaveBeenCalledWith('task-1', 'abc1234')
-    expect(mockGetTaskDiff).not.toHaveBeenCalled()
-  })
+		await loader.selectCommit("abc1234");
+		await loader.loadDiff();
 
-  it('loadCommits populates commits array', async () => {
-    mockGetTaskCommits.mockResolvedValue([baseCommit])
+		expect(mockGetCommitDiff).toHaveBeenCalledWith("task-1", "abc1234");
+		expect(mockGetTaskDiff).not.toHaveBeenCalled();
+	});
 
-    const loader = createDiffLoader({
-      getTaskId: () => 'task-1',
-      getIncludeUncommitted: () => false,
-    })
+	it("loadCommits populates commits array", async () => {
+		mockGetTaskCommits.mockResolvedValue([baseCommit]);
 
-    await loader.loadCommits()
+		const loader = createDiffLoader({
+			getTaskId: () => "task-1",
+			getIncludeUncommitted: () => false,
+		});
 
-    expect(loader.commits).toEqual([baseCommit])
-    expect(mockGetTaskCommits).toHaveBeenCalledWith('task-1')
-  })
+		await loader.loadCommits();
 
-  it('selectCommit clears store then loads commit diff', async () => {
-    mockGetTaskDiff.mockResolvedValue([baseDiff])
-    mockGetCommitDiff.mockResolvedValue([{ ...baseDiff, filename: 'src/other.rs' }])
+		expect(loader.commits).toEqual([baseCommit]);
+		expect(mockGetTaskCommits).toHaveBeenCalledWith("task-1");
+	});
 
-    const loader = createDiffLoader({
-      getTaskId: () => 'task-1',
-      getIncludeUncommitted: () => false,
-    })
+	it("selectCommit clears store then loads commit diff", async () => {
+		mockGetTaskDiff.mockResolvedValue([baseDiff]);
+		mockGetCommitDiff.mockResolvedValue([
+			{ ...baseDiff, filename: "src/other.rs" },
+		]);
 
-    await loader.loadDiff()
-    expect(get(selfReviewDiffFiles)).toHaveLength(1)
+		const loader = createDiffLoader({
+			getTaskId: () => "task-1",
+			getIncludeUncommitted: () => false,
+		});
 
-    await loader.selectCommit('abc1234')
+		await loader.loadDiff();
+		expect(get(selfReviewDiffFiles)).toHaveLength(1);
 
-    expect(loader.selectedCommitSha).toBe('abc1234')
-    expect(get(selfReviewDiffFiles)).toEqual([{ ...baseDiff, filename: 'src/other.rs' }])
-  })
+		await loader.selectCommit("abc1234");
 
-  it('selectCommit(null) restores aggregate mode', async () => {
-    mockGetCommitDiff.mockResolvedValue([baseDiff])
-    mockGetTaskDiff.mockResolvedValue([baseDiff])
+		expect(loader.selectedCommitSha).toBe("abc1234");
+		expect(get(selfReviewDiffFiles)).toEqual([
+			{ ...baseDiff, filename: "src/other.rs" },
+		]);
+	});
 
-    const loader = createDiffLoader({
-      getTaskId: () => 'task-1',
-      getIncludeUncommitted: () => false,
-    })
+	it("selectCommit(null) restores aggregate mode", async () => {
+		mockGetCommitDiff.mockResolvedValue([baseDiff]);
+		mockGetTaskDiff.mockResolvedValue([baseDiff]);
 
-    await loader.selectCommit('abc1234')
-    expect(loader.selectedCommitSha).toBe('abc1234')
+		const loader = createDiffLoader({
+			getTaskId: () => "task-1",
+			getIncludeUncommitted: () => false,
+		});
 
-    await loader.selectCommit(null)
+		await loader.selectCommit("abc1234");
+		expect(loader.selectedCommitSha).toBe("abc1234");
 
-    expect(loader.selectedCommitSha).toBeNull()
-    expect(mockGetTaskDiff).toHaveBeenCalled()
-  })
+		await loader.selectCommit(null);
 
-  it('refresh in commit mode uses getCommitDiff', async () => {
-    mockGetCommitDiff.mockResolvedValue([baseDiff])
+		expect(loader.selectedCommitSha).toBeNull();
+		expect(mockGetTaskDiff).toHaveBeenCalled();
+	});
 
-    const loader = createDiffLoader({
-      getTaskId: () => 'task-1',
-      getIncludeUncommitted: () => false,
-    })
+	it("selectCommit keeps the latest commit diff when earlier requests resolve late", async () => {
+		let resolveFirst!: (value: PrFileDiff[]) => void;
+		let resolveSecond!: (value: PrFileDiff[]) => void;
 
-    await loader.selectCommit('abc1234')
-    mockGetCommitDiff.mockClear()
-    mockGetTaskDiff.mockClear()
+		const firstPromise = new Promise<PrFileDiff[]>((resolve) => {
+			resolveFirst = resolve;
+		});
+		const secondPromise = new Promise<PrFileDiff[]>((resolve) => {
+			resolveSecond = resolve;
+		});
 
-    await loader.refresh()
+		const firstDiff = [{ ...baseDiff, filename: "src/first.rs" }];
+		const secondDiff = [{ ...baseDiff, filename: "src/second.rs" }];
 
-    expect(mockGetCommitDiff).toHaveBeenCalledWith('task-1', 'abc1234')
-    expect(mockGetTaskDiff).not.toHaveBeenCalled()
-  })
+		mockGetCommitDiff.mockImplementation(async (_taskId, commitSha) => {
+			if (commitSha === "first-sha") return firstPromise;
+			if (commitSha === "second-sha") return secondPromise;
+			return [];
+		});
 
-  it('cleanup resets commits and selectedCommitSha', async () => {
-    mockGetTaskCommits.mockResolvedValue([baseCommit])
+		const loader = createDiffLoader({
+			getTaskId: () => "task-1",
+			getIncludeUncommitted: () => false,
+		});
 
-    const loader = createDiffLoader({
-      getTaskId: () => 'task-1',
-      getIncludeUncommitted: () => false,
-    })
+		const firstSelection = loader.selectCommit("first-sha");
+		const secondSelection = loader.selectCommit("second-sha");
 
-    await loader.loadCommits()
-    await loader.selectCommit('abc1234')
-    expect(loader.commits).toHaveLength(1)
-    expect(loader.selectedCommitSha).toBe('abc1234')
+		resolveSecond(secondDiff);
+		await secondSelection;
 
-    loader.cleanup()
+		expect(loader.selectedCommitSha).toBe("second-sha");
+		expect(get(selfReviewDiffFiles)).toEqual(secondDiff);
 
-    expect(loader.commits).toEqual([])
-    expect(loader.selectedCommitSha).toBeNull()
-  })
+		resolveFirst(firstDiff);
+		await firstSelection;
 
-  it('loadDiff populates general comments and archived comments stores', async () => {
-    const generalComment = { ...baseSelfReviewComment, comment_type: 'general' }
-    const inlineComment: SelfReviewComment = { ...baseSelfReviewComment, id: 2, comment_type: 'inline', file_path: 'src/main.rs', line_number: 5 }
-    mockGetTaskDiff.mockResolvedValue([])
-    mockGetActiveSelfReviewComments.mockResolvedValue([generalComment, inlineComment])
-    mockGetArchivedSelfReviewComments.mockResolvedValue([generalComment])
+		expect(loader.selectedCommitSha).toBe("second-sha");
+		expect(get(selfReviewDiffFiles)).toEqual(secondDiff);
+	});
 
-    const loader = createDiffLoader({
-      getTaskId: () => 'task-1',
-      getIncludeUncommitted: () => false,
-    })
+	it("ignores stale request failures after a newer commit selection starts", async () => {
+		let rejectFirst!: (reason?: unknown) => void;
+		let resolveSecond!: (value: PrFileDiff[]) => void;
 
-    await loader.loadDiff()
+		const firstPromise = new Promise<PrFileDiff[]>((_resolve, reject) => {
+			rejectFirst = reject;
+		});
+		const secondPromise = new Promise<PrFileDiff[]>((resolve) => {
+			resolveSecond = resolve;
+		});
 
-    expect(get(selfReviewGeneralComments)).toEqual([generalComment])
-    expect(get(selfReviewArchivedComments)).toEqual([generalComment])
-    expect(get(pendingManualComments)).toEqual([{
-      path: 'src/main.rs',
-      line: 5,
-      body: 'General note',
-      side: 'RIGHT',
-    }])
-  })
-})
+		const secondDiff = [{ ...baseDiff, filename: "src/second.rs" }];
+
+		mockGetCommitDiff.mockImplementation(async (_taskId, commitSha) => {
+			if (commitSha === "first-sha") return firstPromise;
+			if (commitSha === "second-sha") return secondPromise;
+			return [];
+		});
+
+		const loader = createDiffLoader({
+			getTaskId: () => "task-1",
+			getIncludeUncommitted: () => false,
+		});
+
+		const firstSelection = loader.selectCommit("first-sha");
+		const secondSelection = loader.selectCommit("second-sha");
+
+		rejectFirst(new Error("stale failure"));
+		await firstSelection;
+
+		expect(loader.error).toBeNull();
+		expect(loader.isLoading).toBe(true);
+
+		resolveSecond(secondDiff);
+		await secondSelection;
+
+		expect(loader.error).toBeNull();
+		expect(loader.isLoading).toBe(false);
+		expect(get(selfReviewDiffFiles)).toEqual(secondDiff);
+	});
+
+	it("refresh in commit mode uses getCommitDiff", async () => {
+		mockGetCommitDiff.mockResolvedValue([baseDiff]);
+
+		const loader = createDiffLoader({
+			getTaskId: () => "task-1",
+			getIncludeUncommitted: () => false,
+		});
+
+		await loader.selectCommit("abc1234");
+		mockGetCommitDiff.mockClear();
+		mockGetTaskDiff.mockClear();
+
+		await loader.refresh();
+
+		expect(mockGetCommitDiff).toHaveBeenCalledWith("task-1", "abc1234");
+		expect(mockGetTaskDiff).not.toHaveBeenCalled();
+	});
+
+	it("cleanup resets commits and selectedCommitSha", async () => {
+		mockGetTaskCommits.mockResolvedValue([baseCommit]);
+
+		const loader = createDiffLoader({
+			getTaskId: () => "task-1",
+			getIncludeUncommitted: () => false,
+		});
+
+		await loader.loadCommits();
+		await loader.selectCommit("abc1234");
+		expect(loader.commits).toHaveLength(1);
+		expect(loader.selectedCommitSha).toBe("abc1234");
+
+		loader.cleanup();
+
+		expect(loader.commits).toEqual([]);
+		expect(loader.selectedCommitSha).toBeNull();
+	});
+
+	it("cleanup invalidates in-flight diff loads", async () => {
+		let resolveDiff!: (value: PrFileDiff[]) => void;
+		const pendingDiff = new Promise<PrFileDiff[]>((resolve) => {
+			resolveDiff = resolve;
+		});
+
+		mockGetTaskDiff.mockReturnValue(pendingDiff);
+
+		const loader = createDiffLoader({
+			getTaskId: () => "task-1",
+			getIncludeUncommitted: () => false,
+		});
+
+		const loadPromise = loader.loadDiff();
+		loader.cleanup();
+
+		resolveDiff([{ ...baseDiff, filename: "src/late.rs" }]);
+		await loadPromise;
+
+		expect(loader.isLoading).toBe(false);
+		expect(loader.error).toBeNull();
+		expect(get(selfReviewDiffFiles)).toEqual([]);
+	});
+
+	it("loadDiff populates general comments and archived comments stores", async () => {
+		const generalComment = {
+			...baseSelfReviewComment,
+			comment_type: "general",
+		};
+		const inlineComment: SelfReviewComment = {
+			...baseSelfReviewComment,
+			id: 2,
+			comment_type: "inline",
+			file_path: "src/main.rs",
+			line_number: 5,
+		};
+		mockGetTaskDiff.mockResolvedValue([]);
+		mockGetActiveSelfReviewComments.mockResolvedValue([
+			generalComment,
+			inlineComment,
+		]);
+		mockGetArchivedSelfReviewComments.mockResolvedValue([generalComment]);
+
+		const loader = createDiffLoader({
+			getTaskId: () => "task-1",
+			getIncludeUncommitted: () => false,
+		});
+
+		await loader.loadDiff();
+
+		expect(get(selfReviewGeneralComments)).toEqual([generalComment]);
+		expect(get(selfReviewArchivedComments)).toEqual([generalComment]);
+		expect(get(pendingManualComments)).toEqual([
+			{
+				path: "src/main.rs",
+				line: 5,
+				body: "General note",
+				side: "RIGHT",
+			},
+		]);
+	});
+});
