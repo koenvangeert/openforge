@@ -1,13 +1,13 @@
+use log::{error, info, warn};
+use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use std::collections::HashMap;
 use std::fmt;
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
-use log::{error, info, warn};
-use tokio::sync::Mutex;
-use portable_pty::{CommandBuilder, PtySize, native_pty_system};
+use std::sync::Arc;
 use tauri::Emitter;
+use tokio::sync::Mutex;
 
 // ============================================================================
 // Ring Buffer
@@ -63,7 +63,9 @@ impl fmt::Display for PtyError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             PtyError::SpawnFailed(msg) => write!(f, "Failed to spawn PTY: {}", msg),
-            PtyError::ProcessNotFound(task_id) => write!(f, "No PTY process found for task: {}", task_id),
+            PtyError::ProcessNotFound(task_id) => {
+                write!(f, "No PTY process found for task: {}", task_id)
+            }
             PtyError::IoError(e) => write!(f, "IO error: {}", e),
             PtyError::WriteFailed(msg) => write!(f, "Failed to write to PTY: {}", msg),
         }
@@ -217,7 +219,9 @@ impl PtyManager {
         // Release the lock before spawning the reader thread
         drop(sessions);
 
-        let ring_buffer = Arc::new(std::sync::Mutex::new(RingBuffer::new(CLAUDE_BUFFER_CAPACITY)));
+        let ring_buffer = Arc::new(std::sync::Mutex::new(RingBuffer::new(
+            CLAUDE_BUFFER_CAPACITY,
+        )));
         {
             let mut buffers = self.output_buffers.lock().await;
             buffers.insert(task_id.to_string(), Arc::clone(&ring_buffer));
@@ -271,7 +275,10 @@ impl PtyManager {
                         if !data.is_empty() {
                             let text = String::from_utf8_lossy(&data).to_string();
                             if tx.send(Some(text)).is_err() {
-                                info!("[PTY] task={} channel closed, reader exiting", task_id_reader);
+                                info!(
+                                    "[PTY] task={} channel closed, reader exiting",
+                                    task_id_reader
+                                );
                                 break;
                             }
                         }
@@ -297,7 +304,8 @@ impl PtyManager {
         let instance_id_emitter = instance_id;
         tokio::spawn(async move {
             let mut buffer = String::new();
-            let mut interval = tokio::time::interval(tokio::time::Duration::from_millis(FLUSH_INTERVAL_MS));
+            let mut interval =
+                tokio::time::interval(tokio::time::Duration::from_millis(FLUSH_INTERVAL_MS));
             interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
             loop {
@@ -407,11 +415,17 @@ impl PtyManager {
 
         // Pre-approve workspace trust so the "Do you trust this folder?" dialog is skipped
         if let Err(e) = crate::claude_hooks::ensure_workspace_trusted(cwd) {
-            info!("[PTY] Warning: Failed to pre-approve workspace trust: {}", e);
+            info!(
+                "[PTY] Warning: Failed to pre-approve workspace trust: {}",
+                e
+            );
             // Non-fatal — Claude will just show the trust dialog
         }
 
-        info!("Spawning Claude PTY for task {} ({}x{})", task_id, cols, rows);
+        info!(
+            "Spawning Claude PTY for task {} ({}x{})",
+            task_id, cols, rows
+        );
 
         let pty_system = native_pty_system();
         let size = PtySize {
@@ -426,7 +440,13 @@ impl PtyManager {
             .map_err(|e| PtyError::SpawnFailed(format!("Failed to create PTY pair: {}", e)))?;
 
         let mut cmd = CommandBuilder::new("claude");
-        for arg in build_claude_args(prompt, resume_session_id, continue_session, hooks_settings_path, permission_mode) {
+        for arg in build_claude_args(
+            prompt,
+            resume_session_id,
+            continue_session,
+            hooks_settings_path,
+            permission_mode,
+        ) {
             cmd.arg(arg);
         }
         cmd.cwd(cwd);
@@ -491,7 +511,9 @@ impl PtyManager {
         }
         let last_output_time_reader = Arc::clone(&last_output_time);
 
-        let ring_buffer = Arc::new(std::sync::Mutex::new(RingBuffer::new(CLAUDE_BUFFER_CAPACITY)));
+        let ring_buffer = Arc::new(std::sync::Mutex::new(RingBuffer::new(
+            CLAUDE_BUFFER_CAPACITY,
+        )));
         {
             let mut buffers = self.output_buffers.lock().await;
             buffers.insert(task_id.to_string(), Arc::clone(&ring_buffer));
@@ -537,7 +559,10 @@ impl PtyManager {
                         if !data.is_empty() {
                             let text = String::from_utf8_lossy(&data).to_string();
                             if tx.send(Some(text)).is_err() {
-                                info!("[PTY] task={} channel closed, reader exiting", task_id_reader);
+                                info!(
+                                    "[PTY] task={} channel closed, reader exiting",
+                                    task_id_reader
+                                );
                                 break;
                             }
                         }
@@ -558,7 +583,8 @@ impl PtyManager {
         let instance_id_emitter = instance_id;
         tokio::spawn(async move {
             let mut buffer = String::new();
-            let mut interval = tokio::time::interval(tokio::time::Duration::from_millis(FLUSH_INTERVAL_MS));
+            let mut interval =
+                tokio::time::interval(tokio::time::Duration::from_millis(FLUSH_INTERVAL_MS));
             interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
             loop {
@@ -636,11 +662,16 @@ impl PtyManager {
                 let _ = old_session.child.kill();
             }
             if let Ok(pid_dir) = self.get_pid_dir() {
-                let _ = std::fs::remove_file(pid_dir.join(shell_pid_file_name(task_id, terminal_index)));
+                let _ = std::fs::remove_file(
+                    pid_dir.join(shell_pid_file_name(task_id, terminal_index)),
+                );
             }
         }
 
-        info!("Spawning shell PTY for task {} ({}x{})", task_id, cols, rows);
+        info!(
+            "Spawning shell PTY for task {} ({}x{})",
+            task_id, cols, rows
+        );
 
         let pty_system = native_pty_system();
         let size = PtySize {
@@ -717,7 +748,9 @@ impl PtyManager {
         }
         let last_output_time_reader = Arc::clone(&last_output_time);
 
-        let ring_buffer = Arc::new(std::sync::Mutex::new(RingBuffer::new(CLAUDE_BUFFER_CAPACITY)));
+        let ring_buffer = Arc::new(std::sync::Mutex::new(RingBuffer::new(
+            CLAUDE_BUFFER_CAPACITY,
+        )));
         {
             let mut buffers = self.output_buffers.lock().await;
             buffers.insert(key.clone(), Arc::clone(&ring_buffer));
@@ -784,7 +817,8 @@ impl PtyManager {
         let instance_id_emitter = instance_id;
         tokio::spawn(async move {
             let mut buffer = String::new();
-            let mut interval = tokio::time::interval(tokio::time::Duration::from_millis(FLUSH_INTERVAL_MS));
+            let mut interval =
+                tokio::time::interval(tokio::time::Duration::from_millis(FLUSH_INTERVAL_MS));
             interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
             loop {
@@ -1019,7 +1053,11 @@ impl PtyManager {
         let buffer = buffers.get(task_id)?;
         let buf = buffer.lock().unwrap();
         let content = buf.snapshot();
-        if content.is_empty() { None } else { Some(content) }
+        if content.is_empty() {
+            None
+        } else {
+            Some(content)
+        }
     }
 
     /// Cleans up stale PID files for processes that are no longer running
@@ -1036,7 +1074,10 @@ impl PtyManager {
 
             // Process files ending with -pty.pid, -claude.pid, or -shell.pid
             if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-                if !name.ends_with("-pty.pid") && !name.ends_with("-claude.pid") && !name.ends_with("-shell.pid") {
+                if !name.ends_with("-pty.pid")
+                    && !name.ends_with("-claude.pid")
+                    && !name.ends_with("-shell.pid")
+                {
                     continue;
                 }
             } else {
@@ -1061,7 +1102,10 @@ impl PtyManager {
             };
 
             if !is_running {
-                info!("[cleanup] Removing stale PTY PID file (process dead): {:?}", path);
+                info!(
+                    "[cleanup] Removing stale PTY PID file (process dead): {:?}",
+                    path
+                );
                 let _ = std::fs::remove_file(&path);
             } else {
                 // Process is alive — verify it's actually opencode before killing
@@ -1075,7 +1119,10 @@ impl PtyManager {
                     .unwrap_or(false);
 
                 if is_opencode {
-                    info!("[cleanup] Killing orphaned opencode PTY process (PID: {})", pid);
+                    info!(
+                        "[cleanup] Killing orphaned opencode PTY process (PID: {})",
+                        pid
+                    );
                     unsafe {
                         libc::kill(pid, libc::SIGTERM);
                     }
@@ -1114,7 +1161,11 @@ impl PtyManager {
                 "Home directory not found",
             ))
         })?;
-        let pids_dir_name = if cfg!(debug_assertions) { "pids-dev" } else { "pids" };
+        let pids_dir_name = if cfg!(debug_assertions) {
+            "pids-dev"
+        } else {
+            "pids"
+        };
         Ok(home.join(".openforge").join(pids_dir_name))
     }
 }
@@ -1434,13 +1485,22 @@ mod tests {
     fn test_get_pid_dir_default() {
         let manager = PtyManager::new();
         let pid_dir = manager.get_pid_dir().expect("get_pid_dir should succeed");
-        
+
         // In test builds, debug_assertions is enabled, so we expect "pids-dev"
         let dir_name = pid_dir.file_name().unwrap().to_str().unwrap();
-        assert_eq!(dir_name, "pids-dev", "Debug build should use pids-dev directory");
-        
+        assert_eq!(
+            dir_name, "pids-dev",
+            "Debug build should use pids-dev directory"
+        );
+
         // Verify parent is .openforge
-        let parent_name = pid_dir.parent().unwrap().file_name().unwrap().to_str().unwrap();
+        let parent_name = pid_dir
+            .parent()
+            .unwrap()
+            .file_name()
+            .unwrap()
+            .to_str()
+            .unwrap();
         assert_eq!(parent_name, ".openforge");
     }
 
@@ -1495,11 +1555,7 @@ mod tests {
         let args = build_claude_args("", None, true, settings, None);
         assert_eq!(
             args,
-            vec![
-                "--continue",
-                "--settings",
-                "/path/to/settings.json",
-            ]
+            vec!["--continue", "--settings", "/path/to/settings.json",]
         );
     }
 
@@ -1569,12 +1625,21 @@ mod tests {
         assert_eq!(args_new[s_idx + 1], temp_path.to_string_lossy().to_string());
         assert!(!args_new.contains(&"-p".to_string()));
 
-        let args_resume = build_claude_args("continue impl", Some("resume-sess-999"), false, &temp_path, None);
+        let args_resume = build_claude_args(
+            "continue impl",
+            Some("resume-sess-999"),
+            false,
+            &temp_path,
+            None,
+        );
         assert_eq!(args_resume[0], "--resume");
         assert_eq!(args_resume[1], "resume-sess-999");
         assert_eq!(args_resume[2], "continue impl");
         let s_idx_r = args_resume.iter().position(|a| a == "--settings").unwrap();
-        assert_eq!(args_resume[s_idx_r + 1], temp_path.to_string_lossy().to_string());
+        assert_eq!(
+            args_resume[s_idx_r + 1],
+            temp_path.to_string_lossy().to_string()
+        );
 
         let content = std::fs::read_to_string(&temp_path).unwrap();
         let parsed: serde_json::Value = serde_json::from_str(&content).unwrap();
@@ -1600,7 +1665,11 @@ mod tests {
         assert!(buffered.contains("Tool call: bash"));
 
         let still_frozen = frozen_seconds(last_output_ms, now_ms);
-        assert_eq!(still_frozen, Some(20), "Freeze detection unaffected by ring buffer snapshot");
+        assert_eq!(
+            still_frozen,
+            Some(20),
+            "Freeze detection unaffected by ring buffer snapshot"
+        );
 
         let recent_output = now_ms - 5_000;
         assert!(frozen_seconds(recent_output, now_ms).is_none());
@@ -1708,22 +1777,34 @@ mod tests {
 
         {
             let buffers = manager.output_buffers.lock().await;
-            assert!(buffers.contains_key(task_id), "buffer entry should exist before kill");
+            assert!(
+                buffers.contains_key(task_id),
+                "buffer entry should exist before kill"
+            );
         }
         {
             let times = manager.last_output.lock().await;
-            assert!(times.contains_key(task_id), "last_output entry should exist before kill");
+            assert!(
+                times.contains_key(task_id),
+                "last_output entry should exist before kill"
+            );
         }
 
         let _ = manager.kill_pty(task_id).await;
 
         {
             let buffers = manager.output_buffers.lock().await;
-            assert!(!buffers.contains_key(task_id), "output_buffers should be cleaned up after kill_pty");
+            assert!(
+                !buffers.contains_key(task_id),
+                "output_buffers should be cleaned up after kill_pty"
+            );
         }
         {
             let times = manager.last_output.lock().await;
-            assert!(!times.contains_key(task_id), "last_output should be cleaned up after kill_pty");
+            assert!(
+                !times.contains_key(task_id),
+                "last_output should be cleaned up after kill_pty"
+            );
         }
 
         let _ = std::fs::remove_dir_all(&tmp_dir);
@@ -1733,7 +1814,9 @@ mod tests {
     async fn test_spawn_pty_populates_output_buffer() {
         let manager = PtyManager::new();
 
-        let ring = Arc::new(std::sync::Mutex::new(RingBuffer::new(CLAUDE_BUFFER_CAPACITY)));
+        let ring = Arc::new(std::sync::Mutex::new(RingBuffer::new(
+            CLAUDE_BUFFER_CAPACITY,
+        )));
         {
             let mut buf = ring.lock().unwrap();
             buf.push(b"opencode output data");
@@ -1747,19 +1830,30 @@ mod tests {
         assert_eq!(result, Some("opencode output data".to_string()));
 
         let result2 = manager.get_pty_buffer("opencode-task-123").await;
-        assert_eq!(result2, Some("opencode output data".to_string()), "buffer must be replayable on re-attach");
+        assert_eq!(
+            result2,
+            Some("opencode output data".to_string()),
+            "buffer must be replayable on re-attach"
+        );
     }
 
     #[test]
     fn test_build_shell_command() {
         let shell = get_shell_path();
         assert!(!shell.is_empty(), "shell path should not be empty");
-        assert!(shell.starts_with('/'), "shell path should be absolute: {}", shell);
+        assert!(
+            shell.starts_with('/'),
+            "shell path should be absolute: {}",
+            shell
+        );
 
         let original = std::env::var("SHELL").ok();
         std::env::set_var("SHELL", "/usr/bin/env");
         let shell_with_env = get_shell_path();
-        assert_eq!(shell_with_env, "/usr/bin/env", "should use SHELL env var when set");
+        assert_eq!(
+            shell_with_env, "/usr/bin/env",
+            "should use SHELL env var when set"
+        );
 
         match original {
             Some(s) => std::env::set_var("SHELL", s),
@@ -1838,7 +1932,7 @@ mod tests {
         let key_0 = format!("{}-shell-{}", task_id, 0);
         let key_1 = format!("{}-shell-{}", task_id, 1);
         let key_2 = format!("{}-shell-{}", task_id, 2);
-        
+
         assert_eq!(key_0, "t1-shell-0");
         assert_eq!(key_1, "t1-shell-1");
         assert_eq!(key_2, "t1-shell-2");
@@ -1847,18 +1941,11 @@ mod tests {
     #[test]
     fn test_kill_shells_for_task_key_matching() {
         let task_id = "t1";
-        let keys = vec![
-            "t1-shell-0",
-            "t1-shell-1",
-            "t1",
-            "t2-shell-0",
-        ];
-        
+        let keys = ["t1-shell-0", "t1-shell-1", "t1", "t2-shell-0"];
+
         let prefix = format!("{}-shell-", task_id);
-        let matching: Vec<_> = keys.iter()
-            .filter(|k| k.starts_with(&prefix))
-            .collect();
-        
+        let matching: Vec<_> = keys.iter().filter(|k| k.starts_with(&prefix)).collect();
+
         assert_eq!(matching.len(), 2);
         assert!(matching.contains(&&"t1-shell-0"));
         assert!(matching.contains(&&"t1-shell-1"));
@@ -1870,27 +1957,13 @@ mod tests {
     fn test_spawn_shell_no_index() {
         let task_id = "my-task";
         let terminal_index: Option<u32> = None;
-        
+
         let key = if let Some(idx) = terminal_index {
             format!("{}-shell-{}", task_id, idx)
         } else {
             format!("{}-shell-0", task_id)
         };
-        
+
         assert_eq!(key, "my-task-shell-0");
-    }
-}
-
-#[cfg(test)]
-struct MockWriter;
-
-#[cfg(test)]
-impl std::io::Write for MockWriter {
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        Ok(buf.len())
-    }
-
-    fn flush(&mut self) -> std::io::Result<()> {
-        Ok(())
     }
 }

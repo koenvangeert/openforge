@@ -310,7 +310,7 @@ index 1234567..abcdefg 100644
         let result = parse_unified_diff(&diff, true);
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].filename, "big.rs");
-        assert_eq!(result[0].is_truncated, true);
+        assert!(result[0].is_truncated);
         assert_eq!(result[0].patch_line_count, Some(10002)); // 10001 lines + 1 @@ header
 
         let patch = result[0].patch.as_ref().unwrap();
@@ -328,7 +328,7 @@ index 1234567..abcdefg 100644
         let result = parse_unified_diff(&diff, true);
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].filename, "small.rs");
-        assert_eq!(result[0].is_truncated, false);
+        assert!(!result[0].is_truncated);
         assert_eq!(result[0].patch_line_count, None);
 
         let patch = result[0].patch.as_ref().unwrap();
@@ -346,7 +346,7 @@ index 1234567..abcdefg 100644
         let result = parse_unified_diff(&diff, true);
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].filename, "boundary.rs");
-        assert_eq!(result[0].is_truncated, false);
+        assert!(!result[0].is_truncated);
         assert_eq!(result[0].patch_line_count, None);
 
         let patch = result[0].patch.as_ref().unwrap();
@@ -366,7 +366,7 @@ Binary files a/image.png and b/image.png differ
         assert_eq!(result[0].filename, "image.png");
         assert_eq!(result[0].status, "binary");
         assert_eq!(result[0].patch, None);
-        assert_eq!(result[0].is_truncated, false);
+        assert!(!result[0].is_truncated);
         assert_eq!(result[0].patch_line_count, None);
     }
 
@@ -387,14 +387,14 @@ Binary files a/image.png and b/image.png differ
 
         // First file: small, not truncated
         assert_eq!(result[0].filename, "small.rs");
-        assert_eq!(result[0].is_truncated, false);
+        assert!(!result[0].is_truncated);
         assert_eq!(result[0].patch_line_count, None);
         let small_patch = result[0].patch.as_ref().unwrap();
         assert_eq!(small_patch.lines().count(), 11); // 10 lines + 1 @@ header
 
         // Second file: large, truncated
         assert_eq!(result[1].filename, "big.rs");
-        assert_eq!(result[1].is_truncated, true);
+        assert!(result[1].is_truncated);
         assert_eq!(result[1].patch_line_count, Some(10002)); // 10001 lines + 1 @@ header
         let big_patch = result[1].patch.as_ref().unwrap();
         assert_eq!(big_patch.lines().count(), 201); // 200 lines + 1 @@ header

@@ -1,7 +1,7 @@
-use std::sync::{Mutex, Arc};
-use serde::Deserialize;
-use tauri::State;
 use crate::{db, diff_parser};
+use serde::Deserialize;
+use std::sync::{Arc, Mutex};
+use tauri::State;
 
 #[tauri::command]
 pub async fn get_task_diff(
@@ -36,7 +36,10 @@ pub async fn get_task_diff(
         .to_string();
 
     let mut cmd = tokio::process::Command::new("git");
-    cmd.arg("-C").arg(&worktree_path).arg("diff").arg(&merge_base);
+    cmd.arg("-C")
+        .arg(&worktree_path)
+        .arg("diff")
+        .arg(&merge_base);
     if !include_uncommitted {
         cmd.arg("HEAD");
     }
@@ -380,10 +383,22 @@ mod tests {
 
     #[test]
     fn test_batch_request_produces_parallel_results_structure() {
-        let files = vec![
-            FileContentRequest { path: "a.rs".into(), old_path: None, status: "added".into() },
-            FileContentRequest { path: "b.rs".into(), old_path: None, status: "modified".into() },
-            FileContentRequest { path: "c.rs".into(), old_path: Some("old_c.rs".into()), status: "renamed".into() },
+        let files = [
+            FileContentRequest {
+                path: "a.rs".into(),
+                old_path: None,
+                status: "added".into(),
+            },
+            FileContentRequest {
+                path: "b.rs".into(),
+                old_path: None,
+                status: "modified".into(),
+            },
+            FileContentRequest {
+                path: "c.rs".into(),
+                old_path: Some("old_c.rs".into()),
+                status: "renamed".into(),
+            },
         ];
 
         assert_eq!(files.len(), 3);

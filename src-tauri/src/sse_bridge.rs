@@ -1,13 +1,13 @@
-use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
-use log::{debug, error, info, warn};
-use tokio::sync::Mutex;
-use tauri::{AppHandle, Emitter, Manager};
 use crate::db;
 use crate::opencode_client::{OpenCodeClient, OpenCodeError, SessionInfo, SessionStatusInfo};
 use eventsource_client::{self as es, Client};
 use futures::TryStreamExt;
+use log::{debug, error, info, warn};
+use std::collections::{HashMap, HashSet};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use tauri::{AppHandle, Emitter, Manager};
+use tokio::sync::Mutex;
 
 // ============================================================================
 // Constants
@@ -76,8 +76,13 @@ fn persist_session_completed(app: &AppHandle, task_id: &str) {
     let db = app.state::<Arc<std::sync::Mutex<db::Database>>>();
     if let Ok(db_lock) = db.lock() {
         if let Ok(Some(session)) = db_lock.get_latest_session_for_ticket(task_id) {
-            if let Err(e) = db_lock.update_agent_session(&session.id, &session.stage, "completed", None, None) {
-                error!("[SSE] Failed to persist completed status for task {}: {}", task_id, e);
+            if let Err(e) =
+                db_lock.update_agent_session(&session.id, &session.stage, "completed", None, None)
+            {
+                error!(
+                    "[SSE] Failed to persist completed status for task {}: {}",
+                    task_id, e
+                );
             }
         }
     };
@@ -100,7 +105,9 @@ enum CompletionAction {
 fn completion_action_for_descendant_outcome(outcome: DescendantPollOutcome) -> CompletionAction {
     match outcome {
         DescendantPollOutcome::AllIdle => CompletionAction::EmitComplete,
-        DescendantPollOutcome::LookupFailed | DescendantPollOutcome::MissingRootSessionId | DescendantPollOutcome::TimedOut => CompletionAction::KeepRunning,
+        DescendantPollOutcome::LookupFailed
+        | DescendantPollOutcome::MissingRootSessionId
+        | DescendantPollOutcome::TimedOut => CompletionAction::KeepRunning,
     }
 }
 
@@ -240,7 +247,9 @@ impl SseBridgeManager {
         let url = format!("http://127.0.0.1:{}/event", server_port);
 
         let client = es::ClientBuilder::for_url(&url)
-            .map_err(|e| SseBridgeError::ConnectionFailed(format!("Failed to build client: {}", e)))?
+            .map_err(|e| {
+                SseBridgeError::ConnectionFailed(format!("Failed to build client: {}", e))
+            })?
             .reconnect(
                 es::ReconnectOptions::reconnect(true)
                     .retry_initial(true)
@@ -258,7 +267,10 @@ impl SseBridgeManager {
         let bridges_clone = self.bridges.clone();
 
         tokio::spawn(async move {
-            info!("[SSE] Starting bridge for task {} on port {}", task_id_clone, server_port);
+            info!(
+                "[SSE] Starting bridge for task {} on port {}",
+                task_id_clone, server_port
+            );
 
             let stream = client.stream();
 
@@ -590,7 +602,8 @@ mod tests {
     fn test_extract_session_id_from_event() {
         let json = r#"{"type": "session.idle", "properties": {"sessionID": "ses_abc123"}}"#;
         let parsed: serde_json::Value = serde_json::from_str(json).unwrap();
-        let session_id = parsed.get("properties")
+        let session_id = parsed
+            .get("properties")
             .and_then(|p| p.get("sessionID"))
             .and_then(|s| s.as_str());
         assert_eq!(session_id, Some("ses_abc123"));
@@ -656,19 +669,13 @@ mod tests {
 
         assert_eq!(
             descendants,
-            HashSet::from([
-                "ses_child".to_string(),
-                "ses_grandchild".to_string(),
-            ])
+            HashSet::from(["ses_child".to_string(), "ses_grandchild".to_string(),])
         );
     }
 
     #[test]
     fn test_has_active_descendants_detects_grandchildren() {
-        let descendants = HashSet::from([
-            "ses_child".to_string(),
-            "ses_grandchild".to_string(),
-        ]);
+        let descendants = HashSet::from(["ses_child".to_string(), "ses_grandchild".to_string()]);
         let statuses = HashMap::from([(
             "ses_grandchild".to_string(),
             SessionStatusInfo {
@@ -715,7 +722,10 @@ mod tests {
         let descendants = HashSet::new();
         let statuses = HashMap::new();
 
-        assert!(descendant_snapshot_is_idle_candidate(&descendants, &statuses));
+        assert!(descendant_snapshot_is_idle_candidate(
+            &descendants,
+            &statuses
+        ));
     }
 
     #[test]
@@ -723,7 +733,10 @@ mod tests {
         let descendants = HashSet::from(["ses_child".to_string()]);
         let statuses = HashMap::new();
 
-        assert!(descendant_snapshot_is_idle_candidate(&descendants, &statuses));
+        assert!(descendant_snapshot_is_idle_candidate(
+            &descendants,
+            &statuses
+        ));
     }
 
     #[test]
@@ -736,7 +749,11 @@ mod tests {
             },
         )]);
 
-        assert!(!completion_snapshot_is_idle_candidate("ses_root", &descendants, &statuses));
+        assert!(!completion_snapshot_is_idle_candidate(
+            "ses_root",
+            &descendants,
+            &statuses
+        ));
     }
 
     #[test]
@@ -744,14 +761,19 @@ mod tests {
         let descendants = HashSet::from(["ses_child".to_string()]);
         let statuses = HashMap::new();
 
-        assert!(completion_snapshot_is_idle_candidate("ses_root", &descendants, &statuses));
+        assert!(completion_snapshot_is_idle_candidate(
+            "ses_root",
+            &descendants,
+            &statuses
+        ));
     }
 
     #[test]
     fn test_detect_idle_from_session_status_event() {
         let json = r#"{"type": "session.status", "properties": {"sessionID": "ses_1", "status": {"type": "idle"}}}"#;
         let parsed: serde_json::Value = serde_json::from_str(json).unwrap();
-        let status_type = parsed.get("properties")
+        let status_type = parsed
+            .get("properties")
             .and_then(|p| p.get("status"))
             .and_then(|s| s.get("type"))
             .and_then(|t| t.as_str());
@@ -761,9 +783,14 @@ mod tests {
     #[test]
     fn test_child_busy_detection() {
         let mut statuses: HashMap<String, SessionStatusInfo> = HashMap::new();
-        statuses.insert("ses_child1".to_string(), SessionStatusInfo { status_type: "busy".to_string() });
+        statuses.insert(
+            "ses_child1".to_string(),
+            SessionStatusInfo {
+                status_type: "busy".to_string(),
+            },
+        );
 
-        let child_ids = vec!["ses_child1".to_string(), "ses_child2".to_string()];
+        let child_ids = ["ses_child1".to_string(), "ses_child2".to_string()];
         let any_busy = child_ids.iter().any(|id| statuses.contains_key(id));
         assert!(any_busy);
 

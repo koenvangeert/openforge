@@ -225,7 +225,7 @@ mod tests {
         assert_eq!(prs[0].title, "Add new feature");
         assert_eq!(prs[0].body, Some("This PR adds a new feature".to_string()));
         assert_eq!(prs[0].state, "open");
-        assert_eq!(prs[0].draft, false);
+        assert!(!prs[0].draft);
         assert_eq!(prs[0].html_url, "https://github.com/owner/repo/pull/456");
         assert_eq!(prs[0].user_login, "octocat");
         assert_eq!(
