@@ -1,7 +1,8 @@
 <script lang="ts">
   import type { BoardStatus, Action } from '../lib/types'
   import { tasks, error } from '../lib/stores'
-  import { updateTaskStatus, deleteTask } from '../lib/ipc'
+  import { deleteTask } from '../lib/ipc'
+  import { moveTaskToComplete } from '../lib/moveToComplete'
   import ContextMenu from './ContextMenu.svelte'
   import ContextMenuItem from './ContextMenuItem.svelte'
 
@@ -35,12 +36,7 @@
   async function handleMoveToDone() {
     const id = taskId
     onClose()
-    try {
-      await updateTaskStatus(id, 'done')
-    } catch (err: unknown) {
-      console.error('Failed to move task:', err)
-      $error = String(err)
-    }
+    await moveTaskToComplete(id, { resetToBoard: false })
   }
 
   async function handleDelete() {

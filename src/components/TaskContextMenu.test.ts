@@ -5,8 +5,12 @@ import type { Task } from '../lib/types'
 import { tasks, error } from '../lib/stores'
 
 vi.mock('../lib/ipc', () => ({
-  updateTaskStatus: vi.fn(),
+  updateTaskStatus: vi.fn().mockResolvedValue(undefined),
   deleteTask: vi.fn(),
+}))
+
+vi.mock('../lib/moveToComplete', () => ({
+  moveTaskToComplete: vi.fn().mockResolvedValue(undefined),
 }))
 
 const makeTask = (id: string, status: string): Task => ({
@@ -87,12 +91,12 @@ describe('TaskContextMenu', () => {
     expect(screen.queryByText('Move to Done')).toBeNull()
   })
 
-  it('calls updateTaskStatus with done when Move to Done is clicked', async () => {
-    const { updateTaskStatus } = await import('../lib/ipc')
+  it('calls shared moveTaskToComplete without resetting to board when Move to Done is clicked', async () => {
+    const { moveTaskToComplete } = await import('../lib/moveToComplete')
     tasks.set([makeTask('T-1', 'doing')])
     render(TaskContextMenu, { props: { visible: true, x: 0, y: 0, taskId: 'T-1', onClose: vi.fn() } })
     await fireEvent.click(screen.getByText('Move to Done'))
-    expect(updateTaskStatus).toHaveBeenCalledWith('T-1', 'done')
+    expect(moveTaskToComplete).toHaveBeenCalledWith('T-1', { resetToBoard: false })
   })
 
   it('always shows Delete option', () => {
