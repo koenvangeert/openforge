@@ -2,13 +2,7 @@ import { get } from 'svelte/store'
 import { navigateBack, pushNavState, resetToBoard as navResetToBoard } from './navigation'
 import { currentView, selectedTaskId } from './stores'
 import type { AppView } from './types'
-
-const VIEWS_CLEARING_TASK_SELECTION: ReadonlySet<AppView> = new Set([
-  'pr_review',
-  'settings',
-  'workqueue',
-  'global_settings',
-])
+import { TASK_CLEARING_VIEWS } from './views'
 
 export function useAppRouter() {
   let currentViewState = $state<AppView>(get(currentView))
@@ -24,7 +18,7 @@ export function useAppRouter() {
     currentViewState = view
     currentView.set(view)
 
-    if (VIEWS_CLEARING_TASK_SELECTION.has(view)) {
+    if (TASK_CLEARING_VIEWS.has(view)) {
       selectedTaskId.set(null)
     }
   }

@@ -13,9 +13,6 @@
   import TaskDetailView from './components/TaskDetailView.svelte'
    import PromptInput from './components/PromptInput.svelte'
   import Modal from './components/Modal.svelte'
-   import SettingsView from './components/SettingsView.svelte'
-   import PrReviewView from './components/PrReviewView.svelte'
-   import WorkQueueView from './components/WorkQueueView.svelte'
    import Toast from './components/Toast.svelte'
   import CheckpointToast from './components/CheckpointToast.svelte'
   import CiFailureToast from './components/CiFailureToast.svelte'
@@ -37,8 +34,8 @@
   import { isInputFocused } from './lib/domUtils'
   import { useCommandHeld } from './lib/useCommandHeld.svelte'
   import { getOpenCodeSessionUpdate } from './lib/opencodeSessionEvents'
-  import SkillsView from './components/SkillsView.svelte'
   import { useShortcutRegistry } from './lib/shortcuts.svelte'
+  import { ICON_RAIL_HIDDEN_VIEWS, VIEWS } from './lib/views'
 
   let unlisteners: UnlistenFn[] = []
   let showAddDialog = $state(false)
@@ -94,6 +91,7 @@
       ($pendingTask?.id === $selectedTaskId ? $pendingTask : null)
   )
   let previousActiveProjectId: string | null = $state(null)
+  let activeView = $derived($currentView === 'board' ? null : VIEWS[$currentView])
 
   $effect(() => {
     const pending = $pendingTask
@@ -883,46 +881,45 @@
     onNewProject={() => showProjectSetup = true}
     onNavigate={handleNavigate}
   />
-  {#if $currentView !== 'workqueue' && $currentView !== 'global_settings'}
+  {#if !ICON_RAIL_HIDDEN_VIEWS.has($currentView)}
     <IconRail currentView={$currentView} onNavigate={handleNavigate} reviewRequestCount={$reviewRequestCount} authoredPrCount={$authoredPrCount} modalsOpen={showCommandPalette || showProjectSwitcher || showActionPalette || showAddDialog} railBg={iconRailBg} />
   {/if}
 
   <div class="flex flex-col flex-1 min-w-0 relative" style="background: linear-gradient(180deg, var(--project-bg-alt) 0%, var(--project-bg) 100%)">
     <main class="flex-1 overflow-hidden flex flex-col">
-      {#if $currentView === 'settings'}
-        <SettingsView mode="project" onClose={() => { router.navigate('board') }} onProjectDeleted={loadProjects} />
-      {:else if $currentView === 'global_settings'}
-        <SettingsView mode="global" onClose={() => { router.navigate('board') }} onProjectDeleted={loadProjects} />
-      {:else if $currentView === 'pr_review'}
-        <PrReviewView projectName={activeProject?.name ?? ''} />
-       {:else if $currentView === 'skills'}
-         <SkillsView projectName={activeProject?.name ?? ''} />
-       {:else if $currentView === 'workqueue'}
-         <WorkQueueView onRunAction={handleRunAction} />
-       {:else if selectedTask}
+      {#if activeView}
+        <activeView.component
+          {...activeView.getProps({
+            projectName: activeProject?.name ?? '',
+            onCloseSettings: () => { router.navigate('board') },
+            onProjectDeleted: loadProjects,
+            onRunAction: handleRunAction,
+          })}
+        />
+      {:else if selectedTask}
         <TaskDetailView task={selectedTask} onRunAction={handleRunAction} />
-       {:else}
-         <div class="flex-1 overflow-hidden">
-           {#if $isLoading && $tasks.length === 0}
-             <div class="flex flex-col items-center justify-center h-full gap-3 text-base-content/50 text-sm">
-               <span class="loading loading-spinner loading-md text-primary"></span>
-               <span>Loading tasks...</span>
-             </div>
-           {:else if boardLayout === 'focus'}
-               <FocusBoard
-                 projectId={$activeProjectId}
-                 projectName={activeProject?.name ?? ''}
-                 tasks={$tasks}
-                 activeSessions={$activeSessions}
-                ticketPrs={$ticketPrs}
-                onOpenTask={handleOpenTask}
-                onRunAction={handleRunAction}
-              />
-           {:else}
-             <KanbanBoard onRunAction={handleRunAction} projectName={activeProject?.name ?? ''} />
-           {/if}
-         </div>
-       {/if}
+      {:else}
+        <div class="flex-1 overflow-hidden">
+          {#if $isLoading && $tasks.length === 0}
+            <div class="flex flex-col items-center justify-center h-full gap-3 text-base-content/50 text-sm">
+              <span class="loading loading-spinner loading-md text-primary"></span>
+              <span>Loading tasks...</span>
+            </div>
+          {:else if boardLayout === 'focus'}
+            <FocusBoard
+              projectId={$activeProjectId}
+              projectName={activeProject?.name ?? ''}
+              tasks={$tasks}
+              activeSessions={$activeSessions}
+              ticketPrs={$ticketPrs}
+              onOpenTask={handleOpenTask}
+              onRunAction={handleRunAction}
+            />
+          {:else}
+            <KanbanBoard onRunAction={handleRunAction} projectName={activeProject?.name ?? ''} />
+          {/if}
+        </div>
+      {/if}
 
       {#if showAddDialog && $activeProjectId}
         <Modal onClose={() => { showAddDialog = false; editingTask = null }} maxWidth="640px" overflowVisible>
