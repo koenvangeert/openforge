@@ -1,4 +1,4 @@
-import type { Task, Action } from './types'
+import type { Action, Task } from './types'
 
 export interface PaletteAction {
   id: string
@@ -11,7 +11,7 @@ export interface PaletteAction {
 export function getTaskActions(task: Task, customActions: Action[]): PaletteAction[] {
   const actions: PaletteAction[] = []
 
-  if (task.status !== 'done') {
+  if (task.status === 'backlog') {
     actions.push({
       id: 'start-task',
       label: 'Start Task',
@@ -21,7 +21,7 @@ export function getTaskActions(task: Task, customActions: Action[]): PaletteActi
     })
   }
 
-  if (task.status !== 'done') {
+  if (task.status === 'doing') {
     actions.push({
       id: 'move-to-done',
       label: 'Move to Done',

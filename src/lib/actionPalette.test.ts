@@ -1,6 +1,6 @@
-import { describe, it, expect } from 'vitest'
-import type { Task, Action } from './types'
-import { getTaskActions, getGlobalActions, getAvailableActions, filterActions } from './actionPalette'
+import { describe, expect, it } from 'vitest'
+import { filterActions, getAvailableActions, getGlobalActions, getTaskActions } from './actionPalette'
+import type { Action, Task } from './types'
 
 function makeTask(overrides: Partial<Task> = {}): Task {
   return {
@@ -35,12 +35,12 @@ function makeAction(overrides: Partial<Action> = {}): Action {
 }
 
 describe('getTaskActions', () => {
-  it('returns Start Task, Move to Done, Delete for backlog task', () => {
+  it('returns Start Task and Delete for backlog task', () => {
     const task = makeTask({ status: 'backlog' })
     const actions = getTaskActions(task, [])
     const ids = actions.map(a => a.id)
     expect(ids).toContain('start-task')
-    expect(ids).toContain('move-to-done')
+    expect(ids).not.toContain('move-to-done')
     expect(ids).toContain('delete-task')
   })
 
@@ -49,6 +49,7 @@ describe('getTaskActions', () => {
     const custom = makeAction({ id: 'custom-1', name: 'Deploy' })
     const actions = getTaskActions(task, [custom])
     const ids = actions.map(a => a.id)
+    expect(ids).not.toContain('start-task')
     expect(ids).toContain('move-to-done')
     expect(ids).toContain('delete-task')
     expect(ids).toContain('custom-action-custom-1')

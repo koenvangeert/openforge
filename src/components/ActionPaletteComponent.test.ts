@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/svelte'
+import { fireEvent, render, screen } from '@testing-library/svelte'
 import { describe, expect, it, vi } from 'vitest'
 import type { Task } from '../lib/types'
 
@@ -41,8 +41,12 @@ describe('ActionPalette component', () => {
     })
 
     const dialog = screen.getByRole('dialog')
+    const actionButtons = screen.getAllByRole('button')
+    const searchTasksIndex = actionButtons.findIndex(button => button.textContent?.includes('Search Tasks'))
 
-    for (let i = 0; i < 6; i += 1) {
+    expect(searchTasksIndex).toBeGreaterThan(0)
+
+    for (let i = 0; i < searchTasksIndex; i += 1) {
       await fireEvent.keyDown(dialog, { key: 'ArrowDown' })
     }
 
