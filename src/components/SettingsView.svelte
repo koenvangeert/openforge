@@ -278,8 +278,11 @@
     isSaving = true
     try {
        if (hasProject && $activeProjectId) {
-         await updateProject($activeProjectId, projectName, projectPath)
-         await setProjectConfig($activeProjectId, 'jira_board_id', jiraBoardId)
+          await updateProject($activeProjectId, projectName, projectPath)
+          $projects = $projects.map(p =>
+            p.id === $activeProjectId ? { ...p, name: projectName, path: projectPath } : p
+          )
+          await setProjectConfig($activeProjectId, 'jira_board_id', jiraBoardId)
          await setProjectConfig($activeProjectId, 'github_default_repo', githubDefaultRepo)
          await setProjectConfig($activeProjectId, 'additional_instructions', agentInstructions)
          await setProjectConfig($activeProjectId, 'ai_provider', aiProvider)

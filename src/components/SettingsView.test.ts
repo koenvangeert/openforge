@@ -1,6 +1,6 @@
 import { render, screen, fireEvent } from '@testing-library/svelte'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { writable } from 'svelte/store'
+import { writable, get } from 'svelte/store'
 
 vi.mock('../lib/ipc', () => ({
   getProjectConfig: vi.fn(),
@@ -289,6 +289,23 @@ describe('SettingsView', () => {
       expect(vi.mocked(updateProject)).toHaveBeenCalled()
       expect(vi.mocked(setProjectConfig)).toHaveBeenCalled()
       expect(vi.mocked(setConfig)).toHaveBeenCalled()
+    })
+
+    it('updates projects store with new name and path after save', async () => {
+      render(SettingsView, { props: defaultProps })
+
+      await vi.advanceTimersByTimeAsync(50)
+      vi.mocked(updateProject).mockClear()
+
+      const nameInput = screen.getByPlaceholderText('My Project')
+      await fireEvent.input(nameInput, { target: { value: 'Updated Name' } })
+
+      await vi.advanceTimersByTimeAsync(600)
+
+      const updatedProject = get(projects).find(p => p.id === 'test-project-id')
+      expect(updatedProject?.name).toBe('Updated Name')
+      expect(updatedProject?.path).toBe('/tmp/test')
+      expect(get(projects).length).toBe(1)
     })
 
     it('saves global settings after debounce when a field changes', async () => {
