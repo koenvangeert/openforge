@@ -3,6 +3,7 @@
   import { activeSessions, projects, activeProjectId } from '../lib/stores'
   import { matchesSearch, sortTasks, filterActiveTasks, navigateToTask } from '../lib/commandPalette'
   import { getAllTasks, getLatestSessions } from '../lib/ipc'
+  import { useListNavigation } from '../lib/useListNavigation.svelte'
   import type { Task } from '../lib/types'
 
   interface Props {
@@ -113,30 +114,26 @@
     onClose()
   }
 
-  function handleKeyDown(e: KeyboardEvent) {
-    const count = sortedAndFiltered.length
-    if (e.key === 'Escape') {
-      e.preventDefault()
-      e.stopPropagation()
-      onClose()
-      return
-    }
-
-    if (count === 0) return
-
-    if (e.key === 'ArrowDown' || (e.ctrlKey && (e.key === 'j' || e.key === 'n'))) {
-      e.preventDefault()
-      selectedTaskKey = sortedAndFiltered[(selectedIndex + 1) % count].id
-    } else if (e.key === 'ArrowUp' || (e.ctrlKey && (e.key === 'k' || e.key === 'p'))) {
-      e.preventDefault()
-      const nextIndex = selectedIndex <= 0 ? count - 1 : selectedIndex - 1
-      selectedTaskKey = sortedAndFiltered[nextIndex].id
-    } else if (e.key === 'Enter') {
-      e.preventDefault()
-      if (selectedIndex >= 0 && selectedIndex < count) {
+  const listNav = useListNavigation({
+    get itemCount() { return sortedAndFiltered.length },
+    get selectedIndex() { return selectedIndex },
+    set selectedIndex(index: number) {
+      if (sortedAndFiltered.length > 0) {
+        selectedTaskKey = sortedAndFiltered[index].id
+      }
+    },
+    wrap: true,
+    onSelect() {
+      if (selectedIndex >= 0 && selectedIndex < sortedAndFiltered.length) {
         selectTask(sortedAndFiltered[selectedIndex])
       }
-    }
+    },
+    onCancel() { onClose() }
+  })
+
+  function handleKeyDown(e: KeyboardEvent) {
+    const handled = listNav.handleKeydown(e)
+    if (handled) return
   }
 
   function handleBackdropClick(e: MouseEvent) {

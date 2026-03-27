@@ -3,6 +3,7 @@
   import { projects, activeProjectId, projectAttention } from '../lib/stores'
   import { getProjectAttention } from '../lib/ipc'
   import { useAppRouter } from '../lib/router.svelte'
+  import { useListNavigation } from '../lib/useListNavigation.svelte'
   import type { ProjectAttention } from '../lib/types'
 
   interface Props {
@@ -42,31 +43,22 @@
     onClose()
   }
 
-  function handleKeyDown(e: KeyboardEvent) {
-    const count = filteredProjects.length
-    if (count === 0) {
-      if (e.key === 'Escape') {
-        e.preventDefault()
-        onClose()
-      }
-      return
-    }
-
-    if (e.key === 'ArrowDown' || (e.ctrlKey && e.key === 'n')) {
-      e.preventDefault()
-      selectedIndex = (selectedIndex + 1) % count
-    } else if (e.key === 'ArrowUp' || (e.ctrlKey && e.key === 'p')) {
-      e.preventDefault()
-      selectedIndex = selectedIndex <= 0 ? count - 1 : selectedIndex - 1
-    } else if (e.key === 'Enter') {
-      e.preventDefault()
-      if (selectedIndex >= 0 && selectedIndex < count) {
+  const listNav = useListNavigation({
+    get itemCount() { return filteredProjects.length },
+    get selectedIndex() { return selectedIndex },
+    set selectedIndex(index: number) { selectedIndex = index },
+    wrap: true,
+    onSelect() {
+      if (selectedIndex >= 0 && selectedIndex < filteredProjects.length) {
         selectProject(filteredProjects[selectedIndex].id)
       }
-    } else if (e.key === 'Escape') {
-      e.preventDefault()
-      onClose()
-    }
+    },
+    onCancel() { onClose() }
+  })
+
+  function handleKeyDown(e: KeyboardEvent) {
+    const handled = listNav.handleKeydown(e)
+    if (handled) return
   }
 
   function handleBackdropClick(e: MouseEvent) {

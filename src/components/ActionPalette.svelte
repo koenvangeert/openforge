@@ -2,6 +2,7 @@
   import { onMount, tick } from 'svelte'
   import type { Task, Action } from '../lib/types'
   import { getAvailableActions, filterActions, type PaletteAction } from '../lib/actionPalette'
+  import { useListNavigation } from '../lib/useListNavigation.svelte'
   import HoverTooltip from './HoverTooltip.svelte'
 
   interface Props {
@@ -76,30 +77,26 @@
     }
   })
 
-  function handleKeyDown(e: KeyboardEvent) {
-    const count = flatList.length
-    if (e.key === 'Escape') {
-      e.preventDefault()
-      e.stopPropagation()
-      onClose()
-      return
-    }
-
-    if (count === 0) return
-
-    if (e.key === 'ArrowDown' || (e.ctrlKey && (e.key === 'j' || e.key === 'n'))) {
-      e.preventDefault()
-      selectedActionId = flatList[(selectedIndex + 1) % count].id
-    } else if (e.key === 'ArrowUp' || (e.ctrlKey && (e.key === 'k' || e.key === 'p'))) {
-      e.preventDefault()
-      const nextIndex = selectedIndex <= 0 ? count - 1 : selectedIndex - 1
-      selectedActionId = flatList[nextIndex].id
-    } else if (e.key === 'Enter') {
-      e.preventDefault()
-      if (selectedIndex >= 0 && selectedIndex < count) {
+  const listNav = useListNavigation({
+    get itemCount() { return flatList.length },
+    get selectedIndex() { return selectedIndex },
+    set selectedIndex(index: number) {
+      if (flatList.length > 0) {
+        selectedActionId = flatList[index].id
+      }
+    },
+    wrap: true,
+    onSelect() {
+      if (selectedIndex >= 0 && selectedIndex < flatList.length) {
         onExecute(flatList[selectedIndex].id)
       }
-    }
+    },
+    onCancel() { onClose() }
+  })
+
+  function handleKeyDown(e: KeyboardEvent) {
+    const handled = listNav.handleKeydown(e)
+    if (handled) return
   }
 
   function handleBackdropClick(e: MouseEvent) {
