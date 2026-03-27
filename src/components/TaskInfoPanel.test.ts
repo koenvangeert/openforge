@@ -112,7 +112,11 @@ describe('TaskInfoPanel', () => {
   it('renders literal \\n in summary as actual line breaks', () => {
     const taskWithNewlines = { ...baseTask, summary: 'Added feature.\\n\\nChanges:\\n- New file added' }
     render(TaskInfoPanel, { props: { task: taskWithNewlines, worktreePath: null, jiraBaseUrl: '' } })
-    const summarySection = screen.getByLabelText('Summary').closest('section')!
+    const summarySection = screen.getByLabelText('Summary').closest('section')
+    expect(summarySection).not.toBeNull()
+    if (!summarySection) {
+      throw new Error('Expected Summary section to exist')
+    }
     expect(summarySection.textContent).toContain('Added feature.')
     expect(summarySection.textContent).toContain('Changes:')
     expect(summarySection.textContent).toContain('New file added')
