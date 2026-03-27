@@ -179,7 +179,6 @@ pub(crate) struct MergePrRequest {
 
 #[derive(Debug, Deserialize)]
 pub struct MergePrResponse {
-    pub sha: String,
     pub merged: bool,
     pub message: String,
 }
@@ -545,7 +544,7 @@ mod tests {
     }
 
     #[test]
-    fn test_merge_pr_response_deserialization() {
+    fn test_merge_pr_response_deserialization_ignores_unused_sha_field() {
         let json = r#"{
             "sha": "abc123",
             "merged": true,
@@ -554,7 +553,6 @@ mod tests {
 
         let response: MergePrResponse = serde_json::from_str(json).unwrap();
 
-        assert_eq!(response.sha, "abc123");
         assert!(response.merged);
         assert_eq!(response.message, "Pull Request successfully merged");
     }
