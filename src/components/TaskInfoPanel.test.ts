@@ -363,6 +363,20 @@ describe('TaskInfoPanel', () => {
     expect(screen.queryByRole('button', { name: 'Merge' })).toBeNull()
   })
 
+  it('renders Merge Conflict indicator when PR has conflicts', async () => {
+    const conflictedPr = createPullRequest({
+      mergeable: false,
+      mergeable_state: 'dirty',
+    })
+
+    ticketPrs.set(new Map([['T-42', [conflictedPr]]]))
+
+    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null, jiraBaseUrl: '' } })
+
+    await new Promise((r) => setTimeout(r, 10))
+    expect(screen.getByText('Merge Conflict')).toBeTruthy()
+  })
+
   it('calls mergePullRequest with repo coordinates when Merge is clicked', async () => {
     const readyPr = createPullRequest({
       ci_status: 'success',

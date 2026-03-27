@@ -273,6 +273,19 @@ describe('TaskDetailPane', () => {
       await fireEvent.click(urlBtn)
       expect(ipc.openUrl).toHaveBeenCalledWith('https://github.com/org/repo/pull/101')
     })
+
+    it('shows Merge Conflict indicator when PR has conflicts', () => {
+      const conflictedPr = { ...basePr, mergeable_state: 'dirty', mergeable: false }
+      render(TaskDetailPane, {
+        props: {
+          task: baseTask,
+          session: null,
+          pullRequests: [conflictedPr],
+          onOpenFullView: vi.fn(),
+        },
+      })
+      expect(screen.getByText('Merge Conflict')).toBeTruthy()
+    })
   })
 
   describe('pipeline status section', () => {

@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Task, PullRequestInfo } from '../lib/types'
-  import { parseCheckRuns, splitCheckRuns, isReadyToMerge, isQueuedForMerge } from '../lib/types'
+  import { parseCheckRuns, splitCheckRuns, isReadyToMerge, isQueuedForMerge, hasMergeConflicts } from '../lib/types'
   import { ticketPrs } from '../lib/stores'
   import { forceGithubSync, getPullRequests, mergePullRequest, openUrl } from '../lib/ipc'
   import MarkdownContent from './MarkdownContent.svelte'
@@ -176,7 +176,7 @@
   {/if}
 
   <!-- Merge Status Section -->
-  {#if taskPrs.some(pr => pr.state === 'merged' || isReadyToMerge(pr) || isQueuedForMerge(pr))}
+  {#if taskPrs.some(pr => pr.state === 'merged' || hasMergeConflicts(pr) || isReadyToMerge(pr) || isQueuedForMerge(pr))}
     <section class="flex flex-col gap-2.5">
       <h3 class="text-[10px] font-bold text-primary font-mono tracking-[1.2px] m-0" aria-label="Merge Status">// MERGE_STATUS</h3>
       {#each taskPrs as pr (pr.id)}
@@ -199,6 +199,16 @@
                 </div>
               {/if}
             {/if}
+          </div>
+        {:else if hasMergeConflicts(pr)}
+          <div class="mb-3">
+            <div class="flex items-center justify-between gap-2">
+              <span class="text-xs text-base-content/50">{pr.title}</span>
+              <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 bg-[var(--chip-error-bg)]">
+                <span class="w-1.5 h-1.5 rounded-full bg-[var(--chip-error-dot)]"></span>
+                <span class="text-[10px] font-medium text-[var(--chip-error-text)]">Merge Conflict</span>
+              </span>
+            </div>
           </div>
         {:else if isQueuedForMerge(pr)}
           <div class="mb-3">

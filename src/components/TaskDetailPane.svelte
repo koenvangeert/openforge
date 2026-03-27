@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Task, PullRequestInfo, PrComment } from '../lib/types'
-  import { parseCheckRuns, splitCheckRuns } from '../lib/types'
+  import { parseCheckRuns, splitCheckRuns, hasMergeConflicts } from '../lib/types'
   import { getPrComments, markCommentAddressed, openUrl } from '../lib/ipc'
   import MarkdownContent from './MarkdownContent.svelte'
 
@@ -79,6 +79,12 @@
               <span class="text-[0.65rem] font-semibold uppercase px-1.5 py-0.5 rounded tracking-wider {pr.state === 'open' ? 'bg-success/15 text-success' : pr.state === 'merged' ? 'bg-secondary/15 text-secondary' : 'bg-error/15 text-error'}">
                 {pr.state}
               </span>
+              {#if hasMergeConflicts(pr)}
+                <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 bg-[var(--chip-error-bg)]">
+                  <span class="w-1.5 h-1.5 rounded-full bg-[var(--chip-error-dot)]"></span>
+                  <span class="text-[10px] font-medium text-[var(--chip-error-text)]">Merge Conflict</span>
+                </span>
+              {/if}
               <span class="text-xs text-base-content font-medium">{pr.title}</span>
             </div>
             <button
