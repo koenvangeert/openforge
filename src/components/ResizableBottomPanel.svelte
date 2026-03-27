@@ -7,6 +7,8 @@
     minHeight: number | null
     maxHeight: number | null
     fillParent: boolean
+    panelTestId?: string
+    handleTestId?: string
     children: Snippet
   }
 
@@ -16,6 +18,8 @@
     minHeight = null,
     maxHeight = null,
     fillParent = false,
+    panelTestId = 'resizable-bottom-panel',
+    handleTestId = 'resize-handle',
     children,
   }: Props = $props()
 
@@ -111,7 +115,7 @@
 </script>
 
 <div
-  data-testid="resizable-bottom-panel"
+  data-testid={panelTestId}
   class="relative flex flex-col {fillParent ? 'flex-1' : 'shrink-0'} w-full overflow-hidden"
   style="{fillParent ? '' : `height: ${height}px`}"
   bind:this={panelEl}
@@ -120,7 +124,7 @@
     <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
     <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
     <div
-      data-testid="resize-handle"
+      data-testid={handleTestId}
       class="absolute top-0 left-0 right-0 z-10 h-1 hover:bg-primary/30 transition-colors {isDragging ? 'bg-primary/40' : ''} focus-visible:bg-primary/40 focus-visible:outline-none"
       style="cursor: row-resize"
       role="separator"

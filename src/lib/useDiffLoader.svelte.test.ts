@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { writable, get } from 'svelte/store'
-import type { PrComment, PullRequestInfo, PrFileDiff, SelfReviewComment } from './types'
+import type { PrComment, PullRequestInfo, PrFileDiff, SelfReviewComment, CommitInfo } from './types'
 
 // ============================================================================
 // Module Mocks
@@ -16,6 +16,8 @@ vi.mock('./stores', () => ({
 
 vi.mock('./ipc', () => ({
   getTaskDiff: vi.fn<(taskId: string, includeUncommitted: boolean) => Promise<PrFileDiff[]>>(),
+  getTaskCommits: vi.fn<(taskId: string) => Promise<CommitInfo[]>>(),
+  getCommitDiff: vi.fn<(taskId: string, commitSha: string) => Promise<PrFileDiff[]>>(),
   getActiveSelfReviewComments: vi.fn<(taskId: string) => Promise<SelfReviewComment[]>>(),
   getArchivedSelfReviewComments: vi.fn<(taskId: string) => Promise<SelfReviewComment[]>>(),
   getPrComments: vi.fn<(prId: number) => Promise<PrComment[]>>(),
@@ -26,6 +28,8 @@ import * as ipc from './ipc'
 import { selfReviewDiffFiles, selfReviewGeneralComments, selfReviewArchivedComments, pendingManualComments, ticketPrs } from './stores'
 
 const mockGetTaskDiff = vi.mocked(ipc.getTaskDiff)
+const mockGetTaskCommits = vi.mocked(ipc.getTaskCommits)
+const mockGetCommitDiff = vi.mocked(ipc.getCommitDiff)
 const mockGetActiveSelfReviewComments = vi.mocked(ipc.getActiveSelfReviewComments)
 const mockGetArchivedSelfReviewComments = vi.mocked(ipc.getArchivedSelfReviewComments)
 const mockGetPrComments = vi.mocked(ipc.getPrComments)
@@ -98,6 +102,14 @@ const baseSelfReviewComment: SelfReviewComment = {
 // ============================================================================
 
 describe('createDiffLoader', () => {
+  const baseCommit: CommitInfo = {
+    sha: 'abc1234def',
+    short_sha: 'abc1234',
+    message: 'Fix login bug',
+    author: 'dev',
+    date: '2025-01-01T00:00:00Z',
+  }
+
   beforeEach(() => {
     vi.clearAllMocks()
     selfReviewDiffFiles.set([])
@@ -106,8 +118,9 @@ describe('createDiffLoader', () => {
     pendingManualComments.set([])
     ticketPrs.set(new Map())
 
-    // Default mock implementations
     mockGetTaskDiff.mockResolvedValue([])
+    mockGetTaskCommits.mockResolvedValue([])
+    mockGetCommitDiff.mockResolvedValue([])
     mockGetActiveSelfReviewComments.mockResolvedValue([])
     mockGetArchivedSelfReviewComments.mockResolvedValue([])
     mockGetPrComments.mockResolvedValue([])
@@ -250,6 +263,133 @@ describe('createDiffLoader', () => {
     expect(get(selfReviewGeneralComments)).toEqual([])
     expect(get(selfReviewArchivedComments)).toEqual([])
     expect(get(pendingManualComments)).toEqual([])
+  })
+
+  it('starts with empty commits and null selectedCommitSha', () => {
+    const loader = createDiffLoader({
+      getTaskId: () => 'task-1',
+      getIncludeUncommitted: () => false,
+    })
+
+    expect(loader.commits).toEqual([])
+    expect(loader.selectedCommitSha).toBeNull()
+  })
+
+  it('loadDiff with no commit selected calls getTaskDiff', async () => {
+    mockGetTaskDiff.mockResolvedValue([baseDiff])
+
+    const loader = createDiffLoader({
+      getTaskId: () => 'task-1',
+      getIncludeUncommitted: () => false,
+    })
+
+    await loader.loadDiff()
+
+    expect(mockGetTaskDiff).toHaveBeenCalledWith('task-1', false)
+    expect(mockGetCommitDiff).not.toHaveBeenCalled()
+    expect(get(selfReviewDiffFiles)).toEqual([baseDiff])
+  })
+
+  it('loadDiff with commit selected calls getCommitDiff, not getTaskDiff', async () => {
+    mockGetCommitDiff.mockResolvedValue([baseDiff])
+
+    const loader = createDiffLoader({
+      getTaskId: () => 'task-1',
+      getIncludeUncommitted: () => false,
+    })
+
+    await loader.selectCommit('abc1234')
+    await loader.loadDiff()
+
+    expect(mockGetCommitDiff).toHaveBeenCalledWith('task-1', 'abc1234')
+    expect(mockGetTaskDiff).not.toHaveBeenCalled()
+  })
+
+  it('loadCommits populates commits array', async () => {
+    mockGetTaskCommits.mockResolvedValue([baseCommit])
+
+    const loader = createDiffLoader({
+      getTaskId: () => 'task-1',
+      getIncludeUncommitted: () => false,
+    })
+
+    await loader.loadCommits()
+
+    expect(loader.commits).toEqual([baseCommit])
+    expect(mockGetTaskCommits).toHaveBeenCalledWith('task-1')
+  })
+
+  it('selectCommit clears store then loads commit diff', async () => {
+    mockGetTaskDiff.mockResolvedValue([baseDiff])
+    mockGetCommitDiff.mockResolvedValue([{ ...baseDiff, filename: 'src/other.rs' }])
+
+    const loader = createDiffLoader({
+      getTaskId: () => 'task-1',
+      getIncludeUncommitted: () => false,
+    })
+
+    await loader.loadDiff()
+    expect(get(selfReviewDiffFiles)).toHaveLength(1)
+
+    await loader.selectCommit('abc1234')
+
+    expect(loader.selectedCommitSha).toBe('abc1234')
+    expect(get(selfReviewDiffFiles)).toEqual([{ ...baseDiff, filename: 'src/other.rs' }])
+  })
+
+  it('selectCommit(null) restores aggregate mode', async () => {
+    mockGetCommitDiff.mockResolvedValue([baseDiff])
+    mockGetTaskDiff.mockResolvedValue([baseDiff])
+
+    const loader = createDiffLoader({
+      getTaskId: () => 'task-1',
+      getIncludeUncommitted: () => false,
+    })
+
+    await loader.selectCommit('abc1234')
+    expect(loader.selectedCommitSha).toBe('abc1234')
+
+    await loader.selectCommit(null)
+
+    expect(loader.selectedCommitSha).toBeNull()
+    expect(mockGetTaskDiff).toHaveBeenCalled()
+  })
+
+  it('refresh in commit mode uses getCommitDiff', async () => {
+    mockGetCommitDiff.mockResolvedValue([baseDiff])
+
+    const loader = createDiffLoader({
+      getTaskId: () => 'task-1',
+      getIncludeUncommitted: () => false,
+    })
+
+    await loader.selectCommit('abc1234')
+    mockGetCommitDiff.mockClear()
+    mockGetTaskDiff.mockClear()
+
+    await loader.refresh()
+
+    expect(mockGetCommitDiff).toHaveBeenCalledWith('task-1', 'abc1234')
+    expect(mockGetTaskDiff).not.toHaveBeenCalled()
+  })
+
+  it('cleanup resets commits and selectedCommitSha', async () => {
+    mockGetTaskCommits.mockResolvedValue([baseCommit])
+
+    const loader = createDiffLoader({
+      getTaskId: () => 'task-1',
+      getIncludeUncommitted: () => false,
+    })
+
+    await loader.loadCommits()
+    await loader.selectCommit('abc1234')
+    expect(loader.commits).toHaveLength(1)
+    expect(loader.selectedCommitSha).toBe('abc1234')
+
+    loader.cleanup()
+
+    expect(loader.commits).toEqual([])
+    expect(loader.selectedCommitSha).toBeNull()
   })
 
   it('loadDiff populates general comments and archived comments stores', async () => {

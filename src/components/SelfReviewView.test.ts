@@ -36,8 +36,12 @@ vi.mock('../lib/useVirtualizer.svelte', () => ({
 
 vi.mock('../lib/ipc', () => ({
   getTaskDiff: vi.fn().mockResolvedValue([]),
+  getTaskCommits: vi.fn().mockResolvedValue([]),
+  getCommitDiff: vi.fn().mockResolvedValue([]),
   getTaskFileContents: vi.fn().mockResolvedValue(['', '']),
   getTaskBatchFileContents: vi.fn().mockResolvedValue([['', '']]),
+  getCommitFileContents: vi.fn().mockResolvedValue(['', '']),
+  getCommitBatchFileContents: vi.fn().mockResolvedValue([['', '']]),
   getActiveSelfReviewComments: vi.fn().mockResolvedValue([]),
   getArchivedSelfReviewComments: vi.fn().mockResolvedValue([]),
   getPrComments: vi.fn().mockResolvedValue([]),
@@ -62,7 +66,7 @@ beforeAll(() => {
   })
 })
 import { selfReviewDiffFiles, selfReviewGeneralComments, selfReviewArchivedComments, pendingManualComments, ticketPrs } from '../lib/stores'
-import { getTaskDiff, getActiveSelfReviewComments, getTaskBatchFileContents, getPrComments } from '../lib/ipc'
+import { getTaskDiff, getCommitDiff, getActiveSelfReviewComments, getTaskBatchFileContents, getPrComments } from '../lib/ipc'
 
 const baseTask: Task = {
   id: 'task-1',
@@ -222,6 +226,35 @@ describe('SelfReviewView uncommitted toggle', () => {
 
     await waitFor(() => {
       expect(mockGetTaskDiff).toHaveBeenCalledWith('task-1', true)
+    })
+  })
+
+  it('specific commit mode hides uncommitted checkbox and shows recovery action', async () => {
+    const commitDiff = { ...baseDiff, filename: 'src/only-commit.rs' }
+    const mockGetTaskDiff = vi.mocked(getTaskDiff)
+    const mockGetCommitDiff = vi.mocked(getCommitDiff)
+
+    mockGetTaskDiff.mockResolvedValue([baseDiff])
+    mockGetCommitDiff.mockResolvedValue([commitDiff])
+
+    render(SelfReviewView, {
+      props: {
+        task: baseTask,
+        agentStatus: null,
+        onSendToAgent: vi.fn(),
+      },
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('checkbox')).toBeTruthy()
+    })
+
+    const commitButton = screen.getByText('All changes')
+    commitButton.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+
+    await waitFor(() => {
+      expect(screen.queryByRole('checkbox')).toBeTruthy()
+      expect(screen.queryByText('Show all changes')).toBeNull()
     })
   })
 })
