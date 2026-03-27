@@ -3,11 +3,12 @@
   import { listen } from '@tauri-apps/api/event'
   import type { UnlistenFn, Event } from '@tauri-apps/api/event'
   import { tasks, pendingTask, selectedTaskId, activeSessions, checkpointNotification, ciFailureNotification, ticketPrs, error, isLoading, projects, activeProjectId, currentView, reviewRequestCount, authoredPrCount, projectAttention, taskSpawned, startingTasks, codeCleanupTasksEnabled, rateLimitNotification, taskRuntimeInfo, focusBoardFilters } from './lib/stores'
-  import { getProjects, getTasksForProject, getPullRequests, startImplementation, getSessionStatus, getLatestSession, getLatestSessions, forceGithubSync, createTask, updateTask, updateTaskStatus, deleteTask, getProjectAttention, getAppMode, finalizeClaudeSession, getConfig, getProjectConfig, listOpenCodeAgents, getReviewPrs, getAuthoredPrs } from './lib/ipc'
+  import { getProjects, getTasksForProject, getPullRequests, startImplementation, getSessionStatus, getLatestSession, getLatestSessions, forceGithubSync, createTask, updateTask, deleteTask, getProjectAttention, getAppMode, finalizeClaudeSession, getConfig, getProjectConfig, listOpenCodeAgents, getReviewPrs, getAuthoredPrs } from './lib/ipc'
   import { writePtyWithSubmit } from './lib/ptySubmit'
   import SearchableSelect from './components/SearchableSelect.svelte'
   import { hasMergeConflicts } from './lib/types'
   import type { Task, PullRequestInfo, AgentEvent, ProjectAttention, AppView, PermissionMode, AgentSession } from './lib/types'
+  import { moveTaskToComplete } from './lib/moveToComplete'
   import FocusBoard from './components/FocusBoard.svelte'
   import TaskDetailView from './components/TaskDetailView.svelte'
    import PromptInput from './components/PromptInput.svelte'
@@ -362,11 +363,7 @@
         break
       case 'move-to-done':
         if (task) {
-          router.resetToBoard()
-          void updateTaskStatus(task.id, 'done').catch((e) => {
-            console.error('Failed to update task status:', e)
-            $error = 'Task completion may have succeeded, but background cleanup failed.'
-          })
+          await moveTaskToComplete(task.id)
         }
         break
       case 'delete-task':

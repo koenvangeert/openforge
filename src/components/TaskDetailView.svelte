@@ -5,6 +5,7 @@
   import { activeSessions, activeProjectId, startingTasks, taskReviewModes, taskTerminalOpen, error } from '../lib/stores'
   import { getWorktreeForTask, updateTaskStatus, getConfig } from '../lib/ipc'
   import { useAppRouter } from '../lib/router.svelte'
+  import { moveTaskToComplete } from '../lib/moveToComplete'
   import { isInputFocused } from '../lib/domUtils'
   import { loadActions, getEnabledActions } from '../lib/actions'
   import { commandHeld } from '../lib/stores'
@@ -108,11 +109,7 @@
   async function handleStatusChange(newStatus: string) {
     if (newStatus === task.status) return
     if (newStatus === 'done') {
-      router.resetToBoard()
-      void updateTaskStatus(task.id, newStatus).catch((e) => {
-        console.error('Failed to update status:', e)
-        $error = 'Task completion may have succeeded, but background cleanup failed.'
-      })
+      await moveTaskToComplete(task.id)
       return
     }
 
