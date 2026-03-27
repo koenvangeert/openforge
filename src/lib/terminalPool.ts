@@ -66,12 +66,45 @@ function isModalOpen(): boolean {
   return document.querySelector('[role="dialog"][aria-modal="true"]') !== null
 }
 
-function safeFit(entry: PoolEntry): void {
-  if (!entry.fitAddon || !entry.hostDiv) return
-  if (entry.hostDiv.clientWidth === 0 || entry.hostDiv.clientHeight === 0) return
+function safeFit(entry: PoolEntry): boolean {
+  if (!entry.fitAddon || !entry.hostDiv) return false
+  if (entry.hostDiv.clientWidth === 0 || entry.hostDiv.clientHeight === 0) return false
   const proposed = entry.fitAddon.proposeDimensions()
-  if (!proposed || isNaN(proposed.cols) || isNaN(proposed.rows)) return
+  if (!proposed || isNaN(proposed.cols) || isNaN(proposed.rows)) return false
   entry.fitAddon.fit()
+  return true
+}
+
+function refreshAndFocus(entry: PoolEntry): void {
+  entry.terminal.refresh(0, (entry.terminal.rows ?? 1) - 1)
+  if (!isModalOpen()) entry.terminal.focus()
+}
+
+function syncPtySize(entry: PoolEntry): void {
+  if (!entry.ptyActive) return
+
+  resizePty(entry.taskId, entry.terminal.cols, entry.terminal.rows)
+    .catch(e => console.error('[terminalPool] resize failed:', e))
+}
+
+function waitForInitialFit(entry: PoolEntry): Promise<void> {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => {
+      if (!entry.attached) {
+        resolve()
+        return
+      }
+
+      if (safeFit(entry)) {
+        refreshAndFocus(entry)
+        syncPtySize(entry)
+        resolve()
+        return
+      }
+
+      void waitForInitialFit(entry).then(() => resolve())
+    })
+  })
 }
 
 function loadWebLinksAddon(terminal: Terminal): void {
@@ -197,7 +230,7 @@ export async function acquire(taskId: string): Promise<PoolEntry> {
   return entry
 }
 
-export function attach(entry: PoolEntry, wrapperEl: HTMLDivElement): void {
+export async function attach(entry: PoolEntry, wrapperEl: HTMLDivElement): Promise<void> {
   if (entry.attached) return
 
   wrapperEl.appendChild(entry.hostDiv)
@@ -221,10 +254,7 @@ export function attach(entry: PoolEntry, wrapperEl: HTMLDivElement): void {
     entry.resizeTimeout = setTimeout(() => {
       entry.resizeTimeout = null
       safeFit(entry)
-      if (entry.ptyActive) {
-        resizePty(entry.taskId, entry.terminal.cols, entry.terminal.rows)
-          .catch(e => console.error('[terminalPool] resize failed:', e))
-      }
+      syncPtySize(entry)
     }, 100)
   })
   entry.resizeObserver.observe(entry.hostDiv)
@@ -235,19 +265,14 @@ export function attach(entry: PoolEntry, wrapperEl: HTMLDivElement): void {
     if (last.isIntersecting) {
       requestAnimationFrame(() => {
         safeFit(entry)
-        entry.terminal.refresh(0, (entry.terminal.rows ?? 1) - 1)
-        if (!isModalOpen()) entry.terminal.focus()
+        syncPtySize(entry)
+        refreshAndFocus(entry)
       })
     }
   }, { threshold: 0 })
   entry.visibilityObserver.observe(entry.hostDiv)
 
-  // Initial fit, refresh, focus
-  requestAnimationFrame(() => {
-    safeFit(entry)
-    entry.terminal.refresh(0, (entry.terminal.rows ?? 1) - 1)
-    if (!isModalOpen()) entry.terminal.focus()
-  })
+  await waitForInitialFit(entry)
 }
 
 export function detach(entry: PoolEntry): void {
