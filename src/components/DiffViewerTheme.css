@@ -1,179 +1,104 @@
-/* Light theme overrides for @git-diff-view */
-/* Overrides .diff-tailwindcss-wrapper[data-theme='light'] .diff-style-root variables */
+/* Theme overrides for @git-diff-view */
+/* Overrides variables using daisyUI semantic tokens to adapt automatically to light/dark themes */
 
-.diff-tailwindcss-wrapper[data-theme='light'] .diff-style-root {
-  --diff-border--: #e5e7eb;
-  --diff-add-content--: #dcfce7;
-  --diff-del-content--: #fef2f2;
-  --diff-add-lineNumber--: #bbf7d0;
-  --diff-del-lineNumber--: #fecaca;
-  --diff-plain-content--: #ffffff;
-  --diff-expand-content--: #f8fafc;
-  --diff-plain-lineNumber--: #f8fafc;
-  --diff-expand-lineNumber--: #f8fafc;
-  --diff-plain-lineNumber-color--: #6b7280;
-  --diff-expand-lineNumber-color--: #6b7280;
-  --diff-hunk-content--: #eff6ff;
-  --diff-hunk-lineNumber--: rgba(59, 130, 246, 0.1);
-  --diff-hunk-lineNumber-hover--: #3b82f6;
-  --diff-add-content-highlight--: #bbf7d0;
-  --diff-del-content-highlight--: #fca5a5;
-  --diff-add-widget--: #3b82f6;
-  --diff-add-widget-color--: #ffffff;
-  --diff-empty-content--: #f8fafc;
-  --diff-hunk-content-color--: #6b7280;
+.diff-tailwindcss-wrapper[data-theme='light'] .diff-style-root,
+.diff-tailwindcss-wrapper[data-theme='dark'] .diff-style-root {
+  --diff-border--: color-mix(in oklch, var(--color-base-content) 15%, transparent);
+  --diff-add-content--: color-mix(in oklch, var(--color-success) 15%, transparent);
+  --diff-del-content--: color-mix(in oklch, var(--color-error) 15%, transparent);
+  --diff-add-lineNumber--: color-mix(in oklch, var(--color-success) 20%, transparent);
+  --diff-del-lineNumber--: color-mix(in oklch, var(--color-error) 20%, transparent);
+  --diff-plain-content--: transparent;
+  --diff-expand-content--: var(--color-base-200);
+  --diff-plain-lineNumber--: var(--color-base-200);
+  --diff-expand-lineNumber--: var(--color-base-200);
+  --diff-plain-lineNumber-color--: color-mix(in oklch, var(--color-base-content) 60%, transparent);
+  --diff-expand-lineNumber-color--: color-mix(in oklch, var(--color-base-content) 60%, transparent);
+  --diff-hunk-content--: color-mix(in oklch, var(--color-info) 10%, transparent);
+  --diff-hunk-lineNumber--: color-mix(in oklch, var(--color-info) 15%, transparent);
+  --diff-hunk-lineNumber-hover--: var(--color-info);
+  --diff-add-content-highlight--: color-mix(in oklch, var(--color-success) 30%, transparent);
+  --diff-del-content-highlight--: color-mix(in oklch, var(--color-error) 30%, transparent);
+  --diff-add-widget--: var(--color-info);
+  --diff-add-widget-color--: var(--color-info-content);
+  --diff-empty-content--: var(--color-base-200);
+  --diff-hunk-content-color--: color-mix(in oklch, var(--color-base-content) 60%, transparent);
 
-  color: #1f2937;
+  color: var(--color-base-content);
 }
 
 /* Prevent diff base color from overriding daisyUI button text */
-.diff-tailwindcss-wrapper[data-theme='light'] .diff-style-root .btn-primary {
-  color: #ffffff;
-}
-
-/* GitHub-style syntax highlighting for light theme */
-.diff-tailwindcss-wrapper[data-theme="light"] .diff-line-syntax-raw .hljs {
-  color: #24292e;
-  background: #ffffff;
-}
-
-.diff-tailwindcss-wrapper[data-theme="light"] .diff-line-syntax-raw .hljs-keyword,
-.diff-tailwindcss-wrapper[data-theme="light"] .diff-line-syntax-raw .hljs-type,
-.diff-tailwindcss-wrapper[data-theme="light"] .diff-line-syntax-raw .hljs-variable.language_ {
-  color: #d73a49;
-}
-
-.diff-tailwindcss-wrapper[data-theme="light"] .diff-line-syntax-raw .hljs-title,
-.diff-tailwindcss-wrapper[data-theme="light"] .diff-line-syntax-raw .hljs-title.class_,
-.diff-tailwindcss-wrapper[data-theme="light"] .diff-line-syntax-raw .hljs-title.function_ {
-  color: #6f42c1;
-}
-
-.diff-tailwindcss-wrapper[data-theme="light"] .diff-line-syntax-raw .hljs-string,
-.diff-tailwindcss-wrapper[data-theme="light"] .diff-line-syntax-raw .hljs-regexp {
-  color: #032f62;
-}
-
-.diff-tailwindcss-wrapper[data-theme="light"] .diff-line-syntax-raw .hljs-number,
-.diff-tailwindcss-wrapper[data-theme="light"] .diff-line-syntax-raw .hljs-literal {
-  color: #005cc5;
-}
-
-.diff-tailwindcss-wrapper[data-theme="light"] .diff-line-syntax-raw .hljs-comment {
-  color: #6a737d;
-  font-style: italic;
-}
-
-.diff-tailwindcss-wrapper[data-theme="light"] .diff-line-syntax-raw .hljs-built_in,
-.diff-tailwindcss-wrapper[data-theme="light"] .diff-line-syntax-raw .hljs-symbol {
-  color: #e36209;
-}
-
-.diff-tailwindcss-wrapper[data-theme="light"] .diff-line-syntax-raw .hljs-attr,
-.diff-tailwindcss-wrapper[data-theme="light"] .diff-line-syntax-raw .hljs-variable {
-  color: #005cc5;
-}
-
-.diff-tailwindcss-wrapper[data-theme="light"] .diff-line-syntax-raw .hljs-name,
-.diff-tailwindcss-wrapper[data-theme="light"] .diff-line-syntax-raw .hljs-selector-tag {
-  color: #22863a;
-}
-
-/* Dark theme overrides for @git-diff-view */
-.diff-tailwindcss-wrapper[data-theme='dark'] .diff-style-root {
-  --diff-border--: #2A3A4E;
-  --diff-add-content--: rgba(22, 163, 74, 0.15);
-  --diff-del-content--: rgba(220, 38, 38, 0.15);
-  --diff-add-lineNumber--: rgba(22, 163, 74, 0.2);
-  --diff-del-lineNumber--: rgba(220, 38, 38, 0.2);
-  --diff-plain-content--: #1E293B;
-  --diff-expand-content--: #0F172A;
-  --diff-plain-lineNumber--: #0F172A;
-  --diff-expand-lineNumber--: #0F172A;
-  --diff-plain-lineNumber-color--: #64748B;
-  --diff-expand-lineNumber-color--: #64748B;
-  --diff-hunk-content--: rgba(59, 130, 246, 0.08);
-  --diff-hunk-lineNumber--: rgba(59, 130, 246, 0.1);
-  --diff-hunk-lineNumber-hover--: #3b82f6;
-  --diff-add-content-highlight--: rgba(22, 163, 74, 0.3);
-  --diff-del-content-highlight--: rgba(220, 38, 38, 0.3);
-  --diff-add-widget--: #3b82f6;
-  --diff-add-widget-color--: #ffffff;
-  --diff-empty-content--: #0F172A;
-  --diff-hunk-content-color--: #94A3B8;
-
-  color: #E2E8F0;
-}
-
+.diff-tailwindcss-wrapper[data-theme='light'] .diff-style-root .btn-primary,
 .diff-tailwindcss-wrapper[data-theme='dark'] .diff-style-root .btn-primary {
-  color: #000000;
+  color: var(--color-primary-content);
 }
 
-.diff-tailwindcss-wrapper[data-theme="dark"] .diff-line-syntax-raw .hljs {
-  color: #E2E8F0;
-  background: #1E293B;
+/* Syntax highlighting using semantic tokens */
+:is(.diff-tailwindcss-wrapper[data-theme="light"], .diff-tailwindcss-wrapper[data-theme="dark"]) .diff-line-syntax-raw .hljs {
+  color: var(--color-base-content);
+  background: transparent;
 }
 
-.diff-tailwindcss-wrapper[data-theme="dark"] .diff-line-syntax-raw .hljs-keyword,
-.diff-tailwindcss-wrapper[data-theme="dark"] .diff-line-syntax-raw .hljs-type,
-.diff-tailwindcss-wrapper[data-theme="dark"] .diff-line-syntax-raw .hljs-variable.language_ {
-  color: #F472B6;
+:is(.diff-tailwindcss-wrapper[data-theme="light"], .diff-tailwindcss-wrapper[data-theme="dark"]) .diff-line-syntax-raw .hljs-keyword,
+:is(.diff-tailwindcss-wrapper[data-theme="light"], .diff-tailwindcss-wrapper[data-theme="dark"]) .diff-line-syntax-raw .hljs-type,
+:is(.diff-tailwindcss-wrapper[data-theme="light"], .diff-tailwindcss-wrapper[data-theme="dark"]) .diff-line-syntax-raw .hljs-variable.language_ {
+  color: var(--color-error);
 }
 
-.diff-tailwindcss-wrapper[data-theme="dark"] .diff-line-syntax-raw .hljs-title,
-.diff-tailwindcss-wrapper[data-theme="dark"] .diff-line-syntax-raw .hljs-title.class_,
-.diff-tailwindcss-wrapper[data-theme="dark"] .diff-line-syntax-raw .hljs-title.function_ {
-  color: #C084FC;
+:is(.diff-tailwindcss-wrapper[data-theme="light"], .diff-tailwindcss-wrapper[data-theme="dark"]) .diff-line-syntax-raw .hljs-title,
+:is(.diff-tailwindcss-wrapper[data-theme="light"], .diff-tailwindcss-wrapper[data-theme="dark"]) .diff-line-syntax-raw .hljs-title.class_,
+:is(.diff-tailwindcss-wrapper[data-theme="light"], .diff-tailwindcss-wrapper[data-theme="dark"]) .diff-line-syntax-raw .hljs-title.function_ {
+  color: var(--color-primary);
 }
 
-.diff-tailwindcss-wrapper[data-theme="dark"] .diff-line-syntax-raw .hljs-string,
-.diff-tailwindcss-wrapper[data-theme="dark"] .diff-line-syntax-raw .hljs-regexp {
-  color: #86EFAC;
+:is(.diff-tailwindcss-wrapper[data-theme="light"], .diff-tailwindcss-wrapper[data-theme="dark"]) .diff-line-syntax-raw .hljs-string,
+:is(.diff-tailwindcss-wrapper[data-theme="light"], .diff-tailwindcss-wrapper[data-theme="dark"]) .diff-line-syntax-raw .hljs-regexp {
+  color: var(--color-success);
 }
 
-.diff-tailwindcss-wrapper[data-theme="dark"] .diff-line-syntax-raw .hljs-number,
-.diff-tailwindcss-wrapper[data-theme="dark"] .diff-line-syntax-raw .hljs-literal {
-  color: #93C5FD;
+:is(.diff-tailwindcss-wrapper[data-theme="light"], .diff-tailwindcss-wrapper[data-theme="dark"]) .diff-line-syntax-raw .hljs-number,
+:is(.diff-tailwindcss-wrapper[data-theme="light"], .diff-tailwindcss-wrapper[data-theme="dark"]) .diff-line-syntax-raw .hljs-literal {
+  color: var(--color-info);
 }
 
-.diff-tailwindcss-wrapper[data-theme="dark"] .diff-line-syntax-raw .hljs-comment {
-  color: #64748B;
+:is(.diff-tailwindcss-wrapper[data-theme="light"], .diff-tailwindcss-wrapper[data-theme="dark"]) .diff-line-syntax-raw .hljs-comment {
+  color: color-mix(in oklch, var(--color-base-content) 50%, transparent);
   font-style: italic;
 }
 
-.diff-tailwindcss-wrapper[data-theme="dark"] .diff-line-syntax-raw .hljs-built_in,
-.diff-tailwindcss-wrapper[data-theme="dark"] .diff-line-syntax-raw .hljs-symbol {
-  color: #FDBA74;
+:is(.diff-tailwindcss-wrapper[data-theme="light"], .diff-tailwindcss-wrapper[data-theme="dark"]) .diff-line-syntax-raw .hljs-built_in,
+:is(.diff-tailwindcss-wrapper[data-theme="light"], .diff-tailwindcss-wrapper[data-theme="dark"]) .diff-line-syntax-raw .hljs-symbol {
+  color: var(--color-warning);
 }
 
-.diff-tailwindcss-wrapper[data-theme="dark"] .diff-line-syntax-raw .hljs-attr,
-.diff-tailwindcss-wrapper[data-theme="dark"] .diff-line-syntax-raw .hljs-variable {
-  color: #93C5FD;
+:is(.diff-tailwindcss-wrapper[data-theme="light"], .diff-tailwindcss-wrapper[data-theme="dark"]) .diff-line-syntax-raw .hljs-attr,
+:is(.diff-tailwindcss-wrapper[data-theme="light"], .diff-tailwindcss-wrapper[data-theme="dark"]) .diff-line-syntax-raw .hljs-variable {
+  color: var(--color-info);
 }
 
-.diff-tailwindcss-wrapper[data-theme="dark"] .diff-line-syntax-raw .hljs-name,
-.diff-tailwindcss-wrapper[data-theme="dark"] .diff-line-syntax-raw .hljs-selector-tag {
-  color: #4ADE80;
+:is(.diff-tailwindcss-wrapper[data-theme="light"], .diff-tailwindcss-wrapper[data-theme="dark"]) .diff-line-syntax-raw .hljs-name,
+:is(.diff-tailwindcss-wrapper[data-theme="light"], .diff-tailwindcss-wrapper[data-theme="dark"]) .diff-line-syntax-raw .hljs-selector-tag {
+  color: var(--color-success);
 }
 
 ::highlight(diff-search-match) {
-  background-color: #fde68a;
-  color: #1f2937;
+  background-color: color-mix(in oklch, var(--color-warning) 40%, transparent);
+  color: var(--color-base-content);
 }
 
 ::highlight(diff-search-current) {
-  background-color: #f59e0b;
-  color: #ffffff;
+  background-color: var(--color-warning);
+  color: var(--color-warning-content);
 }
 
 ::highlight(diff-occurrence-match) {
-  background-color: #bfdbfe;
-  color: #1f2937;
+  background-color: color-mix(in oklch, var(--color-info) 30%, transparent);
+  color: var(--color-base-content);
 }
 
 /* Flash highlight when scrolling to a comment via sidebar click */
 @keyframes diff-comment-flash {
-  0% { background-color: oklch(0.75 0.15 250 / 0.4); }
+  0% { background-color: color-mix(in oklch, var(--color-info) 40%, transparent); }
   100% { background-color: transparent; }
 }
 
