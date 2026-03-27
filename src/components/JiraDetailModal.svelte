@@ -57,19 +57,3 @@
     {/if}
   </div>
 </Modal>
-
-<style>
-  .jira-content :global(h1) { font-size: 1.25rem; font-weight: 700; margin: 0.75rem 0 0.25rem; }
-  .jira-content :global(h2) { font-size: 1.1rem; font-weight: 600; margin: 0.5rem 0 0.25rem; }
-  .jira-content :global(h3) { font-size: 1rem; font-weight: 600; margin: 0.5rem 0 0.25rem; }
-  .jira-content :global(p) { margin: 0.25rem 0; line-height: 1.5; }
-  .jira-content :global(ul), .jira-content :global(ol) { padding-left: 1.5rem; margin: 0.25rem 0; }
-  .jira-content :global(li) { margin: 0.1rem 0; }
-  .jira-content :global(a) { color: oklch(var(--color-primary)); text-decoration: underline; }
-  .jira-content :global(code) { background: oklch(var(--color-base-200)); padding: 0.1rem 0.3rem; border-radius: 0.25rem; font-size: 0.85em; }
-  .jira-content :global(pre) { background: oklch(var(--color-base-200)); padding: 0.75rem; border-radius: 0.5rem; overflow-x: auto; margin: 0.5rem 0; }
-  .jira-content :global(table) { border-collapse: collapse; width: 100%; margin: 0.5rem 0; }
-  .jira-content :global(th), .jira-content :global(td) { border: 1px solid oklch(var(--color-base-300)); padding: 0.4rem 0.6rem; text-align: left; }
-  .jira-content :global(blockquote) { border-left: 3px solid oklch(var(--color-base-300)); padding-left: 0.75rem; margin: 0.5rem 0; color: oklch(var(--color-base-content) / 0.7); }
-  .jira-content :global(img) { max-width: 100%; height: auto; border-radius: 0.25rem; }
-</style>

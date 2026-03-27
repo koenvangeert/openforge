@@ -57,13 +57,3 @@
     </div>
   </div>
 {/if}
-
-<style>
-  @keyframes slideIn {
-    from { transform: translateY(20px); opacity: 0; }
-    to { transform: translateY(0); opacity: 1; }
-  }
-  :global(.animate-slideIn) {
-    animation: slideIn 0.2s ease-out;
-  }
-</style>

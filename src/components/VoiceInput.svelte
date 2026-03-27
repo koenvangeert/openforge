@@ -181,14 +181,3 @@
     <span class="text-error text-xs">{errorMessage}</span>
   {/if}
 </div>
-
-<style>
-  @keyframes pulse-recording {
-    0%, 100% { opacity: 1; transform: scale(1); }
-    50% { opacity: 0.5; transform: scale(0.85); }
-  }
-
-  .recording-pulse {
-    animation: pulse-recording 1s ease-in-out infinite;
-  }
-</style>
