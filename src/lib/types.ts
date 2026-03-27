@@ -477,7 +477,7 @@ export interface TranscriptionResult {
   duration_ms: number;
 }
 
-export type WhisperModelSizeId = 'tiny' | 'base' | 'small' | 'medium';
+export type WhisperModelSizeId = 'tiny' | 'base' | 'small' | 'medium' | 'large';
 export interface WhisperModelStatus {
   size: WhisperModelSizeId;
   display_name: string;

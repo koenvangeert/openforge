@@ -5,7 +5,7 @@
 //! lazy context loading, and transcription inference via whisper-rs.
 //!
 //! ## Models
-//! Supports multiple model sizes (tiny, base, small, medium) stored in the
+//! Supports multiple model sizes (tiny, base, small, medium, large) stored in the
 //! user's data directory. Models are downloaded from HuggingFace.
 //!
 //! ## Usage
@@ -47,6 +47,7 @@ pub enum WhisperModelSize {
     Base,
     Small,
     Medium,
+    Large,
 }
 
 impl WhisperModelSize {
@@ -57,6 +58,7 @@ impl WhisperModelSize {
             WhisperModelSize::Base,
             WhisperModelSize::Small,
             WhisperModelSize::Medium,
+            WhisperModelSize::Large,
         ]
     }
 
@@ -67,6 +69,7 @@ impl WhisperModelSize {
             "base" => Some(WhisperModelSize::Base),
             "small" => Some(WhisperModelSize::Small),
             "medium" => Some(WhisperModelSize::Medium),
+            "large" => Some(WhisperModelSize::Large),
             _ => None,
         }
     }
@@ -106,6 +109,14 @@ impl WhisperModelSize {
                 disk_size_mb: 1500,
                 ram_usage_mb: 2600,
             },
+            WhisperModelSize::Large => ModelSpec {
+                display_name: "Large",
+                filename: "ggml-large-v3.bin",
+                url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3.bin",
+                sha1: "ad82bf6a9043ceed055076d0fd39f5f186ff8062",
+                disk_size_mb: 3100,
+                ram_usage_mb: 4000,
+            },
         }
     }
 
@@ -116,6 +127,7 @@ impl WhisperModelSize {
             WhisperModelSize::Base => "base",
             WhisperModelSize::Small => "small",
             WhisperModelSize::Medium => "medium",
+            WhisperModelSize::Large => "large",
         }
     }
 }
@@ -156,9 +168,9 @@ pub struct TranscriptionResult {
 /// Status of a Whisper model on disk.
 #[derive(Debug, Clone, Serialize)]
 pub struct WhisperModelStatus {
-    /// Model size identifier ("tiny", "base", "small", "medium").
+    /// Model size identifier ("tiny", "base", "small", "medium", "large").
     pub size: String,
-    /// Human-readable display name ("Tiny", "Base", "Small", "Medium").
+    /// Human-readable display name ("Tiny", "Base", "Small", "Medium", "Large").
     pub display_name: String,
     /// Whether the model file exists on disk.
     pub downloaded: bool,
@@ -619,9 +631,10 @@ mod tests {
     #[test]
     fn test_model_sizes_all() {
         let sizes = WhisperModelSize::all();
-        assert_eq!(sizes.len(), 4);
+        assert_eq!(sizes.len(), 5);
         assert_eq!(sizes[0], WhisperModelSize::Tiny);
         assert_eq!(sizes[3], WhisperModelSize::Medium);
+        assert_eq!(sizes[4], WhisperModelSize::Large);
     }
 
     #[test]
@@ -638,6 +651,10 @@ mod tests {
             WhisperModelSize::from_str("MEDIUM"),
             Some(WhisperModelSize::Medium)
         );
+        assert_eq!(
+            WhisperModelSize::from_str("large"),
+            Some(WhisperModelSize::Large)
+        );
         assert_eq!(WhisperModelSize::from_str("huge"), None);
     }
 
@@ -647,12 +664,14 @@ mod tests {
         assert_eq!(WhisperModelSize::Base.as_str(), "base");
         assert_eq!(WhisperModelSize::Small.as_str(), "small");
         assert_eq!(WhisperModelSize::Medium.as_str(), "medium");
+        assert_eq!(WhisperModelSize::Large.as_str(), "large");
     }
 
     #[test]
     fn test_model_size_display() {
         assert_eq!(format!("{}", WhisperModelSize::Tiny), "tiny");
         assert_eq!(format!("{}", WhisperModelSize::Medium), "medium");
+        assert_eq!(format!("{}", WhisperModelSize::Large), "large");
     }
 
     #[test]
@@ -680,6 +699,16 @@ mod tests {
     }
 
     #[test]
+    fn test_model_spec_large() {
+        let spec = WhisperModelSize::Large.spec();
+        assert_eq!(spec.display_name, "Large");
+        assert_eq!(spec.filename, "ggml-large-v3.bin");
+        assert_eq!(spec.sha1, "ad82bf6a9043ceed055076d0fd39f5f186ff8062");
+        assert_eq!(spec.disk_size_mb, 3100);
+        assert_eq!(spec.ram_usage_mb, 4000);
+    }
+
+    #[test]
     fn test_model_file_path_contains_model_name() {
         for size in WhisperModelSize::all() {
             let spec = size.spec();
@@ -703,11 +732,12 @@ mod tests {
     fn test_get_all_model_statuses() {
         let mgr = WhisperManager::with_active_model(WhisperModelSize::Small);
         let statuses = mgr.get_all_model_statuses();
-        assert_eq!(statuses.len(), 4);
+        assert_eq!(statuses.len(), 5);
         assert_eq!(statuses[0].size, "tiny");
         assert_eq!(statuses[1].size, "base");
         assert_eq!(statuses[2].size, "small");
         assert_eq!(statuses[3].size, "medium");
+        assert_eq!(statuses[4].size, "large");
 
         // Only "small" should be active (default).
         let active_count = statuses.iter().filter(|s| s.is_active).count();
