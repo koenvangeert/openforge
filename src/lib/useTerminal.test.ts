@@ -1,4 +1,7 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { openUrl } from './ipc'
+import { TERMINAL_FONT_FAMILY } from './terminalOptions'
+import { createTerminal } from './useTerminal.svelte'
 
 let webLinksHandler: ((event: MouseEvent, uri: string) => void) | null = null
 let webglContextLossHandler: (() => void) | null = null
@@ -79,9 +82,6 @@ vi.mock('./ipc', () => ({
   openUrl: vi.fn().mockResolvedValue(undefined),
 }))
 
-import { createTerminal } from './useTerminal.svelte'
-import { openUrl } from './ipc'
-
 describe('createTerminal', () => {
   let onData: (data: string) => void
   let onResize: (cols: number, rows: number) => void
@@ -130,7 +130,7 @@ describe('createTerminal', () => {
     const mockEl = document.createElement('div') as HTMLDivElement
     handle.terminalEl = mockEl
     await handle.mount()
-    expect(getTerminalFontFamily(handle.terminal)).toBe("'JetBrains Mono', 'Symbols Nerd Font', 'Symbols Nerd Font Mono', 'SF Mono', 'Fira Code', 'Consolas', monospace")
+    expect(getTerminalFontFamily(handle.terminal)).toBe(TERMINAL_FONT_FAMILY)
   })
 
   it('terminalEl is settable', () => {

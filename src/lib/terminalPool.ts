@@ -1,13 +1,13 @@
-import { Terminal } from '@xterm/xterm'
+import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import { WebglAddon } from '@xterm/addon-webgl'
-import { listen } from '@tauri-apps/api/event'
-import type { UnlistenFn } from '@tauri-apps/api/event'
-import type { PtyEvent } from './types'
-import { writePty, resizePty, getPtyBuffer, openUrl } from './ipc'
-import { themeMode, getTerminalTheme } from './theme'
+import { Terminal } from '@xterm/xterm'
 import { get } from 'svelte/store'
+import { getPtyBuffer, openUrl, resizePty, writePty } from './ipc'
+import { getTerminalOptions } from './terminalOptions'
+import { getTerminalTheme, themeMode } from './theme'
+import type { PtyEvent } from './types'
 
 export interface PoolEntry {
   taskId: string
@@ -134,16 +134,7 @@ export async function acquire(taskId: string): Promise<PoolEntry> {
   const existing = pool.get(taskId)
   if (existing) return existing
 
-  const terminal = new Terminal({
-    fontFamily: "'JetBrains Mono', 'Symbols Nerd Font', 'Symbols Nerd Font Mono', 'SF Mono', 'Fira Code', 'Consolas', monospace",
-    fontSize: 13,
-    lineHeight: 1.4,
-    cursorBlink: true,
-    cursorStyle: 'block',
-    scrollback: 10000,
-    theme: getTerminalTheme(get(themeMode)),
-    allowProposedApi: true,
-  })
+  const terminal = new Terminal(getTerminalOptions(get(themeMode)))
 
   const fitAddon = new FitAddon()
   terminal.loadAddon(fitAddon)

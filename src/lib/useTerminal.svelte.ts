@@ -1,10 +1,11 @@
-import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import { WebglAddon } from '@xterm/addon-webgl'
-import { openUrl } from './ipc'
-import { themeMode, getTerminalTheme } from './theme'
+import { Terminal } from '@xterm/xterm'
 import { get } from 'svelte/store'
+import { openUrl } from './ipc'
+import { getTerminalOptions } from './terminalOptions'
+import { getTerminalTheme, themeMode } from './theme'
 
 function loadWebLinksAddon(terminal: Terminal): void {
   const webLinksAddon = new WebLinksAddon((event, uri) => {
@@ -64,16 +65,7 @@ export function createTerminal(deps: {
     if (terminalMounted || !terminalEl) return
 
     // Initialize xterm.js Terminal (deferred to mount so mocks are active in tests)
-    terminal = new Terminal({
-      fontFamily: "'JetBrains Mono', 'Symbols Nerd Font', 'Symbols Nerd Font Mono', 'SF Mono', 'Fira Code', 'Consolas', monospace",
-      fontSize: 13,
-      lineHeight: 1.4,
-      cursorBlink: true,
-      cursorStyle: 'block',
-      scrollback: 10000,
-      theme: getTerminalTheme(get(themeMode)),
-      allowProposedApi: true,
-    })
+    terminal = new Terminal(getTerminalOptions(get(themeMode)))
     fitAddon = new FitAddon()
     terminal.loadAddon(fitAddon)
     loadWebLinksAddon(terminal)

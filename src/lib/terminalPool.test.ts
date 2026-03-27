@@ -1,4 +1,27 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { openUrl } from './ipc'
+import { TERMINAL_FONT_FAMILY } from './terminalOptions'
+import {
+  _getPool,
+  acquire,
+  attach,
+  clearPtySpawnPending,
+  clearTaskTerminalTabsSession,
+  detach,
+  focusTerminal,
+  getShellLifecycleState,
+  getTaskTerminalTabsSession,
+  isPtyActive,
+  isShellExited,
+  markPtySpawnPending,
+  release,
+  releaseAll,
+  releaseAllForTask,
+  setCurrentPtyInstance,
+  shouldSpawnPty,
+  updateShellLifecycleState,
+  updateTaskTerminalTabsSession,
+} from './terminalPool'
 
 // Track listen callbacks so tests can simulate events
 const listenCallbacks = new Map<string, (event: unknown) => void>()
@@ -93,9 +116,6 @@ vi.mock('./ipc', () => ({
   openUrl: vi.fn().mockResolvedValue(undefined),
 }))
 
-import { acquire, attach, detach, release, releaseAll, releaseAllForTask, _getPool, isPtyActive, focusTerminal, markPtySpawnPending, clearPtySpawnPending, shouldSpawnPty, setCurrentPtyInstance, isShellExited, getTaskTerminalTabsSession, updateTaskTerminalTabsSession, clearTaskTerminalTabsSession, getShellLifecycleState, updateShellLifecycleState } from './terminalPool'
-import { openUrl } from './ipc'
-
 // Stub browser APIs not available in jsdom
 globalThis.ResizeObserver = class {
   observe = vi.fn()
@@ -150,7 +170,7 @@ describe('terminalPool', () => {
 
   it('initializes terminal with the correct font family stack including JetBrains Mono and Nerd Font fallback', async () => {
     const entry = await acquire('task-font-check')
-    expect(getTerminalFontFamily(entry.terminal)).toBe("'JetBrains Mono', 'Symbols Nerd Font', 'Symbols Nerd Font Mono', 'SF Mono', 'Fira Code', 'Consolas', monospace")
+    expect(getTerminalFontFamily(entry.terminal)).toBe(TERMINAL_FONT_FAMILY)
   })
 
   it('acquire returns existing entry on second call', async () => {
