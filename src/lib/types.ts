@@ -457,6 +457,7 @@ export function splitCheckRuns(checks: CheckRunInfo[]): { visible: CheckRunInfo[
 }
 
 export type KanbanColumn = "backlog" | "doing" | "done";
+export type BoardStatus = KanbanColumn;
 
 export interface Action {
   id: string;
