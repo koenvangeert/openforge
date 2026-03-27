@@ -27,7 +27,7 @@ vi.mock('../lib/ipc', () => ({
   getLatestSessions: mockGetLatestSessions,
 }))
 
-vi.mock('../lib/navigation', () => ({
+vi.mock('../lib/router.svelte', () => ({
   pushNavState: vi.fn(),
 }))
 

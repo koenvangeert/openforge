@@ -1,7 +1,7 @@
 import { get } from 'svelte/store'
 import type { Task, AgentSession, Project } from './types'
-import { tasks, activeProjectId, currentView, selectedTaskId } from './stores'
-import { pushNavState } from './navigation'
+import { pendingTask, activeProjectId, currentView, selectedTaskId } from './stores'
+import { pushNavState } from './router.svelte'
 
 export function matchesSearch(task: Task, query: string, projectMap?: Map<string, Project>): boolean {
   if (!query) return true
@@ -39,19 +39,12 @@ export function sortTasks(taskList: Task[], sessions: Map<string, AgentSession>)
   })
 }
 
-/**
- * Navigate to a task, switching projects if necessary.
- * Seeds the tasks store with the selected task when crossing project boundaries
- * so the task detail view renders immediately (before loadTasks() completes).
- */
 export function navigateToTask(task: Task): void {
   pushNavState()
   const currentProjectId = get(activeProjectId)
   if (task.project_id && task.project_id !== currentProjectId) {
     activeProjectId.set(task.project_id)
-    // Seed tasks store so App.svelte's selectedTask derivation resolves immediately,
-    // rather than waiting for the async loadTasks() triggered by the project change.
-    tasks.set([task])
+    pendingTask.set(task)
   }
   currentView.set('board')
   selectedTaskId.set(task.id)

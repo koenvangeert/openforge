@@ -19,10 +19,15 @@ vi.mock('../lib/ipc', () => ({
   getProjectAttention: mockGetProjectAttention,
 }))
 
-const mockResetToBoard = vi.fn()
+const { mockResetToBoard } = vi.hoisted(() => ({
+  mockResetToBoard: vi.fn(),
+}))
 
-vi.mock('../lib/navigation', () => ({
+vi.mock('../lib/router.svelte', () => ({
   resetToBoard: mockResetToBoard,
+  useAppRouter: () => ({
+    resetToBoard: mockResetToBoard,
+  }),
 }))
 
 const sampleProjects: Project[] = [

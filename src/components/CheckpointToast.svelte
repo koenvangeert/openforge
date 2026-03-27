@@ -1,8 +1,10 @@
 <script lang="ts">
   import { onDestroy } from 'svelte'
   import type { CheckpointNotification } from '../lib/types'
-  import { checkpointNotification, selectedTaskId } from '../lib/stores'
-  import { pushNavState } from '../lib/navigation'
+  import { checkpointNotification } from '../lib/stores'
+  import { useAppRouter } from '../lib/router.svelte'
+
+  const router = useAppRouter()
 
   let visible = $state(false)
   let timer: ReturnType<typeof setTimeout>
@@ -13,8 +15,7 @@
 
   function handleClick() {
     if ($checkpointNotification) {
-      pushNavState()
-      $selectedTaskId = $checkpointNotification.ticketId
+      router.navigateToTask($checkpointNotification.ticketId)
       dismiss()
     }
   }

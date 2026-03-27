@@ -19,8 +19,15 @@ vi.mock('../lib/ipc', () => ({
   getProjectAttention: vi.fn(async () => []),
 }))
 
-vi.mock('../lib/navigation', () => ({
-  resetToBoard: vi.fn(),
+const { mockResetToBoard } = vi.hoisted(() => ({
+  mockResetToBoard: vi.fn(),
+}))
+
+vi.mock('../lib/router.svelte', () => ({
+  resetToBoard: mockResetToBoard,
+  useAppRouter: () => ({
+    resetToBoard: mockResetToBoard,
+  }),
 }))
 
 vi.mock('lucide-svelte', () => {
@@ -114,7 +121,7 @@ describe('AppSidebar', () => {
   })
 
   it('clicking a project while on workqueue resets to board', async () => {
-    const { resetToBoard } = await import('../lib/navigation')
+    const { resetToBoard } = await import('../lib/router.svelte')
     vi.mocked(resetToBoard).mockClear()
     renderSidebar({ currentView: 'workqueue' })
 
@@ -123,7 +130,7 @@ describe('AppSidebar', () => {
   })
 
   it('clicking a project while on global_settings resets to board', async () => {
-    const { resetToBoard } = await import('../lib/navigation')
+    const { resetToBoard } = await import('../lib/router.svelte')
     vi.mocked(resetToBoard).mockClear()
     renderSidebar({ currentView: 'global_settings' })
 

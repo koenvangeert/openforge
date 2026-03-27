@@ -17,10 +17,9 @@ vi.mock('../lib/stores', () => ({
   authoredPrs: writable([]),
   authoredPrCount: writable(0),
   activeProjectId: writable('P-1'),
-}))
-
-vi.mock('../lib/navigation', () => ({
-  pushNavState: vi.fn(),
+  currentView: writable('pr_review'),
+  selectedTaskId: writable<string | null>(null),
+  selectedSkillName: writable<string | null>(null),
 }))
 
 vi.mock('../lib/useDiffWorker.svelte', () => ({

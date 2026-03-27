@@ -1,7 +1,7 @@
 <script lang="ts">
   import { skills, selectedSkillName, activeProjectId } from '../lib/stores'
   import { listOpenCodeSkills, saveSkillContent } from '../lib/ipc'
-  import { pushNavState } from '../lib/navigation'
+  import { useAppRouter } from '../lib/router.svelte'
   import { isInputFocused } from '../lib/domUtils'
 
   interface Props {
@@ -13,6 +13,8 @@
   import ProjectPageHeader from './ProjectPageHeader.svelte'
   import MarkdownContent from './MarkdownContent.svelte'
   import type { SkillInfo } from '../lib/types'
+
+  const router = useAppRouter()
 
   let isLoading = $state(false)
   let error = $state<string | null>(null)
@@ -89,7 +91,7 @@
   }
 
   function selectSkill(skill: SkillInfo) {
-    pushNavState()
+    router.navigate('skills')
     $selectedSkillName = skill.name
     editMode = false
     saveError = null

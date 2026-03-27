@@ -8,6 +8,7 @@ export interface TaskRuntimeInfo {
 }
 
 export const tasks = writable<Task[]>([]);
+export const pendingTask = writable<Task | null>(null);
 // selectedTaskId serves as both selection state and navigation:
 // - null = show Kanban board
 // - non-null = show full-page detail view for that task

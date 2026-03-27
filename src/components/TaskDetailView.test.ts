@@ -205,9 +205,16 @@ vi.mock('../lib/terminalPool', () => ({
   }),
 }))
 
-vi.mock('../lib/navigation', () => ({
-  resetToBoard: vi.fn(),
+const { mockResetToBoard } = vi.hoisted(() => ({
+  mockResetToBoard: vi.fn(),
+}))
+
+vi.mock('../lib/router.svelte', () => ({
+  resetToBoard: mockResetToBoard,
   pushNavState: vi.fn(),
+  useAppRouter: () => ({
+    resetToBoard: mockResetToBoard,
+  }),
 }))
 
 vi.mock('../lib/actions', () => ({
@@ -660,14 +667,14 @@ describe('TaskDetailView', () => {
     render(TaskDetailView, { props: { task: doingTask, onRunAction: mockOnRunAction } })
     await fireEvent.click(screen.getByText('Move to Done'))
     const { updateTaskStatus } = await import('../lib/ipc')
-    const { resetToBoard } = await import('../lib/navigation')
+    const { resetToBoard } = await import('../lib/router.svelte')
     expect(updateTaskStatus).toHaveBeenCalledWith('T-42', 'done')
     expect(resetToBoard).toHaveBeenCalled()
   })
 
   it('navigates to board immediately before IPC call when moved to done', async () => {
     const { updateTaskStatus } = await import('../lib/ipc')
-    const { resetToBoard } = await import('../lib/navigation')
+    const { resetToBoard } = await import('../lib/router.svelte')
 
     const callOrder: string[] = []
     vi.mocked(resetToBoard).mockImplementation(() => { callOrder.push('resetToBoard') })
@@ -689,7 +696,7 @@ describe('TaskDetailView', () => {
   it('navigates to board immediately when moving task to done', async () => {
     const doingTask: Task = { ...baseTask, status: 'doing' }
     const { updateTaskStatus } = await import('../lib/ipc')
-    const { resetToBoard } = await import('../lib/navigation')
+    const { resetToBoard } = await import('../lib/router.svelte')
 
     let resolveUpdate: (() => void) | undefined
     vi.mocked(updateTaskStatus).mockImplementationOnce(
@@ -953,7 +960,7 @@ describe('TaskDetailView', () => {
     })
 
     it('Escape triggers reset to board', async () => {
-      const { resetToBoard } = await import('../lib/navigation')
+    const { resetToBoard } = await import('../lib/router.svelte')
       vi.mocked(resetToBoard).mockClear()
       render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
 
@@ -963,7 +970,7 @@ describe('TaskDetailView', () => {
     })
 
      it('q triggers reset to board', async () => {
-       const { resetToBoard } = await import('../lib/navigation')
+    const { resetToBoard } = await import('../lib/router.svelte')
        vi.mocked(resetToBoard).mockClear()
        render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
 

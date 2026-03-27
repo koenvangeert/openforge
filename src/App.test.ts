@@ -1,11 +1,14 @@
 import { render, fireEvent } from '@testing-library/svelte'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { writable } from 'svelte/store'
+import { get, writable } from 'svelte/store'
 import type { Task, AgentSession, Project, ProjectAttention, PullRequestInfo, CheckpointNotification, CiFailureNotification, RateLimitNotification, AuthoredPullRequest } from './lib/types'
 
 const callOrder: string[] = []
 
 const eventListeners = new Map<string, Function>()
+const mockSelectedTaskIdStore = writable<string | null>(null)
+const mockCurrentViewStore = writable<'board' | 'pr_review' | 'settings' | 'skills' | 'workqueue' | 'global_settings'>('board')
+const mockSelectedReviewPrStore = writable(null)
 
 vi.mock('@tauri-apps/api/event', () => ({
   listen: vi.fn(async (eventName: string, callback: Function) => {
@@ -22,7 +25,8 @@ vi.mock('@tauri-apps/api/core', () => ({
 
 vi.mock('./lib/stores', () => ({
   tasks: writable<Task[]>([]),
-  selectedTaskId: writable<string | null>(null),
+  pendingTask: writable<Task | null>(null),
+  selectedTaskId: mockSelectedTaskIdStore,
   activeSessions: writable<Map<string, AgentSession>>(new Map()),
   checkpointNotification: writable<CheckpointNotification | null>(null),
   ciFailureNotification: writable<CiFailureNotification | null>(null),
@@ -36,9 +40,9 @@ vi.mock('./lib/stores', () => ({
   projectAttention: writable<Map<string, ProjectAttention>>(new Map()),
   agentEvents: writable<Map<string, any>>(new Map()),
   taskRuntimeInfo: writable(new Map()),
-  currentView: writable('board'),
+  currentView: mockCurrentViewStore,
   reviewPrs: writable([]),
-  selectedReviewPr: writable(null),
+  selectedReviewPr: mockSelectedReviewPrStore,
   prFileDiffs: writable([]),
   reviewRequestCount: writable(0),
   reviewComments: writable([]),
@@ -173,10 +177,39 @@ vi.mock('./lib/doingStatus', () => ({
   computeDoingStatus: vi.fn(() => 'idle'),
 }))
 
-vi.mock('./lib/navigation', () => ({
-  pushNavState: vi.fn(),
-  navigateBack: vi.fn(),
-  resetToBoard: vi.fn(),
+const mockRouterPushNavState = vi.fn()
+const mockRouterBack = vi.fn(() => false)
+const mockRouterNavigateToTask = vi.fn((taskId: string) => {
+  mockSelectedTaskIdStore.set(taskId)
+})
+const mockRouterResetToBoard = vi.fn(() => {
+  mockCurrentViewStore.set('board')
+  mockSelectedTaskIdStore.set(null)
+  mockSelectedReviewPrStore.set(null)
+})
+const mockRouterNavigate = vi.fn((view: string) => {
+  if (view === 'board') {
+    mockRouterResetToBoard()
+    return
+  }
+  mockCurrentViewStore.set(view as any)
+  if (new Set(['pr_review', 'settings', 'workqueue', 'global_settings']).has(view)) {
+    mockSelectedTaskIdStore.set(null)
+  }
+})
+
+vi.mock('./lib/router.svelte', () => ({
+  pushNavState: mockRouterPushNavState,
+  resetToBoard: mockRouterResetToBoard,
+  useAppRouter: () => ({
+    navigate: mockRouterNavigate,
+    navigateToTask: mockRouterNavigateToTask,
+    back: mockRouterBack,
+    resetToBoard: mockRouterResetToBoard,
+    get currentView() {
+      return get(mockCurrentViewStore)
+    },
+  }),
 }))
 
 vi.mock('./lib/terminalPool', () => ({
@@ -397,7 +430,7 @@ describe('App onMount initialization order', () => {
     it('CMD+H resets to board view and clears selectedTaskId', async () => {
       const App = (await import('./App.svelte')).default
       const stores = await import('./lib/stores')
-      const nav = await import('./lib/navigation')
+      const nav = await import('./lib/router.svelte')
 
       render(App)
 
@@ -447,7 +480,7 @@ describe('App onMount initialization order', () => {
     it('dashboard icon resets to board when a task view is open', async () => {
       const App = (await import('./App.svelte')).default
       const stores = await import('./lib/stores')
-      const nav = await import('./lib/navigation')
+      const nav = await import('./lib/router.svelte')
       const iconRailModule = await import('./components/IconRail.svelte')
 
       stores.selectedTaskId.set('task-123')
@@ -507,7 +540,7 @@ describe('App onMount initialization order', () => {
   it('action palette move-to-done resets to board for the selected task view', async () => {
       const App = (await import('./App.svelte')).default
       const stores = await import('./lib/stores')
-      const nav = await import('./lib/navigation')
+      const nav = await import('./lib/router.svelte')
       const { getTasksForProject, updateTaskStatus } = await import('./lib/ipc')
       const actionPaletteModule = await import('./components/ActionPalette.svelte')
 
@@ -581,7 +614,7 @@ describe('App onMount initialization order', () => {
   it('action palette move-to-done navigates immediately without waiting for backend cleanup', async () => {
     const App = (await import('./App.svelte')).default
     const stores = await import('./lib/stores')
-    const nav = await import('./lib/navigation')
+    const nav = await import('./lib/router.svelte')
     const { getTasksForProject, updateTaskStatus } = await import('./lib/ipc')
     const actionPaletteModule = await import('./components/ActionPalette.svelte')
 
@@ -665,7 +698,7 @@ describe('App onMount initialization order', () => {
     it('action palette move-to-done navigates before IPC call', async () => {
       const App = (await import('./App.svelte')).default
       const stores = await import('./lib/stores')
-      const nav = await import('./lib/navigation')
+      const nav = await import('./lib/router.svelte')
       const { getTasksForProject, updateTaskStatus } = await import('./lib/ipc')
       const actionPaletteModule = await import('./components/ActionPalette.svelte')
 
@@ -755,7 +788,7 @@ describe('App onMount initialization order', () => {
       const App = (await import('./App.svelte')).default
       const stores = await import('./lib/stores')
       const ipc = await import('./lib/ipc')
-      const nav = await import('./lib/navigation')
+      const nav = await import('./lib/router.svelte')
       const { get } = await import('svelte/store')
 
       const projectList: Project[] = [

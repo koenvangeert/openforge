@@ -2,7 +2,7 @@
   import { onMount, onDestroy } from 'svelte'
   import { projects, activeProjectId, projectAttention } from '../lib/stores'
   import { getProjectAttention } from '../lib/ipc'
-  import { resetToBoard } from '../lib/navigation'
+  import { useAppRouter } from '../lib/router.svelte'
   import type { Project, ProjectAttention } from '../lib/types'
 
   interface Props {
@@ -10,6 +10,7 @@
   }
 
   let { onNewProject }: Props = $props()
+  const router = useAppRouter()
 
   let isOpen = $state(false)
   let dropdownRef: HTMLDivElement
@@ -53,7 +54,7 @@
 
   function selectProject(project: Project) {
     $activeProjectId = project.id
-    resetToBoard()
+    router.resetToBoard()
     isOpen = false
   }
 

@@ -3,7 +3,7 @@
   import type { Task, AgentSession, Action } from '../lib/types'
   import { tasks, selectedTaskId, activeSessions, ticketPrs, error, activeProjectId, startingTasks } from '../lib/stores'
   import { clearDoneTasks, getConfig, setConfig } from '../lib/ipc'
-  import { pushNavState } from '../lib/navigation'
+  import { useAppRouter } from '../lib/router.svelte'
   import { loadBoardColumns, DEFAULT_BOARD_COLUMNS, BACKLOG_COLUMN, DONE_COLUMN } from '../lib/boardColumns'
   import { computeTaskState } from '../lib/taskState'
   import { sortBySessionActivity } from '../lib/taskSort'
@@ -22,6 +22,8 @@
   }
 
   let { projectName, onRunAction }: Props = $props()
+
+  const router = useAppRouter()
 
   let boardColumns = $state<BoardColumnConfig[]>([])
 
@@ -195,8 +197,7 @@
   }
 
   function handleSelect(taskId: string) {
-    pushNavState()
-    $selectedTaskId = taskId
+    router.navigateToTask(taskId)
   }
 
   let contextMenu = $state({ visible: false, x: 0, y: 0, taskId: '' })

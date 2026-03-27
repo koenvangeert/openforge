@@ -9,7 +9,7 @@
   import type { AgentSession } from '../lib/types'
   import { getWorkQueueTasks, getConfig, setConfig } from '../lib/ipc'
   import { activeProjectId, currentView, selectedTaskId, activeSessions, ticketPrs, startingTasks } from '../lib/stores'
-  import { pushNavState } from '../lib/navigation'
+  import { useAppRouter } from '../lib/router.svelte'
   import { isInputFocused } from '../lib/domUtils'
   import { useVimNavigation } from '../lib/useVimNavigation.svelte'
   import TaskCard from './TaskCard.svelte'
@@ -20,6 +20,8 @@
   }
 
   let { onRunAction }: Props = $props()
+
+  const router = useAppRouter()
 
   let entries = $state<WorkQueueEntry[]>([])
   let loading = $state(true)
@@ -99,9 +101,8 @@
   }
 
   function handleTaskClick(entry: WorkQueueEntry) {
-    pushNavState()
+    router.navigate('board')
     $activeProjectId = entry.task.project_id
-    $currentView = 'board'
     $selectedTaskId = entry.task.id
   }
 

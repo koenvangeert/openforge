@@ -10,10 +10,8 @@ vi.mock('../lib/stores', () => ({
   activeSessions: writable<Map<string, AgentSession>>(new Map()),
   ticketPrs: writable<Map<string, PullRequestInfo[]>>(new Map()),
   startingTasks: writable<Set<string>>(new Set()),
-}))
-
-vi.mock('../lib/navigation', () => ({
-  pushNavState: vi.fn(),
+  selectedReviewPr: writable(null),
+  selectedSkillName: writable<string | null>(null),
 }))
 
 vi.mock('../lib/ipc', () => ({
@@ -47,7 +45,6 @@ function emitTauriEvent(eventName: string, payload: unknown = {}) {
 import WorkQueueView from './WorkQueueView.svelte'
 import { activeProjectId, currentView, selectedTaskId } from '../lib/stores'
 import { getWorkQueueTasks, getConfig, setConfig } from '../lib/ipc'
-import { pushNavState } from '../lib/navigation'
 import { listen } from '@tauri-apps/api/event'
 
 const now = Math.floor(Date.now() / 1000)
@@ -210,7 +207,6 @@ describe('WorkQueueView', () => {
     expect(taskCard).toBeTruthy()
     await fireEvent.click(taskCard!)
 
-    expect(pushNavState).toHaveBeenCalled()
     // Verify stores were updated — read current values
     const { get } = await import('svelte/store')
     expect(get(activeProjectId)).toBe('proj-42')
@@ -601,8 +597,9 @@ describe('WorkQueueView', () => {
       const pinBtn = screen.getByTestId('pin-btn-T-1')
       await fireEvent.click(pinBtn)
 
-      // Should NOT navigate
-      expect(pushNavState).not.toHaveBeenCalled()
+      // Should NOT update selectedTaskId
+      const { get } = await import('svelte/store')
+      expect(get(selectedTaskId)).toBe(null)
     })
   })
 

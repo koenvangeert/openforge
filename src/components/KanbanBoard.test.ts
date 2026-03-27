@@ -1,5 +1,6 @@
 import { render, screen, fireEvent, within, waitFor } from '@testing-library/svelte'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { writable } from 'svelte/store'
 import KanbanBoard from './KanbanBoard.svelte'
 import type { Task } from '../lib/types'
 import { tasks, activeSessions, activeProjectId, ticketPrs, startingTasks } from '../lib/stores'
@@ -16,6 +17,19 @@ vi.mock('../lib/ipc', () => ({
   setConfig: vi.fn(() => Promise.resolve()),
 }))
 
+vi.mock('../lib/stores', () => ({
+  tasks: writable([]),
+  selectedTaskId: writable(null),
+  currentView: writable('board'),
+  selectedReviewPr: writable(null),
+  selectedSkillName: writable(null),
+  activeSessions: writable(new Map()),
+  activeProjectId: writable('proj-1'),
+  ticketPrs: writable(new Map()),
+  startingTasks: writable(new Set()),
+  error: writable(null),
+}))
+
 vi.mock('../lib/boardColumns', () => ({
   loadBoardColumns: vi.fn(() => Promise.resolve([
     { id: 'col-doing', name: 'Doing', statuses: ['idle', 'active', 'needs-input', 'paused', 'agent-done', 'failed', 'interrupted', 'pr-draft', 'pr-open', 'ci-failed', 'changes-requested', 'ready-to-merge', 'pr-merged'], underlyingStatus: 'doing' },
@@ -25,10 +39,6 @@ vi.mock('../lib/boardColumns', () => ({
   ],
   BACKLOG_COLUMN: { id: 'col-backlog', name: 'Backlog', statuses: ['egg'], underlyingStatus: 'backlog' },
   DONE_COLUMN: { id: 'col-done', name: 'Done', statuses: ['done'], underlyingStatus: 'done' },
-}))
-
-vi.mock('../lib/navigation', () => ({
-  pushNavState: vi.fn(),
 }))
 
 const baseTask: Task = {

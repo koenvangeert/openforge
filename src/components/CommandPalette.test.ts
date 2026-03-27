@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import { get } from 'svelte/store'
 import type { Task, AgentSession, Project } from '../lib/types'
 import { matchesSearch, sortTasks, filterActiveTasks, navigateToTask } from '../lib/commandPalette'
-import { tasks, activeProjectId, currentView, selectedTaskId } from '../lib/stores'
+import { tasks, activeProjectId, currentView, selectedTaskId, pendingTask } from '../lib/stores'
 
 function makeProject(overrides: Partial<Project> & { id: string; name: string }): Project {
   return {
@@ -219,12 +219,14 @@ describe('navigateToTask', () => {
     activeProjectId.set(null)
     currentView.set('board')
     selectedTaskId.set(null)
+    pendingTask.set(null)
     tasks.set([])
   })
 
-  it('seeds tasks store with selected task when switching to a different project', () => {
+  it('sets pending task without mutating tasks when switching to a different project', () => {
     activeProjectId.set('P-1')
-    tasks.set([makeTask({ id: 'T-old', project_id: 'P-1' })])
+    const existing = [makeTask({ id: 'T-old', project_id: 'P-1' })]
+    tasks.set(existing)
 
     const task = makeTask({ id: 'T-new', project_id: 'P-2' })
     navigateToTask(task)
@@ -232,11 +234,11 @@ describe('navigateToTask', () => {
     expect(get(activeProjectId)).toBe('P-2')
     expect(get(selectedTaskId)).toBe('T-new')
     expect(get(currentView)).toBe('board')
-    // Task must be in the tasks store so selectedTask derivation resolves immediately
-    expect(get(tasks).find(t => t.id === 'T-new')).toBeTruthy()
+    expect(get(pendingTask)?.id).toBe('T-new')
+    expect(get(tasks)).toEqual(existing)
   })
 
-  it('does not replace tasks store when task is in the same project', () => {
+  it('does not set pending task or replace tasks when task is in same project', () => {
     activeProjectId.set('P-1')
     const existing = [makeTask({ id: 'T-1', project_id: 'P-1' }), makeTask({ id: 'T-2', project_id: 'P-1' })]
     tasks.set(existing)
@@ -245,8 +247,8 @@ describe('navigateToTask', () => {
 
     expect(get(activeProjectId)).toBe('P-1')
     expect(get(selectedTaskId)).toBe('T-2')
-    // Tasks store should still have both tasks
-    expect(get(tasks)).toHaveLength(2)
+    expect(get(tasks)).toEqual(existing)
+    expect(get(pendingTask)).toBeNull()
   })
 
   it('sets currentView to board', () => {
@@ -265,5 +267,6 @@ describe('navigateToTask', () => {
 
     expect(get(activeProjectId)).toBe('P-1')
     expect(get(selectedTaskId)).toBe('T-1')
+    expect(get(pendingTask)).toBeNull()
   })
 })

@@ -2,7 +2,7 @@
   import { onMount, onDestroy } from 'svelte'
   import { listen } from '@tauri-apps/api/event'
   import type { UnlistenFn, Event } from '@tauri-apps/api/event'
-  import { tasks, selectedTaskId, activeSessions, checkpointNotification, ciFailureNotification, ticketPrs, error, isLoading, projects, activeProjectId, currentView, reviewRequestCount, authoredPrCount, projectAttention, taskSpawned, startingTasks, codeCleanupTasksEnabled, rateLimitNotification, taskRuntimeInfo, focusBoardFilters } from './lib/stores'
+  import { tasks, pendingTask, selectedTaskId, activeSessions, checkpointNotification, ciFailureNotification, ticketPrs, error, isLoading, projects, activeProjectId, currentView, reviewRequestCount, authoredPrCount, projectAttention, taskSpawned, startingTasks, codeCleanupTasksEnabled, rateLimitNotification, taskRuntimeInfo, focusBoardFilters } from './lib/stores'
   import { getProjects, getTasksForProject, getPullRequests, startImplementation, getSessionStatus, getLatestSession, getLatestSessions, forceGithubSync, createTask, updateTask, updateTaskStatus, deleteTask, getProjectAttention, getAppMode, finalizeClaudeSession, getConfig, getProjectConfig, listOpenCodeAgents, getReviewPrs, getAuthoredPrs } from './lib/ipc'
   import { writePtyWithSubmit } from './lib/ptySubmit'
   import SearchableSelect from './components/SearchableSelect.svelte'
@@ -13,9 +13,6 @@
   import TaskDetailView from './components/TaskDetailView.svelte'
    import PromptInput from './components/PromptInput.svelte'
   import Modal from './components/Modal.svelte'
-   import SettingsView from './components/SettingsView.svelte'
-   import PrReviewView from './components/PrReviewView.svelte'
-   import WorkQueueView from './components/WorkQueueView.svelte'
    import Toast from './components/Toast.svelte'
   import CheckpointToast from './components/CheckpointToast.svelte'
   import CiFailureToast from './components/CiFailureToast.svelte'
@@ -28,7 +25,7 @@
   import CommandPalette from './components/CommandPalette.svelte'
   import ActionPalette from './components/ActionPalette.svelte'
 
-  import { pushNavState, navigateBack, resetToBoard } from './lib/navigation'
+  import { useAppRouter } from './lib/router.svelte'
   import { loadActions, getEnabledActions } from './lib/actions'
   import { getProjectColor } from './lib/projectColors'
   import { themeMode } from './lib/theme'
@@ -37,7 +34,8 @@
   import { isInputFocused } from './lib/domUtils'
   import { useCommandHeld } from './lib/useCommandHeld.svelte'
   import { getOpenCodeSessionUpdate } from './lib/opencodeSessionEvents'
-  import SkillsView from './components/SkillsView.svelte'
+  import { useShortcutRegistry } from './lib/shortcuts.svelte'
+  import { ICON_RAIL_HIDDEN_VIEWS, VIEWS } from './lib/views'
 
   let unlisteners: UnlistenFn[] = []
   let showAddDialog = $state(false)
@@ -48,6 +46,7 @@
   let dialogSelectedAgent = $state('')
   let dialogSelectedPermissionMode = $state<PermissionMode>('default')
   let dialogActions = $state<Action[]>([])
+  let shortcuts: ReturnType<typeof useShortcutRegistry> | null = null
 
   async function loadDialogAgentInfo() {
     dialogSelectedAgent = ''
@@ -83,11 +82,23 @@
   let actionPaletteActions = $state<Action[]>([])
   let workQueueRefreshTrigger = $state(0)
   let boardLayout = $state<'kanban' | 'focus'>('kanban')
+  let router = useAppRouter()
 
   useCommandHeld()
 
-  let selectedTask = $derived($tasks.find(t => t.id === $selectedTaskId) || null)
+  let selectedTask = $derived(
+    $tasks.find(t => t.id === $selectedTaskId) ||
+      ($pendingTask?.id === $selectedTaskId ? $pendingTask : null)
+  )
   let previousActiveProjectId: string | null = $state(null)
+  let activeView = $derived($currentView === 'board' ? null : VIEWS[$currentView])
+
+  $effect(() => {
+    const pending = $pendingTask
+    if (pending && $tasks.some(t => t.id === pending.id)) {
+      pendingTask.set(null)
+    }
+  })
 
   $effect(() => {
     const projectId = $activeProjectId
@@ -99,31 +110,7 @@
     previousActiveProjectId = projectId
   })
 
-
-  // Navigation logic - clear selected task when switching views
-  $effect(() => {
-    if ($currentView === 'pr_review') {
-      $selectedTaskId = null
-    }
-  })
-
-  $effect(() => {
-    if ($currentView === 'settings') {
-      $selectedTaskId = null
-    }
-  })
-   $effect(() => {
-     if ($currentView === 'workqueue') {
-       $selectedTaskId = null
-     }
-   })
-   $effect(() => {
-     if ($currentView === 'global_settings') {
-       $selectedTaskId = null
-     }
-   })
-
-    // Reload tasks when active project changes
+     // Reload tasks when active project changes
    $effect(() => {
       if ($activeProjectId) {
         loadTasks()
@@ -387,7 +374,7 @@
         break
       case 'move-to-done':
         if (task) {
-          resetToBoard()
+          router.resetToBoard()
           void updateTaskStatus(task.id, 'done').catch((e) => {
             console.error('Failed to update task status:', e)
             $error = 'Task completion may have succeeded, but background cleanup failed.'
@@ -402,11 +389,10 @@
         }
         break
       case 'go-back':
-        navigateBack()
+        router.back()
         break
       case 'open-workqueue':
-        pushNavState()
-        $currentView = 'workqueue'
+        router.navigate('workqueue')
         break
       case 'search-tasks':
         showCommandPalette = true
@@ -440,119 +426,107 @@
   }
 
   function handleNavigate(view: AppView) {
-    if (view === 'board') {
-      resetToBoard()
-      return
-    }
-
-    pushNavState()
-    $currentView = view
+    router.navigate(view)
   }
 
   function handleOpenTask(taskId: string) {
-    pushNavState()
-    $selectedTaskId = taskId
+    router.navigateToTask(taskId)
   }
 
   function handleKeydown(e: KeyboardEvent) {
-    // ? — show keyboard shortcuts help (global, but not when typing in an input)
-    if (e.key === '?' && !isInputFocused()) {
-      e.preventDefault()
+    if (shortcuts) {
+      shortcuts.handleKeydown(e)
+    }
+  }
+
+  onMount(async () => {
+    shortcuts = useShortcutRegistry()
+
+    window.addEventListener('keydown', handleKeydown)
+    unlisteners.push(() => window.removeEventListener('keydown', handleKeydown))
+
+    shortcuts.register('?', () => {
       showShortcutsDialog = true
-      return
-    }
-    if (e.metaKey && !e.shiftKey && e.key === 'k') {
-      e.preventDefault()
-      openActionPalette()
-      return
-    }
-    if (e.metaKey && !e.shiftKey && e.key === 'p') {
-      e.preventDefault()
+    })
+
+    shortcuts.register('⌘k', openActionPalette)
+
+    shortcuts.register('⌘p', () => {
       showProjectSwitcher = !showProjectSwitcher
-      return
-    }
-    if (e.metaKey && e.key === 'b') {
-      e.preventDefault()
+    })
+
+    shortcuts.register('⌘b', () => {
       appSidebarCollapsed = !appSidebarCollapsed
       localStorage.setItem('appSidebarCollapsed', String(appSidebarCollapsed))
-      return
-    }
-    if (e.metaKey && e.key === 't') {
-      e.preventDefault()
+    })
+
+    shortcuts.register('⌘t', () => {
       if (!showAddDialog) {
         editingTask = null
         showAddDialog = true
         loadDialogAgentInfo()
       }
-    }
-    if ((e.metaKey || e.ctrlKey) && (e.key === '[' || e.key === 'ArrowLeft')) {
-      e.preventDefault()
-      navigateBack()
-    }
-    if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'R') {
-      e.preventDefault()
-      triggerGithubSync()
-    }
-    if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key === 'd') {
-      e.preventDefault()
-      window.dispatchEvent(new CustomEvent('toggle-voice-recording'))
-    }
-    if (e.metaKey && e.shiftKey && (e.key === 'F' || e.key === 'f')) {
-      e.preventDefault()
-      showCommandPalette = !showCommandPalette
-      return
-    }
-    if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key === 'r') {
-      e.preventDefault()
-      pushNavState()
-      $currentView = 'workqueue'
-      return
-    }
-    if (e.metaKey && !e.shiftKey && e.key === 'h') {
-      e.preventDefault()
-      resetToBoard()
-      return
-    }
-    if (e.metaKey && !e.shiftKey && e.key === 'g') {
-      e.preventDefault()
-      handleNavigate('pr_review')
-      return
-    }
-    if (e.metaKey && !e.shiftKey && e.key === 'l') {
-      e.preventDefault()
-      handleNavigate('skills')
-      return
-    }
-    if (e.metaKey && e.key === ',') {
-      e.preventDefault()
-      handleNavigate('settings')
-      return
-    }
+    })
 
-    // 1/2 — cycle through projects (plain keys, no modifier)
-    if ((e.key === '1' || e.key === '2') && !e.metaKey && !e.ctrlKey && !e.altKey && !isInputFocused()) {
+    shortcuts.register('⌘[', () => { router.back() })
+    shortcuts.register('⌘arrowleft', () => { router.back() })
+    shortcuts.register('⌃[', () => { router.back() })
+    shortcuts.register('⌃arrowleft', () => { router.back() })
+
+    shortcuts.register('⌘⇧r', triggerGithubSync)
+    shortcuts.register('⌃⇧r', triggerGithubSync)
+
+    shortcuts.register('⌘d', () => {
+      window.dispatchEvent(new CustomEvent('toggle-voice-recording'))
+    })
+    shortcuts.register('⌃d', () => {
+      window.dispatchEvent(new CustomEvent('toggle-voice-recording'))
+    })
+
+    shortcuts.register('⌘⇧f', () => {
+      showCommandPalette = !showCommandPalette
+    })
+
+    shortcuts.register('⌘r', () => {
+      router.navigate('workqueue')
+    })
+    shortcuts.register('⌃r', () => {
+      router.navigate('workqueue')
+    })
+
+    shortcuts.register('⌘h', () => {
+      router.resetToBoard()
+    })
+
+    shortcuts.register('⌘g', () => {
+      handleNavigate('pr_review')
+    })
+
+    shortcuts.register('⌘l', () => {
+      handleNavigate('skills')
+    })
+
+    shortcuts.register('⌘,', () => {
+      handleNavigate('settings')
+    })
+
+    shortcuts.register('1', () => {
       const projectList = $projects
       if (projectList.length === 0) return
-      e.preventDefault()
       const currentIndex = projectList.findIndex((p) => p.id === $activeProjectId)
-      let nextIndex: number
-      if (e.key === '2') {
-        // Next project
-        nextIndex = currentIndex < 0 ? 0 : (currentIndex + 1) % projectList.length
-      } else {
-        // Previous project
-        nextIndex = currentIndex <= 0 ? projectList.length - 1 : currentIndex - 1
-      }
+      const nextIndex = currentIndex <= 0 ? projectList.length - 1 : currentIndex - 1
       $activeProjectId = projectList[nextIndex].id
-      resetToBoard()
-      return
-    }
+      router.resetToBoard()
+    })
 
-  }
-
-  onMount(async () => {
-    window.addEventListener('keydown', handleKeydown)
-    unlisteners.push(() => window.removeEventListener('keydown', handleKeydown))
+    shortcuts.register('2', () => {
+      const projectList = $projects
+      if (projectList.length === 0) return
+      const currentIndex = projectList.findIndex((p) => p.id === $activeProjectId)
+      const nextIndex = currentIndex < 0 ? 0 : (currentIndex + 1) % projectList.length
+      $activeProjectId = projectList[nextIndex].id
+      router.resetToBoard()
+    })
 
     // Phase 1: Register ALL event listeners
     unlisteners.push(
@@ -907,46 +881,45 @@
     onNewProject={() => showProjectSetup = true}
     onNavigate={handleNavigate}
   />
-  {#if $currentView !== 'workqueue' && $currentView !== 'global_settings'}
+  {#if !ICON_RAIL_HIDDEN_VIEWS.has($currentView)}
     <IconRail currentView={$currentView} onNavigate={handleNavigate} reviewRequestCount={$reviewRequestCount} authoredPrCount={$authoredPrCount} modalsOpen={showCommandPalette || showProjectSwitcher || showActionPalette || showAddDialog} railBg={iconRailBg} />
   {/if}
 
   <div class="flex flex-col flex-1 min-w-0 relative" style="background: linear-gradient(180deg, var(--project-bg-alt) 0%, var(--project-bg) 100%)">
     <main class="flex-1 overflow-hidden flex flex-col">
-      {#if $currentView === 'settings'}
-        <SettingsView mode="project" onClose={() => { pushNavState(); $currentView = 'board' }} onProjectDeleted={loadProjects} />
-      {:else if $currentView === 'global_settings'}
-        <SettingsView mode="global" onClose={() => { pushNavState(); $currentView = 'board' }} onProjectDeleted={loadProjects} />
-      {:else if $currentView === 'pr_review'}
-        <PrReviewView projectName={activeProject?.name ?? ''} />
-       {:else if $currentView === 'skills'}
-         <SkillsView projectName={activeProject?.name ?? ''} />
-       {:else if $currentView === 'workqueue'}
-         <WorkQueueView onRunAction={handleRunAction} />
-       {:else if selectedTask}
+      {#if activeView}
+        <activeView.component
+          {...activeView.getProps({
+            projectName: activeProject?.name ?? '',
+            onCloseSettings: () => { router.navigate('board') },
+            onProjectDeleted: loadProjects,
+            onRunAction: handleRunAction,
+          })}
+        />
+      {:else if selectedTask}
         <TaskDetailView task={selectedTask} onRunAction={handleRunAction} />
-       {:else}
-         <div class="flex-1 overflow-hidden">
-           {#if $isLoading && $tasks.length === 0}
-             <div class="flex flex-col items-center justify-center h-full gap-3 text-base-content/50 text-sm">
-               <span class="loading loading-spinner loading-md text-primary"></span>
-               <span>Loading tasks...</span>
-             </div>
-           {:else if boardLayout === 'focus'}
-               <FocusBoard
-                 projectId={$activeProjectId}
-                 projectName={activeProject?.name ?? ''}
-                 tasks={$tasks}
-                 activeSessions={$activeSessions}
-                ticketPrs={$ticketPrs}
-                onOpenTask={handleOpenTask}
-                onRunAction={handleRunAction}
-              />
-           {:else}
-             <KanbanBoard onRunAction={handleRunAction} projectName={activeProject?.name ?? ''} />
-           {/if}
-         </div>
-       {/if}
+      {:else}
+        <div class="flex-1 overflow-hidden">
+          {#if $isLoading && $tasks.length === 0}
+            <div class="flex flex-col items-center justify-center h-full gap-3 text-base-content/50 text-sm">
+              <span class="loading loading-spinner loading-md text-primary"></span>
+              <span>Loading tasks...</span>
+            </div>
+          {:else if boardLayout === 'focus'}
+            <FocusBoard
+              projectId={$activeProjectId}
+              projectName={activeProject?.name ?? ''}
+              tasks={$tasks}
+              activeSessions={$activeSessions}
+              ticketPrs={$ticketPrs}
+              onOpenTask={handleOpenTask}
+              onRunAction={handleRunAction}
+            />
+          {:else}
+            <KanbanBoard onRunAction={handleRunAction} projectName={activeProject?.name ?? ''} />
+          {/if}
+        </div>
+      {/if}
 
       {#if showAddDialog && $activeProjectId}
         <Modal onClose={() => { showAddDialog = false; editingTask = null }} maxWidth="640px" overflowVisible>

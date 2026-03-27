@@ -4,7 +4,7 @@
   import type { Task, Action } from '../lib/types'
   import { activeSessions, activeProjectId, startingTasks, taskReviewModes, taskTerminalOpen, error } from '../lib/stores'
   import { getWorktreeForTask, updateTaskStatus, getConfig } from '../lib/ipc'
-  import { resetToBoard } from '../lib/navigation'
+  import { useAppRouter } from '../lib/router.svelte'
   import { isInputFocused } from '../lib/domUtils'
   import { loadActions, getEnabledActions } from '../lib/actions'
   import { commandHeld } from '../lib/stores'
@@ -23,6 +23,7 @@
   }
 
   let { task, onRunAction }: Props = $props()
+  const router = useAppRouter()
 
   let reviewMode = $state(false)
   let bottomPanelOpen = $state(false)
@@ -101,13 +102,13 @@
   })
 
   function handleBack() {
-    resetToBoard()
+    router.resetToBoard()
   }
 
   async function handleStatusChange(newStatus: string) {
     if (newStatus === task.status) return
     if (newStatus === 'done') {
-      resetToBoard()
+      router.resetToBoard()
       void updateTaskStatus(task.id, newStatus).catch((e) => {
         console.error('Failed to update status:', e)
         $error = 'Task completion may have succeeded, but background cleanup failed.'

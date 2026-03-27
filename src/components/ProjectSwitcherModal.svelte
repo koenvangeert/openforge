@@ -2,7 +2,7 @@
   import { onMount, tick } from 'svelte'
   import { projects, activeProjectId, projectAttention } from '../lib/stores'
   import { getProjectAttention } from '../lib/ipc'
-  import { resetToBoard } from '../lib/navigation'
+  import { useAppRouter } from '../lib/router.svelte'
   import type { ProjectAttention } from '../lib/types'
 
   interface Props {
@@ -10,6 +10,7 @@
   }
 
   let { onClose }: Props = $props()
+  const router = useAppRouter()
 
   let searchQuery = $state('')
   let selectedIndex = $state(-1)
@@ -37,7 +38,7 @@
 
   function selectProject(projectId: string) {
     $activeProjectId = projectId
-    resetToBoard()
+    router.resetToBoard()
     onClose()
   }
 

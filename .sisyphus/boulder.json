@@ -1,10 +1,41 @@
 {
-  "active_plan": "/Users/koen.vangeert/.openforge/worktrees/my-command-center/KVG-747/.sisyphus/plans/multi-terminal.md",
-  "started_at": "2026-03-23T13:07:24.766Z",
+  "active_plan": "/Users/koen/.openforge/worktrees/openforge/KVG-84/.sisyphus/plans/routing-refactor.md",
+  "started_at": "2026-03-27T06:52:22.897Z",
   "session_ids": [
-    "ses_2e616106effeuTAlUr7mcTKf0s"
+    "ses_2d21049ccffee7zWdmN0ImiEhS",
+    "ses_2d1ecd487ffeo8p2uy9PGV4i40",
+    "ses_2d1e6ccf0ffeLJq9jXofHEouz6",
+    "ses_2d1e08cd0ffew688WpU8uoGBUj"
   ],
-  "plan_name": "multi-terminal",
-  "worktree_path": "/Users/koen.vangeert/.openforge/worktrees/my-command-center/KVG-747",
-  "agent": "atlas"
+  "plan_name": "routing-refactor",
+  "agent": "atlas",
+  "task_sessions": {
+    "todo:1": {
+      "task_key": "todo:1",
+      "task_label": "1",
+      "task_title": "Create ShortcutRegistry",
+      "session_id": "ses_2d1ecd487ffeo8p2uy9PGV4i40",
+      "agent": "Sisyphus-Junior",
+      "category": "quick",
+      "updated_at": "2026-03-27T06:57:48.242Z"
+    },
+    "todo:2": {
+      "task_key": "todo:2",
+      "task_label": "2",
+      "task_title": "Create AppRouter composable",
+      "session_id": "ses_2d1e6ccf0ffeLJq9jXofHEouz6",
+      "agent": "Sisyphus-Junior",
+      "category": "deep",
+      "updated_at": "2026-03-27T07:06:43.802Z"
+    },
+    "todo:4": {
+      "task_key": "todo:4",
+      "task_label": "4",
+      "task_title": "Create view registry and refactor App.svelte",
+      "session_id": "ses_2d1e08cd0ffew688WpU8uoGBUj",
+      "agent": "Sisyphus-Junior",
+      "category": "quick",
+      "updated_at": "2026-03-27T07:09:12.625Z"
+    }
+  }
 }

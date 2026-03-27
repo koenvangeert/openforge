@@ -4,7 +4,7 @@
   import type { UnlistenFn } from '@tauri-apps/api/event'
   import { reviewPrs, selectedReviewPr, prFileDiffs, reviewRequestCount, reviewComments, pendingManualComments, prOverviewComments, agentReviewComments, agentReviewLoading, agentReviewError, authoredPrs, authoredPrCount, activeProjectId } from '../lib/stores'
   import { fetchReviewPrs, getReviewPrs, fetchAuthoredPrs, getAuthoredPrs, getPrFileDiffs, openUrl, getReviewComments, getFileContent, getFileAtRef, markReviewPrViewed, startAgentReview, getAgentReviewComments, abortAgentReview, getProjectConfig, setProjectConfig } from '../lib/ipc'
-  import { pushNavState } from '../lib/navigation'
+  import { useAppRouter } from '../lib/router.svelte'
   import { isInputFocused } from '../lib/domUtils'
   import { useVimNavigation } from '../lib/useVimNavigation.svelte'
   import { timeAgoFromSeconds } from '../lib/timeAgo'
@@ -28,6 +28,8 @@
   }
 
   let { projectName }: Props = $props()
+
+  const router = useAppRouter()
 
   let isLoading = $state(false)
   let isLoadingAuthored = $state(false)
@@ -284,7 +286,7 @@
   }
 
   async function selectPr(pr: ReviewPullRequest) {
-    pushNavState()
+    router.navigate('pr_review')
     const now = Math.floor(Date.now() / 1000)
     const updatedPr = { ...pr, viewed_at: now, viewed_head_sha: pr.head_sha }
     $selectedReviewPr = updatedPr

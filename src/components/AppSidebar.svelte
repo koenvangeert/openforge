@@ -2,7 +2,7 @@
   import { onMount } from 'svelte'
   import { projects, activeProjectId, projectAttention } from '../lib/stores'
   import { getProjectAttention, getGitBranch } from '../lib/ipc'
-  import { resetToBoard } from '../lib/navigation'
+  import { useAppRouter } from '../lib/router.svelte'
   import { ChevronLeft, ChevronRight, ListChecks, Settings, Plus } from 'lucide-svelte'
   import type { ProjectAttention, AppView } from '../lib/types'
 
@@ -16,6 +16,7 @@
   }
 
   let { collapsed, currentView, appMode, onToggleCollapse, onNewProject, onNavigate }: Props = $props()
+  const router = useAppRouter()
 
   let branchName = $state<string | null>(null)
 
@@ -42,7 +43,7 @@
 
   function selectProject(projectId: string) {
     $activeProjectId = projectId
-    resetToBoard()
+    router.resetToBoard()
   }
 
   function getAttentionStatus(projectId: string): { dot: string; text: string; color: string } {

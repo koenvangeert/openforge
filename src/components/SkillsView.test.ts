@@ -7,10 +7,9 @@ vi.mock('../lib/stores', () => ({
   skills: writable<SkillInfo[]>([]),
   selectedSkillName: writable<string | null>(null),
   activeProjectId: writable<string | null>('proj-1'),
-}))
-
-vi.mock('../lib/navigation', () => ({
-  pushNavState: vi.fn(),
+  currentView: writable('board'),
+  selectedTaskId: writable<string | null>(null),
+  selectedReviewPr: writable(null),
 }))
 
 vi.mock('../lib/ipc', () => ({

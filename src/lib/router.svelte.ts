@@ -1,6 +1,17 @@
 import { get } from 'svelte/store'
-import { currentView, selectedTaskId, selectedReviewPr, selectedSkillName, prFileDiffs, reviewComments, pendingManualComments, prOverviewComments, activeProjectId } from './stores'
+import {
+  activeProjectId,
+  currentView,
+  pendingManualComments,
+  prFileDiffs,
+  prOverviewComments,
+  reviewComments,
+  selectedReviewPr,
+  selectedSkillName,
+  selectedTaskId,
+} from './stores'
 import type { AppView, ReviewPullRequest } from './types'
+import { TASK_CLEARING_VIEWS } from './views'
 
 interface NavState {
   currentView: AppView
@@ -38,9 +49,11 @@ export function resetToBoard(): void {
   selectedSkillName.set(null)
 }
 
-export function navigateBack(): boolean {
+function navigateBack(): boolean {
   const prev = history.pop()
-  if (!prev) return false
+  if (!prev) {
+    return false
+  }
 
   const hadReviewPr = get(selectedReviewPr)
 
@@ -58,4 +71,50 @@ export function navigateBack(): boolean {
   }
 
   return true
+}
+
+export function useAppRouter() {
+  let currentViewState = $state<AppView>(get(currentView))
+
+  function navigate(view: AppView) {
+    if (view === 'board') {
+      resetToBoardRoute()
+      currentViewState = 'board'
+      return
+    }
+
+    pushNavState()
+    currentViewState = view
+    currentView.set(view)
+
+    if (TASK_CLEARING_VIEWS.has(view)) {
+      selectedTaskId.set(null)
+    }
+  }
+
+  function navigateToTask(taskId: string) {
+    pushNavState()
+    selectedTaskId.set(taskId)
+  }
+
+  function back(): boolean {
+    const didNavigate = navigateBack()
+    currentViewState = get(currentView)
+    return didNavigate
+  }
+
+  function resetToBoardRoute() {
+    resetToBoard()
+    currentViewState = 'board'
+  }
+
+  return {
+    navigate,
+    navigateToTask,
+    back,
+    resetToBoard: resetToBoardRoute,
+    get currentView() {
+      return currentViewState
+    },
+  }
 }
