@@ -65,7 +65,7 @@ export function createTerminal(deps: {
 
     // Initialize xterm.js Terminal (deferred to mount so mocks are active in tests)
     terminal = new Terminal({
-      fontFamily: "'SF Mono', 'Fira Code', 'Consolas', monospace",
+      fontFamily: "'JetBrains Mono', 'Symbols Nerd Font', 'Symbols Nerd Font Mono', 'SF Mono', 'Fira Code', 'Consolas', monospace",
       fontSize: 13,
       lineHeight: 1.4,
       cursorBlink: true,

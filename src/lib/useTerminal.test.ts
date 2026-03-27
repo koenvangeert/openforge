@@ -3,9 +3,30 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 let webLinksHandler: ((event: MouseEvent, uri: string) => void) | null = null
 let webglContextLossHandler: (() => void) | null = null
 
+interface TerminalMockOptions {
+  fontFamily?: string
+}
+
+function getTerminalFontFamily(terminal: unknown): string | undefined {
+  if (typeof terminal !== 'object' || terminal === null || !('options' in terminal)) {
+    return undefined
+  }
+
+  const options = terminal.options
+  if (typeof options !== 'object' || options === null || !('fontFamily' in options)) {
+    return undefined
+  }
+
+  return typeof options.fontFamily === 'string' ? options.fontFamily : undefined
+}
+
 // Mock xterm.js — class-style so `new Terminal(...)` works in vitest
 vi.mock('@xterm/xterm', () => {
   class Terminal {
+    options: TerminalMockOptions
+    constructor(options: TerminalMockOptions = {}) {
+      this.options = options
+    }
     open = vi.fn()
     write = vi.fn()
     dispose = vi.fn()
@@ -102,6 +123,14 @@ describe('createTerminal', () => {
   it('starts with terminal = null before mount', () => {
     const handle = createTerminal({ onData, onResize })
     expect(handle.terminal).toBeNull()
+  })
+
+  it('initializes terminal with the correct font family stack including JetBrains Mono and Nerd Font fallback', async () => {
+    const handle = createTerminal({ onData, onResize })
+    const mockEl = document.createElement('div') as HTMLDivElement
+    handle.terminalEl = mockEl
+    await handle.mount()
+    expect(getTerminalFontFamily(handle.terminal)).toBe("'JetBrains Mono', 'Symbols Nerd Font', 'Symbols Nerd Font Mono', 'SF Mono', 'Fira Code', 'Consolas', monospace")
   })
 
   it('terminalEl is settable', () => {
