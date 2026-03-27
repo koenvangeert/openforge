@@ -117,7 +117,7 @@
 <div class="flex flex-col h-full">
   <div class="flex-1 overflow-hidden min-h-0 relative">
     <div class="shell-terminal-wrapper w-full h-full p-3 bg-base-100" bind:this={terminalEl}></div>
-  {#if lifecycle.shellExited}
+    {#if lifecycle.shellExited}
       <div class="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-neutral/90 z-[1]">
         <span class="text-sm font-mono text-base-content/60">Shell exited</span>
         <button class="btn btn-sm btn-ghost text-primary font-mono" onclick={handleRestart}>
@@ -127,22 +127,3 @@
     {/if}
   </div>
 </div>
-
-<style>
-  :global(.shell-terminal-wrapper .xterm-viewport::-webkit-scrollbar) {
-    width: 6px;
-  }
-
-  :global(.shell-terminal-wrapper .xterm-viewport::-webkit-scrollbar-track) {
-    background: var(--color-base-200);
-  }
-
-  :global(.shell-terminal-wrapper .xterm-viewport::-webkit-scrollbar-thumb) {
-    background: var(--color-base-300);
-    border-radius: 3px;
-  }
-
-  :global(.shell-terminal-wrapper .xterm-viewport::-webkit-scrollbar-thumb:hover) {
-    background: color-mix(in oklch, var(--color-base-content) 40%, transparent);
-  }
-</style>
