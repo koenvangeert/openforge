@@ -292,6 +292,32 @@ describe('OpenCodeAgentPanel (via router)', () => {
     expect(screen.getByText('running')).toBeTruthy()
   })
 
+  it('calls attach with the pooled terminal entry for OpenCode sessions', async () => {
+    const { attach } = await import('../lib/terminalPool')
+
+    const session: AgentSession = {
+      id: 'ses-1',
+      ticket_id: 'T-1',
+      opencode_session_id: 'oc-sess-1',
+      stage: 'implement',
+      status: 'running',
+      checkpoint_data: null,
+      error_message: null,
+      created_at: 1000,
+      updated_at: 2000,
+      provider: 'opencode',
+      claude_session_id: null,
+    }
+
+    activeSessions.set(new Map([['T-1', session]]))
+
+    render(AgentPanel, { props: { taskId: 'T-1' } })
+
+    await vi.waitFor(() => {
+      expect(attach).toHaveBeenCalledWith(mockPoolEntry, expect.any(HTMLDivElement))
+    })
+  })
+
   it('shows different stage labels', () => {
     const session: AgentSession = {
       id: 'ses-1',

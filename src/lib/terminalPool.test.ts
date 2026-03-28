@@ -220,6 +220,28 @@ describe('terminalPool', () => {
     expect(openSpy.mock.invocationCallOrder[0]).toBeLessThan(loadAddonSpy.mock.invocationCallOrder[2])
   })
 
+  it('attach loads the WebGL renderer for both agent and shell terminal keys', async () => {
+    const agentEntry = await acquire('T-50')
+    const shellEntry = await acquire('T-50-shell-0')
+    const agentWrapper = document.createElement('div')
+    const shellWrapper = document.createElement('div')
+
+    await attach(agentEntry, agentWrapper)
+    await attach(shellEntry, shellWrapper)
+
+    const agentOpenSpy = agentEntry.terminal.open as ReturnType<typeof vi.fn>
+    const shellOpenSpy = shellEntry.terminal.open as ReturnType<typeof vi.fn>
+    const agentLoadAddonSpy = agentEntry.terminal.loadAddon as ReturnType<typeof vi.fn>
+    const shellLoadAddonSpy = shellEntry.terminal.loadAddon as ReturnType<typeof vi.fn>
+
+    expect(agentOpenSpy).toHaveBeenCalledWith(agentEntry.hostDiv)
+    expect(shellOpenSpy).toHaveBeenCalledWith(shellEntry.hostDiv)
+    expect(agentLoadAddonSpy).toHaveBeenCalledTimes(3)
+    expect(shellLoadAddonSpy).toHaveBeenCalledTimes(3)
+    expect(agentOpenSpy.mock.invocationCallOrder[0]).toBeLessThan(agentLoadAddonSpy.mock.invocationCallOrder[2])
+    expect(shellOpenSpy.mock.invocationCallOrder[0]).toBeLessThan(shellLoadAddonSpy.mock.invocationCallOrder[2])
+  })
+
   it('attach disposes the WebGL addon on context loss', async () => {
     const entry = await acquire('task-webgl-context-loss')
     const wrapper = document.createElement('div')

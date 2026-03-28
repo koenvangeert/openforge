@@ -223,6 +223,15 @@ describe('ClaudeAgentPanel', () => {
     })
   })
 
+  it('calls attach with the pooled terminal entry on mount', async () => {
+    const { attach } = await import('../lib/terminalPool')
+
+    render(ClaudeAgentPanel, { props: { taskId: 'T-1' } })
+    await vi.waitFor(() => {
+      expect(attach).toHaveBeenCalledWith(mockPoolEntry, expect.any(HTMLDivElement))
+    })
+  })
+
   it('test_status_transitions_from_store_updates', async () => {
     const sessions = new Map<string, AgentSession>()
     sessions.set('T-1', { ...baseSession, status: 'running' })
