@@ -6,10 +6,10 @@
 		actions: Action[];
 		disabled: boolean;
 		onAddAction: () => void;
-		onDeleteAction: (actionId: string) => void;
+		onDeleteAction: (actionId: string) => void | Promise<void>;
 		onToggleAction: (actionId: string) => void;
 		onUpdateAction: (actionId: string, field: string, value: string) => void;
-		onResetActions: () => void;
+		onResetActions: () => void | Promise<void>;
 	}
 
 	const {
@@ -28,14 +28,14 @@
 				return;
 			}
 		}
-		onDeleteAction(action.id);
+		void onDeleteAction(action.id);
 	}
 
 	function handleReset() {
 		if (!confirm('Reset all actions to defaults? This will remove any custom actions.')) {
 			return;
 		}
-		onResetActions();
+		void onResetActions();
 	}
 </script>
 

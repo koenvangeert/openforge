@@ -336,6 +336,92 @@ describe('SettingsView', () => {
 
       expect(vi.mocked(updateProject)).toHaveBeenCalledTimes(1)
     })
+
+    it('cancels a pending debounced save when resetting actions and persists once immediately', async () => {
+      vi.mocked(loadActions).mockResolvedValue([
+        { id: 'custom-1', name: 'Custom', prompt: 'test', builtin: false, enabled: true },
+      ])
+
+      let resolveSaveActions: (() => void) | null = null
+      vi.mocked(saveActions).mockImplementation(
+        () => new Promise<void>((resolve) => {
+          resolveSaveActions = resolve
+        })
+      )
+
+      vi.spyOn(window, 'confirm').mockReturnValue(true)
+
+      render(SettingsView, { props: defaultProps })
+
+      await vi.waitFor(() => {
+        expect(screen.getByDisplayValue('Custom')).toBeTruthy()
+      })
+
+      const nameInput = screen.getByPlaceholderText('My Project')
+      await fireEvent.input(nameInput, { target: { value: 'Changed Name' } })
+
+      const resetButton = screen.getByRole('button', { name: /reset to defaults/i })
+      await fireEvent.click(resetButton)
+
+      await vi.waitFor(() => {
+        expect(saveActions).toHaveBeenCalledTimes(1)
+        expect(screen.getByText('Saving…')).toBeTruthy()
+      })
+
+      await vi.advanceTimersByTimeAsync(600)
+
+      expect(saveActions).toHaveBeenCalledTimes(1)
+
+      resolveSaveActions?.()
+
+      await vi.advanceTimersByTimeAsync(0)
+      await vi.waitFor(() => {
+        expect(screen.queryByText('Saving…')).toBeNull()
+      })
+    })
+
+    it('cancels a pending debounced save when deleting an action and persists once immediately', async () => {
+      vi.mocked(loadActions).mockResolvedValue([
+        { id: 'builtin-go', name: 'Go', prompt: '', builtin: true, enabled: true },
+      ])
+
+      let resolveSaveActions: (() => void) | null = null
+      vi.mocked(saveActions).mockImplementation(
+        () => new Promise<void>((resolve) => {
+          resolveSaveActions = resolve
+        })
+      )
+
+      vi.spyOn(window, 'confirm').mockReturnValue(true)
+
+      render(SettingsView, { props: defaultProps })
+
+      await vi.waitFor(() => {
+        expect(screen.getByText('Go')).toBeTruthy()
+      })
+
+      const nameInput = screen.getByPlaceholderText('My Project')
+      await fireEvent.input(nameInput, { target: { value: 'Changed Name' } })
+
+      const deleteButton = screen.getByTitle('Delete action')
+      await fireEvent.click(deleteButton)
+
+      await vi.waitFor(() => {
+        expect(saveActions).toHaveBeenCalledTimes(1)
+        expect(screen.getByText('Saving…')).toBeTruthy()
+      })
+
+      await vi.advanceTimersByTimeAsync(600)
+
+      expect(saveActions).toHaveBeenCalledTimes(1)
+
+      resolveSaveActions?.()
+
+      await vi.advanceTimersByTimeAsync(0)
+      await vi.waitFor(() => {
+        expect(screen.queryByText('Saving…')).toBeNull()
+      })
+    })
   })
 
   it('renders Add Action button', () => {

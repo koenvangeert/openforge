@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte'
+  import { onMount, onDestroy, tick } from 'svelte'
   import { activeProjectId, projects, codeCleanupTasksEnabled, error } from '../lib/stores'
   import {
     getProjectConfig,
@@ -15,6 +15,7 @@
   } from '../lib/ipc'
   import { loadActions, saveActions, createAction, DEFAULT_ACTIONS } from '../lib/actions'
   import { loadFocusFilterStates, saveFocusFilterStates, DEFAULT_FOCUS_STATES } from '../lib/boardFilters'
+  import { createTrackedDebouncedSave } from '../lib/createTrackedDebouncedSave'
   import { themeMode, applyTheme } from '../lib/theme'
   import type { ThemeMode } from '../lib/theme'
   import type { Action, WhisperModelStatus, WhisperModelSizeId } from '../lib/types'
@@ -92,8 +93,11 @@
   // UI state
   let isSaving = $state(false)
   let saved = $state(false)
-  let saveTimer: ReturnType<typeof setTimeout> | null = null
   const SAVE_DEBOUNCE_MS = 500
+  const saveController = createTrackedDebouncedSave({
+    delayMs: SAVE_DEBOUNCE_MS,
+    save,
+  })
   const getInitialActiveSection = () => mode === 'global' ? 'preferences' : 'general'
 
   let activeSection = $state(getInitialActiveSection())
@@ -111,33 +115,42 @@
   const hasProject = $derived(!!$activeProjectId)
   const activePage = $derived(mode === 'global' ? 'global' : mode === 'project' ? 'project' : (globalSections.includes(activeSection) ? 'global' : 'project'))
 
-  // Load project config on activeProjectId change
+  // Sync project name/path from project list
   $effect(() => {
     const pid = $activeProjectId
     if (pid) {
-      // Sync name/path from project list
       const proj = $projects.find((p) => p.id === pid)
       if (proj) {
         projectName = proj.name
         projectPath = proj.path
       }
+    } else {
+      projectName = ''
+      projectPath = ''
+    }
+  })
 
-       // Load project-level config keys
-       Promise.all([
-         getProjectConfig(pid, 'jira_board_id'),
-         getProjectConfig(pid, 'github_default_repo'),
-         getProjectConfig(pid, 'additional_instructions'),
-         getProjectConfig(pid, 'ai_provider'),
-         getProjectConfig(pid, 'use_worktrees'),
-         getProjectConfig(pid, 'project_color'),
-       ]).then(([boardId, repo, instructions, provider, worktrees, color]) => {
-         jiraBoardId = boardId ?? ''
-         githubDefaultRepo = repo ?? ''
-         agentInstructions = instructions ?? ''
-         aiProvider = provider ?? 'claude-code'
-         useWorktrees = worktrees !== 'false'
-         projectColor = color ?? ''
-       })
+  // Load project config on activeProjectId change
+  $effect(() => {
+    const pid = $activeProjectId
+    if (pid) {
+
+      // Load project-level config keys
+      Promise.all([
+        getProjectConfig(pid, 'jira_board_id'),
+        getProjectConfig(pid, 'github_default_repo'),
+        getProjectConfig(pid, 'additional_instructions'),
+        getProjectConfig(pid, 'ai_provider'),
+        getProjectConfig(pid, 'use_worktrees'),
+        getProjectConfig(pid, 'project_color'),
+      ]).then(([boardId, repo, instructions, provider, worktrees, color]) => {
+        jiraBoardId = boardId ?? ''
+        githubDefaultRepo = repo ?? ''
+        agentInstructions = instructions ?? ''
+        aiProvider = provider ?? 'claude-code'
+        useWorktrees = worktrees !== 'false'
+        projectColor = color ?? ''
+      })
 
       // Load actions
       loadActions(pid).then((loaded) => {
@@ -149,17 +162,15 @@
         focusFilterStates = states
       })
     } else {
-       projectName = ''
-       projectPath = ''
-       jiraBoardId = ''
-       githubDefaultRepo = ''
-       agentInstructions = ''
-       aiProvider = 'claude-code'
-       useWorktrees = true
-       projectColor = ''
-       actions = []
-       focusFilterStates = [...DEFAULT_FOCUS_STATES]
-     }
+      jiraBoardId = ''
+      githubDefaultRepo = ''
+      agentInstructions = ''
+      aiProvider = 'claude-code'
+      useWorktrees = true
+      projectColor = ''
+      actions = []
+      focusFilterStates = [...DEFAULT_FOCUS_STATES]
+    }
   })
 
   // Default to correct page based on mode
@@ -287,32 +298,31 @@
       saved = true
       setTimeout(() => {
         saved = false
-      }, 2000)
-    } catch (e) {
-      console.error('Failed to save settings:', e)
-      $error = e instanceof Error ? e.message : String(e)
-    } finally {
-      isSaving = false
-    }
+       }, 2000)
+     } catch (e) {
+       console.error('Failed to save settings:', e)
+       $error = e instanceof Error ? e.message : String(e)
+       throw e
+     } finally {
+       isSaving = false
+     }
   }
 
   function scheduleSave() {
-    if (saveTimer) clearTimeout(saveTimer)
-    saveTimer = setTimeout(() => {
-      saveTimer = null
-      save()
-    }, SAVE_DEBOUNCE_MS)
+    void saveController.schedule().catch(() => {})
   }
 
   function flushPendingSave() {
-    if (saveTimer) {
-      clearTimeout(saveTimer)
-      saveTimer = null
-      save()
-    }
+    return saveController.flush()
   }
 
-  onDestroy(flushPendingSave)
+  onDestroy(() => {
+    void flushPendingSave().catch(() => {})
+  })
+
+  function runImmediateSave() {
+    return saveController.runImmediately()
+  }
 
   async function handleDelete() {
     if (!$activeProjectId) return
@@ -335,9 +345,12 @@
     actions = [...actions, createAction('New Action', '')]
   }
 
-  function removeAction(actionId: string) {
+  async function removeAction(actionId: string) {
     actions = actions.filter((a) => a.id !== actionId)
-    if ($activeProjectId) saveActions($activeProjectId, actions)
+    if ($activeProjectId) {
+      await tick()
+      await runImmediateSave()
+    }
   }
 
   function toggleAction(actionId: string) {
@@ -350,9 +363,12 @@
     )
   }
 
-  function resetActions() {
+  async function resetActions() {
     actions = [...DEFAULT_ACTIONS]
-    if ($activeProjectId) saveActions($activeProjectId, actions)
+    if ($activeProjectId) {
+      await tick()
+      await runImmediateSave()
+    }
   }
 
   async function handleModelChange(newSize: string) {
