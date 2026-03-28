@@ -8,10 +8,21 @@ export type BoardFilter = 'focus' | 'in-progress' | 'backlog'
 export const DEFAULT_FOCUS_STATES: TaskState[] = [
   'idle', 'needs-input', 'paused', 'agent-done', 'failed', 'interrupted',
   'pr-draft', 'pr-open', 'ci-failed', 'changes-requested', 'unaddressed-comments',
+  'ready-to-merge', 'pr-merged', 'merge-conflict',
+]
+
+const LEGACY_DEFAULT_FOCUS_STATES: TaskState[] = [
+  'idle', 'needs-input', 'paused', 'agent-done', 'failed', 'interrupted',
+  'pr-draft', 'pr-open', 'ci-failed', 'changes-requested', 'unaddressed-comments',
   'ready-to-merge', 'pr-merged',
 ]
 
 const FOCUS_FILTER_CONFIG_KEY = 'focus_filter_states'
+
+function isLegacyDefaultFocusStateSet(states: TaskState[]): boolean {
+  return states.length === LEGACY_DEFAULT_FOCUS_STATES.length
+    && LEGACY_DEFAULT_FOCUS_STATES.every((state, index) => states[index] === state)
+}
 
 export function isFocusTask(_task: Task, state: TaskState, prs: PullRequestInfo[], focusStates: TaskState[] = DEFAULT_FOCUS_STATES): boolean {
   if (state === 'done') {
@@ -98,7 +109,11 @@ export async function loadFocusFilterStates(projectId: string): Promise<TaskStat
   try {
     const parsed = JSON.parse(stored)
     if (Array.isArray(parsed) && parsed.every((s: string) => ALL_TASK_STATES.includes(s as TaskState))) {
-      return parsed as TaskState[]
+      const parsedStates = parsed as TaskState[]
+      if (isLegacyDefaultFocusStateSet(parsedStates)) {
+        return DEFAULT_FOCUS_STATES
+      }
+      return parsedStates
     }
   } catch { /* ignore */ }
   return DEFAULT_FOCUS_STATES

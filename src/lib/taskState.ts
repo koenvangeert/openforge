@@ -1,9 +1,9 @@
 import type { Task, AgentSession, PullRequestInfo } from './types'
-import { isReadyToMerge } from './types'
+import { isReadyToMerge, hasMergeConflicts } from './types'
 
 export type TaskState =
   | 'egg' | 'idle' | 'active' | 'needs-input' | 'paused' | 'agent-done' | 'failed' | 'interrupted' | 'done'
-  | 'pr-draft' | 'pr-open' | 'ci-failed' | 'changes-requested' | 'ready-to-merge' | 'pr-queued' | 'pr-merged' | 'ci-running' | 'review-pending' | 'unaddressed-comments'
+  | 'pr-draft' | 'pr-open' | 'ci-failed' | 'changes-requested' | 'ready-to-merge' | 'pr-queued' | 'pr-merged' | 'ci-running' | 'review-pending' | 'unaddressed-comments' | 'merge-conflict'
 
 export const ALL_TASK_STATES: TaskState[] = [
   'idle',
@@ -23,6 +23,7 @@ export const ALL_TASK_STATES: TaskState[] = [
   'ready-to-merge',
   'pr-queued',
   'pr-merged',
+  'merge-conflict',
 ]
 
 export const TASK_STATE_LABELS: Record<TaskState, string> = {
@@ -45,6 +46,7 @@ export const TASK_STATE_LABELS: Record<TaskState, string> = {
   'ready-to-merge': 'Ready to Merge',
   'pr-queued': 'In Merge Queue',
   'pr-merged': 'PR Merged',
+  'merge-conflict': 'Merge Conflict',
 }
 
 function getPrState(prs: PullRequestInfo[]): TaskState | null {
@@ -67,6 +69,7 @@ function getPrState(prs: PullRequestInfo[]): TaskState | null {
 
   // Open PR checks in priority order (when not merge-ready)
   if (pr.review_status === 'changes_requested') return 'changes-requested'
+  if (hasMergeConflicts(pr)) return 'merge-conflict'
   if ((pr.unaddressed_comment_count ?? 0) > 0) return 'unaddressed-comments'
   if (pr.draft) return 'pr-draft'
   if (pr.ci_status === 'pending') return 'ci-running'
@@ -87,6 +90,7 @@ const BORDER_CLASS: Record<string, string> = {
   'unaddressed-comments': 'unaddressed-comments',
   'ready-to-merge': 'ready-to-merge',
   'pr-queued': 'ready-to-merge',
+  'merge-conflict': 'ci-failed',
 }
 
 export function taskStateToBorderClass(state: TaskState): string {

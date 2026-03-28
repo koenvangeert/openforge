@@ -159,4 +159,10 @@ describe('TaskListItem', () => {
     const badge = screen.getByText('Queued')
     expect(badge.classList.contains('badge-info')).toBe(true)
   })
+
+  it('renders badge-error class and "Merge Conflict" label for merge-conflict state', () => {
+    render(TaskListItem, { props: { ...baseProps, state: 'merge-conflict' as TaskState } })
+    const badge = screen.getByText('Merge Conflict')
+    expect(badge.classList.contains('badge-error')).toBe(true)
+  })
 })

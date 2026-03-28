@@ -32,7 +32,8 @@
       case 'unaddressed-comments': return 'badge-warning'
       case 'ci-failed':
       case 'failed':
-      case 'changes-requested': return 'badge-error'
+      case 'changes-requested':
+      case 'merge-conflict': return 'badge-error'
       case 'agent-done': return 'badge-success'
       case 'ready-to-merge': return 'badge-info'
       case 'pr-queued': return 'badge-info'
@@ -49,6 +50,7 @@
       case 'ci-failed': return 'CI Failed'
       case 'failed': return 'Failed'
       case 'changes-requested': return 'Changes Req.'
+      case 'merge-conflict': return 'Merge Conflict'
       case 'agent-done': return 'Done'
       case 'ready-to-merge': return 'Ready to Merge'
       case 'egg': return 'Backlog'

@@ -425,6 +425,10 @@ describe('taskStateToBorderClass', () => {
     expect(taskStateToBorderClass('changes-requested')).toBe('')
   })
 
+  it('maps merge-conflict to ci-failed', () => {
+    expect(taskStateToBorderClass('merge-conflict')).toBe('ci-failed')
+  })
+
   it('maps unaddressed-comments to unaddressed-comments', () => {
     expect(taskStateToBorderClass('unaddressed-comments' as any)).toBe('unaddressed-comments')
   })
@@ -605,5 +609,53 @@ describe('computeTaskState - mergeable_state based ready-to-merge (PART 5)', () 
     const session = createSession({ status: 'completed' })
     const prs = [createPr({ state: 'open', mergeable_state: 'behind', is_queued: true })]
     expect(computeTaskState(task, session, prs)).toBe('pr-queued')
+  })
+})
+
+// ============================================================================
+// PART 6: merge conflicts
+// ============================================================================
+
+describe('computeTaskState - merge-conflict (PART 6)', () => {
+  it('test 1: mergeable_state dirty → merge-conflict', () => {
+    const task = createTask({ status: 'doing' })
+    const session = createSession({ status: 'completed' })
+    const prs = [createPr({ state: 'open', mergeable_state: 'dirty' })]
+    expect(computeTaskState(task, session, prs)).toBe('merge-conflict')
+  })
+
+  it('test 2: mergeable_state conflicting → merge-conflict', () => {
+    const task = createTask({ status: 'doing' })
+    const session = createSession({ status: 'completed' })
+    const prs = [createPr({ state: 'open', mergeable_state: 'conflicting' })]
+    expect(computeTaskState(task, session, prs)).toBe('merge-conflict')
+  })
+
+  it('test 3: ci-failed takes priority over merge-conflict', () => {
+    const task = createTask({ status: 'doing' })
+    const session = createSession({ status: 'completed' })
+    const prs = [createPr({ state: 'open', mergeable_state: 'dirty', ci_status: 'failure' })]
+    expect(computeTaskState(task, session, prs)).toBe('ci-failed')
+  })
+
+  it('test 4: changes-requested takes priority over merge-conflict', () => {
+    const task = createTask({ status: 'doing' })
+    const session = createSession({ status: 'completed' })
+    const prs = [createPr({ state: 'open', mergeable_state: 'dirty', review_status: 'changes_requested' })]
+    expect(computeTaskState(task, session, prs)).toBe('changes-requested')
+  })
+
+  it('test 5: merge-conflict takes priority over unaddressed-comments', () => {
+    const task = createTask({ status: 'doing' })
+    const session = createSession({ status: 'completed' })
+    const prs = [createPr({ state: 'open', mergeable_state: 'dirty', unaddressed_comment_count: 2 })]
+    expect(computeTaskState(task, session, prs)).toBe('merge-conflict')
+  })
+
+  it('test 6: closed PR with dirty state does not trigger merge-conflict', () => {
+    const task = createTask({ status: 'doing' })
+    const session = createSession({ status: 'completed' })
+    const prs = [createPr({ state: 'closed', mergeable_state: 'dirty' })]
+    expect(computeTaskState(task, session, prs)).toBe('agent-done') // fallback since no open PR
   })
 })
