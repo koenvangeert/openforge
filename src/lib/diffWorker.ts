@@ -1,15 +1,9 @@
 import { DiffFile, setEnableFastDiffTemplate } from '@git-diff-view/core'
 import { highlighter } from '@git-diff-view/lowlight'
+import { configureDiffHighlighter } from './diffHighlightConfig'
 
 setEnableFastDiffTemplate(true)
-highlighter.setMaxLineToIgnoreSyntax(3000)
-highlighter.setIgnoreSyntaxHighlightList([
-  /\.lock$/,
-  /lock\.json$/,
-  /lock\.yaml$/,
-  /\.min\.js$/,
-  /\.min\.css$/,
-])
+configureDiffHighlighter(highlighter)
 
 export interface DiffWorkerRequest {
   type: 'process'
