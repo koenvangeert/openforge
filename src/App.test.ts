@@ -643,33 +643,37 @@ describe('App onMount initialization order', () => {
       const { getTasksForProject, updateTaskStatus } = await import('./lib/ipc')
       const actionPaletteModule = await import('./components/ActionPalette.svelte')
 
+      const selectedTask: Task = {
+        id: 'task-123',
+        initial_prompt: 'Finish task',
+        prompt: null,
+        summary: null,
+        status: 'doing',
+        jira_key: null,
+        jira_title: null,
+        jira_status: null,
+        jira_assignee: null,
+        jira_description: null,
+        agent: null,
+        permission_mode: null,
+        project_id: 'proj-1',
+        created_at: 1000,
+        updated_at: 1000,
+      }
+
       vi.mocked(getTasksForProject).mockResolvedValue([
-        {
-          id: 'task-123',
-          initial_prompt: 'Finish task',
-          prompt: null,
-          summary: null,
-          status: 'doing',
-          jira_key: null,
-          jira_title: null,
-          jira_status: null,
-          jira_assignee: null,
-          jira_description: null,
-          agent: null,
-          permission_mode: null,
-          project_id: 'proj-1',
-          created_at: 1000,
-          updated_at: 1000,
-        },
+        selectedTask,
       ])
+
+      stores.tasks.set([selectedTask])
+      stores.pendingTask.set(null)
+      stores.selectedTaskId.set(selectedTask.id)
 
       render(App)
 
       await vi.waitFor(() => {
         expect(getTasksForProject).toHaveBeenCalled()
       })
-
-      stores.selectedTaskId.set('task-123')
 
       await fireEvent.keyDown(window, { key: 'k', metaKey: true, bubbles: true })
 
@@ -717,25 +721,31 @@ describe('App onMount initialization order', () => {
     const { getTasksForProject, updateTaskStatus } = await import('./lib/ipc')
     const actionPaletteModule = await import('./components/ActionPalette.svelte')
 
+    const selectedTask: Task = {
+      id: 'task-123',
+      initial_prompt: 'Finish task',
+      prompt: null,
+      summary: null,
+      status: 'doing',
+      jira_key: null,
+      jira_title: null,
+      jira_status: null,
+      jira_assignee: null,
+      jira_description: null,
+      agent: null,
+      permission_mode: null,
+      project_id: 'proj-1',
+      created_at: 1000,
+      updated_at: 1000,
+    }
+
     vi.mocked(getTasksForProject).mockResolvedValue([
-      {
-        id: 'task-123',
-        initial_prompt: 'Finish task',
-        prompt: null,
-        summary: null,
-        status: 'doing',
-        jira_key: null,
-        jira_title: null,
-        jira_status: null,
-        jira_assignee: null,
-        jira_description: null,
-        agent: null,
-        permission_mode: null,
-        project_id: 'proj-1',
-        created_at: 1000,
-        updated_at: 1000,
-      },
+      selectedTask,
     ])
+
+    stores.tasks.set([selectedTask])
+    stores.pendingTask.set(null)
+    stores.selectedTaskId.set(selectedTask.id)
 
     let resolveUpdate: (() => void) | undefined
     vi.mocked(updateTaskStatus).mockImplementationOnce(
@@ -749,8 +759,6 @@ describe('App onMount initialization order', () => {
     await vi.waitFor(() => {
       expect(getTasksForProject).toHaveBeenCalled()
     })
-
-    stores.selectedTaskId.set('task-123')
 
     await fireEvent.keyDown(window, { key: 'k', metaKey: true, bubbles: true })
 
@@ -801,33 +809,41 @@ describe('App onMount initialization order', () => {
       const { getTasksForProject, updateTaskStatus } = await import('./lib/ipc')
       const actionPaletteModule = await import('./components/ActionPalette.svelte')
 
+      const selectedTask: Task = {
+        id: 'task-200',
+        initial_prompt: 'Order test',
+        prompt: null,
+        summary: null,
+        status: 'doing',
+        jira_key: null,
+        jira_title: null,
+        jira_status: null,
+        jira_assignee: null,
+        jira_description: null,
+        agent: null,
+        permission_mode: null,
+        project_id: 'proj-1',
+        created_at: 1000,
+        updated_at: 1000,
+      }
+
       vi.mocked(getTasksForProject).mockResolvedValue([
-        {
-          id: 'task-200',
-          initial_prompt: 'Order test',
-          prompt: null,
-          summary: null,
-          status: 'doing',
-          jira_key: null,
-          jira_title: null,
-          jira_status: null,
-          jira_assignee: null,
-          jira_description: null,
-          agent: null,
-          permission_mode: null,
-          project_id: 'proj-1',
-          created_at: 1000,
-          updated_at: 1000,
-        },
+        selectedTask,
       ])
+
+      stores.tasks.set([selectedTask])
+      stores.pendingTask.set(null)
+      stores.selectedTaskId.set(selectedTask.id)
+
+      const callOrder: string[] = []
+      vi.mocked(nav.resetToBoard).mockImplementation(() => { callOrder.push('resetToBoard') })
+      vi.mocked(updateTaskStatus).mockImplementation(async () => { callOrder.push('updateTaskStatus') })
 
       render(App)
 
       await vi.waitFor(() => {
         expect(getTasksForProject).toHaveBeenCalled()
       })
-
-      stores.selectedTaskId.set('task-200')
 
       await fireEvent.keyDown(window, { key: 'k', metaKey: true, bubbles: true })
 
@@ -847,10 +863,6 @@ describe('App onMount initialization order', () => {
         .find((arg): arg is { onExecute: (actionId: string) => Promise<void> } => 'onExecute' in arg && typeof arg.onExecute === 'function')
 
       if (!propsCandidate) throw new Error('Expected ActionPalette props to include onExecute')
-
-      const callOrder: string[] = []
-      vi.mocked(nav.resetToBoard).mockImplementation(() => { callOrder.push('resetToBoard') })
-      vi.mocked(updateTaskStatus).mockImplementation(async () => { callOrder.push('updateTaskStatus') })
 
       await propsCandidate.onExecute('move-to-done')
 
