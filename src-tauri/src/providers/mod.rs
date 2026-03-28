@@ -368,15 +368,16 @@ mod tests {
             crate::pty_manager::PtyManager::new(),
         ));
         let commands = p.list_commands(None);
-        assert!(
-            commands.len() >= 10,
-            "Expected built-in commands, got {}",
-            commands.len()
-        );
-        assert!(
-            commands.iter().any(|c| c.name == "compact"),
-            "Should include 'compact' built-in"
-        );
+        let command_names: std::collections::HashSet<_> =
+            commands.iter().map(|command| command.name.as_str()).collect();
+
+        for builtin in crate::command_discovery::builtin_claude_commands() {
+            assert!(
+                command_names.contains(builtin.name.as_str()),
+                "missing built-in command '{}'",
+                builtin.name
+            );
+        }
     }
 
     #[test]
