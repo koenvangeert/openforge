@@ -18,7 +18,7 @@ vi.mock('../lib/boardFilters', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../lib/boardFilters')>()
   return {
     ...actual,
-    loadFocusFilterStates: vi.fn().mockResolvedValue(['idle', 'needs-input', 'paused', 'agent-done', 'failed', 'interrupted', 'pr-draft', 'pr-open', 'ci-failed', 'changes-requested', 'unaddressed-comments', 'ready-to-merge', 'pr-merged']),
+    loadFocusFilterStates: vi.fn().mockResolvedValue(['idle', 'needs-input', 'paused', 'agent-done', 'failed', 'interrupted', 'pr-draft', 'pr-open', 'ci-failed', 'changes-requested', 'unaddressed-comments', 'ready-to-merge', 'pr-merged', 'merge-conflict']),
   }
 })
 
@@ -297,6 +297,27 @@ describe('FocusBoard', () => {
 
     expect(await screen.findByRole('button', { name: /Focus now 1/i })).toBeTruthy()
     expect(screen.getAllByText('Doing task').length).toBeGreaterThan(0)
+  })
+
+  it('surfaces merge conflicts in Needs attention cards', async () => {
+    renderBoard({
+      tasks: [taskDoing],
+      sessions: new Map(),
+      prs: new Map([[
+        taskDoing.id,
+        [{
+          ...makePr(taskDoing.id, 0),
+          mergeable_state: 'dirty',
+        }],
+      ]]),
+    })
+
+    expect(await screen.findByRole('button', { name: /Focus now 1/i })).toBeTruthy()
+    const [boardCard] = document.querySelectorAll('[data-vim-item]')
+    expect(boardCard).toBeTruthy()
+    expect(within(boardCard as HTMLElement).getByText('Doing task')).toBeTruthy()
+    expect(within(boardCard as HTMLElement).getByText('Merge Conflict')).toBeTruthy()
+    expect(within(boardCard as HTMLElement).getByText('Pull request has merge conflicts that must be resolved.')).toBeTruthy()
   })
 
   it('CMD+1 activates Focus now filter', async () => {
