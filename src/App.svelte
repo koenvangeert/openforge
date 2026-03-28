@@ -430,6 +430,23 @@
     }
   }
 
+  function cycleActiveProject(direction: 'previous' | 'next', options?: { boardOnly?: boolean }) {
+    if (options?.boardOnly && ($currentView !== 'board' || selectedTask !== null)) {
+      return
+    }
+
+    const projectList = $projects
+    if (projectList.length === 0) return
+
+    const currentIndex = projectList.findIndex((p) => p.id === $activeProjectId)
+    const nextIndex = direction === 'next'
+      ? (currentIndex < 0 ? 0 : (currentIndex + 1) % projectList.length)
+      : (currentIndex <= 0 ? projectList.length - 1 : currentIndex - 1)
+
+    $activeProjectId = projectList[nextIndex].id
+    router.resetToBoard()
+  }
+
   onMount(async () => {
     shortcuts = useShortcutRegistry()
 
@@ -501,22 +518,20 @@
       handleNavigate('settings')
     })
 
+    shortcuts.register('⌃n', () => {
+      cycleActiveProject('next', { boardOnly: true })
+    })
+
+    shortcuts.register('⌃p', () => {
+      cycleActiveProject('previous', { boardOnly: true })
+    })
+
     shortcuts.register('1', () => {
-      const projectList = $projects
-      if (projectList.length === 0) return
-      const currentIndex = projectList.findIndex((p) => p.id === $activeProjectId)
-      const nextIndex = currentIndex <= 0 ? projectList.length - 1 : currentIndex - 1
-      $activeProjectId = projectList[nextIndex].id
-      router.resetToBoard()
+      cycleActiveProject('previous')
     })
 
     shortcuts.register('2', () => {
-      const projectList = $projects
-      if (projectList.length === 0) return
-      const currentIndex = projectList.findIndex((p) => p.id === $activeProjectId)
-      const nextIndex = currentIndex < 0 ? 0 : (currentIndex + 1) % projectList.length
-      $activeProjectId = projectList[nextIndex].id
-      router.resetToBoard()
+      cycleActiveProject('next')
     })
 
     // Phase 1: Register ALL event listeners

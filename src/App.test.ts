@@ -998,6 +998,66 @@ describe('App onMount initialization order', () => {
       expect(get(stores.activeProjectId)).toBe('proj-1')
     })
 
+    it('pressing Ctrl+N cycles to next project on the board and resets to board', async () => {
+      const App = (await import('./App.svelte')).default
+      const stores = await import('./lib/stores')
+      const ipc = await import('./lib/ipc')
+      const nav = await import('./lib/router.svelte')
+      const { get } = await import('svelte/store')
+
+      const projectList: Project[] = [
+        { id: 'proj-1', name: 'Project One', path: '/test/one', created_at: 0, updated_at: 0 },
+        { id: 'proj-2', name: 'Project Two', path: '/test/two', created_at: 0, updated_at: 0 },
+      ]
+      vi.mocked(ipc.getProjects).mockResolvedValue(projectList)
+
+      render(App)
+
+      await vi.waitFor(() => {
+        expect(get(stores.projects)).toHaveLength(2)
+      })
+
+      stores.currentView.set('board')
+      stores.selectedTaskId.set(null)
+      vi.mocked(nav.resetToBoard).mockClear()
+      stores.activeProjectId.set('proj-1')
+
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', ctrlKey: true, bubbles: true }))
+
+      expect(get(stores.activeProjectId)).toBe('proj-2')
+      expect(nav.resetToBoard).toHaveBeenCalled()
+    })
+
+    it('pressing Ctrl+P cycles to previous project on the board', async () => {
+      const App = (await import('./App.svelte')).default
+      const stores = await import('./lib/stores')
+      const ipc = await import('./lib/ipc')
+      const nav = await import('./lib/router.svelte')
+      const { get } = await import('svelte/store')
+
+      const projectList: Project[] = [
+        { id: 'proj-1', name: 'Project One', path: '/test/one', created_at: 0, updated_at: 0 },
+        { id: 'proj-2', name: 'Project Two', path: '/test/two', created_at: 0, updated_at: 0 },
+      ]
+      vi.mocked(ipc.getProjects).mockResolvedValue(projectList)
+
+      render(App)
+
+      await vi.waitFor(() => {
+        expect(get(stores.projects)).toHaveLength(2)
+      })
+
+      stores.currentView.set('board')
+      stores.selectedTaskId.set(null)
+      vi.mocked(nav.resetToBoard).mockClear()
+      stores.activeProjectId.set('proj-2')
+
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'p', ctrlKey: true, bubbles: true }))
+
+      expect(get(stores.activeProjectId)).toBe('proj-1')
+      expect(nav.resetToBoard).toHaveBeenCalled()
+    })
+
     it('1 and 2 do not fire when input is focused', async () => {
       const App = (await import('./App.svelte')).default
       const stores = await import('./lib/stores')
