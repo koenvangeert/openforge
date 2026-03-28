@@ -2,9 +2,9 @@ use std::collections::HashMap;
 
 use log::warn;
 
-use super::GitHubClient;
 use super::error::GitHubError;
 use super::types::*;
+use super::GitHubClient;
 
 impl GitHubClient {
     /// Get all check runs for a commit (paginated)

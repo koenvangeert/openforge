@@ -1,13 +1,17 @@
-use std::sync::{Mutex, Arc};
+use crate::{
+    db,
+    whisper_manager::{WhisperManager, WhisperModelSize},
+};
+use std::sync::{Arc, Mutex};
 use tauri::State;
-use crate::{db, whisper_manager::{WhisperManager, WhisperModelSize}};
 
 #[tauri::command]
 pub async fn transcribe_audio(
     whisper: State<'_, WhisperManager>,
     audio_data: Vec<f32>,
 ) -> Result<crate::whisper_manager::TranscriptionResult, String> {
-    whisper.transcribe(&audio_data)
+    whisper
+        .transcribe(&audio_data)
         .map_err(|e| format!("Transcription failed: {}", e))
 }
 
@@ -35,7 +39,9 @@ pub async fn download_whisper_model(
     let size = WhisperModelSize::from_str(&model_size)
         .ok_or_else(|| format!("Invalid model size: {}", model_size))?;
 
-    let path = whisper.download_model(app, size).await
+    let path = whisper
+        .download_model(app, size)
+        .await
         .map_err(|e| format!("Model download failed: {}", e))?;
 
     let db = crate::db::acquire_db(&db);

@@ -360,8 +360,16 @@ impl OpenCodeClient {
     ///
     /// # Returns
     /// List of matching file paths
-    pub async fn find_files(&self, query: &str, dirs: bool, limit: u32) -> Result<Vec<String>, OpenCodeError> {
-        let url = format!("{}/find/file?query={}&dirs={}&limit={}", self.base_url, query, dirs, limit);
+    pub async fn find_files(
+        &self,
+        query: &str,
+        dirs: bool,
+        limit: u32,
+    ) -> Result<Vec<String>, OpenCodeError> {
+        let url = format!(
+            "{}/find/file?query={}&dirs={}&limit={}",
+            self.base_url, query, dirs, limit
+        );
 
         let response = self
             .client
@@ -437,7 +445,10 @@ impl OpenCodeClient {
     ///
     /// # Returns
     /// List of child session information
-    pub async fn get_session_children(&self, session_id: &str) -> Result<Vec<SessionInfo>, OpenCodeError> {
+    pub async fn get_session_children(
+        &self,
+        session_id: &str,
+    ) -> Result<Vec<SessionInfo>, OpenCodeError> {
         let url = format!("{}/session/{}/children", self.base_url, session_id);
 
         let response = self
@@ -471,7 +482,9 @@ impl OpenCodeClient {
     ///
     /// # Returns
     /// Map of session IDs to their status information
-    pub async fn get_all_session_statuses(&self) -> Result<HashMap<String, SessionStatusInfo>, OpenCodeError> {
+    pub async fn get_all_session_statuses(
+        &self,
+    ) -> Result<HashMap<String, SessionStatusInfo>, OpenCodeError> {
         let url = format!("{}/session/status", self.base_url);
 
         let response = self

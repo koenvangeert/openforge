@@ -1,13 +1,13 @@
+use crate::db;
 use axum::{
-    extract::{State, Json, Path, Query},
-    routing::{post, get},
-    Router,
+    extract::{Json, Path, Query, State},
     http::StatusCode,
+    routing::{get, post},
+    Router,
 };
 use log::{error, info, warn};
 use serde::{Deserialize, Serialize};
 use std::{net::SocketAddr, sync::Mutex};
-use crate::db;
 use tauri::Emitter;
 
 /// Request to create a new task from OpenCode
@@ -138,15 +138,22 @@ pub async fn create_task_handler(
     )
     .map_err(|msg| (StatusCode::UNPROCESSABLE_ENTITY, msg))?;
 
-    let task = db.create_task(
-        &request.initial_prompt,
-        "backlog",
-        None,
-        Some(&project_id),
-        None,
-        None,
-        None,
-    ).map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to create task: {}", e)))?;
+    let task = db
+        .create_task(
+            &request.initial_prompt,
+            "backlog",
+            None,
+            Some(&project_id),
+            None,
+            None,
+            None,
+        )
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to create task: {}", e),
+            )
+        })?;
 
     drop(db);
 
@@ -157,7 +164,7 @@ pub async fn create_task_handler(
                 "action": "created",
                 "task_id": task.id,
                 "project_id": task.project_id
-            })
+            }),
         );
     }
 
@@ -182,7 +189,8 @@ pub async fn update_task_handler(
         &request.task_id,
         request.initial_prompt.as_deref(),
         request.summary.as_deref(),
-    ).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    )
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     drop(db);
 
@@ -192,7 +200,7 @@ pub async fn update_task_handler(
             serde_json::json!({
                 "action": "updated",
                 "task_id": request.task_id
-            })
+            }),
         );
     }
 
@@ -208,7 +216,10 @@ pub async fn get_task_info_handler(
 ) -> Result<Json<GetTaskInfoResponse>, StatusCode> {
     let db = state.db.lock().unwrap();
 
-    match db.get_task(&id).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)? {
+    match db
+        .get_task(&id)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    {
         Some(task) => Ok(Json(GetTaskInfoResponse {
             id: task.id,
             initial_prompt: task.initial_prompt,
@@ -269,7 +280,12 @@ pub async fn get_project_attention_handler(
                 format!("Failed to get project: {e}"),
             )
         })?
-        .ok_or_else(|| (StatusCode::NOT_FOUND, format!("Project not found: {project_id}")))?;
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                format!("Project not found: {project_id}"),
+            )
+        })?;
 
     let attention = db
         .get_project_attention_for_project(&project_id)
@@ -342,7 +358,7 @@ async fn handle_hook(
                     "task_id": task_id,
                     "event_type": event_type,
                     "payload": payload_value
-                })
+                }),
             );
         }
 
@@ -362,8 +378,17 @@ async fn handle_hook(
                     }
 
                     if let Some(new_status) = map_hook_to_status(event_type, &session.status) {
-                        if let Err(e) = db.update_agent_session(&session.id, &session.stage, &new_status, None, None) {
-                            error!("[http_server] Failed to update session status for task {}: {}", task_id, e);
+                        if let Err(e) = db.update_agent_session(
+                            &session.id,
+                            &session.stage,
+                            &new_status,
+                            None,
+                            None,
+                        ) {
+                            error!(
+                                "[http_server] Failed to update session status for task {}: {}",
+                                task_id, e
+                            );
                         }
                         Some(new_status)
                     } else {
@@ -385,12 +410,15 @@ async fn handle_hook(
                         "task_id": task_id,
                         "status": new_status,
                         "provider": "claude-code"
-                    })
+                    }),
                 );
             }
         }
     } else {
-        warn!("[http_server] Warning: Hook event '{}' received without CLAUDE_TASK_ID", event_type);
+        warn!(
+            "[http_server] Warning: Hook event '{}' received without CLAUDE_TASK_ID",
+            event_type
+        );
     }
 
     Ok(Json(serde_json::json!({ "status": "ok" })))
@@ -452,15 +480,18 @@ pub fn create_router(state: AppState) -> Router {
         .route("/hooks/post-tool-use", post(hook_post_tool_use_handler))
         .route("/hooks/session-end", post(hook_session_end_handler))
         .route("/hooks/notification", post(hook_notification_handler))
-        .route("/hooks/notification-permission", post(hook_notification_permission_handler))
+        .route(
+            "/hooks/notification-permission",
+            post(hook_notification_permission_handler),
+        )
         .with_state(state)
 }
 
 /// Start the HTTP server on the configured port
-/// 
+///
 /// The server listens on 127.0.0.1 (localhost only) to ensure
 /// it's not exposed to the external network.
-/// 
+///
 /// The port can be configured via the AI_COMMAND_CENTER_PORT
 /// environment variable, defaulting to 17422.
 pub async fn start_http_server(
@@ -532,8 +563,16 @@ mod tests {
             let project = db
                 .create_project("Project", "/tmp/project")
                 .expect("create project");
-            db.create_task("Task A", "backlog", None, Some(&project.id), None, None, None)
-                .expect("create task a");
+            db.create_task(
+                "Task A",
+                "backlog",
+                None,
+                Some(&project.id),
+                None,
+                None,
+                None,
+            )
+            .expect("create task a");
             db.create_task("Task B", "doing", None, Some(&project.id), None, None, None)
                 .expect("create task b");
         }
@@ -576,8 +615,16 @@ mod tests {
                 None,
             )
             .expect("create backlog task");
-            db.create_task("Task doing", "doing", None, Some(&project.id), None, None, None)
-                .expect("create doing task");
+            db.create_task(
+                "Task doing",
+                "doing",
+                None,
+                Some(&project.id),
+                None,
+                None,
+                None,
+            )
+            .expect("create doing task");
         }
 
         let router = create_router(state);
@@ -757,10 +804,22 @@ mod tests {
 
     #[test]
     fn test_pre_tool_use_transitions_from_non_running_to_running() {
-        assert_eq!(map_hook_to_status("pre-tool-use", "paused"), Some("running".to_string()));
-        assert_eq!(map_hook_to_status("pre-tool-use", "completed"), Some("running".to_string()));
-        assert_eq!(map_hook_to_status("pre-tool-use", "failed"), Some("running".to_string()));
-        assert_eq!(map_hook_to_status("pre-tool-use", "interrupted"), Some("running".to_string()));
+        assert_eq!(
+            map_hook_to_status("pre-tool-use", "paused"),
+            Some("running".to_string())
+        );
+        assert_eq!(
+            map_hook_to_status("pre-tool-use", "completed"),
+            Some("running".to_string())
+        );
+        assert_eq!(
+            map_hook_to_status("pre-tool-use", "failed"),
+            Some("running".to_string())
+        );
+        assert_eq!(
+            map_hook_to_status("pre-tool-use", "interrupted"),
+            Some("running".to_string())
+        );
     }
 
     #[test]
@@ -770,8 +829,14 @@ mod tests {
 
     #[test]
     fn test_post_tool_use_transitions_from_non_running_to_running() {
-        assert_eq!(map_hook_to_status("post-tool-use", "paused"), Some("running".to_string()));
-        assert_eq!(map_hook_to_status("post-tool-use", "completed"), Some("running".to_string()));
+        assert_eq!(
+            map_hook_to_status("post-tool-use", "paused"),
+            Some("running".to_string())
+        );
+        assert_eq!(
+            map_hook_to_status("post-tool-use", "completed"),
+            Some("running".to_string())
+        );
     }
 
     #[test]
@@ -781,15 +846,30 @@ mod tests {
 
     #[test]
     fn test_stop_always_maps_to_completed() {
-        assert_eq!(map_hook_to_status("stop", "running"), Some("completed".to_string()));
-        assert_eq!(map_hook_to_status("stop", "paused"), Some("completed".to_string()));
-        assert_eq!(map_hook_to_status("stop", "completed"), Some("completed".to_string()));
+        assert_eq!(
+            map_hook_to_status("stop", "running"),
+            Some("completed".to_string())
+        );
+        assert_eq!(
+            map_hook_to_status("stop", "paused"),
+            Some("completed".to_string())
+        );
+        assert_eq!(
+            map_hook_to_status("stop", "completed"),
+            Some("completed".to_string())
+        );
     }
 
     #[test]
     fn test_session_end_always_maps_to_completed() {
-        assert_eq!(map_hook_to_status("session-end", "running"), Some("completed".to_string()));
-        assert_eq!(map_hook_to_status("session-end", "paused"), Some("completed".to_string()));
+        assert_eq!(
+            map_hook_to_status("session-end", "running"),
+            Some("completed".to_string())
+        );
+        assert_eq!(
+            map_hook_to_status("session-end", "paused"),
+            Some("completed".to_string())
+        );
     }
 
     #[test]
@@ -800,14 +880,26 @@ mod tests {
 
     #[test]
     fn test_notification_permission_maps_running_to_paused() {
-        assert_eq!(map_hook_to_status("notification-permission", "running"), Some("paused".to_string()));
+        assert_eq!(
+            map_hook_to_status("notification-permission", "running"),
+            Some("paused".to_string())
+        );
     }
 
     #[test]
     fn test_notification_permission_no_op_when_not_running() {
-        assert_eq!(map_hook_to_status("notification-permission", "paused"), None);
-        assert_eq!(map_hook_to_status("notification-permission", "completed"), None);
-        assert_eq!(map_hook_to_status("notification-permission", "interrupted"), None);
+        assert_eq!(
+            map_hook_to_status("notification-permission", "paused"),
+            None
+        );
+        assert_eq!(
+            map_hook_to_status("notification-permission", "completed"),
+            None
+        );
+        assert_eq!(
+            map_hook_to_status("notification-permission", "interrupted"),
+            None
+        );
     }
 
     #[test]
@@ -877,7 +969,10 @@ mod tests {
     fn test_create_task_request_deserialize_missing_initial_prompt_fails() {
         let json = r#"{"project_id": "PROJ-1"}"#;
         let result: Result<CreateTaskRequest, _> = serde_json::from_str(json);
-        assert!(result.is_err(), "Should fail without required initial_prompt field");
+        assert!(
+            result.is_err(),
+            "Should fail without required initial_prompt field"
+        );
     }
 
     #[test]
@@ -888,7 +983,8 @@ mod tests {
             worktree: Some("/path/to/worktree".to_string()),
         };
         let json = serde_json::to_string(&original).expect("Failed to serialize");
-        let deserialized: CreateTaskRequest = serde_json::from_str(&json).expect("Failed to deserialize");
+        let deserialized: CreateTaskRequest =
+            serde_json::from_str(&json).expect("Failed to deserialize");
         assert_eq!(deserialized.initial_prompt, original.initial_prompt);
         assert_eq!(deserialized.project_id, original.project_id);
         assert_eq!(deserialized.worktree, original.worktree);
@@ -941,7 +1037,8 @@ mod tests {
 
     #[test]
     fn test_claude_hook_payload_deserialize_with_claude_task_id() {
-        let json = r#"{"session_id": "sess-123", "tool_name": "bash", "CLAUDE_TASK_ID": "task-456"}"#;
+        let json =
+            r#"{"session_id": "sess-123", "tool_name": "bash", "CLAUDE_TASK_ID": "task-456"}"#;
         let payload: ClaudeHookPayload = serde_json::from_str(json).expect("Failed to deserialize");
         assert_eq!(payload.session_id, Some("sess-123".to_string()));
         assert_eq!(payload.tool_name, Some("bash".to_string()));
@@ -971,7 +1068,10 @@ mod tests {
         assert_eq!(payload.session_id, Some("sess-123".to_string()));
         assert_eq!(payload.tool_name, Some("bash".to_string()));
         assert!(payload.tool_input.is_some());
-        assert_eq!(payload.transcript_path, Some("/path/to/transcript".to_string()));
+        assert_eq!(
+            payload.transcript_path,
+            Some("/path/to/transcript".to_string())
+        );
         assert_eq!(payload.claude_task_id, Some("task-456".to_string()));
     }
 
@@ -1037,13 +1137,19 @@ mod tests {
         if let Some(s) = map_hook_to_status("notification-permission", &status) {
             status = s;
         }
-        assert_eq!(status, "paused", "notification-permission transitions running→paused");
+        assert_eq!(
+            status, "paused",
+            "notification-permission transitions running→paused"
+        );
 
         // Tool use resumes from paused
         if let Some(s) = map_hook_to_status("pre-tool-use", &status) {
             status = s;
         }
-        assert_eq!(status, "running", "Resumed: pre-tool-use transitions paused→running");
+        assert_eq!(
+            status, "running",
+            "Resumed: pre-tool-use transitions paused→running"
+        );
 
         if let Some(s) = map_hook_to_status("stop", &status) {
             status = s;
@@ -1053,7 +1159,10 @@ mod tests {
         if let Some(s) = map_hook_to_status("pre-tool-use", &status) {
             status = s;
         }
-        assert_eq!(status, "running", "Resumed: pre-tool-use transitions completed→running");
+        assert_eq!(
+            status, "running",
+            "Resumed: pre-tool-use transitions completed→running"
+        );
 
         if let Some(s) = map_hook_to_status("session-end", &status) {
             status = s;
@@ -1117,7 +1226,10 @@ mod tests {
     fn test_update_task_request_deserialize_missing_task_id_fails() {
         let json = r#"{"initial_prompt": "No Task ID"}"#;
         let result: Result<UpdateTaskRequest, _> = serde_json::from_str(json);
-        assert!(result.is_err(), "Should fail without required task_id field");
+        assert!(
+            result.is_err(),
+            "Should fail without required task_id field"
+        );
     }
 
     #[test]
@@ -1128,7 +1240,8 @@ mod tests {
             summary: Some("Roundtrip Summary".to_string()),
         };
         let json = serde_json::to_string(&original).expect("Failed to serialize");
-        let deserialized: UpdateTaskRequest = serde_json::from_str(&json).expect("Failed to deserialize");
+        let deserialized: UpdateTaskRequest =
+            serde_json::from_str(&json).expect("Failed to deserialize");
         assert_eq!(deserialized.task_id, original.task_id);
         assert_eq!(deserialized.initial_prompt, original.initial_prompt);
         assert_eq!(deserialized.summary, original.summary);
@@ -1292,7 +1405,9 @@ mod tests {
     #[test]
     fn test_resolve_project_id_from_worktree() {
         let (db, _path) = crate::db::test_helpers::make_test_db("resolve_worktree");
-        let project = db.create_project("Test Project", "/tmp/test").expect("create project");
+        let project = db
+            .create_project("Test Project", "/tmp/test")
+            .expect("create project");
         crate::db::test_helpers::insert_test_task(&db);
         db.create_worktree_record("T-100", &project.id, "/tmp/repo", "/tmp/wt1", "branch-1")
             .expect("create worktree");
@@ -1304,16 +1419,26 @@ mod tests {
     #[test]
     fn test_resolve_project_id_no_match_lists_available_projects() {
         let (db, _path) = crate::db::test_helpers::make_test_db("resolve_no_match");
-        db.create_project("My Project", "/path/to/project").expect("create project");
+        db.create_project("My Project", "/path/to/project")
+            .expect("create project");
 
         let result = resolve_project_id(&db, None, None);
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(err.contains("Could not determine project"), "Error: {err}");
         assert!(err.contains("P-1"), "Should list project ID. Error: {err}");
-        assert!(err.contains("My Project"), "Should list project name. Error: {err}");
-        assert!(err.contains("/path/to/project"), "Should list project path. Error: {err}");
-        assert!(err.contains("create_task"), "Should tell caller to retry. Error: {err}");
+        assert!(
+            err.contains("My Project"),
+            "Should list project name. Error: {err}"
+        );
+        assert!(
+            err.contains("/path/to/project"),
+            "Should list project path. Error: {err}"
+        );
+        assert!(
+            err.contains("create_task"),
+            "Should tell caller to retry. Error: {err}"
+        );
     }
 
     #[test]
@@ -1322,25 +1447,34 @@ mod tests {
         let result = resolve_project_id(&db, None, None);
         assert!(result.is_err());
         let err = result.unwrap_err();
-        assert!(err.contains("none"), "Should indicate no projects exist. Error: {err}");
+        assert!(
+            err.contains("none"),
+            "Should indicate no projects exist. Error: {err}"
+        );
     }
 
     #[test]
     fn test_resolve_project_id_worktree_not_found_lists_projects() {
         let (db, _path) = crate::db::test_helpers::make_test_db("resolve_wt_not_found");
-        db.create_project("Test", "/tmp/test").expect("create project");
+        db.create_project("Test", "/tmp/test")
+            .expect("create project");
 
         let result = resolve_project_id(&db, None, Some("/unknown/path"));
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(err.contains("Could not determine project"), "Error: {err}");
-        assert!(err.contains("P-1"), "Should list available project. Error: {err}");
+        assert!(
+            err.contains("P-1"),
+            "Should list available project. Error: {err}"
+        );
     }
 
     #[test]
     fn test_resolve_project_id_explicit_takes_priority_over_worktree() {
         let (db, _path) = crate::db::test_helpers::make_test_db("resolve_priority");
-        let project = db.create_project("Test Project", "/tmp/test").expect("create project");
+        let project = db
+            .create_project("Test Project", "/tmp/test")
+            .expect("create project");
         crate::db::test_helpers::insert_test_task(&db);
         db.create_worktree_record("T-100", &project.id, "/tmp/repo", "/tmp/wt1", "branch-1")
             .expect("create worktree");
@@ -1348,5 +1482,4 @@ mod tests {
         let result = resolve_project_id(&db, Some("P-99"), Some("/tmp/wt1"));
         assert_eq!(result, Ok("P-99".to_string()));
     }
-
 }

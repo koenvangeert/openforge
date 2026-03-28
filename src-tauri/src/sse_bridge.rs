@@ -166,6 +166,32 @@ fn should_persist_completed_status(spawned_child_poll: bool, child_poll_in_progr
     !spawned_child_poll && !child_poll_in_progress
 }
 
+fn is_status_event_type(event_type: &str) -> bool {
+    matches!(
+        event_type,
+        "session.idle"
+            | "session.status"
+            | "session.error"
+            | "permission.asked"
+            | "permission.updated"
+            | "permission.replied"
+            | "question.asked"
+            | "question.replied"
+            | "question.rejected"
+            | "question.answered"
+    )
+}
+
+fn map_checkpoint_event_to_session_status(event_type: &str) -> Option<&'static str> {
+    match event_type {
+        "permission.asked" | "permission.updated" | "question.asked" => Some("paused"),
+        "permission.replied" | "question.replied" | "question.rejected" | "question.answered" => {
+            Some("running")
+        }
+        _ => None,
+    }
+}
+
 fn collect_descendant_ids(
     root_session_id: &str,
     children_by_parent: &HashMap<String, Vec<SessionInfo>>,
@@ -400,11 +426,7 @@ impl SseBridgeManager {
                                     .and_then(|s| s.as_str())
                                     .map(|s| s.to_string());
 
-                                let is_status_event = matches!(real_event_type,
-                                    "session.idle" | "session.status" | "session.error" |
-                                    "permission.updated" | "permission.replied" |
-                                    "question.asked" | "question.answered"
-                                );
+                                let is_status_event = is_status_event_type(real_event_type);
 
                                 if is_status_event {
                                     if let (Some(ref our_session_id), Some(ref event_sid)) = (&opencode_session_id_clone, &event_session_id) {
@@ -562,10 +584,10 @@ impl SseBridgeManager {
                                     }
                                 } else if real_event_type == "session.error" {
                                     Some("failed")
-                                } else if real_event_type == "permission.updated" || real_event_type == "question.asked" {
-                                    Some("paused")
-                                } else if real_event_type == "permission.replied" || real_event_type == "question.answered" {
-                                    Some("running")
+                                } else if let Some(session_status) =
+                                    map_checkpoint_event_to_session_status(real_event_type)
+                                {
+                                    Some(session_status)
                                 } else {
                                     None
                                 };
@@ -844,6 +866,39 @@ mod tests {
             .and_then(|s| s.get("type"))
             .and_then(|t| t.as_str());
         assert_eq!(status_type, Some("idle"));
+    }
+
+    #[test]
+    fn test_input_requested_event_types_include_current_opencode_names() {
+        assert!(is_status_event_type("permission.asked"));
+        assert!(is_status_event_type("question.asked"));
+        assert_eq!(
+            map_checkpoint_event_to_session_status("permission.asked"),
+            Some("paused")
+        );
+        assert_eq!(
+            map_checkpoint_event_to_session_status("question.asked"),
+            Some("paused")
+        );
+    }
+
+    #[test]
+    fn test_input_resolved_event_types_include_current_opencode_names() {
+        assert!(is_status_event_type("permission.replied"));
+        assert!(is_status_event_type("question.replied"));
+        assert!(is_status_event_type("question.rejected"));
+        assert_eq!(
+            map_checkpoint_event_to_session_status("permission.replied"),
+            Some("running")
+        );
+        assert_eq!(
+            map_checkpoint_event_to_session_status("question.replied"),
+            Some("running")
+        );
+        assert_eq!(
+            map_checkpoint_event_to_session_status("question.rejected"),
+            Some("running")
+        );
     }
 
     #[test]

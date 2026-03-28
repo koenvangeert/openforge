@@ -1,6 +1,7 @@
 import { svelte } from '@sveltejs/vite-plugin-svelte'
 import tailwindcss from '@tailwindcss/vite'
 import { defineConfig } from 'vite'
+import { createOpenForgeChunkGroups, OPEN_FORGE_CHUNK_SIZE_WARNING_LIMIT } from './src/lib/viteChunks'
 import { createOpenForgeViteLogger } from './src/lib/viteLogger'
 
 // https://vitejs.dev/config/
@@ -24,5 +25,19 @@ export default defineConfig({
     target: ['es2021', 'chrome100', 'safari14'],
     minify: !process.env.TAURI_DEBUG,
     sourcemap: !!process.env.TAURI_DEBUG,
+    // Raise the limit to suppress two known-large-but-unavoidable chunks:
+    //   - vendor-diff  (~1,086 kB): @git-diff-view/lowlight bundles all
+    //     highlight.js language grammars — no meaningful split possible.
+    //   - diffWorker   (~960 kB):   same lowlight dep in the Web Worker.
+    // Tauri loads assets from disk — no network transfer cost, so these
+    // sizes are not a real perf problem, only a bundler noise warning.
+    chunkSizeWarningLimit: OPEN_FORGE_CHUNK_SIZE_WARNING_LIMIT,
+    rolldownOptions: {
+      output: {
+        codeSplitting: {
+          groups: createOpenForgeChunkGroups(),
+        },
+      },
+    },
   },
 })

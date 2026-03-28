@@ -2,6 +2,19 @@ import type { AgentSession } from './types'
 
 export type OpenCodeSessionUpdate = Partial<Pick<AgentSession, 'status' | 'checkpoint_data' | 'error_message'>>
 
+function isInputRequestedEvent(eventType: string): boolean {
+  return eventType === 'permission.asked'
+    || eventType === 'permission.updated'
+    || eventType === 'question.asked'
+}
+
+function isInputResolvedEvent(eventType: string): boolean {
+  return eventType === 'permission.replied'
+    || eventType === 'question.replied'
+    || eventType === 'question.rejected'
+    || eventType === 'question.answered'
+}
+
 export function getOpenCodeSessionUpdate(eventType: string, data: string): OpenCodeSessionUpdate | null {
   if (eventType === 'session.idle') {
     return null
@@ -32,14 +45,14 @@ export function getOpenCodeSessionUpdate(eventType: string, data: string): OpenC
     }
   }
 
-  if (eventType === 'permission.updated' || eventType === 'question.asked') {
+  if (isInputRequestedEvent(eventType)) {
     return {
       status: 'paused',
       checkpoint_data: data,
     }
   }
 
-  if (eventType === 'permission.replied' || eventType === 'question.answered') {
+  if (isInputResolvedEvent(eventType)) {
     return {
       status: 'running',
       checkpoint_data: null,

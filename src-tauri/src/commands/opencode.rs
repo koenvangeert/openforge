@@ -1,13 +1,10 @@
-use std::path::Path;
-use std::sync::{Mutex, Arc};
-use tauri::State;
+use crate::command_discovery::{scan_skills_directory, search_project_files};
+use crate::db;
 use crate::opencode_client::OpenCodeClient;
 use crate::server_manager;
-use crate::db;
-use crate::command_discovery::{
-    scan_skills_directory,
-    search_project_files,
-};
+use std::path::Path;
+use std::sync::{Arc, Mutex};
+use tauri::State;
 
 fn load_project_context(
     db: &State<'_, Arc<Mutex<db::Database>>>,
@@ -102,7 +99,7 @@ pub async fn list_opencode_commands(
         let (_, project_path) = load_project_context(&db, &project_id)?;
 
         let provider = crate::providers::claude_code::ClaudeCodeProvider::new(
-            crate::pty_manager::PtyManager::new()
+            crate::pty_manager::PtyManager::new(),
         );
         return Ok(provider.list_commands(project_path.as_deref()));
     }
@@ -113,7 +110,9 @@ pub async fn list_opencode_commands(
     };
 
     let client = OpenCodeClient::with_base_url(format!("http://127.0.0.1:{}", port));
-    client.list_commands().await
+    client
+        .list_commands()
+        .await
         .map_err(|e| format!("Failed to list commands: {}", e))
 }
 
@@ -145,7 +144,9 @@ pub async fn search_opencode_files(
     };
 
     let client = OpenCodeClient::with_base_url(format!("http://127.0.0.1:{}", port));
-    client.find_files(&query, true, 10).await
+    client
+        .find_files(&query, true, 10)
+        .await
         .map_err(|e| format!("Failed to search files: {}", e))
 }
 
@@ -165,7 +166,7 @@ pub async fn list_opencode_agents(
         let (_, project_path) = load_project_context(&db, &project_id)?;
 
         let provider = crate::providers::claude_code::ClaudeCodeProvider::new(
-            crate::pty_manager::PtyManager::new()
+            crate::pty_manager::PtyManager::new(),
         );
         return Ok(provider.list_agents(project_path.as_deref()));
     }
@@ -176,7 +177,9 @@ pub async fn list_opencode_agents(
     };
 
     let client = OpenCodeClient::with_base_url(format!("http://127.0.0.1:{}", port));
-    client.list_agents().await
+    client
+        .list_agents()
+        .await
         .map_err(|e| format!("Failed to list agents: {}", e))
 }
 
@@ -198,8 +201,6 @@ pub async fn list_opencode_models(
         .map_err(|e| format!("Failed to list models: {}", e))
 }
 
-
-
 /// List skills from OpenCode API + filesystem (.opencode/skills/ and .claude/skills/).
 /// Merges results, deduplicating by name (API skills take precedence).
 #[tauri::command]
@@ -212,7 +213,8 @@ pub async fn list_opencode_skills(
     let (_, project_path) = load_project_context(&db, &project_id)?;
 
     // Collect skills from OpenCode API (if server is running)
-    let mut skills_map = std::collections::HashMap::<String, crate::opencode_client::SkillInfo>::new();
+    let mut skills_map =
+        std::collections::HashMap::<String, crate::opencode_client::SkillInfo>::new();
 
     if let Some(port) = ensure_project_discovery_server(&db, &server_mgr, &project_id).await? {
         let client = OpenCodeClient::with_base_url(format!("http://127.0.0.1:{}", port));
@@ -221,7 +223,9 @@ pub async fn list_opencode_skills(
                 if cmd.source.as_deref() != Some("skill") {
                     continue;
                 }
-                let template = cmd.extra.get("template")
+                let template = cmd
+                    .extra
+                    .get("template")
                     .and_then(|v| v.as_str())
                     .map(|s| s.to_string());
 
@@ -232,7 +236,12 @@ pub async fn list_opencode_skills(
                         ("project".to_string(), ".agents".to_string())
                     } else if proj.join(".claude").join("skills").join(&cmd.name).exists() {
                         ("project".to_string(), ".claude".to_string())
-                    } else if proj.join(".opencode").join("skills").join(&cmd.name).exists() {
+                    } else if proj
+                        .join(".opencode")
+                        .join("skills")
+                        .join(&cmd.name)
+                        .exists()
+                    {
                         ("project".to_string(), ".opencode".to_string())
                     } else {
                         // Skill is user-level; detect source from home dirs
@@ -244,20 +253,26 @@ pub async fn list_opencode_skills(
                             }
                             None
                         });
-                        ("user".to_string(), home_source.unwrap_or_else(|| ".opencode".to_string()))
+                        (
+                            "user".to_string(),
+                            home_source.unwrap_or_else(|| ".opencode".to_string()),
+                        )
                     }
                 } else {
                     ("user".to_string(), ".opencode".to_string())
                 };
 
-                skills_map.insert(cmd.name.clone(), crate::opencode_client::SkillInfo {
-                    name: cmd.name,
-                    description: cmd.description,
-                    agent: cmd.agent,
-                    template,
-                    level,
-                    source_dir,
-                });
+                skills_map.insert(
+                    cmd.name.clone(),
+                    crate::opencode_client::SkillInfo {
+                        name: cmd.name,
+                        description: cmd.description,
+                        agent: cmd.agent,
+                        template,
+                        level,
+                        source_dir,
+                    },
+                );
             }
         }
     }

@@ -126,7 +126,7 @@ pub async fn create_worktree(
 
     if result.is_err() {
         info!("Worktree creation failed, attempting cleanup and retry...");
-        
+
         let _ = Command::new("git")
             .arg("-C")
             .arg(repo_path)
@@ -187,8 +187,13 @@ async fn try_create_worktree_inner(
 
 /// Computes the standard worktree path for a PR review.
 /// Convention: ~/.openforge/worktrees/{repo_name}/review-pr-{pr_number}
-pub fn review_worktree_path(repo_path: &Path, pr_number: i64) -> Result<std::path::PathBuf, GitWorktreeError> {
-    let home = dirs::home_dir().ok_or(GitWorktreeError::CommandFailed("Failed to get home directory".into()))?;
+pub fn review_worktree_path(
+    repo_path: &Path,
+    pr_number: i64,
+) -> Result<std::path::PathBuf, GitWorktreeError> {
+    let home = dirs::home_dir().ok_or(GitWorktreeError::CommandFailed(
+        "Failed to get home directory".into(),
+    ))?;
     let repo_name = repo_path
         .file_name()
         .and_then(|n| n.to_str())
@@ -239,7 +244,10 @@ pub async fn create_review_worktree(
 
     if !fetch_output.status.success() {
         let stderr = String::from_utf8_lossy(&fetch_output.stderr);
-        warn!("Warning: git fetch origin {} failed: {}", remote_branch, stderr);
+        warn!(
+            "Warning: git fetch origin {} failed: {}",
+            remote_branch, stderr
+        );
     }
 
     if worktree_path.exists() {
@@ -344,7 +352,7 @@ pub async fn remove_worktree_with_branch(
         .file_name()
         .and_then(|n| n.to_str())
         .unwrap_or("");
-    
+
     let git_dir = repo_path.join(".git").join("worktrees").join(worktree_name);
     if git_dir.exists() {
         if let Err(e) = std::fs::remove_dir_all(&git_dir) {
@@ -464,7 +472,8 @@ mod tests {
 
     #[test]
     fn test_slugify_branch_name_long_title() {
-        let long_title = "This is a very long title that should be truncated to fifty characters maximum";
+        let long_title =
+            "This is a very long title that should be truncated to fifty characters maximum";
         let result = slugify_branch_name("T-999", long_title);
         assert!(result.starts_with("T-999/"));
         let slug_part = result.strip_prefix("T-999/").unwrap();
@@ -479,19 +488,19 @@ mod tests {
     }
 }
 
-    #[test]
-    fn test_review_worktree_path() {
-        let repo_path = std::path::Path::new("/some/path/my-repo");
-        let result = review_worktree_path(repo_path, 42).unwrap();
-        let path_str = result.to_string_lossy();
-        assert!(path_str.ends_with("/.openforge/worktrees/my-repo/review-pr-42"));
-    }
+#[test]
+fn test_review_worktree_path() {
+    let repo_path = std::path::Path::new("/some/path/my-repo");
+    let result = review_worktree_path(repo_path, 42).unwrap();
+    let path_str = result.to_string_lossy();
+    assert!(path_str.ends_with("/.openforge/worktrees/my-repo/review-pr-42"));
+}
 
-    #[test]
-    fn test_review_worktree_path_extracts_repo_name() {
-        let repo_path = std::path::Path::new("/Users/user/projects/awesome-project");
-        let result = review_worktree_path(repo_path, 123).unwrap();
-        let path_str = result.to_string_lossy();
-        assert!(path_str.contains("awesome-project"));
-        assert!(path_str.ends_with("/review-pr-123"));
-    }
+#[test]
+fn test_review_worktree_path_extracts_repo_name() {
+    let repo_path = std::path::Path::new("/Users/user/projects/awesome-project");
+    let result = review_worktree_path(repo_path, 123).unwrap();
+    let path_str = result.to_string_lossy();
+    assert!(path_str.contains("awesome-project"));
+    assert!(path_str.ends_with("/review-pr-123"));
+}

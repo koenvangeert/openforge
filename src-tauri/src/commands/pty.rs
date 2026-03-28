@@ -1,5 +1,5 @@
-use tauri::State;
 use crate::pty_manager::PtyManager;
+use tauri::State;
 
 #[tauri::command]
 pub async fn pty_spawn(
@@ -16,7 +16,6 @@ pub async fn pty_spawn(
         .await
         .map_err(|e| format!("Failed to spawn PTY: {}", e))
 }
-
 
 #[tauri::command]
 pub async fn pty_write(
@@ -44,10 +43,7 @@ pub async fn pty_resize(
 }
 
 #[tauri::command]
-pub async fn pty_kill(
-    pty_mgr: State<'_, PtyManager>,
-    task_id: String,
-) -> Result<(), String> {
+pub async fn pty_kill(pty_mgr: State<'_, PtyManager>, task_id: String) -> Result<(), String> {
     pty_mgr
         .kill_pty(&task_id)
         .await
@@ -80,7 +76,14 @@ pub async fn pty_spawn_shell(
     terminal_index: Option<u32>,
 ) -> Result<u64, String> {
     pty_mgr
-        .spawn_shell_pty(&task_id, std::path::Path::new(&cwd), cols, rows, terminal_index, app)
+        .spawn_shell_pty(
+            &task_id,
+            std::path::Path::new(&cwd),
+            cols,
+            rows,
+            terminal_index,
+            app,
+        )
         .await
         .map_err(|e| format!("Failed to spawn shell PTY: {}", e))
 }

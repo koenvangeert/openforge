@@ -1,6 +1,9 @@
-use std::sync::{Mutex, Arc};
+use crate::{
+    db, opencode_client::OpenCodeClient, pty_manager::PtyManager, server_manager::ServerManager,
+    sse_bridge::SseBridgeManager,
+};
+use std::sync::{Arc, Mutex};
 use tauri::State;
-use crate::{db, opencode_client::OpenCodeClient, server_manager::ServerManager, sse_bridge::SseBridgeManager, pty_manager::PtyManager};
 
 #[tauri::command]
 pub async fn get_session_status(
@@ -39,17 +42,28 @@ pub async fn abort_session(
         pty_mgr.inner().clone(),
         server_mgr.inner().clone(),
         sse_mgr.inner().clone(),
-    ).map_err(|e| format!("Unknown provider: {}", e))?;
+    )
+    .map_err(|e| format!("Unknown provider: {}", e))?;
 
     // 3. Abort via provider (handles PTY kill for Claude, HTTP abort + SSE/server stop for OpenCode)
     let _ = provider.abort(task_id, &session).await;
 
     // 4. Update session status (orchestration-level concern)
     // Claude uses "interrupted", OpenCode uses "failed"
-    let abort_status = if session.provider == "claude-code" { "interrupted" } else { "failed" };
+    let abort_status = if session.provider == "claude-code" {
+        "interrupted"
+    } else {
+        "failed"
+    };
     {
         let db_lock = crate::db::acquire_db(&db);
-        let _ = db_lock.update_agent_session(&session.id, "implementing", abort_status, None, Some("Aborted by user"));
+        let _ = db_lock.update_agent_session(
+            &session.id,
+            "implementing",
+            abort_status,
+            None,
+            Some("Aborted by user"),
+        );
     }
 
     // 5. Update worktree status for OpenCode
@@ -112,8 +126,8 @@ pub async fn get_session_output(
     let port = match existing_port {
         Some(port) => port,
         None => {
-            let wt_path = worktree_path
-                .ok_or_else(|| "No worktree found for this task".to_string())?;
+            let wt_path =
+                worktree_path.ok_or_else(|| "No worktree found for this task".to_string())?;
             server_mgr
                 .spawn_server(&task_id, std::path::Path::new(&wt_path))
                 .await

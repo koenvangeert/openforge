@@ -1,3 +1,5 @@
+use log::{debug, error, info};
+use regex::Regex;
 use std::collections::HashMap;
 use std::fmt;
 use std::io;
@@ -5,12 +7,10 @@ use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::Arc;
 use std::time::Duration;
-use log::{error, info, debug};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::{Child, Command};
 use tokio::sync::Mutex;
 use tokio::time::{sleep, timeout};
-use regex::Regex;
 
 const HEALTH_CHECK_RETRIES: u32 = 10;
 const HEALTH_CHECK_INTERVAL: Duration = Duration::from_millis(500);
@@ -34,10 +34,16 @@ impl fmt::Display for ServerError {
         match self {
             ServerError::SpawnFailed(msg) => write!(f, "Failed to spawn server: {}", msg),
             ServerError::PortDetectionTimeout => {
-                write!(f, "Port detection timed out after {} seconds", PORT_DETECTION_TIMEOUT.as_secs())
+                write!(
+                    f,
+                    "Port detection timed out after {} seconds",
+                    PORT_DETECTION_TIMEOUT.as_secs()
+                )
             }
             ServerError::HealthCheckFailed(msg) => write!(f, "Health check failed: {}", msg),
-            ServerError::ProcessNotFound(task_id) => write!(f, "No server process found for task: {}", task_id),
+            ServerError::ProcessNotFound(task_id) => {
+                write!(f, "No server process found for task: {}", task_id)
+            }
             ServerError::IoError(e) => write!(f, "IO error: {}", e),
         }
     }
@@ -91,17 +97,30 @@ impl ServerManager {
     /// # Arguments
     /// * `task_id` - Unique identifier for the task
     /// * `worktree_path` - Working directory for the OpenCode server
-    pub async fn spawn_server(&self, task_id: &str, worktree_path: &Path) -> Result<u16, ServerError> {
+    pub async fn spawn_server(
+        &self,
+        task_id: &str,
+        worktree_path: &Path,
+    ) -> Result<u16, ServerError> {
         let mut servers = self.servers.lock().await;
 
         if let Some(server) = servers.get(task_id) {
-            info!("Server already running for task {}: port {}", task_id, server.port);
+            info!(
+                "Server already running for task {}: port {}",
+                task_id, server.port
+            );
             return Ok(server.port);
         }
 
-        info!("Spawning OpenCode server for task {} in {:?}", task_id, worktree_path);
+        info!(
+            "Spawning OpenCode server for task {} in {:?}",
+            task_id, worktree_path
+        );
         debug!("Spawning command: opencode");
-        debug!("OpenCode server working directory: {}", worktree_path.display());
+        debug!(
+            "OpenCode server working directory: {}",
+            worktree_path.display()
+        );
 
         let pid_dir = self.get_pid_dir()?;
         std::fs::create_dir_all(&pid_dir)?;
@@ -109,7 +128,7 @@ impl ServerManager {
         let mut child = Command::new("opencode")
             .arg("serve")
             .arg("--port")
-            .arg("0")  // Dynamic port allocation
+            .arg("0") // Dynamic port allocation
             .current_dir(worktree_path)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -117,11 +136,16 @@ impl ServerManager {
             .spawn()
             .map_err(|e| ServerError::SpawnFailed(e.to_string()))?;
 
-        let pid = child.id().ok_or_else(|| ServerError::SpawnFailed("Failed to get PID".to_string()))?;
+        let pid = child
+            .id()
+            .ok_or_else(|| ServerError::SpawnFailed("Failed to get PID".to_string()))?;
 
         let port = self.detect_port(&mut child).await?;
 
-        info!("Server for task {} started on port {} (PID: {})", task_id, port, pid);
+        info!(
+            "Server for task {} started on port {} (PID: {})",
+            task_id, port, pid
+        );
 
         self.wait_for_health(port).await?;
 
@@ -130,14 +154,7 @@ impl ServerManager {
         let pid_file = pid_dir.join(format!("{}.pid", task_id));
         std::fs::write(&pid_file, pid.to_string())?;
 
-        servers.insert(
-            task_id.to_string(),
-            ManagedServer {
-                child,
-                port,
-                pid,
-            },
-        );
+        servers.insert(task_id.to_string(), ManagedServer { child, port, pid });
 
         Ok(port)
     }
@@ -150,11 +167,14 @@ impl ServerManager {
     pub async fn stop_server(&self, task_id: &str) -> Result<(), ServerError> {
         let mut servers = self.servers.lock().await;
 
-        let mut server = servers.remove(task_id).ok_or_else(|| {
-            ServerError::ProcessNotFound(task_id.to_string())
-        })?;
+        let mut server = servers
+            .remove(task_id)
+            .ok_or_else(|| ServerError::ProcessNotFound(task_id.to_string()))?;
 
-        info!("Stopping server for task {} (PID: {}) — force killing", task_id, server.pid);
+        info!(
+            "Stopping server for task {} (PID: {}) — force killing",
+            task_id, server.pid
+        );
 
         server.child.kill().await?;
         let _ = server.child.wait().await;
@@ -236,11 +256,14 @@ impl ServerManager {
             };
 
             let is_running = unsafe {
-                libc::kill(pid, 0) == 0  // Signal 0 checks process existence
+                libc::kill(pid, 0) == 0 // Signal 0 checks process existence
             };
 
             if !is_running {
-                info!("[cleanup] Removing stale PID file (process dead): {:?}", path);
+                info!(
+                    "[cleanup] Removing stale PID file (process dead): {:?}",
+                    path
+                );
                 let _ = std::fs::remove_file(&path);
             } else {
                 // Process is alive — verify it's actually opencode before killing
@@ -254,12 +277,18 @@ impl ServerManager {
                     .unwrap_or(false);
 
                 if is_opencode {
-                    info!("[cleanup] Force killing orphaned opencode process (PID: {})", pid);
+                    info!(
+                        "[cleanup] Force killing orphaned opencode process (PID: {})",
+                        pid
+                    );
                     unsafe {
                         libc::kill(pid, libc::SIGKILL);
                     }
                 } else {
-                    info!("[cleanup] PID {} is not opencode (PID reuse), removing stale file: {:?}", pid, path);
+                    info!(
+                        "[cleanup] PID {} is not opencode (PID reuse), removing stale file: {:?}",
+                        pid, path
+                    );
                 }
                 let _ = std::fs::remove_file(&path);
             }
@@ -277,17 +306,29 @@ impl ServerManager {
         if let Some(ref dir) = self.pid_dir_override {
             return Ok(dir.clone());
         }
-        let home = dirs::home_dir()
-            .ok_or_else(|| ServerError::IoError(io::Error::new(io::ErrorKind::NotFound, "Home directory not found")))?;
-        let pids_dir_name = if cfg!(debug_assertions) { "pids-dev" } else { "pids" };
+        let home = dirs::home_dir().ok_or_else(|| {
+            ServerError::IoError(io::Error::new(
+                io::ErrorKind::NotFound,
+                "Home directory not found",
+            ))
+        })?;
+        let pids_dir_name = if cfg!(debug_assertions) {
+            "pids-dev"
+        } else {
+            "pids"
+        };
         Ok(home.join(".openforge").join(pids_dir_name))
     }
 
     /// Detects the dynamically assigned port by parsing stdout and stderr for "127.0.0.1:(\d+)"
     async fn detect_port(&self, child: &mut Child) -> Result<u16, ServerError> {
-        let stdout = child.stdout.take()
+        let stdout = child
+            .stdout
+            .take()
             .ok_or_else(|| ServerError::SpawnFailed("Failed to capture stdout".to_string()))?;
-        let stderr = child.stderr.take()
+        let stderr = child
+            .stderr
+            .take()
             .ok_or_else(|| ServerError::SpawnFailed("Failed to capture stderr".to_string()))?;
 
         let port_regex = Regex::new(r"127\.0\.0\.1:(\d+)")
@@ -358,7 +399,11 @@ impl ServerManager {
         for attempt in 1..=HEALTH_CHECK_RETRIES {
             match client.get(&health_url).send().await {
                 Ok(response) if response.status().is_success() => {
-                    debug!("Health check passed for port {}: {}", port, response.status());
+                    debug!(
+                        "Health check passed for port {}: {}",
+                        port,
+                        response.status()
+                    );
                     return Ok(());
                 }
                 Ok(_response) => {}
@@ -370,7 +415,10 @@ impl ServerManager {
             }
         }
 
-        Err(ServerError::HealthCheckFailed(format!("Failed after {} retries", HEALTH_CHECK_RETRIES)))
+        Err(ServerError::HealthCheckFailed(format!(
+            "Failed after {} retries",
+            HEALTH_CHECK_RETRIES
+        )))
     }
 }
 
@@ -418,7 +466,7 @@ mod tests {
     async fn test_get_any_server_port_for_project() {
         let manager = ServerManager::new();
         let task_ids = vec!["task1".to_string(), "task2".to_string()];
-        
+
         // Should return None when no servers are running
         let port = manager.get_any_server_port_for_project(&task_ids).await;
         assert_eq!(port, None);
@@ -491,7 +539,10 @@ mod tests {
 
         let result = manager.cleanup_stale_pids();
         assert!(result.is_ok());
-        assert!(!pid_file.exists(), "Stale PID file for dead process should be removed");
+        assert!(
+            !pid_file.exists(),
+            "Stale PID file for dead process should be removed"
+        );
 
         let _ = std::fs::remove_dir_all(&tmp_dir);
     }
@@ -500,13 +551,22 @@ mod tests {
     fn test_get_pid_dir_default() {
         let manager = ServerManager::new();
         let pid_dir = manager.get_pid_dir().expect("get_pid_dir should succeed");
-        
+
         // In test builds, debug_assertions is enabled, so we expect "pids-dev"
         let dir_name = pid_dir.file_name().unwrap().to_str().unwrap();
-        assert_eq!(dir_name, "pids-dev", "Debug build should use pids-dev directory");
-        
+        assert_eq!(
+            dir_name, "pids-dev",
+            "Debug build should use pids-dev directory"
+        );
+
         // Verify parent is .openforge
-        let parent_name = pid_dir.parent().unwrap().file_name().unwrap().to_str().unwrap();
+        let parent_name = pid_dir
+            .parent()
+            .unwrap()
+            .file_name()
+            .unwrap()
+            .to_str()
+            .unwrap();
         assert_eq!(parent_name, ".openforge");
     }
 
@@ -522,7 +582,10 @@ mod tests {
 
         let result = manager.cleanup_stale_pids();
         assert!(result.is_ok());
-        assert!(non_pid_file.exists(), "Non-.pid files should not be removed");
+        assert!(
+            non_pid_file.exists(),
+            "Non-.pid files should not be removed"
+        );
 
         let _ = std::fs::remove_dir_all(&tmp_dir);
     }

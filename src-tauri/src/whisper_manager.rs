@@ -321,7 +321,10 @@ impl WhisperManager {
             *path_guard = None;
             let mut loaded_guard = self.loaded_model.write().unwrap();
             *loaded_guard = None;
-            info!("[whisper] Unloaded model (switching from {} to {})", previous, size);
+            info!(
+                "[whisper] Unloaded model (switching from {} to {})",
+                previous, size
+            );
         }
     }
 
@@ -609,7 +612,10 @@ impl WhisperManager {
         })?;
 
         let path_str = dest_path.to_string_lossy().to_string();
-        info!("[whisper] Model downloaded and verified: {} ({})", size, path_str);
+        info!(
+            "[whisper] Model downloaded and verified: {} ({})",
+            size, path_str
+        );
         Ok(path_str)
     }
 }

@@ -458,7 +458,9 @@ async fn get_parent_sha(worktree_path: &str, commit_sha: &str) -> Result<String,
         .map_err(|e| format!("Failed to run git rev-parse: {}", e))?;
 
     if parent_output.status.success() {
-        Ok(String::from_utf8_lossy(&parent_output.stdout).trim().to_string())
+        Ok(String::from_utf8_lossy(&parent_output.stdout)
+            .trim()
+            .to_string())
     } else {
         // Root commit — use git's empty tree SHA
         Ok("4b825dc642cb6eb9a060e54bf899d15006245d1a".to_string())

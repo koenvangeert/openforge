@@ -43,7 +43,7 @@ pub async fn start_jira_sync(app: AppHandle) {
 
     loop {
         let db = app.state::<Arc<Mutex<Database>>>();
-        
+
         let poll_interval = {
             let db_lock = db.lock().unwrap();
             db_lock
@@ -101,7 +101,6 @@ pub async fn start_jira_sync(app: AppHandle) {
         let mut total_updated = 0;
 
         for project in projects {
-
             let tasks_result = {
                 let db_lock = db.lock().unwrap();
                 db_lock.get_tasks_for_project(&project.id)
@@ -145,12 +144,7 @@ pub async fn start_jira_sync(app: AppHandle) {
             );
 
             match jira_client
-                .search_issues(
-                    &jira_base_url,
-                    &jira_username,
-                    &jira_api_token,
-                    &jql,
-                )
+                .search_issues(&jira_base_url, &jira_username, &jira_api_token, &jql)
                 .await
             {
                 Ok(issues) => {
@@ -169,13 +163,20 @@ pub async fn start_jira_sync(app: AppHandle) {
                             .as_ref()
                             .map(|u| u.display_name.clone())
                             .unwrap_or_default();
-                        let jira_description = issue.rendered_fields
+                        let jira_description = issue
+                            .rendered_fields
                             .as_ref()
                             .and_then(|rf| rf.description.clone())
                             .unwrap_or_default();
 
                         let db_lock = db.lock().unwrap();
-                        match db_lock.update_task_jira_info(&issue.key, &jira_title, &jira_status, &assignee, &jira_description) {
+                        match db_lock.update_task_jira_info(
+                            &issue.key,
+                            &jira_title,
+                            &jira_status,
+                            &assignee,
+                            &jira_description,
+                        ) {
                             Ok(count) => updated += count,
                             Err(e) => {
                                 warn!("[JIRA Sync] Failed to update {}: {}", issue.key, e)
@@ -210,4 +211,3 @@ pub async fn start_jira_sync(app: AppHandle) {
         sleep(Duration::from_secs(poll_interval)).await;
     }
 }
-

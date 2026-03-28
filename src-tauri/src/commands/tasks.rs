@@ -1,7 +1,13 @@
+use crate::{
+    db::{self, BoardStatus},
+    git_worktree,
+    pty_manager::PtyManager,
+    server_manager::ServerManager,
+    sse_bridge::SseBridgeManager,
+};
 use log::error;
-use std::sync::{Mutex, Arc};
-use tauri::{State, Emitter};
-use crate::{db::{self, BoardStatus}, server_manager::ServerManager, sse_bridge::SseBridgeManager, pty_manager::PtyManager, git_worktree};
+use std::sync::{Arc, Mutex};
+use tauri::{Emitter, State};
 
 #[tauri::command]
 pub async fn get_tasks(
@@ -45,9 +51,21 @@ pub async fn create_task(
     permission_mode: Option<String>,
 ) -> Result<db::TaskRow, String> {
     let db = crate::db::acquire_db(&db);
-    let task = db.create_task(&initial_prompt, status.as_str(), jira_key.as_deref(), project_id.as_deref(), prompt.as_deref(), agent.as_deref(), permission_mode.as_deref())
+    let task = db
+        .create_task(
+            &initial_prompt,
+            status.as_str(),
+            jira_key.as_deref(),
+            project_id.as_deref(),
+            prompt.as_deref(),
+            agent.as_deref(),
+            permission_mode.as_deref(),
+        )
         .map_err(|e| format!("Failed to create task: {}", e))?;
-    let _ = app.emit("task-changed", serde_json::json!({ "action": "created", "task_id": task.id }));
+    let _ = app.emit(
+        "task-changed",
+        serde_json::json!({ "action": "created", "task_id": task.id }),
+    );
     Ok(task)
 }
 
@@ -62,7 +80,10 @@ pub async fn update_task(
     let db = crate::db::acquire_db(&db);
     db.update_task(&id, &initial_prompt, jira_key.as_deref())
         .map_err(|e| format!("Failed to update task: {}", e))?;
-    let _ = app.emit("task-changed", serde_json::json!({ "action": "updated", "task_id": id }));
+    let _ = app.emit(
+        "task-changed",
+        serde_json::json!({ "action": "updated", "task_id": id }),
+    );
     Ok(())
 }
 
@@ -77,7 +98,10 @@ pub async fn update_task_initial_prompt_and_summary(
     let db = crate::db::acquire_db(&db);
     db.update_task_title_and_summary(&id, initial_prompt.as_deref(), summary.as_deref())
         .map_err(|e| format!("Failed to update task initial prompt and summary: {}", e))?;
-    let _ = app.emit("task-changed", serde_json::json!({ "action": "updated", "task_id": id }));
+    let _ = app.emit(
+        "task-changed",
+        serde_json::json!({ "action": "updated", "task_id": id }),
+    );
     Ok(())
 }
 
@@ -99,7 +123,10 @@ pub async fn update_task_status(
             let _ = db.update_task_workspace_status(&id, "completed");
         }
     }
-    let _ = app.emit("task-changed", serde_json::json!({ "action": "updated", "task_id": id }));
+    let _ = app.emit(
+        "task-changed",
+        serde_json::json!({ "action": "updated", "task_id": id }),
+    );
 
     if status == BoardStatus::Done {
         let _ = pty_mgr.kill_pty(&id).await;
@@ -160,7 +187,13 @@ pub async fn delete_task(
     if let Some(worktree) = worktree {
         let repo_path = std::path::Path::new(&worktree.repo_path);
         let worktree_path = std::path::Path::new(&worktree.worktree_path);
-        if let Err(e) = git_worktree::remove_worktree_with_branch(repo_path, worktree_path, Some(&worktree.branch_name)).await {
+        if let Err(e) = git_worktree::remove_worktree_with_branch(
+            repo_path,
+            worktree_path,
+            Some(&worktree.branch_name),
+        )
+        .await
+        {
             error!(
                 "[delete_task] Failed to remove worktree at {}: {}",
                 worktree_path.display(),
@@ -173,7 +206,10 @@ pub async fn delete_task(
     db_lock
         .delete_task(&id)
         .map_err(|e| format!("Failed to delete task: {}", e))?;
-    let _ = app.emit("task-changed", serde_json::json!({ "action": "deleted", "task_id": id }));
+    let _ = app.emit(
+        "task-changed",
+        serde_json::json!({ "action": "deleted", "task_id": id }),
+    );
     Ok(())
 }
 

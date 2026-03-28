@@ -1,10 +1,10 @@
-use base64::{Engine as _, engine::general_purpose};
+use base64::{engine::general_purpose, Engine as _};
 use futures::future::join_all;
 use log::warn;
 
-use super::GitHubClient;
 use super::error::GitHubError;
 use super::types::*;
+use super::GitHubClient;
 
 impl GitHubClient {
     pub async fn merge_pr(

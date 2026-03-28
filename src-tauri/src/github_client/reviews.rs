@@ -2,9 +2,9 @@ use std::collections::HashMap;
 
 use log::warn;
 
-use super::GitHubClient;
 use super::error::GitHubError;
 use super::types::*;
+use super::GitHubClient;
 
 impl GitHubClient {
     /// Fetch positioned review comments for a PR

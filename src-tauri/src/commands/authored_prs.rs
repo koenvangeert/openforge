@@ -8,8 +8,8 @@ use tauri::State;
 use crate::{
     db,
     github_client::{
-        GitHubClient, PrRef, SearchPrResult, dedupe_pr_refs,
-        extract_authored_pr_refs_from_user_events,
+        dedupe_pr_refs, extract_authored_pr_refs_from_user_events, GitHubClient, PrRef,
+        SearchPrResult,
     },
 };
 

@@ -28,10 +28,15 @@ describe('getOpenCodeSessionUpdate', () => {
     })
   })
 
-  it('maps question and permission events to paused', () => {
+  it('maps question and permission request events to paused', () => {
     expect(getOpenCodeSessionUpdate('question.asked', 'Need approval')).toEqual({
       status: 'paused',
       checkpoint_data: 'Need approval',
+    })
+
+    expect(getOpenCodeSessionUpdate('permission.asked', 'Need permission')).toEqual({
+      status: 'paused',
+      checkpoint_data: 'Need permission',
     })
 
     expect(getOpenCodeSessionUpdate('permission.updated', 'Need permission')).toEqual({
@@ -40,7 +45,17 @@ describe('getOpenCodeSessionUpdate', () => {
     })
   })
 
-  it('maps reply events back to running', () => {
+  it('maps reply and reject events back to running', () => {
+    expect(getOpenCodeSessionUpdate('question.replied', 'approved')).toEqual({
+      status: 'running',
+      checkpoint_data: null,
+    })
+
+    expect(getOpenCodeSessionUpdate('question.rejected', 'denied')).toEqual({
+      status: 'running',
+      checkpoint_data: null,
+    })
+
     expect(getOpenCodeSessionUpdate('question.answered', 'approved')).toEqual({
       status: 'running',
       checkpoint_data: null,

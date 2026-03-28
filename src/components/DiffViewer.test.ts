@@ -1,19 +1,19 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/svelte'
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import DiffViewer from './DiffViewer.svelte'
-import type { PrFileDiff } from '../lib/types'
+import { fireEvent, render, screen, waitFor } from '@testing-library/svelte'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { toGitDiffViewData } from '../lib/diffAdapter'
+import type { PrFileDiff } from '../lib/types'
+import DiffViewer from './DiffViewer.svelte'
 
-
-
-
-
+const { mockDiffView, mockDiffHighlighter } = vi.hoisted(() => ({
+  mockDiffView: vi.fn().mockReturnValue(null),
+  mockDiffHighlighter: { name: 'test-highlighter', type: 'class' },
+}))
 // ============================================================================
 // Module Mocks
 // ============================================================================
 
 vi.mock('@git-diff-view/svelte', () => ({
-  DiffView: vi.fn().mockReturnValue(null),
+  DiffView: mockDiffView,
   DiffModeEnum: { Split: 0, Unified: 1 },
   SplitSide: { old: 1, new: 2 },
 }))
@@ -47,7 +47,7 @@ vi.mock('../lib/diffComments', () => ({
 }))
 
 vi.mock('../lib/diffHighlighter', () => ({
-  diffHighlighter: vi.fn(),
+  diffHighlighter: mockDiffHighlighter,
 }))
 
 vi.mock('../lib/useVirtualizer.svelte', () => ({
@@ -86,6 +86,24 @@ globalThis.Highlight = class MockHighlight {
 describe('DiffViewer Search', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+  })
+
+  it('passes the configured registerHighlighter through to DiffView', async () => {
+    const diffFile = { clearId: vi.fn() }
+    const { createDiffWorker } = await import('../lib/useDiffWorker.svelte')
+    vi.mocked(createDiffWorker).mockReturnValue({
+      getDiffFile: () => diffFile as never,
+      processing: false,
+    })
+
+    render(DiffViewer, { props: { files: [fileWithPatch] } })
+
+    await waitFor(() => {
+      expect(mockDiffView).toHaveBeenCalled()
+    })
+
+    const lastCall = mockDiffView.mock.calls.at(-1)
+    expect(lastCall?.[1]?.registerHighlighter).toBe(mockDiffHighlighter)
   })
 
   // --------------------------------------------------------------------------
