@@ -1,8 +1,8 @@
 use std::collections::HashSet;
 
-use super::GitHubClient;
 use super::error::GitHubError;
 use super::types::{GitHubEvent, PrRef};
+use super::GitHubClient;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct RepoEventChanges {

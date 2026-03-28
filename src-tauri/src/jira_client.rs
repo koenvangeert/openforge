@@ -104,7 +104,6 @@ impl JiraClient {
 
         Ok(search_response.issues)
     }
-
 }
 
 impl Default for JiraClient {
@@ -262,7 +261,9 @@ mod tests {
         let input = "user@example.com:token123";
         let encoded = base64_encode(input);
         // Verify it's valid base64 (should not contain invalid chars)
-        assert!(encoded.chars().all(|c| c.is_alphanumeric() || c == '+' || c == '/' || c == '='));
+        assert!(encoded
+            .chars()
+            .all(|c| c.is_alphanumeric() || c == '+' || c == '/' || c == '='));
     }
 
     #[test]
