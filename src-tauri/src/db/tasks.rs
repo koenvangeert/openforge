@@ -1342,4 +1342,48 @@ mod tests {
         drop(db);
         let _ = fs::remove_file(&path);
     }
+
+    #[test]
+    fn test_board_status_parses_canonical_and_legacy_values() {
+        use crate::db::BoardStatus;
+        use std::str::FromStr;
+
+        assert_eq!(
+            BoardStatus::from_str("backlog").unwrap(),
+            BoardStatus::Backlog
+        );
+        assert_eq!(BoardStatus::from_str("todo").unwrap(), BoardStatus::Backlog);
+        assert_eq!(BoardStatus::from_str("doing").unwrap(), BoardStatus::Doing);
+        assert_eq!(
+            BoardStatus::from_str("in_progress").unwrap(),
+            BoardStatus::Doing
+        );
+        assert_eq!(BoardStatus::from_str("done").unwrap(), BoardStatus::Done);
+    }
+
+    #[test]
+    fn test_board_status_rejects_unknown_values() {
+        use crate::db::BoardStatus;
+        use std::str::FromStr;
+
+        assert!(BoardStatus::from_str("wat").is_err());
+    }
+
+    #[test]
+    fn test_board_status_serializes_to_canonical_lowercase_strings() {
+        use crate::db::BoardStatus;
+
+        assert_eq!(
+            serde_json::to_string(&BoardStatus::Backlog).unwrap(),
+            "\"backlog\""
+        );
+        assert_eq!(
+            serde_json::to_string(&BoardStatus::Doing).unwrap(),
+            "\"doing\""
+        );
+        assert_eq!(
+            serde_json::to_string(&BoardStatus::Done).unwrap(),
+            "\"done\""
+        );
+    }
 }

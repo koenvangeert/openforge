@@ -1,7 +1,7 @@
 use log::error;
 use std::sync::{Mutex, Arc};
 use tauri::{State, Emitter};
-use crate::{db, server_manager::ServerManager, sse_bridge::SseBridgeManager, pty_manager::PtyManager, git_worktree};
+use crate::{db::{self, BoardStatus}, server_manager::ServerManager, sse_bridge::SseBridgeManager, pty_manager::PtyManager, git_worktree};
 
 #[tauri::command]
 pub async fn get_tasks(
@@ -37,7 +37,7 @@ pub async fn create_task(
     db: State<'_, Arc<Mutex<db::Database>>>,
     app: tauri::AppHandle,
     initial_prompt: String,
-    status: String,
+    status: BoardStatus,
     jira_key: Option<String>,
     project_id: Option<String>,
     prompt: Option<String>,
@@ -45,7 +45,7 @@ pub async fn create_task(
     permission_mode: Option<String>,
 ) -> Result<db::TaskRow, String> {
     let db = crate::db::acquire_db(&db);
-    let task = db.create_task(&initial_prompt, &status, jira_key.as_deref(), project_id.as_deref(), prompt.as_deref(), agent.as_deref(), permission_mode.as_deref())
+    let task = db.create_task(&initial_prompt, status.as_str(), jira_key.as_deref(), project_id.as_deref(), prompt.as_deref(), agent.as_deref(), permission_mode.as_deref())
         .map_err(|e| format!("Failed to create task: {}", e))?;
     let _ = app.emit("task-changed", serde_json::json!({ "action": "created", "task_id": task.id }));
     Ok(task)
@@ -89,19 +89,19 @@ pub async fn update_task_status(
     pty_mgr: State<'_, PtyManager>,
     app: tauri::AppHandle,
     id: String,
-    status: String,
+    status: BoardStatus,
 ) -> Result<(), String> {
     {
         let db = crate::db::acquire_db(&db);
-        db.update_task_status(&id, &status)
+        db.update_task_status(&id, status.as_str())
             .map_err(|e| format!("Failed to update task status: {}", e))?;
-        if status == "done" {
+        if status == BoardStatus::Done {
             let _ = db.update_task_workspace_status(&id, "completed");
         }
     }
     let _ = app.emit("task-changed", serde_json::json!({ "action": "updated", "task_id": id }));
 
-    if status == "done" {
+    if status == BoardStatus::Done {
         let _ = pty_mgr.kill_pty(&id).await;
         pty_mgr.kill_shells_for_task(&id).await;
         sse_mgr.stop_bridge(&id).await;
@@ -189,7 +189,7 @@ pub async fn clear_done_tasks(
     let task_ids = {
         let db_lock = crate::db::acquire_db(&db);
         db_lock
-            .get_task_ids_by_status(&project_id, "done")
+            .get_task_ids_by_status(&project_id, BoardStatus::Done.as_str())
             .map_err(|e| format!("Failed to get done tasks: {}", e))?
     };
 
