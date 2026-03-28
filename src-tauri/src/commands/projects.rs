@@ -1,6 +1,6 @@
-use std::sync::{Mutex, Arc};
-use tauri::State;
 use crate::db;
+use std::sync::{Arc, Mutex};
+use tauri::State;
 
 fn task_workspace_from_legacy(
     workspace: db::WorktreeRow,
@@ -147,7 +147,12 @@ pub async fn get_task_workspace(
 
     let provider_name = db
         .get_latest_session_for_ticket(&task_id)
-        .map_err(|e| format!("Failed to get latest session for task workspace fallback: {}", e))?
+        .map_err(|e| {
+            format!(
+                "Failed to get latest session for task workspace fallback: {}",
+                e
+            )
+        })?
         .map(|session| session.provider)
         .unwrap_or_else(|| "unknown".to_string());
 
@@ -156,7 +161,6 @@ pub async fn get_task_workspace(
         .map_err(|e| format!("Failed to get worktree for task workspace fallback: {}", e))?;
     Ok(worktree.map(|workspace| task_workspace_from_legacy(workspace, provider_name)))
 }
-
 
 #[tauri::command]
 pub async fn get_project_attention(

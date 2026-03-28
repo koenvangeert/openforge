@@ -1,8 +1,15 @@
-use std::sync::{Mutex, Arc};
-use tauri::{State, Emitter};
-use crate::{db, server_manager::ServerManager, sse_bridge::SseBridgeManager, git_worktree, pty_manager::PtyManager};
+use crate::{
+    db, git_worktree, pty_manager::PtyManager, server_manager::ServerManager,
+    sse_bridge::SseBridgeManager,
+};
+use std::sync::{Arc, Mutex};
+use tauri::{Emitter, State};
 
-pub fn build_task_prompt(task: &db::TaskRow, additional_instructions: Option<&str>, code_cleanup_enabled: bool) -> String {
+pub fn build_task_prompt(
+    task: &db::TaskRow,
+    additional_instructions: Option<&str>,
+    code_cleanup_enabled: bool,
+) -> String {
     let mut prompt = String::new();
 
     prompt.push_str(&format!(r#"<openforge_task_management>
@@ -111,7 +118,10 @@ pub(crate) fn activate_task(
 ) -> Result<(), String> {
     activate_task_status_update(db, task_id, current_status)?;
     if current_status == "backlog" {
-        let _ = app.emit("task-changed", serde_json::json!({ "action": "updated", "task_id": task_id }));
+        let _ = app.emit(
+            "task-changed",
+            serde_json::json!({ "action": "updated", "task_id": task_id }),
+        );
     }
     Ok(())
 }
@@ -131,8 +141,7 @@ pub(crate) fn build_start_response(
     })
 }
 
-
-    pub(crate) async fn abort_task_agent(
+pub(crate) async fn abort_task_agent(
     db: &State<'_, Arc<Mutex<db::Database>>>,
     server_mgr: &State<'_, ServerManager>,
     sse_mgr: &State<'_, SseBridgeManager>,
@@ -141,8 +150,14 @@ pub(crate) fn build_start_response(
 ) -> Result<(), String> {
     let (provider_name, session) = {
         let db_lock = crate::db::acquire_db(db);
-        let session = db_lock.get_latest_session_for_ticket(task_id).ok().flatten();
-        let provider = session.as_ref().map(|s| s.provider.clone()).unwrap_or_else(|| "claude-code".to_string());
+        let session = db_lock
+            .get_latest_session_for_ticket(task_id)
+            .ok()
+            .flatten();
+        let provider = session
+            .as_ref()
+            .map(|s| s.provider.clone())
+            .unwrap_or_else(|| "claude-code".to_string());
         (provider, session)
     };
 
@@ -151,7 +166,8 @@ pub(crate) fn build_start_response(
         pty_mgr.inner().clone(),
         server_mgr.inner().clone(),
         sse_mgr.inner().clone(),
-    ).map_err(|e| format!("Unknown provider: {}", e))?;
+    )
+    .map_err(|e| format!("Unknown provider: {}", e))?;
 
     pty_mgr.kill_shells_for_task(task_id).await;
 
@@ -161,8 +177,13 @@ pub(crate) fn build_start_response(
 
     if let Some(ref s) = session {
         let db_lock = crate::db::acquire_db(db);
-        let status = if provider_name == "claude-code" { "interrupted" } else { "failed" };
-        let _ = db_lock.update_agent_session(&s.id, &s.stage, status, None, Some("Aborted by user"));
+        let status = if provider_name == "claude-code" {
+            "interrupted"
+        } else {
+            "failed"
+        };
+        let _ =
+            db_lock.update_agent_session(&s.id, &s.stage, status, None, Some("Aborted by user"));
     }
 
     if provider_name != "claude-code" {
@@ -186,14 +207,17 @@ pub async fn start_implementation(
 ) -> Result<serde_json::Value, String> {
     let (task, project_id_owned, additional_instructions, code_cleanup_enabled, use_worktrees) = {
         let db = crate::db::acquire_db(&db);
-        let task = db.get_task(&task_id)
+        let task = db
+            .get_task(&task_id)
             .map_err(|e| format!("Failed to get task: {}", e))?
             .ok_or("Task not found")?;
         let project_id = task.project_id.clone().unwrap_or_default();
-        let instructions = db.get_project_config(&project_id, "additional_instructions")
+        let instructions = db
+            .get_project_config(&project_id, "additional_instructions")
             .ok()
             .flatten();
-        let cleanup = db.get_config("code_cleanup_tasks_enabled")
+        let cleanup = db
+            .get_config("code_cleanup_tasks_enabled")
             .ok()
             .flatten()
             .map(|v| v == "true")
@@ -212,10 +236,14 @@ pub async fn start_implementation(
         pty_mgr.inner().clone(),
         server_mgr.inner().clone(),
         sse_mgr.inner().clone(),
-    ).map_err(|e| format!("Unknown provider: {}", e))?;
+    )
+    .map_err(|e| format!("Unknown provider: {}", e))?;
 
     let (working_dir, workspace_kind, branch_name) = if use_worktrees {
-        let branch = git_worktree::slugify_branch_name(&task_id, task.prompt.as_deref().unwrap_or(&task.initial_prompt));
+        let branch = git_worktree::slugify_branch_name(
+            &task_id,
+            task.prompt.as_deref().unwrap_or(&task.initial_prompt),
+        );
         let home = dirs::home_dir().ok_or("Failed to get home directory")?;
         let repo_name = std::path::Path::new(&repo_path)
             .file_name()
@@ -253,7 +281,11 @@ pub async fn start_implementation(
         (std::path::PathBuf::from(&repo_path), "project_dir", None)
     };
 
-    let prompt = build_task_prompt(&task, additional_instructions.as_deref(), code_cleanup_enabled);
+    let prompt = build_task_prompt(
+        &task,
+        additional_instructions.as_deref(),
+        code_cleanup_enabled,
+    );
     let result = provider
         .start(
             &task_id,
@@ -276,7 +308,11 @@ pub async fn start_implementation(
             workspace_kind,
             branch_name.as_deref(),
             provider.provider_name(),
-            if provider_name == "claude-code" { None } else { Some(result.port as i64) },
+            if provider_name == "claude-code" {
+                None
+            } else {
+                Some(result.port as i64)
+            },
             "active",
         )
         .map_err(|e| format!("Failed to persist task workspace: {}", e))?;
@@ -315,7 +351,10 @@ pub async fn abort_implementation(
     task_id: String,
 ) -> Result<(), String> {
     abort_task_agent(&db, &server_mgr, &sse_mgr, &pty_mgr, &task_id).await?;
-    let _ = app.emit("task-changed", serde_json::json!({ "action": "updated", "task_id": task_id }));
+    let _ = app.emit(
+        "task-changed",
+        serde_json::json!({ "action": "updated", "task_id": task_id }),
+    );
     Ok(())
 }
 
@@ -328,7 +367,13 @@ pub async fn finalize_claude_session(
     let db_lock = crate::db::acquire_db(&db);
     if let Ok(Some(session)) = db_lock.get_latest_session_for_ticket(&task_id) {
         if session.provider == "claude-code" && session.status == "running" {
-            let _ = db_lock.update_agent_session(&session.id, &session.stage, "interrupted", None, Some("PTY process exited"));
+            let _ = db_lock.update_agent_session(
+                &session.id,
+                &session.stage,
+                "interrupted",
+                None,
+                Some("PTY process exited"),
+            );
             drop(db_lock);
             let _ = app.emit(
                 "agent-status-changed",
@@ -336,7 +381,7 @@ pub async fn finalize_claude_session(
                     "task_id": task_id,
                     "status": "interrupted",
                     "provider": "claude-code"
-                })
+                }),
             );
         }
     }
@@ -397,7 +442,7 @@ mod tests {
         };
 
         let prompt = build_task_prompt(&task, None, false);
-        
+
         assert!(prompt.contains("Minimal Task"));
         assert!(!prompt.contains("Plan:"));
         assert!(prompt.contains("openforge_update_task"));
@@ -425,7 +470,7 @@ mod tests {
         };
 
         let prompt = build_task_prompt(&task, None, false);
-        
+
         assert!(prompt.contains("Empty Fields Task"));
         assert!(!prompt.contains("Plan:"));
         assert!(prompt.contains("openforge_update_task"));
@@ -451,8 +496,12 @@ mod tests {
             permission_mode: None,
         };
 
-        let prompt = build_task_prompt(&task, Some("Always use TypeScript strict mode.\nFollow the project coding standards."), false);
-        
+        let prompt = build_task_prompt(
+            &task,
+            Some("Always use TypeScript strict mode.\nFollow the project coding standards."),
+            false,
+        );
+
         assert!(prompt.starts_with("<openforge_task_management>"));
         assert!(prompt.contains("Always use TypeScript strict mode."));
         assert!(prompt.contains("Instructions Task"));
@@ -483,7 +532,7 @@ mod tests {
 
         let prompt_with_empty = build_task_prompt(&task, Some(""), false);
         let prompt_with_none = build_task_prompt(&task, None, false);
-        
+
         assert_eq!(prompt_with_empty, prompt_with_none);
     }
 
@@ -619,7 +668,7 @@ mod tests {
         };
 
         let prompt = build_task_prompt(&task, None, false);
-        
+
         assert!(prompt.contains("Fix auth bug"));
         assert!(!prompt.contains("Auth fix"));
         assert!(prompt.contains("openforge_update_task"));
@@ -647,7 +696,7 @@ mod tests {
         };
 
         let prompt = build_task_prompt(&task, None, false);
-        
+
         assert!(prompt.contains("My task"));
         assert!(prompt.contains("openforge_update_task"));
         assert!(prompt.contains("T-777"));
@@ -686,7 +735,10 @@ mod tests {
 
         let mgmt_pos = prompt.find("<openforge_task_management>").unwrap();
         let task_prompt_pos = prompt.find("Add a login page").unwrap();
-        assert!(mgmt_pos < task_prompt_pos, "Task management section should come before task prompt");
+        assert!(
+            mgmt_pos < task_prompt_pos,
+            "Task management section should come before task prompt"
+        );
     }
 
     #[test]
@@ -761,7 +813,8 @@ mod tests {
         insert_test_task(&db);
         let db_arc = std::sync::Arc::new(std::sync::Mutex::new(db));
 
-        let result = create_and_record_session(&db_arc, "T-100", Some("opencode-sess-xyz"), "opencode");
+        let result =
+            create_and_record_session(&db_arc, "T-100", Some("opencode-sess-xyz"), "opencode");
         assert!(result.is_ok());
 
         drop(db_arc);
@@ -889,8 +942,14 @@ mod tests {
         let task_prompt_pos = prompt.find("Cleanup ordering").unwrap();
 
         // Cleanup section should be after task management but before the task prompt
-        assert!(mgmt_pos < cleanup_pos, "Task management should come before code cleanup");
-        assert!(cleanup_pos < task_prompt_pos, "Code cleanup should come before task prompt");
+        assert!(
+            mgmt_pos < cleanup_pos,
+            "Task management should come before code cleanup"
+        );
+        assert!(
+            cleanup_pos < task_prompt_pos,
+            "Code cleanup should come before task prompt"
+        );
     }
 
     #[test]
@@ -900,7 +959,11 @@ mod tests {
         insert_test_task(&db);
         let db_arc = std::sync::Arc::new(std::sync::Mutex::new(db));
 
-        db_arc.lock().unwrap().update_task_status("T-100", "doing").unwrap();
+        db_arc
+            .lock()
+            .unwrap()
+            .update_task_status("T-100", "doing")
+            .unwrap();
 
         let result = activate_task_status_update(&db_arc, "T-100", "doing");
         assert!(result.is_ok());
@@ -911,5 +974,4 @@ mod tests {
         drop(db_arc);
         let _ = std::fs::remove_file(&path);
     }
-
 }

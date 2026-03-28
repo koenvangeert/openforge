@@ -1,6 +1,9 @@
-use std::sync::{Mutex, Arc};
+use crate::{
+    db, git_worktree, opencode_client::OpenCodeClient, review_prompt,
+    server_manager::ServerManager, sse_bridge::SseBridgeManager,
+};
+use std::sync::{Arc, Mutex};
 use tauri::State;
-use crate::{db, opencode_client::OpenCodeClient, server_manager::ServerManager, sse_bridge::SseBridgeManager, git_worktree, review_prompt};
 
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
@@ -33,11 +36,9 @@ pub async fn start_agent_review(
     })?;
 
     // Step 2: Compute worktree path
-    let worktree_path = git_worktree::review_worktree_path(
-        std::path::Path::new(&project.path),
-        pr_number,
-    )
-    .map_err(|e| e.to_string())?;
+    let worktree_path =
+        git_worktree::review_worktree_path(std::path::Path::new(&project.path), pr_number)
+            .map_err(|e| e.to_string())?;
 
     // Step 3: Create/reuse worktree
     git_worktree::create_review_worktree(
@@ -66,17 +67,18 @@ pub async fn start_agent_review(
 
     // Step 7: Start SSE bridge
     sse_mgr
-        .start_bridge(app.clone(), synthetic_key.clone(), Some(opencode_session_id.clone()), port)
+        .start_bridge(
+            app.clone(),
+            synthetic_key.clone(),
+            Some(opencode_session_id.clone()),
+            port,
+        )
         .await
         .map_err(|e| e.to_string())?;
 
     // Step 8: Build prompt
-    let prompt = review_prompt::build_review_prompt(
-        &base_ref,
-        &head_ref,
-        &pr_title,
-        pr_body.as_deref(),
-    );
+    let prompt =
+        review_prompt::build_review_prompt(&base_ref, &head_ref, &pr_title, pr_body.as_deref());
 
     // Step 9: Send prompt
     client

@@ -1,7 +1,7 @@
-use std::sync::{Mutex, Arc};
-use tauri::State;
-use serde::Serialize;
 use crate::db;
+use serde::Serialize;
+use std::sync::{Arc, Mutex};
+use tauri::State;
 
 #[derive(Serialize)]
 pub struct OpenCodeInstallStatus {
@@ -20,9 +20,7 @@ pub struct ClaudeInstallStatus {
 
 #[tauri::command]
 pub async fn check_opencode_installed() -> Result<OpenCodeInstallStatus, String> {
-    let output = std::process::Command::new("which")
-        .arg("opencode")
-        .output();
+    let output = std::process::Command::new("which").arg("opencode").output();
 
     match output {
         Ok(out) if out.status.success() => {
@@ -54,9 +52,7 @@ pub async fn check_opencode_installed() -> Result<OpenCodeInstallStatus, String>
 
 #[tauri::command]
 pub async fn check_claude_installed() -> Result<ClaudeInstallStatus, String> {
-    let output = std::process::Command::new("which")
-        .arg("claude")
-        .output();
+    let output = std::process::Command::new("which").arg("claude").output();
 
     match output {
         Ok(out) if out.status.success() => {
@@ -102,7 +98,8 @@ pub async fn get_config(
         return crate::secure_store::get_secret(&key);
     }
     let db_lock = crate::db::acquire_db(&db);
-    db_lock.get_config(&key)
+    db_lock
+        .get_config(&key)
         .map_err(|e| format!("Failed to get config: {}", e))
 }
 
@@ -117,7 +114,8 @@ pub async fn set_config(
         return crate::secure_store::set_secret(&key, &value);
     }
     let db_lock = crate::db::acquire_db(&db);
-    db_lock.set_config(&key, &value)
+    db_lock
+        .set_config(&key, &value)
         .map_err(|e| format!("Failed to set config: {}", e))
 }
 

@@ -1,12 +1,10 @@
-use std::sync::{Mutex, Arc};
-use tauri::{Emitter, State};
-use crate::{db, github_poller};
 use crate::github_client::GitHubClient;
+use crate::{db, github_poller};
+use std::sync::{Arc, Mutex};
+use tauri::{Emitter, State};
 
 #[tauri::command]
-pub async fn force_github_sync(
-    app: tauri::AppHandle,
-) -> Result<github_poller::PollResult, String> {
+pub async fn force_github_sync(app: tauri::AppHandle) -> Result<github_poller::PollResult, String> {
     let github_client = crate::github_client::GitHubClient::new();
     let result = github_poller::poll_github_once(&app, &github_client).await;
     Ok(result)
@@ -15,12 +13,17 @@ pub async fn force_github_sync(
 fn validate_url_scheme(url: &str) -> Result<(), String> {
     let lower = url.to_lowercase();
     if lower.starts_with("http://") || lower.starts_with("https://") {
-        let rest = if lower.starts_with("https://") { &url[8..] } else { &url[7..] };
+        let rest = if lower.starts_with("https://") {
+            &url[8..]
+        } else {
+            &url[7..]
+        };
         if rest.is_empty() {
             return Err("Invalid URL format".to_string());
         }
         Ok(())
-    } else if url.contains("://") || lower.starts_with("javascript:") || lower.starts_with("data:") {
+    } else if url.contains("://") || lower.starts_with("javascript:") || lower.starts_with("data:")
+    {
         Err("Invalid URL: only http and https URLs are allowed".to_string())
     } else {
         Err("Invalid URL format".to_string())
@@ -99,7 +102,10 @@ pub async fn merge_pull_request(
         .map_err(|e| format!("Failed to merge pull request: {}", e))?;
 
     if !response.merged {
-        return Err(format!("Failed to merge pull request: {}", response.message));
+        return Err(format!(
+            "Failed to merge pull request: {}",
+            response.message
+        ));
     }
 
     Ok(())
