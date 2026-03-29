@@ -33,11 +33,6 @@ const baseTask: Task = {
   id: 'T-42',
   initial_prompt: 'Implement auth middleware',
   status: 'backlog',
-  jira_key: 'PROJ-123',
-  jira_title: null,
-  jira_status: 'To Do',
-  jira_assignee: 'Alice',
-  jira_description: null,
   prompt: 'Build the auth middleware implementation with JWT support',
   summary: null,
   agent: null,
@@ -80,38 +75,38 @@ describe('TaskInfoPanel', () => {
   }
 
   it('renders Initial Prompt section with task prompt', () => {
-    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null, jiraBaseUrl: '' } })
+    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null } })
     expect(screen.getByText('// INITIAL_PROMPT')).toBeTruthy()
     expect(screen.getByText('Build the auth middleware implementation with JWT support')).toBeTruthy()
   })
 
   it('renders prompt as read-only text (no input elements in prompt section)', () => {
-    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null, jiraBaseUrl: '' } })
+    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null } })
     const promptSection = screen.getByLabelText('Initial Prompt').closest('section')
     expect(promptSection?.querySelector('input')).toBeNull()
     expect(promptSection?.querySelector('textarea')).toBeNull()
   })
 
   it('renders // SUMMARY label', () => {
-    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null, jiraBaseUrl: '' } })
+    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null } })
     expect(screen.getByText('// SUMMARY')).toBeTruthy()
   })
 
   it('renders "No summary yet" in muted text when summary is null', () => {
-    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null, jiraBaseUrl: '' } })
+    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null } })
     expect(screen.getByText('No summary yet')).toBeTruthy()
   })
 
   it('renders summary content when summary is present', () => {
     const taskWithSummary = { ...baseTask, summary: 'Implemented JWT auth with refresh token support.' }
-    render(TaskInfoPanel, { props: { task: taskWithSummary, worktreePath: null, jiraBaseUrl: '' } })
+    render(TaskInfoPanel, { props: { task: taskWithSummary, worktreePath: null } })
     expect(screen.getByText('Implemented JWT auth with refresh token support.')).toBeTruthy()
     expect(screen.queryByText('No summary yet')).toBeNull()
   })
 
   it('renders literal \\n in summary as actual line breaks', () => {
     const taskWithNewlines = { ...baseTask, summary: 'Added feature.\\n\\nChanges:\\n- New file added' }
-    render(TaskInfoPanel, { props: { task: taskWithNewlines, worktreePath: null, jiraBaseUrl: '' } })
+    render(TaskInfoPanel, { props: { task: taskWithNewlines, worktreePath: null } })
     const summarySection = screen.getByLabelText('Summary').closest('section')
     expect(summarySection).not.toBeNull()
     if (!summarySection) {
@@ -125,14 +120,14 @@ describe('TaskInfoPanel', () => {
 
   it('renders summary as read-only text (no input elements in summary section)', () => {
     const taskWithSummary = { ...baseTask, summary: 'Done.' }
-    render(TaskInfoPanel, { props: { task: taskWithSummary, worktreePath: null, jiraBaseUrl: '' } })
+    render(TaskInfoPanel, { props: { task: taskWithSummary, worktreePath: null } })
     const summarySection = screen.getByLabelText('Summary').closest('section')
     expect(summarySection?.querySelector('input')).toBeNull()
     expect(summarySection?.querySelector('textarea')).toBeNull()
   })
 
   it('does not show Edit Task or Delete buttons', () => {
-    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null, jiraBaseUrl: '' } })
+    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null } })
     expect(screen.queryByText('Edit Task')).toBeNull()
     expect(screen.queryByText('Delete')).toBeNull()
   })
@@ -165,7 +160,7 @@ describe('TaskInfoPanel', () => {
 
     ticketPrs.set(new Map([['T-42', [prWithCi]]]))
 
-    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null, jiraBaseUrl: '' } })
+    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null } })
 
     await new Promise((r) => setTimeout(r, 10))
     expect(screen.getByText('// PIPELINE_STATUS')).toBeTruthy()
@@ -197,7 +192,7 @@ describe('TaskInfoPanel', () => {
 
     ticketPrs.set(new Map([['T-42', [draftPr]]]))
 
-    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null, jiraBaseUrl: '' } })
+    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null } })
 
     await new Promise((r) => setTimeout(r, 10))
     expect(screen.getByText('Draft')).toBeTruthy()
@@ -228,55 +223,21 @@ describe('TaskInfoPanel', () => {
 
     ticketPrs.set(new Map([['T-42', [openPr]]]))
 
-    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null, jiraBaseUrl: '' } })
+    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null } })
 
     await new Promise((r) => setTimeout(r, 10))
     expect(screen.queryByText('Draft')).toBeNull()
   })
 
   it('renders workspace path section when worktreePath is provided', () => {
-    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: '/home/user/worktrees/T-42', jiraBaseUrl: '' } })
+    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: '/home/user/worktrees/T-42' } })
     expect(screen.getByText('// WORKSPACE')).toBeTruthy()
     expect(screen.getByText('/home/user/worktrees/T-42')).toBeTruthy()
   })
 
   it('does not render workspace section when worktreePath is null', () => {
-    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null, jiraBaseUrl: '' } })
+    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null } })
     expect(screen.queryByText('// WORKSPACE')).toBeNull()
-  })
-
-  it('renders // JIRA section when task has jira_key and jiraBaseUrl', () => {
-    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null, jiraBaseUrl: 'https://jira.example.com' } })
-    expect(screen.getByText('// JIRA')).toBeTruthy()
-  })
-
-  it('does not render // JIRA section when jira_key is null', () => {
-    const taskWithoutJira = { ...baseTask, jira_key: null }
-    render(TaskInfoPanel, { props: { task: taskWithoutJira, worktreePath: null, jiraBaseUrl: 'https://jira.example.com' } })
-    expect(screen.queryByText('// JIRA')).toBeNull()
-  })
-
-  it('renders jira_title in Jira section when available', () => {
-    const taskWithJiraTitle = { ...baseTask, jira_title: 'Fix login bug' }
-    render(TaskInfoPanel, { props: { task: taskWithJiraTitle, worktreePath: null, jiraBaseUrl: 'https://jira.example.com' } })
-    expect(screen.getByText('Fix login bug')).toBeTruthy()
-  })
-
-  it('renders Open in Jira button when jiraBaseUrl provided', () => {
-    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null, jiraBaseUrl: 'https://jira.example.com' } })
-    expect(screen.getByText('Open in Jira ↗')).toBeTruthy()
-  })
-
-  it('does not render Open in Jira button when jiraBaseUrl is empty', () => {
-    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null, jiraBaseUrl: '' } })
-    expect(screen.queryByText('Open in Jira ↗')).toBeNull()
-  })
-
-  it('calls openUrl with correct Jira URL on click', async () => {
-    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null, jiraBaseUrl: 'https://jira.example.com' } })
-    const button = screen.getByText('Open in Jira ↗')
-    await fireEvent.click(button)
-    expect(openUrl).toHaveBeenCalledWith('https://jira.example.com/browse/PROJ-123')
   })
 
   it('renders Merge button when PR is ready to merge', async () => {
@@ -289,7 +250,7 @@ describe('TaskInfoPanel', () => {
 
     ticketPrs.set(new Map([['T-42', [readyPr]]]))
 
-    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null, jiraBaseUrl: '' } })
+    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null } })
 
     await screen.findByRole('button', { name: 'Merge' })
     expect(screen.getByText(/Ready to Merge/)).toBeTruthy()
@@ -305,7 +266,7 @@ describe('TaskInfoPanel', () => {
 
     ticketPrs.set(new Map([['T-42', [readyPr]]]))
 
-    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null, jiraBaseUrl: '' } })
+    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null } })
 
     await screen.findByRole('button', { name: 'Merge' })
     expect(screen.getByText(/Ready to Merge/)).toBeTruthy()
@@ -321,7 +282,7 @@ describe('TaskInfoPanel', () => {
 
     ticketPrs.set(new Map([['T-42', [readyPr]]]))
 
-    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null, jiraBaseUrl: '' } })
+    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null } })
 
     await screen.findByRole('button', { name: 'Merge' })
     expect(screen.getByText(/Ready to Merge/)).toBeTruthy()
@@ -338,7 +299,7 @@ describe('TaskInfoPanel', () => {
 
     ticketPrs.set(new Map([['T-42', [queuedPr]]]))
 
-    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null, jiraBaseUrl: '' } })
+    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null } })
 
     await new Promise((r) => setTimeout(r, 10))
     expect(screen.queryByRole('button', { name: 'Merge' })).toBeNull()
@@ -356,7 +317,7 @@ describe('TaskInfoPanel', () => {
 
     ticketPrs.set(new Map([['T-42', [queuedPr]]]))
 
-    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null, jiraBaseUrl: '' } })
+    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null } })
 
     await new Promise((r) => setTimeout(r, 10))
     expect(screen.getByText(/In Merge Queue/)).toBeTruthy()
@@ -371,7 +332,7 @@ describe('TaskInfoPanel', () => {
 
     ticketPrs.set(new Map([['T-42', [conflictedPr]]]))
 
-    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null, jiraBaseUrl: '' } })
+    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null } })
 
     await new Promise((r) => setTimeout(r, 10))
     expect(screen.getByText('Merge Conflict')).toBeTruthy()
@@ -388,7 +349,7 @@ describe('TaskInfoPanel', () => {
     ticketPrs.set(new Map([['T-42', [readyPr]]]))
     vi.mocked(getPullRequests).mockResolvedValue([readyPr])
 
-    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null, jiraBaseUrl: '' } })
+    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null } })
 
     await fireEvent.click(await screen.findByRole('button', { name: 'Merge' }))
 
@@ -410,7 +371,7 @@ describe('TaskInfoPanel', () => {
     ticketPrs.set(new Map([['T-42', [readyPr]]]))
     vi.mocked(getPullRequests).mockResolvedValue([readyPr])
 
-    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null, jiraBaseUrl: '' } })
+    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null } })
 
     await fireEvent.click(await screen.findByRole('button', { name: 'Merge' }))
 
@@ -430,7 +391,7 @@ describe('TaskInfoPanel', () => {
     vi.mocked(mergePullRequest).mockRejectedValueOnce(new Error('merge blocked by branch protection'))
     ticketPrs.set(new Map([['T-42', [readyPr]]]))
 
-    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null, jiraBaseUrl: '' } })
+    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null } })
 
     await fireEvent.click(await screen.findByRole('button', { name: 'Merge' }))
 
@@ -449,7 +410,7 @@ describe('TaskInfoPanel', () => {
     ticketPrs.set(new Map([['T-42', [readyPr]]]))
     vi.mocked(getPullRequests).mockResolvedValue([mergedPr])
 
-    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null, jiraBaseUrl: '' } })
+    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null } })
 
     await fireEvent.click(await screen.findByRole('button', { name: 'Merge' }))
 

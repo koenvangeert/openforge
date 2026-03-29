@@ -48,7 +48,7 @@ This builds a production release, copies `Open Forge.app` to `/Applications`, an
 
 ## What it does
 
-Open Forge is a command center for AI-assisted development. You define coding tasks, an AI agent (Claude Code or OpenCode) implements them in isolated git worktrees on dedicated branches, and the app tracks the full lifecycle: agent progress, CI status, PR reviews, and Jira sync.
+Open Forge is a command center for AI-assisted development. You define coding tasks, an AI agent (Claude Code or OpenCode) implements them in isolated git worktrees on dedicated branches, and the app tracks the full lifecycle: agent progress, CI status, and PR reviews.
 
 | | |
 |---|---|
@@ -56,7 +56,7 @@ Open Forge is a command center for AI-assisted development. You define coding ta
 | **AI agents** | Launch Claude Code or OpenCode agents per task. Each runs in its own git worktree and branch with a live embedded terminal. |
 | **Self-review** | Review agent changes with a syntax-highlighted diff viewer. Leave inline comments and send feedback back to the agent. |
 | **PR review** | Review pull requests assigned to you. Browse diffs, leave comments, and submit reviews directly from the app. |
-| **GitHub & Jira** | Background polling keeps PR status, CI checks, and Jira issues in sync. |
+| **GitHub** | Background polling keeps PR status and CI checks in sync. |
 | **Voice input** | Dictate instructions to the agent using on-device speech recognition (Whisper). |
 
 ![Open Forge — Task View](docs/images/task-view.png)
@@ -113,5 +113,5 @@ pnpm tauri:install
 
 1. Launch the app — the project setup dialog appears automatically
 2. Go to **Settings > Global** to configure your AI provider and GitHub token
-3. Go to **Settings > Project** to set the GitHub repo and optional Jira board
+3. Go to **Settings > Project** to set the GitHub repo
 4. Create a task (`Cmd+T`), right-click it, and choose **Start Implementation**

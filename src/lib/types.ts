@@ -4,11 +4,6 @@ export interface Task {
   id: string;
   initial_prompt: string;
   status: BoardStatus;
-  jira_key: string | null;
-  jira_title: string | null;
-  jira_status: string | null;
-  jira_assignee: string | null;
-  jira_description: string | null;
   prompt: string | null;
   summary: string | null;
   agent: string | null;
@@ -41,7 +36,6 @@ export interface ClaudeInstallStatus {
 
 export interface CheckpointNotification {
   ticketId: string;
-  ticketKey: string | null;
   sessionId: string;
   stage: string;
   message: string;

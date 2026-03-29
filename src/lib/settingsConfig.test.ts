@@ -56,7 +56,6 @@ describe('settingsConfig', () => {
   describe('loadProjectSettings', () => {
     it('loads project settings with defaults and related collections', async () => {
       vi.mocked(getProjectConfig)
-        .mockResolvedValueOnce('BOARD-123')
         .mockResolvedValueOnce('owner/repo')
         .mockResolvedValueOnce('Be careful')
         .mockResolvedValueOnce('opencode')
@@ -70,11 +69,10 @@ describe('settingsConfig', () => {
 
       const result = await loadProjectSettings('project-1')
 
-      expect(getProjectConfig).toHaveBeenCalledTimes(6)
+      expect(getProjectConfig).toHaveBeenCalledTimes(5)
       expect(loadActions).toHaveBeenCalledWith('project-1')
       expect(loadFocusFilterStates).toHaveBeenCalledWith('project-1')
       expect(result).toEqual({
-        jiraBoardId: 'BOARD-123',
         githubDefaultRepo: 'owner/repo',
         agentInstructions: 'Be careful',
         aiProvider: 'opencode',
@@ -89,7 +87,6 @@ describe('settingsConfig', () => {
       const result = await loadProjectSettings('project-1')
 
       expect(result).toEqual({
-        jiraBoardId: '',
         githubDefaultRepo: '',
         agentInstructions: '',
         aiProvider: 'claude-code',
@@ -105,21 +102,15 @@ describe('settingsConfig', () => {
     it('loads global settings and parses boolean and numeric fields', async () => {
       vi.mocked(getConfig)
         .mockResolvedValueOnce('T-')
-        .mockResolvedValueOnce('https://jira.example.com')
-        .mockResolvedValueOnce('user@example.com')
-        .mockResolvedValueOnce('jira-token')
         .mockResolvedValueOnce('gh-token')
         .mockResolvedValueOnce('true')
         .mockResolvedValueOnce('45')
 
       const result = await loadGlobalSettings()
 
-      expect(getConfig).toHaveBeenCalledTimes(7)
+      expect(getConfig).toHaveBeenCalledTimes(4)
       expect(result).toEqual({
         taskIdPrefix: 'T-',
-        jiraBaseUrl: 'https://jira.example.com',
-        jiraUsername: 'user@example.com',
-        jiraApiToken: 'jira-token',
         githubToken: 'gh-token',
         codeCleanupTasksEnabled: true,
         githubPollInterval: 45,
@@ -131,18 +122,12 @@ describe('settingsConfig', () => {
         .mockResolvedValueOnce(null)
         .mockResolvedValueOnce(null)
         .mockResolvedValueOnce(null)
-        .mockResolvedValueOnce(null)
-        .mockResolvedValueOnce(null)
-        .mockResolvedValueOnce(null)
         .mockResolvedValueOnce('not-a-number')
 
       const result = await loadGlobalSettings()
 
       expect(result).toEqual({
         taskIdPrefix: '',
-        jiraBaseUrl: '',
-        jiraUsername: '',
-        jiraApiToken: '',
         githubToken: '',
         codeCleanupTasksEnabled: false,
         githubPollInterval: 30,

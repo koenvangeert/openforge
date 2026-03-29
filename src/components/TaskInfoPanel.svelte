@@ -10,7 +10,6 @@
     task: Task
     workspacePath?: string | null
     worktreePath?: string | null
-    jiraBaseUrl: string
   }
 
   interface MergeFeedback {
@@ -20,7 +19,7 @@
 
   type MergeSmokeOutcome = 'success' | 'warning' | 'error'
 
-  let { task, workspacePath = null, worktreePath = null, jiraBaseUrl }: Props = $props()
+  let { task, workspacePath = null, worktreePath = null }: Props = $props()
 
   let resolvedWorkspacePath = $derived(workspacePath ?? worktreePath)
 
@@ -152,25 +151,6 @@
       <div class="flex items-center gap-2 bg-base-100 border border-base-300 rounded-md px-3 py-2">
         <span class="text-xs font-mono text-base-content/70 truncate flex-1" title={resolvedWorkspacePath}>{resolvedWorkspacePath}</span>
         <CopyButton text={resolvedWorkspacePath} label="Copy workspace path" />
-      </div>
-    </section>
-  {/if}
-
-  <!-- Jira Section -->
-  {#if task.jira_key}
-    <section class="flex flex-col gap-2.5">
-      <h3 class="text-[10px] font-bold text-primary font-mono tracking-[1.2px] m-0" aria-label="Jira">// JIRA</h3>
-      <div class="bg-base-100 border border-base-300 rounded-md p-3 flex flex-col gap-2">
-        <span class="text-sm font-semibold text-base-content">{task.jira_key}</span>
-        {#if task.jira_title}
-          <span class="text-xs text-base-content/70 truncate" title={task.jira_title}>{task.jira_title}</span>
-        {/if}
-        {#if jiraBaseUrl}
-          <button
-            class="btn btn-link btn-xs p-0 h-auto min-h-0 text-primary no-underline hover:underline text-[0.7rem] text-left justify-start"
-            onclick={() => openUrl(`${jiraBaseUrl}/browse/${task.jira_key}`)}
-          >Open in Jira ↗</button>
-        {/if}
       </div>
     </section>
   {/if}

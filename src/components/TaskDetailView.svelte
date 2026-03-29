@@ -3,7 +3,7 @@
   import { get } from 'svelte/store'
   import type { Task, Action, BoardStatus } from '../lib/types'
   import { activeSessions, activeProjectId, startingTasks, taskReviewModes, taskTerminalOpen, error } from '../lib/stores'
-  import { getWorktreeForTask, updateTaskStatus, getConfig } from '../lib/ipc'
+  import { getWorktreeForTask, updateTaskStatus } from '../lib/ipc'
   import { useAppRouter } from '../lib/router.svelte'
   import { moveTaskToComplete } from '../lib/moveToComplete'
   import { isInputFocused } from '../lib/domUtils'
@@ -31,7 +31,6 @@
   let terminalFullscreen = $state(false)
   let terminalEverOpened = $state(false)
   let worktreePath = $state<string | null>(null)
-  let jiraBaseUrl = $state('')
   let lastTaskId = ''
   let actions = $state<Action[]>([])
   let terminalTabsRef = $state<TerminalTabs | null>(null)
@@ -96,10 +95,6 @@
     if (prevTerminalTaskId) {
       releaseAllForTask(prevTerminalTaskId)
     }
-  })
-
-  onMount(async () => {
-    jiraBaseUrl = (await getConfig('jira_base_url')) || ''
   })
 
   function handleBack() {
@@ -212,7 +207,7 @@
         <span aria-hidden="true">&lt; </span><span>back</span>
       </button>
        <span class="text-base-content/20 select-none">|</span>
-       <span class="text-[0.8125rem] font-semibold text-primary font-mono shrink-0">{task.jira_key || task.id}</span>
+       <span class="text-[0.8125rem] font-semibold text-primary font-mono shrink-0">{task.id}</span>
         <h1 class="text-lg font-semibold text-base-content m-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap min-w-0" title={displayTitle}>{displayTitle}</h1>
       {#if task.status === 'backlog'}
         <button
@@ -250,7 +245,7 @@
       <span class="text-base-content/20 mx-1">/</span>
       <span class="text-base-content/50">{task.status}</span>
       <span class="text-base-content/20 mx-1">/</span>
-      <span class="text-primary font-semibold">{task.jira_key || task.id}</span>
+      <span class="text-primary font-semibold">{task.id}</span>
       <span class="text-base-content/20 mx-1">/</span>
       <span class="text-primary font-semibold">{reviewMode ? 'self_review' : 'code'}</span>
     </div>
@@ -286,7 +281,7 @@
           <ResizablePanel storageKey="task-detail-sidebar" defaultWidth={360} minWidth={200} maxWidth={600} side="right">
             <div class="overflow-hidden bg-base-200 border-l border-base-300 flex flex-col h-full">
               <div class="flex-1 overflow-y-auto">
-                <TaskInfoPanel task={task} {worktreePath} {jiraBaseUrl} />
+                <TaskInfoPanel task={task} {worktreePath} />
               </div>
             </div>
           </ResizablePanel>

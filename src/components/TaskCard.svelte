@@ -55,7 +55,6 @@
 
   let reasonText = $derived.by(() => {
     if (task.summary) return task.summary.replace(/\\n/g, ' ')
-    if (task.jira_title) return truncate(task.jira_title, 80)
     return null
   })
 </script>
@@ -71,9 +70,6 @@
     <div class="flex items-center justify-between">
       <div class="flex items-center gap-2.5">
         <span class="font-mono text-[11px] font-semibold text-primary">{task.id}</span>
-        {#if task.jira_key}
-          <span class="badge badge-ghost badge-xs">{task.jira_key}</span>
-        {/if}
         {#if needsInput}
           <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 bg-[var(--chip-paused-bg)]">
             <span class="w-1.5 h-1.5 rounded-full bg-[var(--chip-paused-dot)]"></span>
@@ -210,8 +206,4 @@
       </div>
     {/if}
   </div>
-
-  {#if task.jira_assignee}
-    <div class="text-[10px] text-base-content/40 {isEffectivelyFeatured ? 'mt-2' : 'mt-1'}">@{task.jira_assignee}</div>
-  {/if}
 </Card>

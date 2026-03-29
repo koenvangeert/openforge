@@ -8,11 +8,6 @@ vi.mock('../lib/ipc', () => ({
     id: 'T-1',
     initial_prompt: 'New Task',
     status: 'backlog',
-    jira_key: null,
-    jira_title: null,
-    jira_status: null,
-    jira_assignee: null,
-    jira_description: null,
     prompt: null,
     summary: null,
     agent: null,
@@ -42,11 +37,6 @@ const mockTask: Task = {
   id: 'T-42',
   initial_prompt: 'Existing Task',
   status: 'doing',
-  jira_key: 'PROJ-123',
-  jira_title: null,
-  jira_status: 'In Progress',
-  jira_assignee: 'Alice',
-  jira_description: null,
   prompt: null,
   summary: null,
   agent: null,
@@ -60,7 +50,6 @@ describe('AddTaskDialog', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(getProjectConfig).mockImplementation(async (_projectId, key) => {
-      if (key === 'jira_board_id') return 'board-123'
       return 'claude-code'
     })
     vi.mocked(listOpenCodeAgents).mockResolvedValue([
@@ -70,44 +59,6 @@ describe('AddTaskDialog', () => {
   })
 
   
-  describe('Jira Key Visibility', () => {
-    it('shows Jira field when jira_board_id is configured in create mode', async () => {
-      vi.mocked(getProjectConfig).mockImplementation(async (_projectId, key) => {
-        if (key === 'jira_board_id') return 'board-123'
-        if (key === 'ai_provider') return 'claude-code'
-        return null
-      })
-      render(AddTaskDialog, { props: { mode: 'create' } })
-      await waitFor(() => {
-        expect(screen.queryByPlaceholderText('e.g. PROJ-123')).toBeTruthy()
-      })
-    })
-
-    it('hides Jira field when jira_board_id is not configured in create mode', async () => {
-      vi.mocked(getProjectConfig).mockImplementation(async (_projectId, key) => {
-        if (key === 'jira_board_id') return null
-        if (key === 'ai_provider') return 'claude-code'
-        return null
-      })
-      render(AddTaskDialog, { props: { mode: 'create' } })
-      await new Promise(r => setTimeout(r, 50))
-      expect(screen.queryByPlaceholderText('e.g. PROJ-123')).toBeNull()
-    })
-
-    it('shows Jira field in edit mode if task has a jira_key, even if not configured', async () => {
-      vi.mocked(getProjectConfig).mockImplementation(async (_projectId, key) => {
-        if (key === 'jira_board_id') return null
-        if (key === 'ai_provider') return 'claude-code'
-        return null
-      })
-      render(AddTaskDialog, { props: { mode: 'edit', task: mockTask } })
-      await waitFor(() => {
-        expect(screen.queryByPlaceholderText('e.g. PROJ-123')).toBeTruthy()
-      })
-      expect((screen.getByPlaceholderText('e.g. PROJ-123') as HTMLInputElement).value).toBe('PROJ-123')
-    })
-  })
-
   it('renders in create mode with empty fields', () => {
     render(AddTaskDialog, { props: { mode: 'create' } })
     expect(screen.getByRole('heading', { name: 'Create Task' })).toBeTruthy()
@@ -136,17 +87,14 @@ describe('AddTaskDialog', () => {
     render(AddTaskDialog, { props: { mode: 'create' } })
     
     const promptInput = screen.getByPlaceholderText('Describe what you want the agent to do')
-    await waitFor(() => expect(screen.getByPlaceholderText('e.g. PROJ-123')).toBeTruthy())
-    const jiraInput = screen.getByPlaceholderText('e.g. PROJ-123')
     
     await fireEvent.input(promptInput, { target: { value: 'My new task' } })
-    await fireEvent.input(jiraInput, { target: { value: 'PROJ-456' } })
     
     const submitBtn = screen.getByRole('button', { name: 'Create Task' })
     await fireEvent.click(submitBtn)
     
     await new Promise((r) => setTimeout(r, 10))
-    expect(createTask).toHaveBeenCalledWith('My new task', 'backlog', 'PROJ-456', 'test-project-id', null, 'default')
+    expect(createTask).toHaveBeenCalledWith('My new task', 'backlog', 'test-project-id', null, 'default')
   })
 
   it('pre-fills fields in edit mode', async () => {
@@ -155,10 +103,6 @@ describe('AddTaskDialog', () => {
     
     const promptInput = screen.getByPlaceholderText('Describe what you want the agent to do') as HTMLInputElement
     expect(promptInput.value).toBe('Existing Task')
-    
-    await waitFor(() => expect(screen.getByPlaceholderText('e.g. PROJ-123')).toBeTruthy())
-    const jiraInput = screen.getByPlaceholderText('e.g. PROJ-123') as HTMLInputElement
-    expect(jiraInput.value).toBe('PROJ-123')
   })
 
   it('calls updateTask when submitted in edit mode', async () => {
@@ -168,7 +112,7 @@ describe('AddTaskDialog', () => {
     await fireEvent.click(submitBtn)
     
     await new Promise((r) => setTimeout(r, 10))
-    expect(updateTask).toHaveBeenCalledWith('T-42', 'Existing Task', 'PROJ-123')
+    expect(updateTask).toHaveBeenCalledWith('T-42', 'Existing Task')
   })
 
   it('does not show status dropdown in edit mode', () => {
@@ -183,7 +127,6 @@ describe('AddTaskDialog', () => {
 
   it('shows permission mode dropdown when ai_provider is claude-code', async () => {
     vi.mocked(getProjectConfig).mockImplementation(async (_projectId, key) => {
-      if (key === 'jira_board_id') return 'board-123'
       return 'claude-code'
     })
     render(AddTaskDialog, { props: { mode: 'create' } })
@@ -195,7 +138,6 @@ describe('AddTaskDialog', () => {
 
   it('hides agent dropdown when ai_provider is claude-code even with agents', async () => {
     vi.mocked(getProjectConfig).mockImplementation(async (_projectId, key) => {
-      if (key === 'jira_board_id') return 'board-123'
       return 'claude-code'
     })
     vi.mocked(listOpenCodeAgents).mockResolvedValue([
@@ -223,7 +165,6 @@ describe('AddTaskDialog', () => {
 
   it('never shows agent dropdown when ai_provider is claude-code regardless of agents', async () => {
     vi.mocked(getProjectConfig).mockImplementation(async (_projectId, key) => {
-      if (key === 'jira_board_id') return 'board-123'
       return 'claude-code'
     })
     vi.mocked(listOpenCodeAgents).mockResolvedValue([
@@ -239,7 +180,6 @@ describe('AddTaskDialog', () => {
 
   it('hides agent dropdown when ai_provider is claude-code and no agents', async () => {
     vi.mocked(getProjectConfig).mockImplementation(async (_projectId, key) => {
-      if (key === 'jira_board_id') return 'board-123'
       return 'claude-code'
     })
     vi.mocked(listOpenCodeAgents).mockResolvedValue([])
@@ -253,7 +193,6 @@ describe('AddTaskDialog', () => {
 
   it('does not call listOpenCodeAgents when ai_provider is claude-code', async () => {
     vi.mocked(getProjectConfig).mockImplementation(async (_projectId, key) => {
-      if (key === 'jira_board_id') return 'board-123'
       return 'claude-code'
     })
     render(AddTaskDialog, { props: { mode: 'create' } })

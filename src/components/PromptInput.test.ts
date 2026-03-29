@@ -77,7 +77,7 @@ describe('PromptInput', () => {
     await fireEvent.input(textarea)
     await fireEvent.keyDown(textarea, { key: 'Enter', metaKey: true })
 
-    expect(onSubmit).toHaveBeenCalledWith('Fix the bug', null)
+    expect(onSubmit).toHaveBeenCalledWith('Fix the bug')
   })
 
   it('does not submit on plain Enter (allows newline)', async () => {
@@ -112,55 +112,6 @@ describe('PromptInput', () => {
     expect(onCancel).toHaveBeenCalled()
   })
 
-  it('shows JIRA key field when toggled', async () => {
-    render(PromptInput, {
-      props: {
-        ...baseProps,
-      },
-    })
-
-    await waitFor(() => expect(screen.getByText('+ Add JIRA key')).toBeTruthy())
-    const addJiraLink = screen.getByText('+ Add JIRA key')
-    await fireEvent.click(addJiraLink)
-
-    const jiraInput = screen.getByPlaceholderText('e.g. PROJ-123')
-    expect(jiraInput).toBeTruthy()
-  })
-
-  it('shows JIRA key field when the add control is activated with Space', async () => {
-    render(PromptInput, {
-      props: {
-        ...baseProps,
-      },
-    })
-
-    await waitFor(() => expect(screen.getByRole('button', { name: '+ Add JIRA key' })).toBeTruthy())
-    const addJiraButton = screen.getByRole('button', { name: '+ Add JIRA key' })
-    await fireEvent.keyDown(addJiraButton, { key: ' ' })
-
-    expect(screen.getByPlaceholderText('e.g. PROJ-123')).toBeTruthy()
-  })
-
-  it('clears the JIRA key when the clear control is activated with Enter', async () => {
-    render(PromptInput, {
-      props: {
-        ...baseProps,
-        jiraKey: 'PROJ-42',
-      },
-    })
-
-    await waitFor(() => expect(screen.getByRole('button', { name: '✕' })).toBeTruthy())
-    const clearJiraButton = screen.getByRole('button', { name: '✕' })
-    await fireEvent.keyDown(clearJiraButton, { key: 'Enter' })
-
-    expect(screen.queryByPlaceholderText('e.g. PROJ-123')).toBeNull()
-
-    await fireEvent.click(screen.getByRole('button', { name: '+ Add JIRA key' }))
-
-    expect((screen.getByPlaceholderText('e.g. PROJ-123') as HTMLInputElement).value).toBe('')
-  })
-
-
   it('renders a submit button', () => {
     render(PromptInput, { props: { ...baseProps } })
     const button = screen.getByRole('button', { name: 'Submit' })
@@ -188,7 +139,7 @@ describe('PromptInput', () => {
     const button = screen.getByRole('button', { name: 'Submit' })
     await fireEvent.click(button)
 
-    expect(onSubmit).toHaveBeenCalledWith('Fix the bug', null)
+    expect(onSubmit).toHaveBeenCalledWith('Fix the bug')
   })
 
   it('does not submit empty text', async () => {
@@ -211,42 +162,11 @@ describe('PromptInput', () => {
       props: {
         ...baseProps,
         value: 'Fix the bug',
-        jiraKey: 'PROJ-42',
       },
     })
 
     const textarea = screen.getByPlaceholderText('Describe what you want to implement...')
     expect((textarea as HTMLTextAreaElement).value).toBe('Fix the bug')
-
-    const jiraInput = screen.getByPlaceholderText('e.g. PROJ-123')
-    expect((jiraInput as HTMLInputElement).value).toBe('PROJ-42')
-  })
-
-  
-  describe('Jira Key Visibility', () => {
-    it('shows + Add JIRA key when jira_board_id is configured', async () => {
-      vi.mocked(getProjectConfig).mockResolvedValue('board-123')
-      render(PromptInput, { props: { ...baseProps } })
-      await waitFor(() => {
-        expect(screen.queryByText('+ Add JIRA key')).toBeTruthy()
-      })
-    })
-
-    it('hides + Add JIRA key when jira_board_id is not configured', async () => {
-      vi.mocked(getProjectConfig).mockResolvedValue(null)
-      render(PromptInput, { props: { ...baseProps } })
-      await new Promise(r => setTimeout(r, 50)) // give onMount time
-      expect(screen.queryByText('+ Add JIRA key')).toBeNull()
-    })
-
-    it('shows JIRA key field if initialJiraKey is provided even if not configured', async () => {
-      vi.mocked(getProjectConfig).mockResolvedValue(null)
-      render(PromptInput, { props: { ...baseProps, jiraKey: 'PROJ-999' } })
-      await waitFor(() => {
-        expect(screen.getByPlaceholderText('e.g. PROJ-123')).toBeTruthy()
-      })
-      expect((screen.getByPlaceholderText('e.g. PROJ-123') as HTMLInputElement).value).toBe('PROJ-999')
-    })
   })
 
   describe('dual buttons (onStartTask provided)', () => {
@@ -275,7 +195,7 @@ describe('PromptInput', () => {
       textarea.value = 'New feature'
       await fireEvent.input(textarea)
       await fireEvent.click(screen.getByText('Add to Backlog', { exact: false }))
-      expect(onSubmit).toHaveBeenCalledWith('New feature', null)
+      expect(onSubmit).toHaveBeenCalledWith('New feature')
     })
 
     it('calls onStartTask when Start Task is clicked', async () => {
@@ -290,7 +210,7 @@ describe('PromptInput', () => {
       textarea.value = 'New feature'
       await fireEvent.input(textarea)
       await fireEvent.click(screen.getByText('Start Task', { exact: false }))
-      expect(onStartTask).toHaveBeenCalledWith('New feature', null)
+      expect(onStartTask).toHaveBeenCalledWith('New feature')
     })
 
     it('Cmd+Enter calls onStartTask (primary action)', async () => {
@@ -307,7 +227,7 @@ describe('PromptInput', () => {
       textarea.value = 'New feature'
       await fireEvent.input(textarea)
       await fireEvent.keyDown(textarea, { key: 'Enter', metaKey: true })
-      expect(onStartTask).toHaveBeenCalledWith('New feature', null)
+      expect(onStartTask).toHaveBeenCalledWith('New feature')
       expect(onSubmit).not.toHaveBeenCalled()
     })
 
@@ -325,7 +245,7 @@ describe('PromptInput', () => {
       textarea.value = 'New feature'
       await fireEvent.input(textarea)
       await fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: true })
-      expect(onSubmit).toHaveBeenCalledWith('New feature', null)
+      expect(onSubmit).toHaveBeenCalledWith('New feature')
       expect(onStartTask).not.toHaveBeenCalled()
     })
   })

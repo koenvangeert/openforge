@@ -34,7 +34,6 @@ describe('settingsSaver', () => {
       projectId: 'project-1',
       projectName: 'My Project',
       projectPath: '/tmp/project',
-      jiraBoardId: 'BOARD-1',
       githubDefaultRepo: 'owner/repo',
       agentInstructions: 'Do the thing',
       aiProvider: 'opencode',
@@ -45,7 +44,6 @@ describe('settingsSaver', () => {
     })
 
     expect(updateProject).toHaveBeenCalledWith('project-1', 'My Project', '/tmp/project')
-    expect(setProjectConfig).toHaveBeenCalledWith('project-1', 'jira_board_id', 'BOARD-1')
     expect(setProjectConfig).toHaveBeenCalledWith('project-1', 'github_default_repo', 'owner/repo')
     expect(setProjectConfig).toHaveBeenCalledWith('project-1', 'additional_instructions', 'Do the thing')
     expect(setProjectConfig).toHaveBeenCalledWith('project-1', 'ai_provider', 'opencode')
@@ -60,18 +58,12 @@ describe('settingsSaver', () => {
   it('persists global settings through the existing global config helpers', async () => {
     await saveGlobalSettings({
       taskIdPrefix: 'T-',
-      jiraBaseUrl: 'https://jira.example.com',
-      jiraUsername: 'user@example.com',
-      jiraApiToken: 'jira-token',
       githubToken: 'gh-token',
       codeCleanupTasksEnabled: true,
       githubPollInterval: 45,
     })
 
     expect(setConfig).toHaveBeenCalledWith('task_id_prefix', 'T-')
-    expect(setConfig).toHaveBeenCalledWith('jira_base_url', 'https://jira.example.com')
-    expect(setConfig).toHaveBeenCalledWith('jira_username', 'user@example.com')
-    expect(setConfig).toHaveBeenCalledWith('jira_api_token', 'jira-token')
     expect(setConfig).toHaveBeenCalledWith('github_token', 'gh-token')
     expect(setConfig).toHaveBeenCalledWith('code_cleanup_tasks_enabled', 'true')
     expect(setConfig).toHaveBeenCalledWith('github_poll_interval', '45')

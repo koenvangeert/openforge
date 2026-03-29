@@ -12,12 +12,11 @@
 
   interface Props {
     value?: string
-    jiraKey?: string
     placeholder?: string
     projectId: string
-    onSubmit: (prompt: string, jiraKey: string | null) => void
-    onStartTask?: (prompt: string, jiraKey: string | null) => void
-    onRunAction?: (prompt: string, jiraKey: string | null, actionPrompt: string) => void
+    onSubmit: (prompt: string) => void
+    onStartTask?: (prompt: string) => void
+    onRunAction?: (prompt: string, actionPrompt: string) => void
     onCancel: () => void
     autofocus?: boolean
     extras?: Snippet
@@ -26,7 +25,6 @@
 
   let {
     value = '',
-    jiraKey: initialJiraKey = '',
     placeholder = 'Describe what you want to implement...',
     projectId,
     onSubmit,
@@ -39,27 +37,11 @@
   }: Props = $props()
 
   const getInitialTextValue = () => value
-  const getInitialJiraKeyValue = () => initialJiraKey
-  const getInitialShowJiraKey = () => !!initialJiraKey
   const getAutocompleteProjectId = () => projectId
 
   // ── Local state ──────────────────────────────────────────────────────────────
   let textValue = $state(getInitialTextValue())
-  let jiraKeyValue = $state(getInitialJiraKeyValue())
-  let showJiraKey = $state(getInitialShowJiraKey())
   let showModelDownload = $state(false)
-  let hasJiraConfigured = $state(false)
-
-  onMount(async () => {
-    if (projectId) {
-      try {
-        const boardId = await getProjectConfig(projectId, 'jira_board_id')
-        hasJiraConfigured = !!boardId
-      } catch (e) {
-        hasJiraConfigured = false
-      }
-    }
-  })
 
   let textareaEl = $state<HTMLTextAreaElement | null>(null)
 
@@ -184,39 +166,23 @@
   function handleSubmit() {
     const prompt = textValue.trim()
     if (!prompt) return
-    onSubmit(prompt, jiraKeyValue.trim() || null)
+    onSubmit(prompt)
   }
 
   function handleStart() {
     const prompt = textValue.trim()
     if (!prompt) return
-    onStartTask?.(prompt, jiraKeyValue.trim() || null)
+    onStartTask?.(prompt)
   }
 
   function handleCustomAction(actionPrompt: string) {
     const prompt = textValue.trim()
     if (!prompt) return
-    onRunAction?.(prompt, jiraKeyValue.trim() || null, actionPrompt)
+    onRunAction?.(prompt, actionPrompt)
   }
 
   function handleActionFromDropdown(action: Action) {
     handleCustomAction(action.prompt)
-  }
-
-  function showJiraKeyField() {
-    showJiraKey = true
-  }
-
-  function clearJiraKeyField() {
-    showJiraKey = false
-    jiraKeyValue = ''
-  }
-
-  function handleJiraKeyControlKeydown(event: KeyboardEvent, action: () => void) {
-    if (event.key === 'Enter' || event.key === ' ' || event.key === 'Spacebar') {
-      event.preventDefault()
-      action()
-    }
   }
 </script>
 
@@ -251,31 +217,6 @@
   <div class="flex items-center justify-between px-3 pb-2">
     <div class="flex items-center gap-2">
       <VoiceInput onTranscription={handleTranscription} listenToHotkey />
-      {#if hasJiraConfigured || initialJiraKey}
-        {#if showJiraKey}
-          <input
-            type="text"
-            class="input input-bordered input-xs w-48"
-            bind:value={jiraKeyValue}
-            placeholder="e.g. PROJ-123"
-          />
-          <span
-            class="text-xs text-base-content opacity-70 cursor-pointer"
-            role="button"
-            tabindex="0"
-            onclick={clearJiraKeyField}
-            onkeydown={(e: KeyboardEvent) => handleJiraKeyControlKeydown(e, clearJiraKeyField)}
-          >✕</span>
-        {:else}
-          <span
-            class="text-xs text-primary cursor-pointer"
-            role="button"
-            tabindex="0"
-            onclick={showJiraKeyField}
-            onkeydown={(e: KeyboardEvent) => handleJiraKeyControlKeydown(e, showJiraKeyField)}
-          >+ Add JIRA key</span>
-        {/if}
-      {/if}
     </div>
     <div class="flex items-center gap-2">
       {#if onStartTask}

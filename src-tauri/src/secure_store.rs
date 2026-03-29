@@ -1,4 +1,4 @@
-const SECRET_KEYS: &[&str] = &["github_token", "jira_api_token"];
+const SECRET_KEYS: &[&str] = &["github_token"];
 
 fn service_name() -> &'static str {
     if cfg!(debug_assertions) {
@@ -94,10 +94,9 @@ mod tests {
     #[test]
     fn test_is_secret() {
         assert!(is_secret("github_token"));
-        assert!(is_secret("jira_api_token"));
         assert!(!is_secret("github_username"));
-        assert!(!is_secret("jira_base_url"));
-        assert!(!is_secret("jira_username"));
+        assert!(!is_secret("external_base_url"));
+        assert!(!is_secret("external_username"));
         assert!(!is_secret("opencode_port"));
         assert!(!is_secret(""));
     }

@@ -16,11 +16,6 @@ const baseTask: Task = {
   initial_prompt: 'Fix the dashboard bug.',
   summary: 'Applied reactive fix.',
   status: 'doing',
-  jira_key: 'KVG-748',
-  jira_title: 'Fix Dashboard',
-  jira_status: null,
-  jira_assignee: null,
-  jira_description: null,
   prompt: null,
   agent: null,
   permission_mode: null,
@@ -115,31 +110,6 @@ describe('TaskDetailPane', () => {
         },
       })
       expect(screen.getByText('T-748')).toBeTruthy()
-    })
-
-    it('renders jira_key badge when present', () => {
-      render(TaskDetailPane, {
-        props: {
-          task: baseTask,
-          session: null,
-          pullRequests: [],
-          onOpenFullView: vi.fn(),
-        },
-      })
-      expect(screen.getByText('KVG-748')).toBeTruthy()
-    })
-
-    it('does not render jira_key badge when jira_key is null', () => {
-      const taskNoJira = { ...baseTask, jira_key: null }
-      render(TaskDetailPane, {
-        props: {
-          task: taskNoJira,
-          session: null,
-          pullRequests: [],
-          onOpenFullView: vi.fn(),
-        },
-      })
-      expect(screen.queryByText('KVG-748')).toBeNull()
     })
 
     it('calls onOpenFullView when "Open full view" button is clicked', async () => {

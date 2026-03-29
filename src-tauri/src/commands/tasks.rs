@@ -44,7 +44,6 @@ pub async fn create_task(
     app: tauri::AppHandle,
     initial_prompt: String,
     status: BoardStatus,
-    jira_key: Option<String>,
     project_id: Option<String>,
     prompt: Option<String>,
     agent: Option<String>,
@@ -55,7 +54,6 @@ pub async fn create_task(
         .create_task(
             &initial_prompt,
             status.as_str(),
-            jira_key.as_deref(),
             project_id.as_deref(),
             prompt.as_deref(),
             agent.as_deref(),
@@ -75,10 +73,9 @@ pub async fn update_task(
     app: tauri::AppHandle,
     id: String,
     initial_prompt: String,
-    jira_key: Option<String>,
 ) -> Result<(), String> {
     let db = crate::db::acquire_db(&db);
-    db.update_task(&id, &initial_prompt, jira_key.as_deref())
+    db.update_task(&id, &initial_prompt)
         .map_err(|e| format!("Failed to update task: {}", e))?;
     let _ = app.emit(
         "task-changed",

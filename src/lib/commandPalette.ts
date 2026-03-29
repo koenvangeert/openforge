@@ -10,9 +10,6 @@ export function matchesSearch(task: Task, query: string, projectMap?: Map<string
   return (
     task.id.toLowerCase().includes(q) ||
     task.initial_prompt.toLowerCase().includes(q) ||
-    (task.jira_key?.toLowerCase().includes(q) ?? false) ||
-    (task.jira_title?.toLowerCase().includes(q) ?? false) ||
-    (task.jira_assignee?.toLowerCase().includes(q) ?? false) ||
     (projectName?.toLowerCase().includes(q) ?? false)
   )
 }

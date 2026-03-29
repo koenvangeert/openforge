@@ -8,11 +8,6 @@ function makeTask(overrides: Partial<Task> & { id: string }): Task {
   return {
     initial_prompt: 'Test task',
     status: 'backlog',
-    jira_key: null,
-    jira_title: null,
-    jira_status: null,
-    jira_assignee: null,
-    jira_description: null,
     prompt: null,
     summary: null,
     agent: null,

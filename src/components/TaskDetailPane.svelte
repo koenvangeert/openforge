@@ -45,9 +45,6 @@
 
     <div class="flex items-center gap-2 flex-wrap">
       <span class="font-mono text-sm font-bold text-primary">{task.id}</span>
-      {#if task.jira_key}
-        <span class="badge badge-primary badge-sm font-mono">{task.jira_key}</span>
-      {/if}
       <button
         class="btn btn-ghost btn-xs ml-auto text-base-content/60 hover:text-primary"
         onclick={onOpenFullView}

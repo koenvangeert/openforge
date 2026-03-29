@@ -92,8 +92,8 @@ pub mod test_helpers {
         let conn = db.connection();
         let conn = conn.lock().unwrap();
         conn.execute(
-            "INSERT INTO tasks (id, initial_prompt, status, jira_key, jira_title, jira_status, jira_assignee, project_id, created_at, updated_at, jira_description, prompt, summary, agent, permission_mode) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
-            rusqlite::params!["T-100", "Test task", "backlog", "PROJ-100", "Test task summary", "To Do", "alice", None::<String>, 1000, 1000, None::<String>, "Test task", None::<String>, None::<String>, None::<String>],
+            "INSERT INTO tasks (id, initial_prompt, status, project_id, created_at, updated_at, prompt, summary, agent, permission_mode) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            rusqlite::params!["T-100", "Test task", "backlog", None::<String>, 1000, 1000, "Test task", None::<String>, None::<String>, None::<String>],
         ).expect("Failed to insert test task");
     }
 }

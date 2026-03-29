@@ -107,7 +107,6 @@ vi.mock('./lib/ipc', () => ({
   updateTaskStatus: vi.fn(async () => undefined),
   deleteTask: vi.fn(),
   clearDoneTasks: vi.fn(),
-  refreshJiraInfo: vi.fn(),
   getAgents: vi.fn(),
   listOpenCodeAgents: vi.fn().mockResolvedValue([]),
   createProject: vi.fn(),
@@ -174,6 +173,10 @@ vi.mock('./components/ActionPalette.svelte', () => ({ default: vi.fn() }))
 
 vi.mock('./lib/doingStatus', () => ({
   computeDoingStatus: vi.fn(() => 'idle'),
+}))
+
+vi.mock('./lib/moveToComplete', () => ({
+  moveTaskToComplete: vi.fn(async () => undefined),
 }))
 
 const mockRouterPushNavState = vi.fn()
@@ -427,11 +430,6 @@ describe('App onMount initialization order', () => {
         prompt: null,
         summary: null,
         status: 'doing',
-        jira_key: null,
-        jira_title: null,
-        jira_status: null,
-        jira_assignee: null,
-        jira_description: null,
         agent: null,
         permission_mode: null,
         project_id: 'proj-1',
@@ -461,11 +459,6 @@ describe('App onMount initialization order', () => {
         prompt: null,
         summary: null,
         status: 'doing',
-        jira_key: null,
-        jira_title: null,
-        jira_status: null,
-        jira_assignee: null,
-        jira_description: null,
         agent: null,
         permission_mode: null,
         project_id: 'proj-1',
@@ -493,11 +486,6 @@ describe('App onMount initialization order', () => {
         prompt: null,
         summary: null,
         status: 'backlog',
-        jira_key: null,
-        jira_title: null,
-        jira_status: null,
-        jira_assignee: null,
-        jira_description: null,
         agent: null,
         permission_mode: null,
         project_id: 'proj-1',
@@ -535,6 +523,20 @@ describe('App onMount initialization order', () => {
 
       // Simulate being on a task detail view
       stores.selectedTaskId.set('task-123')
+      stores.tasks.set([
+        {
+          id: 'task-123',
+          initial_prompt: 'Finish task',
+          prompt: null,
+          summary: null,
+          status: 'doing',
+          agent: null,
+          permission_mode: null,
+          project_id: 'proj-1',
+          created_at: 1000,
+          updated_at: 1000,
+        },
+      ])
       stores.currentView.set('settings')
 
       vi.mocked(nav.resetToBoard).mockClear()
@@ -636,11 +638,11 @@ describe('App onMount initialization order', () => {
       })
     })
 
-  it('action palette move-to-done resets to board for the selected task view', async () => {
+    it('action palette move-to-done does not navigate directly from App', async () => {
       const App = (await import('./App.svelte')).default
       const stores = await import('./lib/stores')
       const nav = await import('./lib/router.svelte')
-      const { getTasksForProject, updateTaskStatus } = await import('./lib/ipc')
+      const { getTasksForProject } = await import('./lib/ipc')
       const actionPaletteModule = await import('./components/ActionPalette.svelte')
 
       vi.mocked(getTasksForProject).mockResolvedValue([
@@ -650,11 +652,6 @@ describe('App onMount initialization order', () => {
           prompt: null,
           summary: null,
           status: 'doing',
-          jira_key: null,
-          jira_title: null,
-          jira_status: null,
-          jira_assignee: null,
-          jira_description: null,
           agent: null,
           permission_mode: null,
           project_id: 'proj-1',
@@ -706,16 +703,16 @@ describe('App onMount initialization order', () => {
 
       await propsCandidate.onExecute('move-to-done')
 
-    expect(updateTaskStatus).toHaveBeenCalledWith('task-123', 'done')
-    expect(nav.resetToBoard).toHaveBeenCalled()
+    expect(nav.resetToBoard).not.toHaveBeenCalled()
   })
 
-  it('action palette move-to-done navigates immediately without waiting for backend cleanup', async () => {
-    const App = (await import('./App.svelte')).default
-    const stores = await import('./lib/stores')
-    const nav = await import('./lib/router.svelte')
-    const { getTasksForProject, updateTaskStatus } = await import('./lib/ipc')
-    const actionPaletteModule = await import('./components/ActionPalette.svelte')
+    it('action palette move-to-done delegates to moveTaskToComplete', async () => {
+      const App = (await import('./App.svelte')).default
+      const stores = await import('./lib/stores')
+      const nav = await import('./lib/router.svelte')
+      const { getTasksForProject } = await import('./lib/ipc')
+      const { moveTaskToComplete } = await import('./lib/moveToComplete')
+      const actionPaletteModule = await import('./components/ActionPalette.svelte')
 
     vi.mocked(getTasksForProject).mockResolvedValue([
       {
@@ -724,11 +721,6 @@ describe('App onMount initialization order', () => {
         prompt: null,
         summary: null,
         status: 'doing',
-        jira_key: null,
-        jira_title: null,
-        jira_status: null,
-        jira_assignee: null,
-        jira_description: null,
         agent: null,
         permission_mode: null,
         project_id: 'proj-1',
@@ -737,12 +729,12 @@ describe('App onMount initialization order', () => {
       },
     ])
 
-    let resolveUpdate: (() => void) | undefined
-    vi.mocked(updateTaskStatus).mockImplementationOnce(
-      () => new Promise<void>((resolve) => {
-        resolveUpdate = resolve
-      }),
-    )
+      let resolveMove: (() => void) | undefined
+      vi.mocked(moveTaskToComplete).mockImplementationOnce(
+        () => new Promise<void>((resolve) => {
+          resolveMove = resolve
+        }),
+      )
 
     render(App)
 
@@ -787,18 +779,19 @@ describe('App onMount initialization order', () => {
 
     const execution = propsCandidate.onExecute('move-to-done')
 
-    expect(updateTaskStatus).toHaveBeenCalledWith('task-123', 'done')
-    expect(nav.resetToBoard).toHaveBeenCalled()
+      expect(moveTaskToComplete).toHaveBeenCalledWith('task-123')
+      expect(nav.resetToBoard).not.toHaveBeenCalled()
 
-    resolveUpdate?.()
-    await execution
-  })
+      resolveMove?.()
+      await execution
+    })
 
-    it('action palette move-to-done navigates before IPC call', async () => {
+    it('action palette move-to-done awaits moveTaskToComplete', async () => {
       const App = (await import('./App.svelte')).default
       const stores = await import('./lib/stores')
       const nav = await import('./lib/router.svelte')
-      const { getTasksForProject, updateTaskStatus } = await import('./lib/ipc')
+      const { getTasksForProject } = await import('./lib/ipc')
+      const { moveTaskToComplete } = await import('./lib/moveToComplete')
       const actionPaletteModule = await import('./components/ActionPalette.svelte')
 
       vi.mocked(getTasksForProject).mockResolvedValue([
@@ -808,11 +801,6 @@ describe('App onMount initialization order', () => {
           prompt: null,
           summary: null,
           status: 'doing',
-          jira_key: null,
-          jira_title: null,
-          jira_status: null,
-          jira_assignee: null,
-          jira_description: null,
           agent: null,
           permission_mode: null,
           project_id: 'proj-1',
@@ -828,6 +816,20 @@ describe('App onMount initialization order', () => {
       })
 
       stores.selectedTaskId.set('task-200')
+      stores.tasks.set([
+        {
+          id: 'task-200',
+          initial_prompt: 'Order test',
+          prompt: null,
+          summary: null,
+          status: 'doing',
+          agent: null,
+          permission_mode: null,
+          project_id: 'proj-1',
+          created_at: 1000,
+          updated_at: 1000,
+        },
+      ])
 
       await fireEvent.keyDown(window, { key: 'k', metaKey: true, bubbles: true })
 
@@ -850,15 +852,15 @@ describe('App onMount initialization order', () => {
 
       const callOrder: string[] = []
       vi.mocked(nav.resetToBoard).mockImplementation(() => { callOrder.push('resetToBoard') })
-      vi.mocked(updateTaskStatus).mockImplementation(async () => { callOrder.push('updateTaskStatus') })
+      vi.mocked(moveTaskToComplete).mockImplementation(async () => { callOrder.push('moveTaskToComplete') })
 
       await propsCandidate.onExecute('move-to-done')
 
-      expect(callOrder).toEqual(['resetToBoard', 'updateTaskStatus'])
+      expect(callOrder).toEqual(['moveTaskToComplete'])
 
       vi.mocked(nav.resetToBoard).mockReset()
-      vi.mocked(updateTaskStatus).mockReset()
-      vi.mocked(updateTaskStatus).mockResolvedValue(undefined)
+      vi.mocked(moveTaskToComplete).mockReset()
+      vi.mocked(moveTaskToComplete).mockResolvedValue(undefined)
     })
 
     it('CMD+SHIFT+F opens search tasks', async () => {

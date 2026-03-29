@@ -1485,7 +1485,7 @@
                             {
                               "type": "text",
                               "id": "S0GEi",
-                              "name": "ac1jira",
+            "name": "ac1ticket",
                               "fill": "#CCCCCC",
                               "content": "DEV-149194",
                               "fontFamily": "JetBrains Mono",
@@ -2231,7 +2231,7 @@
                             {
                               "type": "text",
                               "id": "2sAZi",
-                              "name": "bc1jira",
+            "name": "bc1ticket",
                               "fill": "#B8B8C8",
                               "content": "DEV-149194",
                               "fontFamily": "JetBrains Mono",
@@ -7589,7 +7589,7 @@
                     {
                       "type": "frame",
                       "id": "3ijY0",
-                      "name": "tvJiraBadge",
+            "name": "tvTicketBadge",
                       "fill": "#EDE9FF",
                       "cornerRadius": 6,
                       "padding": [
@@ -7601,7 +7601,7 @@
                         {
                           "type": "text",
                           "id": "WFk2G",
-                          "name": "tvJiraT",
+            "name": "tvTicketT",
                           "fill": "#5B52A8",
                           "content": "DEV-149194",
                           "fontFamily": "JetBrains Mono",
@@ -8120,7 +8120,7 @@
                         {
                           "type": "frame",
                           "id": "af8Cq",
-                          "name": "jiraSec",
+            "name": "ticketSec",
                           "width": "fill_container",
                           "layout": "vertical",
                           "gap": 8,
@@ -8128,9 +8128,9 @@
                             {
                               "type": "text",
                               "id": "HuGpt",
-                              "name": "jiraLabel",
+            "name": "ticketLabel",
                               "fill": "#6C63C9",
-                              "content": "// JIRA",
+            "content": "// TICKET",
                               "fontFamily": "JetBrains Mono",
                               "fontSize": 10,
                               "fontWeight": "700"
@@ -8138,7 +8138,7 @@
                             {
                               "type": "frame",
                               "id": "T2EAP",
-                              "name": "jiraCard",
+            "name": "ticketCard",
                               "width": "fill_container",
                               "fill": "#FAF8F5",
                               "cornerRadius": 10,
@@ -8154,7 +8154,7 @@
                                 {
                                   "type": "text",
                                   "id": "Pp9s7",
-                                  "name": "jiraKey",
+            "name": "ticketKey",
                                   "fill": "#2D2D3F",
                                   "content": "DEV-149194",
                                   "fontFamily": "Inter",
@@ -8164,7 +8164,7 @@
                                 {
                                   "type": "text",
                                   "id": "1LYp1",
-                                  "name": "jiraTitle",
+            "name": "ticketTitle",
                                   "fill": "#6F6A76",
                                   "textGrowth": "fixed-width",
                                   "width": "fill_container",
@@ -8177,9 +8177,9 @@
                                 {
                                   "type": "text",
                                   "id": "K3kjr",
-                                  "name": "jiraLink",
+            "name": "ticketLink",
                                   "fill": "#6C63C9",
-                                  "content": "Open in Jira ↗",
+            "content": "Open Link ↗",
                                   "fontFamily": "Inter",
                                   "fontSize": 11,
                                   "fontWeight": "normal"
@@ -8728,7 +8728,7 @@
             {
               "type": "frame",
               "id": "KkSpA",
-              "name": "Jira Badge",
+            "name": "Ticket Badge",
               "fill": "#F0F4FF",
               "cornerRadius": 6,
               "padding": [
@@ -8740,7 +8740,7 @@
                 {
                   "type": "text",
                   "id": "ZBaXM",
-                  "name": "jiraText",
+            "name": "ticketText",
                   "fill": "#5E7DE0",
                   "content": "DEV-149194",
                   "fontFamily": "Inter",
@@ -9468,7 +9468,7 @@
             {
               "type": "frame",
               "id": "doTtz",
-              "name": "jiraBadge",
+            "name": "ticketBadge",
               "fill": "#F0EDE8",
               "cornerRadius": 4,
               "padding": [
@@ -9480,7 +9480,7 @@
                 {
                   "type": "text",
                   "id": "jMLIr",
-                  "name": "jiraBadgeText",
+            "name": "ticketBadgeText",
                   "fill": "#9B9493",
                   "content": "DEV-149194",
                   "fontFamily": "JetBrains Mono",
@@ -10174,7 +10174,7 @@
                           "id": "M9gEC",
                           "name": "refWorktreeRow",
                           "fill": "#B0AAA0",
-                          "content": "Worktree · Jira ▸",
+            "content": "Worktree · Link ▸",
                           "fontFamily": "Inter",
                           "fontSize": 11,
                           "fontWeight": "normal"

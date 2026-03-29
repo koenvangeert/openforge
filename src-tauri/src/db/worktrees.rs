@@ -228,8 +228,8 @@ mod tests {
         let conn = db.connection();
         let conn = conn.lock().unwrap();
         conn.execute(
-            "INSERT INTO tasks (id, initial_prompt, status, jira_key, jira_title, jira_status, jira_assignee, project_id, created_at, updated_at, jira_description, prompt, summary) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
-            rusqlite::params!["T-200", "Test task 2", "backlog", "PROJ-200", "Task 2 summary", "To Do", "bob", None::<String>, 1000, 1000, None::<String>, "Test task 2", None::<String>],
+            "INSERT INTO tasks (id, initial_prompt, status, project_id, created_at, updated_at, prompt, summary) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            rusqlite::params!["T-200", "Test task 2", "backlog", None::<String>, 1000, 1000, "Test task 2", None::<String>],
         ).expect("Failed to insert test task T-200");
         drop(conn);
 
@@ -241,8 +241,8 @@ mod tests {
         let conn = db.connection();
         let conn = conn.lock().unwrap();
         conn.execute(
-            "INSERT INTO tasks (id, initial_prompt, status, jira_key, jira_title, jira_status, jira_assignee, project_id, created_at, updated_at, jira_description, prompt, summary) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
-            rusqlite::params!["T-300", "Test task 3", "backlog", "PROJ-300", "Task 3 summary", "To Do", "charlie", None::<String>, 1000, 1000, None::<String>, "Test task 3", None::<String>],
+            "INSERT INTO tasks (id, initial_prompt, status, project_id, created_at, updated_at, prompt, summary) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            rusqlite::params!["T-300", "Test task 3", "backlog", None::<String>, 1000, 1000, "Test task 3", None::<String>],
         ).expect("Failed to insert test task T-300");
         drop(conn);
 
@@ -295,8 +295,8 @@ mod tests {
         let conn = db.connection();
         let conn = conn.lock().unwrap();
         conn.execute(
-             "INSERT INTO tasks (id, initial_prompt, status, jira_key, jira_title, jira_status, jira_assignee, project_id, created_at, updated_at, jira_description, prompt, summary) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
-             rusqlite::params!["T-1", "Doing task", "doing", "PROJ-1", "Summary", "In Progress", "alice", None::<String>, 1000, 1000, None::<String>, "Doing task", None::<String>],
+             "INSERT INTO tasks (id, initial_prompt, status, project_id, created_at, updated_at, prompt, summary) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+             rusqlite::params!["T-1", "Doing task", "doing", None::<String>, 1000, 1000, "Doing task", None::<String>],
          ).expect("insert T-1");
         drop(conn);
 
@@ -316,8 +316,8 @@ mod tests {
         let conn = db.connection();
         let conn = conn.lock().unwrap();
         conn.execute(
-             "INSERT INTO tasks (id, initial_prompt, status, jira_key, jira_title, jira_status, jira_assignee, project_id, created_at, updated_at, jira_description, prompt, summary) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
-             rusqlite::params!["T-2", "Backlog task", "backlog", "PROJ-2", "Summary", "To Do", "bob", None::<String>, 1000, 1000, None::<String>, "Backlog task", None::<String>],
+             "INSERT INTO tasks (id, initial_prompt, status, project_id, created_at, updated_at, prompt, summary) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+             rusqlite::params!["T-2", "Backlog task", "backlog", None::<String>, 1000, 1000, "Backlog task", None::<String>],
          ).expect("insert T-2");
         drop(conn);
 
@@ -337,8 +337,8 @@ mod tests {
         let conn = db.connection();
         let conn = conn.lock().unwrap();
         conn.execute(
-             "INSERT INTO tasks (id, initial_prompt, status, jira_key, jira_title, jira_status, jira_assignee, project_id, created_at, updated_at, jira_description, prompt, summary) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
-             rusqlite::params!["T-3", "Done task", "done", "PROJ-3", "Summary", "Done", "charlie", None::<String>, 1000, 1000, None::<String>, "Done task", None::<String>],
+             "INSERT INTO tasks (id, initial_prompt, status, project_id, created_at, updated_at, prompt, summary) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+             rusqlite::params!["T-3", "Done task", "done", None::<String>, 1000, 1000, "Done task", None::<String>],
          ).expect("insert T-3");
         drop(conn);
 

@@ -163,11 +163,6 @@ describe('SettingsView', () => {
     expect(screen.getByPlaceholderText('/path/to/project')).toBeTruthy()
   })
 
-  it('renders JIRA board ID field', () => {
-    render(SettingsView, { props: defaultProps })
-    expect(screen.getByPlaceholderText('e.g. PROJ')).toBeTruthy()
-  })
-
   it('renders GitHub repository field', () => {
     render(SettingsView, { props: defaultProps })
     expect(screen.getByPlaceholderText('owner/repo')).toBeTruthy()
@@ -180,27 +175,6 @@ describe('SettingsView', () => {
         'Optional instructions prepended to the first prompt when starting a new task...'
       )
     ).toBeTruthy()
-  })
-
-  it('renders JIRA base URL field on global page', () => {
-    activeProjectId.set(null)
-    projects.set([])
-    render(SettingsView, { props: { ...defaultProps, mode: 'global' as const } })
-    expect(screen.getByPlaceholderText('https://your-domain.atlassian.net')).toBeTruthy()
-  })
-
-  it('renders JIRA username field on global page', () => {
-    activeProjectId.set(null)
-    projects.set([])
-    render(SettingsView, { props: { ...defaultProps, mode: 'global' as const } })
-    expect(screen.getByPlaceholderText('your@email.com')).toBeTruthy()
-  })
-
-  it('renders JIRA API token field on global page', () => {
-    activeProjectId.set(null)
-    projects.set([])
-    render(SettingsView, { props: { ...defaultProps, mode: 'global' as const } })
-    expect(screen.getByPlaceholderText('Your JIRA API token')).toBeTruthy()
   })
 
   it('renders GitHub PAT field on global page', () => {
@@ -237,14 +211,14 @@ describe('SettingsView', () => {
 
   it('does not show global cards on project page', () => {
     render(SettingsView, { props: defaultProps })
-    expect(screen.queryByPlaceholderText('https://your-domain.atlassian.net')).toBeNull()
+    expect(screen.queryByPlaceholderText('ghp_...')).toBeNull()
   })
 
   it('does not show project cards on global page', () => {
     activeProjectId.set(null)
     projects.set([])
     render(SettingsView, { props: { ...defaultProps, mode: 'global' as const } })
-    expect(screen.queryByPlaceholderText('My Project')).toBeNull()
+    expect(screen.queryByPlaceholderText('owner/repo')).toBeNull()
   })
 
   it('does not render a Save Settings button (auto-save replaces it)', () => {
@@ -345,8 +319,8 @@ describe('SettingsView', () => {
       await vi.advanceTimersByTimeAsync(50)
       vi.mocked(setConfig).mockClear()
 
-      const jiraInput = screen.getByPlaceholderText('https://your-domain.atlassian.net')
-      await fireEvent.input(jiraInput, { target: { value: 'https://test.atlassian.net' } })
+      const tokenInput = screen.getByPlaceholderText('ghp_...')
+      await fireEvent.input(tokenInput, { target: { value: 'ghp_new' } })
 
       await vi.advanceTimersByTimeAsync(600)
 
@@ -513,14 +487,6 @@ describe('SettingsView', () => {
     expect(checkboxes.length).toBeGreaterThan(0)
   })
 
-  it('JIRA API token field has type=password on global page', () => {
-    activeProjectId.set(null)
-    projects.set([])
-    render(SettingsView, { props: { ...defaultProps, mode: 'global' as const } })
-    const apiTokenInput = screen.getByPlaceholderText('Your JIRA API token') as HTMLInputElement
-    expect(apiTokenInput.type).toBe('password')
-  })
-
   it('GitHub PAT field has type=password on global page', () => {
     activeProjectId.set(null)
     projects.set([])
@@ -565,7 +531,7 @@ describe('SettingsView', () => {
     render(SettingsView, { props: { ...defaultProps, mode: 'global' as const } })
 
     expect(screen.queryByPlaceholderText('My Project')).toBeNull()
-    expect(screen.getByPlaceholderText('https://your-domain.atlassian.net')).toBeTruthy()
+    expect(screen.getByPlaceholderText('ghp_...')).toBeTruthy()
   })
 
   it('reset to defaults shows only one confirm dialog', async () => {

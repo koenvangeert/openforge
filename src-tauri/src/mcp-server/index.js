@@ -100,7 +100,6 @@ server.tool(
         `Status: ${data.status}`,
         data.prompt ? `Prompt: ${data.prompt}` : null,
         data.summary ? `Summary: ${data.summary}` : null,
-        data.jira_key ? `Jira: ${data.jira_key}` : null,
       ].filter(Boolean).join('\n');
       return { content: [{ type: 'text', text: lines }] };
     } catch (e) {

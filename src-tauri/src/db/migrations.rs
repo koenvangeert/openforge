@@ -3,7 +3,7 @@ use rusqlite_migration::{Migrations, M};
 
 /// The user_version that a fully-migrated fresh database will have.
 /// Equals the number of migrations returned by [`get_migrations`].
-pub const LATEST_USER_VERSION: i32 = 18;
+pub const LATEST_USER_VERSION: i32 = 19;
 
 /// Returns the complete migration set for this application.
 /// This is the single source of truth for schema version management.
@@ -21,15 +21,10 @@ CREATE TABLE IF NOT EXISTS tasks (
     id TEXT PRIMARY KEY,
     title TEXT NOT NULL,
     status TEXT NOT NULL,
-    jira_key TEXT,
-    jira_status TEXT,
-    jira_assignee TEXT,
     plan_text TEXT,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL,
-    project_id TEXT REFERENCES projects(id),
-    jira_title TEXT,
-    jira_description TEXT
+    project_id TEXT REFERENCES projects(id)
 );
 
 CREATE TABLE IF NOT EXISTS agent_sessions (
@@ -165,18 +160,10 @@ CREATE INDEX IF NOT EXISTS idx_self_review_comments_task_round ON self_review_co
 CREATE INDEX IF NOT EXISTS idx_review_prs_updated_at ON review_prs(updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_review_prs_repo ON review_prs(repo_owner, repo_name);
 
-INSERT OR IGNORE INTO config (key, value) VALUES ('jira_api_token', '');
-INSERT OR IGNORE INTO config (key, value) VALUES ('jira_base_url', '');
-INSERT OR IGNORE INTO config (key, value) VALUES ('jira_board_id', '');
-INSERT OR IGNORE INTO config (key, value) VALUES ('jira_username', '');
-INSERT OR IGNORE INTO config (key, value) VALUES ('filter_assigned_to_me', 'true');
-INSERT OR IGNORE INTO config (key, value) VALUES ('exclude_done_tickets', 'true');
-INSERT OR IGNORE INTO config (key, value) VALUES ('custom_jql', '');
 INSERT OR IGNORE INTO config (key, value) VALUES ('github_token', '');
 INSERT OR IGNORE INTO config (key, value) VALUES ('github_default_repo', '');
 INSERT OR IGNORE INTO config (key, value) VALUES ('opencode_port', '4096');
 INSERT OR IGNORE INTO config (key, value) VALUES ('opencode_auto_start', 'true');
-INSERT OR IGNORE INTO config (key, value) VALUES ('jira_poll_interval', '60');
 INSERT OR IGNORE INTO config (key, value) VALUES ('github_poll_interval', '15');
 INSERT OR IGNORE INTO config (key, value) VALUES ('next_task_id', '1');
 INSERT OR IGNORE INTO config (key, value) VALUES ('next_project_id', '1')
@@ -185,7 +172,7 @@ INSERT OR IGNORE INTO config (key, value) VALUES ('next_project_id', '1')
                 // One-time migration: Copy per-project credentials to global config
                 let global_token: String = tx
                     .query_row(
-                        "SELECT value FROM config WHERE key = 'jira_api_token'",
+                        "SELECT value FROM config WHERE key = 'github_token'",
                         [],
                         |row| row.get(0),
                     )
@@ -193,33 +180,25 @@ INSERT OR IGNORE INTO config (key, value) VALUES ('next_project_id', '1')
 
                 if global_token.is_empty() {
                     let source_project: Option<String> = tx.query_row(
-                        "SELECT project_id FROM project_config WHERE key = 'jira_api_token' AND value != '' LIMIT 1",
+                        "SELECT project_id FROM project_config WHERE key = 'github_token' AND value != '' LIMIT 1",
                         [],
                         |row| row.get(0),
                     ).ok();
 
                     if let Some(project_id) = source_project {
-                        let keys = [
-                            "jira_base_url",
-                            "jira_username",
-                            "jira_api_token",
-                            "github_token",
-                        ];
-                        for key in &keys {
-                            let value: String = tx
-                                .query_row(
-                                    "SELECT value FROM project_config WHERE project_id = ?1 AND key = ?2",
-                                    rusqlite::params![project_id, key],
-                                    |row| row.get(0),
-                                )
-                                .unwrap_or_default();
-                            if !value.is_empty() {
-                                tx.execute(
-                                    "UPDATE config SET value = ?1 WHERE key = ?2",
-                                    rusqlite::params![value, key],
-                                )
-                                .map_err(rusqlite_migration::HookError::RusqliteError)?;
-                            }
+                        let value: String = tx
+                            .query_row(
+                                "SELECT value FROM project_config WHERE project_id = ?1 AND key = 'github_token'",
+                                rusqlite::params![project_id],
+                                |row| row.get(0),
+                            )
+                            .unwrap_or_default();
+                        if !value.is_empty() {
+                            tx.execute(
+                                "UPDATE config SET value = ?1 WHERE key = 'github_token'",
+                                rusqlite::params![value],
+                            )
+                            .map_err(rusqlite_migration::HookError::RusqliteError)?;
                         }
                     }
                 }
@@ -665,6 +644,72 @@ CREATE INDEX IF NOT EXISTS idx_task_workspaces_status ON task_workspaces(status)
 CREATE INDEX IF NOT EXISTS idx_task_workspaces_project ON task_workspaces(project_id, updated_at DESC);
             "#,
         ),
+        M::up_with_hook("SELECT 1;", |tx| {
+            let has_tasks_table: bool = tx
+                .query_row(
+                    "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='tasks'",
+                    [],
+                    |r| r.get(0),
+                )
+                .unwrap_or(false);
+
+            if has_tasks_table {
+                for column in [
+                    "jira_key",
+                    "jira_title",
+                    "jira_status",
+                    "jira_assignee",
+                    "jira_description",
+                ] {
+                    let exists: bool = tx
+                        .query_row(
+                            &format!(
+                                "SELECT COUNT(*) > 0 FROM pragma_table_info('tasks') WHERE name = '{}'",
+                                column
+                            ),
+                            [],
+                            |r| r.get(0),
+                        )
+                        .unwrap_or(false);
+                    if exists {
+                        tx.execute(&format!("ALTER TABLE tasks DROP COLUMN {}", column), [])
+                            .map_err(rusqlite_migration::HookError::RusqliteError)?;
+                    }
+                }
+            }
+
+            let has_config_table: bool = tx
+                .query_row(
+                    "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='config'",
+                    [],
+                    |r| r.get(0),
+                )
+                .unwrap_or(false);
+            if has_config_table {
+                tx.execute(
+                    "DELETE FROM config WHERE key LIKE 'jira_%' OR key IN ('custom_jql', 'filter_assigned_to_me', 'exclude_done_tickets')",
+                    [],
+                )
+                .map_err(rusqlite_migration::HookError::RusqliteError)?;
+            }
+
+            let has_project_config_table: bool = tx
+                .query_row(
+                    "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='project_config'",
+                    [],
+                    |r| r.get(0),
+                )
+                .unwrap_or(false);
+            if has_project_config_table {
+                tx.execute(
+                    "DELETE FROM project_config WHERE key LIKE 'jira_%' OR key IN ('custom_jql', 'filter_assigned_to_me', 'exclude_done_tickets')",
+                    [],
+                )
+                .map_err(rusqlite_migration::HookError::RusqliteError)?;
+            }
+
+            Ok(())
+        }),
     ])
 }
 
@@ -829,8 +874,32 @@ mod tests {
             .expect("Failed to count config rows");
 
         assert_eq!(
-            config_count, 17,
-            "All 17 default config values should be inserted"
+            config_count, 9,
+            "All 9 default config values should be inserted"
+        );
+
+        let jira_columns: i32 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('tasks') WHERE name IN ('jira_key', 'jira_title', 'jira_status', 'jira_assignee', 'jira_description')",
+                [],
+                |row| row.get(0),
+            )
+            .expect("Failed to count jira columns in tasks");
+        assert_eq!(
+            jira_columns, 0,
+            "Fresh schema must not include jira columns in tasks table"
+        );
+
+        let jira_config_count: i32 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM config WHERE key LIKE 'jira_%' OR key IN ('custom_jql', 'filter_assigned_to_me', 'exclude_done_tickets')",
+                [],
+                |row| row.get(0),
+            )
+            .expect("Failed to count jira-related config keys");
+        assert_eq!(
+            jira_config_count, 0,
+            "Fresh schema must not seed jira-related config"
         );
 
         // Clean up
@@ -840,7 +909,7 @@ mod tests {
     }
 
     #[test]
-    fn test_migration_copies_credentials_to_global() {
+    fn test_migration_copies_github_token_to_global() {
         let path = format!("/tmp/test_migration_copy_mig_{}.db", std::process::id());
         let _ = fs::remove_file(&path);
 
@@ -868,21 +937,6 @@ mod tests {
             ).expect("insert project");
             conn.execute(
                 "INSERT INTO project_config (project_id, key, value) VALUES (?, ?, ?)",
-                rusqlite::params!["proj-1", "jira_api_token", "proj-token"],
-            )
-            .expect("insert jira_api_token");
-            conn.execute(
-                "INSERT INTO project_config (project_id, key, value) VALUES (?, ?, ?)",
-                rusqlite::params!["proj-1", "jira_base_url", "https://test.atlassian.net"],
-            )
-            .expect("insert jira_base_url");
-            conn.execute(
-                "INSERT INTO project_config (project_id, key, value) VALUES (?, ?, ?)",
-                rusqlite::params!["proj-1", "jira_username", "user@test.com"],
-            )
-            .expect("insert jira_username");
-            conn.execute(
-                "INSERT INTO project_config (project_id, key, value) VALUES (?, ?, ?)",
                 rusqlite::params!["proj-1", "github_token", "ghp_testtoken"],
             )
             .expect("insert github_token");
@@ -891,19 +945,6 @@ mod tests {
         // Now open with Database::new() which will run the migration hook
         let db = Database::new(PathBuf::from(&path)).expect("Failed to open DB");
 
-        // Verify credentials were copied to global config by the migration hook
-        assert_eq!(
-            db.get_config("jira_api_token").unwrap(),
-            Some("proj-token".to_string())
-        );
-        assert_eq!(
-            db.get_config("jira_base_url").unwrap(),
-            Some("https://test.atlassian.net".to_string())
-        );
-        assert_eq!(
-            db.get_config("jira_username").unwrap(),
-            Some("user@test.com".to_string())
-        );
         assert_eq!(
             db.get_config("github_token").unwrap(),
             Some("ghp_testtoken".to_string())
@@ -923,18 +964,18 @@ mod tests {
 
         {
             let db = Database::new(PathBuf::from(&path)).expect("Failed to create DB");
-            db.set_config("jira_api_token", "existing-token")
+            db.set_config("github_token", "existing-token")
                 .expect("set");
             let project = db
                 .create_project("Test Project", "/tmp/test")
                 .expect("Failed to create project");
-            db.set_project_config(&project.id, "jira_api_token", "project-token")
+            db.set_project_config(&project.id, "github_token", "project-token")
                 .expect("set");
         }
 
         let db = Database::new(PathBuf::from(&path)).expect("Failed to reopen DB");
         assert_eq!(
-            db.get_config("jira_api_token").unwrap(),
+            db.get_config("github_token").unwrap(),
             Some("existing-token".to_string())
         );
 
@@ -1465,6 +1506,121 @@ mod tests {
             prefix.chars().all(|c| c.is_ascii_uppercase()),
             "task_id_prefix should contain only uppercase letters, got: {}",
             prefix
+        );
+
+        drop(conn);
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_upgrade_removes_jira_schema_and_config() {
+        let path = std::env::temp_dir().join(format!(
+            "test_upgrade_removes_jira_schema_and_config_{}.db",
+            std::process::id()
+        ));
+        let _ = fs::remove_file(&path);
+
+        {
+            let conn = rusqlite::Connection::open(&path).expect("open raw db");
+            conn.execute("PRAGMA user_version = 18", [])
+                .expect("set user_version");
+            conn.execute(
+                "CREATE TABLE tasks (
+                    id TEXT PRIMARY KEY,
+                    initial_prompt TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    jira_key TEXT,
+                    jira_title TEXT,
+                    jira_status TEXT,
+                    jira_assignee TEXT,
+                    project_id TEXT,
+                    created_at INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL,
+                    jira_description TEXT,
+                    prompt TEXT,
+                    summary TEXT,
+                    agent TEXT,
+                    permission_mode TEXT
+                )",
+                [],
+            )
+            .expect("create tasks table");
+            conn.execute(
+                "CREATE TABLE config (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
+                [],
+            )
+            .expect("create config table");
+            conn.execute(
+                "CREATE TABLE projects (id TEXT PRIMARY KEY, name TEXT NOT NULL, path TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)",
+                [],
+            )
+            .expect("create projects table");
+            conn.execute(
+                "CREATE TABLE project_config (project_id TEXT NOT NULL, key TEXT NOT NULL, value TEXT NOT NULL, UNIQUE(project_id, key))",
+                [],
+            )
+            .expect("create project_config table");
+
+            conn.execute(
+                "INSERT INTO projects (id, name, path, created_at, updated_at) VALUES ('P-1', 'Project', '/tmp/project', 1, 1)",
+                [],
+            )
+            .expect("insert project");
+            conn.execute(
+                "INSERT INTO config (key, value) VALUES ('jira_api_token', 'token')",
+                [],
+            )
+            .expect("insert jira_api_token");
+            conn.execute(
+                "INSERT INTO config (key, value) VALUES ('jira_base_url', 'https://example.atlassian.net')",
+                [],
+            )
+            .expect("insert jira_base_url");
+            conn.execute(
+                "INSERT INTO project_config (project_id, key, value) VALUES ('P-1', 'jira_username', 'dev@example.com')",
+                [],
+            )
+            .expect("insert project jira_username");
+            conn.execute(
+                "INSERT INTO project_config (project_id, key, value) VALUES ('P-1', 'jira_board_id', '123')",
+                [],
+            )
+            .expect("insert project jira_board_id");
+        }
+
+        let db = Database::new(path.clone()).expect("Database::new");
+        let conn = db.connection();
+        let conn = conn.lock().unwrap();
+
+        let jira_columns: i32 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('tasks') WHERE name IN ('jira_key', 'jira_title', 'jira_status', 'jira_assignee', 'jira_description')",
+                [],
+                |row| row.get(0),
+            )
+            .expect("count jira columns");
+        assert_eq!(jira_columns, 0, "upgrade must remove jira columns");
+
+        let jira_config_count: i32 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM config WHERE key LIKE 'jira_%' OR key IN ('custom_jql', 'filter_assigned_to_me', 'exclude_done_tickets')",
+                [],
+                |row| row.get(0),
+            )
+            .expect("count jira config");
+        assert_eq!(jira_config_count, 0, "upgrade must remove jira config keys");
+
+        let jira_project_config_count: i32 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM project_config WHERE key LIKE 'jira_%' OR key IN ('custom_jql', 'filter_assigned_to_me', 'exclude_done_tickets')",
+                [],
+                |row| row.get(0),
+            )
+            .expect("count jira project config");
+        assert_eq!(
+            jira_project_config_count, 0,
+            "upgrade must remove jira project config keys"
         );
 
         drop(conn);

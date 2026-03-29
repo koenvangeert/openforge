@@ -12,11 +12,6 @@ const baseTask: Task = {
   id: 'T-100',
   initial_prompt: 'Fix login bug',
   status: 'doing',
-  jira_key: null,
-  jira_title: null,
-  jira_status: null,
-  jira_assignee: null,
-  jira_description: null,
   prompt: null,
   summary: null,
   agent: null,
@@ -69,13 +64,6 @@ describe('TaskListItem', () => {
   it('renders title from initial_prompt', () => {
     render(TaskListItem, { props: baseProps })
     expect(screen.getByText('Fix login bug')).toBeTruthy()
-  })
-
-  it('renders jira_title when present instead of initial_prompt', () => {
-    const task = { ...baseTask, jira_title: 'Jira: Fix Login Bug' }
-    render(TaskListItem, { props: { ...baseProps, task } })
-    expect(screen.getByText('Jira: Fix Login Bug')).toBeTruthy()
-    expect(screen.queryByText('Fix login bug')).toBeNull()
   })
 
   it('renders only first line of initial_prompt as title', () => {

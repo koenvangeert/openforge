@@ -7,11 +7,6 @@ const baseTask: Task = {
   id: 'T-42',
   initial_prompt: 'Implement auth middleware',
   status: 'backlog',
-  jira_key: 'PROJ-123',
-  jira_title: 'Add JWT authentication to REST API',
-  jira_status: 'To Do',
-  jira_assignee: 'Alice',
-  jira_description: null,
   prompt: null,
   summary: null,
   agent: null,
@@ -48,33 +43,6 @@ describe('TaskCard', () => {
     render(TaskCard, { props: { task: baseTask } })
     expect(screen.getByText('T-42')).toBeTruthy()
     expect(screen.getByText('Implement auth middleware')).toBeTruthy()
-  })
-
-  it('renders JIRA badge when jira_key is present', () => {
-    render(TaskCard, { props: { task: baseTask } })
-    expect(screen.getByText('PROJ-123')).toBeTruthy()
-  })
-
-  it('hides JIRA badge when jira_key is null', () => {
-    const taskWithoutJira = { ...baseTask, jira_key: null }
-    render(TaskCard, { props: { task: taskWithoutJira } })
-    expect(screen.queryByText('PROJ-123')).toBeNull()
-  })
-
-  it('renders jira_title when present', () => {
-    render(TaskCard, { props: { task: baseTask } })
-    expect(screen.getByText('Add JWT authentication to REST API')).toBeTruthy()
-  })
-
-  it('hides jira_title when null', () => {
-    const taskWithoutJiraTitle = { ...baseTask, jira_title: null }
-    render(TaskCard, { props: { task: taskWithoutJiraTitle } })
-    expect(screen.queryByText('Add JWT authentication to REST API')).toBeNull()
-  })
-
-  it('renders jira_assignee', () => {
-    render(TaskCard, { props: { task: baseTask } })
-    expect(screen.getByText('@Alice')).toBeTruthy()
   })
 
   it('shows running status when session is running', () => {

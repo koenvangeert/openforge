@@ -54,7 +54,6 @@ pub struct GetTaskInfoResponse {
     pub prompt: Option<String>,
     pub summary: Option<String>,
     pub status: String,
-    pub jira_key: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -142,7 +141,6 @@ pub async fn create_task_handler(
         .create_task(
             &request.initial_prompt,
             "backlog",
-            None,
             Some(&project_id),
             None,
             None,
@@ -226,7 +224,6 @@ pub async fn get_task_info_handler(
             prompt: task.prompt,
             summary: task.summary,
             status: task.status,
-            jira_key: task.jira_key,
         })),
         None => Err(StatusCode::NOT_FOUND),
     }
@@ -566,14 +563,13 @@ mod tests {
             db.create_task(
                 "Task A",
                 "backlog",
-                None,
                 Some(&project.id),
                 None,
                 None,
                 None,
             )
             .expect("create task a");
-            db.create_task("Task B", "doing", None, Some(&project.id), None, None, None)
+            db.create_task("Task B", "doing", Some(&project.id), None, None, None)
                 .expect("create task b");
         }
 
@@ -608,7 +604,6 @@ mod tests {
             db.create_task(
                 "Task backlog",
                 "backlog",
-                None,
                 Some(&project.id),
                 None,
                 None,
@@ -618,7 +613,6 @@ mod tests {
             db.create_task(
                 "Task doing",
                 "doing",
-                None,
                 Some(&project.id),
                 None,
                 None,
@@ -747,7 +741,6 @@ mod tests {
                 .create_task(
                     "Task P1",
                     "doing",
-                    None,
                     Some(&project1.id),
                     None,
                     None,
@@ -758,7 +751,6 @@ mod tests {
                 .create_task(
                     "Task P2",
                     "doing",
-                    None,
                     Some(&project2.id),
                     None,
                     None,
@@ -1295,14 +1287,12 @@ mod tests {
             prompt: Some("Do something cool".to_string()),
             summary: Some("Did the thing".to_string()),
             status: "doing".to_string(),
-            jira_key: Some("PROJ-1".to_string()),
         };
         assert_eq!(response.id, "T-42");
         assert_eq!(response.initial_prompt, "My Task");
         assert_eq!(response.prompt, Some("Do something cool".to_string()));
         assert_eq!(response.summary, Some("Did the thing".to_string()));
         assert_eq!(response.status, "doing");
-        assert_eq!(response.jira_key, Some("PROJ-1".to_string()));
     }
 
     #[test]
@@ -1313,11 +1303,9 @@ mod tests {
             prompt: None,
             summary: None,
             status: "backlog".to_string(),
-            jira_key: None,
         };
         assert!(response.prompt.is_none());
         assert!(response.summary.is_none());
-        assert!(response.jira_key.is_none());
     }
 
     #[test]
@@ -1328,7 +1316,6 @@ mod tests {
             prompt: Some("Implement X".to_string()),
             summary: Some("Implemented X".to_string()),
             status: "done".to_string(),
-            jira_key: Some("PROJ-99".to_string()),
         };
         let json = serde_json::to_string(&response).expect("Failed to serialize");
         assert!(json.contains("\"id\":\"T-99\""));
@@ -1336,7 +1323,28 @@ mod tests {
         assert!(json.contains("\"prompt\":\"Implement X\""));
         assert!(json.contains("\"summary\":\"Implemented X\""));
         assert!(json.contains("\"status\":\"done\""));
-        assert!(json.contains("\"jira_key\":\"PROJ-99\""));
+    }
+
+    #[test]
+    fn test_get_task_info_response_only_exposes_expected_fields() {
+        let response = GetTaskInfoResponse {
+            id: "T-99".to_string(),
+            initial_prompt: "Full Task".to_string(),
+            prompt: Some("Implement X".to_string()),
+            summary: Some("Implemented X".to_string()),
+            status: "done".to_string(),
+        };
+
+        let json_value = serde_json::to_value(&response).expect("Failed to serialize");
+        assert!(
+            json_value.get("id").is_some()
+                && json_value.get("initial_prompt").is_some()
+                && json_value.get("prompt").is_some()
+                && json_value.get("summary").is_some()
+                && json_value.get("status").is_some()
+                && json_value.as_object().map(|obj| obj.len()).unwrap_or_default() == 5,
+            "HTTP task info response must only expose the expected task fields"
+        );
     }
 
     #[test]
@@ -1347,7 +1355,6 @@ mod tests {
             prompt: None,
             summary: None,
             status: "backlog".to_string(),
-            jira_key: None,
         };
         let json_value = serde_json::to_value(&response).expect("Failed to serialize");
         assert_eq!(json_value["id"], "T-1");
@@ -1355,7 +1362,7 @@ mod tests {
         assert!(json_value["prompt"].is_null());
         assert!(json_value["summary"].is_null());
         assert_eq!(json_value["status"], "backlog");
-        assert!(json_value["jira_key"].is_null());
+        assert_eq!(json_value.as_object().map(|obj| obj.len()), Some(5));
     }
 
     #[test]
@@ -1366,7 +1373,6 @@ mod tests {
             prompt: Some("Test prompt".to_string()),
             summary: None,
             status: "doing".to_string(),
-            jira_key: None,
         };
         let json_value = serde_json::to_value(&response).expect("Failed to convert to JSON value");
         assert_eq!(json_value["id"], "T-7");
@@ -1374,7 +1380,7 @@ mod tests {
         assert_eq!(json_value["prompt"], "Test prompt");
         assert!(json_value["summary"].is_null());
         assert_eq!(json_value["status"], "doing");
-        assert!(json_value["jira_key"].is_null());
+        assert_eq!(json_value.as_object().map(|obj| obj.len()), Some(5));
     }
 
     // ========================================================================

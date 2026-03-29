@@ -65,7 +65,7 @@
     }
   }
 
-  let title = $derived(truncate(firstLine(task.jira_title ?? task.initial_prompt), 80))
+  let title = $derived(truncate(firstLine(task.initial_prompt), 80))
   let badgeClass = $derived(stateToBadgeClass(state))
   let stateLabel = $derived(stateToLabel(state))
   let firstPr = $derived(pullRequests[0] ?? null)

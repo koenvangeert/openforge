@@ -66,12 +66,6 @@ Only create tasks for genuine issues worth addressing. Do not create tasks for m
     prompt.push_str(task.prompt.as_deref().unwrap_or(&task.initial_prompt));
     prompt.push('\n');
 
-    if let Some(ref key) = task.jira_key {
-        if !key.is_empty() {
-            prompt.push_str(&format!("Jira: {}\n", key));
-        }
-    }
-
     prompt
 }
 
@@ -392,385 +386,57 @@ pub async fn finalize_claude_session(
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_build_task_prompt_all_fields() {
-        let task = db::TaskRow {
-            id: "T-123".to_string(),
-            initial_prompt: "Test Task".to_string(),
+    fn sample_task(id: &str, initial_prompt: &str, prompt: Option<&str>) -> db::TaskRow {
+        db::TaskRow {
+            id: id.to_string(),
+            initial_prompt: initial_prompt.to_string(),
             status: "backlog".to_string(),
-            jira_key: None,
-            jira_title: None,
-            jira_status: None,
-            jira_assignee: None,
-            jira_description: None,
             project_id: None,
             created_at: 0,
             updated_at: 0,
-            prompt: None,
+            prompt: prompt.map(|value| value.to_string()),
             summary: None,
             agent: None,
             permission_mode: None,
-        };
+        }
+    }
+
+    #[test]
+    fn test_build_task_prompt_contains_management_and_prompt() {
+        let task = sample_task("T-123", "Test Task", None);
 
         let prompt = build_task_prompt(&task, None, false);
 
         assert!(prompt.contains("Test Task"));
-        assert!(!prompt.contains("Plan:"));
         assert!(prompt.contains("<openforge_task_management>"));
         assert!(prompt.contains("openforge_update_task"));
         assert!(prompt.contains("T-123"));
+        assert!(!prompt.contains("External ticket:"));
     }
 
     #[test]
-    fn test_build_task_prompt_minimal_fields() {
-        let task = db::TaskRow {
-            id: "T-456".to_string(),
-            initial_prompt: "Minimal Task".to_string(),
-            status: "backlog".to_string(),
-            jira_key: None,
-            jira_title: None,
-            jira_status: None,
-            jira_assignee: None,
-            jira_description: None,
-            project_id: None,
-            created_at: 0,
-            updated_at: 0,
-            prompt: None,
-            summary: None,
-            agent: None,
-            permission_mode: None,
-        };
+    fn test_build_task_prompt_uses_prompt_over_initial_prompt() {
+        let task = sample_task("T-456", "Initial title", Some("Specific implementation prompt"));
 
         let prompt = build_task_prompt(&task, None, false);
 
-        assert!(prompt.contains("Minimal Task"));
-        assert!(!prompt.contains("Plan:"));
-        assert!(prompt.contains("openforge_update_task"));
-        assert!(prompt.contains("T-456"));
+        assert!(prompt.contains("Specific implementation prompt"));
+        assert!(!prompt.contains("\nInitial title\n"));
     }
 
     #[test]
-    fn test_build_task_prompt_empty_optional_fields() {
-        let task = db::TaskRow {
-            id: "T-789".to_string(),
-            initial_prompt: "Empty Fields Task".to_string(),
-            status: "backlog".to_string(),
-            jira_key: None,
-            jira_title: None,
-            jira_status: None,
-            jira_assignee: None,
-            jira_description: None,
-            project_id: None,
-            created_at: 0,
-            updated_at: 0,
-            prompt: None,
-            summary: None,
-            agent: None,
-            permission_mode: None,
-        };
-
-        let prompt = build_task_prompt(&task, None, false);
-
-        assert!(prompt.contains("Empty Fields Task"));
-        assert!(!prompt.contains("Plan:"));
-        assert!(prompt.contains("openforge_update_task"));
-    }
-
-    #[test]
-    fn test_build_task_prompt_with_additional_instructions() {
-        let task = db::TaskRow {
-            id: "T-999".to_string(),
-            initial_prompt: "Instructions Task".to_string(),
-            status: "backlog".to_string(),
-            jira_key: None,
-            jira_title: None,
-            jira_status: None,
-            jira_assignee: None,
-            jira_description: None,
-            project_id: None,
-            created_at: 0,
-            updated_at: 0,
-            prompt: None,
-            summary: None,
-            agent: None,
-            permission_mode: None,
-        };
-
-        let prompt = build_task_prompt(
-            &task,
-            Some("Always use TypeScript strict mode.\nFollow the project coding standards."),
-            false,
-        );
-
-        assert!(prompt.starts_with("<openforge_task_management>"));
-        assert!(prompt.contains("Always use TypeScript strict mode."));
-        assert!(prompt.contains("Instructions Task"));
-        assert!(!prompt.contains("Plan:"));
-        assert!(prompt.contains("openforge_update_task"));
-        assert!(prompt.contains("T-999"));
-    }
-
-    #[test]
-    fn test_build_task_prompt_with_empty_additional_instructions() {
-        let task = db::TaskRow {
-            id: "T-111".to_string(),
-            initial_prompt: "Empty Instructions Task".to_string(),
-            status: "backlog".to_string(),
-            jira_key: None,
-            jira_title: None,
-            jira_status: None,
-            jira_assignee: None,
-            jira_description: None,
-            project_id: None,
-            created_at: 0,
-            updated_at: 0,
-            prompt: None,
-            summary: None,
-            agent: None,
-            permission_mode: None,
-        };
-
-        let prompt_with_empty = build_task_prompt(&task, Some(""), false);
-        let prompt_with_none = build_task_prompt(&task, None, false);
-
-        assert_eq!(prompt_with_empty, prompt_with_none);
-    }
-
-    #[test]
-    fn test_build_task_prompt_with_none_additional_instructions() {
-        let task = db::TaskRow {
-            id: "T-222".to_string(),
-            initial_prompt: "None Instructions Task".to_string(),
-            status: "backlog".to_string(),
-            jira_key: None,
-            jira_title: None,
-            jira_status: None,
-            jira_assignee: None,
-            jira_description: None,
-            project_id: None,
-            created_at: 0,
-            updated_at: 0,
-            prompt: None,
-            summary: None,
-            agent: None,
-            permission_mode: None,
-        };
-
-        let prompt = build_task_prompt(&task, None, false);
-
-        assert!(prompt.starts_with("<openforge_task_management>"));
-    }
-
-    #[test]
-    fn test_build_task_prompt_with_jira_key() {
-        let task = db::TaskRow {
-            id: "T-333".to_string(),
-            initial_prompt: "Feature with Jira context".to_string(),
-            status: "backlog".to_string(),
-            jira_key: Some("PROJ-42".to_string()),
-            jira_title: Some("Add auth endpoint".to_string()),
-            jira_status: None,
-            jira_assignee: None,
-            jira_description: Some("<p>As a user I want to authenticate via JWT.</p>".to_string()),
-            project_id: None,
-            created_at: 0,
-            updated_at: 0,
-            prompt: None,
-            summary: None,
-            agent: None,
-            permission_mode: None,
-        };
-
-        let prompt = build_task_prompt(&task, None, false);
-
-        assert!(prompt.contains("Feature with Jira context"));
-        assert!(prompt.contains("Jira: PROJ-42"));
-        assert!(!prompt.contains("Description:"));
-        assert!(!prompt.contains("authenticate via JWT"));
-        assert!(!prompt.contains("Plan:"));
-        assert!(prompt.contains("openforge_update_task"));
-        assert!(prompt.contains("T-333"));
-    }
-
-    #[test]
-    fn test_build_task_prompt_without_jira_key() {
-        let task = db::TaskRow {
-            id: "T-444".to_string(),
-            initial_prompt: "Task without jira".to_string(),
-            status: "backlog".to_string(),
-            jira_key: None,
-            jira_title: None,
-            jira_status: None,
-            jira_assignee: None,
-            jira_description: None,
-            project_id: None,
-            created_at: 0,
-            updated_at: 0,
-            prompt: None,
-            summary: None,
-            agent: None,
-            permission_mode: None,
-        };
-
-        let prompt = build_task_prompt(&task, None, false);
-
-        assert!(prompt.contains("Task without jira"));
-        assert!(!prompt.contains("Jira:"));
-        assert!(prompt.contains("openforge_update_task"));
-    }
-
-    #[test]
-    fn test_build_task_prompt_includes_task_id_in_management_section() {
-        let task = db::TaskRow {
-            id: "T-555".to_string(),
-            initial_prompt: "Task with ID in prompt".to_string(),
-            status: "backlog".to_string(),
-            jira_key: None,
-            jira_title: None,
-            jira_status: None,
-            jira_assignee: None,
-            jira_description: None,
-            project_id: None,
-            created_at: 0,
-            updated_at: 0,
-            prompt: None,
-            summary: None,
-            agent: None,
-            permission_mode: None,
-        };
-
-        let prompt = build_task_prompt(&task, None, false);
-
-        assert!(prompt.contains("T-555"));
-        assert!(prompt.contains("Task with ID in prompt"));
-        // Task ID should appear in the openforge_update_task instruction
-        assert!(prompt.contains("task_id=\"T-555\"") || prompt.contains("\"T-555\""));
-    }
-
-    #[test]
-    fn test_build_task_prompt_uses_prompt() {
-        let task = db::TaskRow {
-            id: "T-666".to_string(),
-            initial_prompt: "Auth fix".to_string(),
-            status: "backlog".to_string(),
-            jira_key: None,
-            jira_title: None,
-            jira_status: None,
-            jira_assignee: None,
-            jira_description: None,
-            project_id: None,
-            created_at: 0,
-            updated_at: 0,
-            prompt: Some("Fix auth bug".to_string()),
-            summary: None,
-            agent: None,
-            permission_mode: None,
-        };
-
-        let prompt = build_task_prompt(&task, None, false);
-
-        assert!(prompt.contains("Fix auth bug"));
-        assert!(!prompt.contains("Auth fix"));
-        assert!(prompt.contains("openforge_update_task"));
-        assert!(prompt.contains("T-666"));
-    }
-
-    #[test]
-    fn test_build_task_prompt_fallback_to_title() {
-        let task = db::TaskRow {
-            id: "T-777".to_string(),
-            initial_prompt: "My task".to_string(),
-            status: "backlog".to_string(),
-            jira_key: None,
-            jira_title: None,
-            jira_status: None,
-            jira_assignee: None,
-            jira_description: None,
-            project_id: None,
-            created_at: 0,
-            updated_at: 0,
-            prompt: None,
-            summary: None,
-            agent: None,
-            permission_mode: None,
-        };
-
-        let prompt = build_task_prompt(&task, None, false);
-
-        assert!(prompt.contains("My task"));
-        assert!(prompt.contains("openforge_update_task"));
-        assert!(prompt.contains("T-777"));
-    }
-
-    #[test]
-    fn test_build_task_prompt_task_management_section_structure() {
-        let task = db::TaskRow {
-            id: "T-42".to_string(),
-            initial_prompt: "Test management section".to_string(),
-            status: "backlog".to_string(),
-            jira_key: None,
-            jira_title: None,
-            jira_status: None,
-            jira_assignee: None,
-            jira_description: None,
-            project_id: None,
-            created_at: 0,
-            updated_at: 0,
-            prompt: Some("Add a login page".to_string()),
-            summary: None,
-            agent: None,
-            permission_mode: None,
-        };
-
-        let prompt = build_task_prompt(&task, None, false);
-
-        assert!(prompt.contains("<openforge_task_management>"));
-        assert!(prompt.contains("</openforge_task_management>"));
-        assert!(prompt.contains("openforge_update_task"));
-        assert!(prompt.contains("task_id=\"T-42\""));
-        assert!(prompt.contains("<initial_prompt_update trigger=\"after_initial_analysis\">"));
-        assert!(prompt.contains("<summary_update trigger=\"before_finalizing\">"));
-        assert!(prompt.contains("<completeness_check>"));
-        assert!(prompt.contains("not complete without"));
-
-        let mgmt_pos = prompt.find("<openforge_task_management>").unwrap();
-        let task_prompt_pos = prompt.find("Add a login page").unwrap();
-        assert!(
-            mgmt_pos < task_prompt_pos,
-            "Task management section should come before task prompt"
-        );
-    }
-
-    #[test]
-    fn test_build_task_prompt_ordering() {
-        let task = db::TaskRow {
-            id: "T-99".to_string(),
-            initial_prompt: "Ordering test".to_string(),
-            status: "backlog".to_string(),
-            jira_key: Some("PROJ-10".to_string()),
-            jira_title: None,
-            jira_status: None,
-            jira_assignee: None,
-            jira_description: None,
-            project_id: None,
-            created_at: 0,
-            updated_at: 0,
-            prompt: Some("Do the work".to_string()),
-            summary: None,
-            agent: None,
-            permission_mode: None,
-        };
+    fn test_build_task_prompt_with_additional_instructions_ordering() {
+        let task = sample_task("T-789", "Task Body", Some("Do the work"));
 
         let prompt = build_task_prompt(&task, Some("Project rules here"), false);
 
         let mgmt_pos = prompt.find("<openforge_task_management>").unwrap();
         let instructions_pos = prompt.find("Project rules here").unwrap();
         let task_prompt_pos = prompt.find("Do the work").unwrap();
-        let jira_pos = prompt.find("Jira: PROJ-10").unwrap();
 
         assert!(mgmt_pos < instructions_pos);
         assert!(instructions_pos < task_prompt_pos);
-        assert!(task_prompt_pos < jira_pos);
+        assert!(!prompt.contains("External ticket:"));
     }
 
     #[test]
@@ -862,23 +528,7 @@ mod tests {
 
     #[test]
     fn test_build_task_prompt_without_code_cleanup() {
-        let task = db::TaskRow {
-            id: "T-800".to_string(),
-            initial_prompt: "No cleanup".to_string(),
-            status: "backlog".to_string(),
-            jira_key: None,
-            jira_title: None,
-            jira_status: None,
-            jira_assignee: None,
-            jira_description: None,
-            project_id: None,
-            created_at: 0,
-            updated_at: 0,
-            prompt: None,
-            summary: None,
-            agent: None,
-            permission_mode: None,
-        };
+        let task = sample_task("T-800", "No cleanup", None);
 
         let prompt = build_task_prompt(&task, None, false);
 
@@ -889,23 +539,7 @@ mod tests {
 
     #[test]
     fn test_build_task_prompt_with_code_cleanup_enabled() {
-        let task = db::TaskRow {
-            id: "T-801".to_string(),
-            initial_prompt: "With cleanup".to_string(),
-            status: "backlog".to_string(),
-            jira_key: None,
-            jira_title: None,
-            jira_status: None,
-            jira_assignee: None,
-            jira_description: None,
-            project_id: None,
-            created_at: 0,
-            updated_at: 0,
-            prompt: None,
-            summary: None,
-            agent: None,
-            permission_mode: None,
-        };
+        let task = sample_task("T-801", "With cleanup", None);
 
         let prompt = build_task_prompt(&task, None, true);
 
@@ -917,23 +551,7 @@ mod tests {
 
     #[test]
     fn test_build_task_prompt_code_cleanup_ordering() {
-        let task = db::TaskRow {
-            id: "T-802".to_string(),
-            initial_prompt: "Cleanup ordering".to_string(),
-            status: "backlog".to_string(),
-            jira_key: None,
-            jira_title: None,
-            jira_status: None,
-            jira_assignee: None,
-            jira_description: None,
-            project_id: None,
-            created_at: 0,
-            updated_at: 0,
-            prompt: None,
-            summary: None,
-            agent: None,
-            permission_mode: None,
-        };
+        let task = sample_task("T-802", "Cleanup ordering", None);
 
         let prompt = build_task_prompt(&task, None, true);
 

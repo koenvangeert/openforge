@@ -3,7 +3,6 @@ pub mod agents;
 pub mod authored_prs;
 pub mod config;
 pub mod github;
-pub mod jira;
 pub mod opencode;
 pub mod orchestration;
 pub mod projects;

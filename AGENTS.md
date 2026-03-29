@@ -7,7 +7,7 @@ Styling: daisyUI v5 + Tailwind CSS v4 (CSS-first config in `src/app.css`, no `ta
 Map-based stores require `new Map()` to trigger Svelte reactivity — direct `.set()` mutation won't work.
 Types in `src/lib/types.ts`. `import type` enforced by `verbatimModuleSyntax`. Nullable fields use `T | null`, not optional.
 Rust commands: `Result<T, String>` with `.map_err(|e| format!(...))`. DB domain files use `impl super::Database`.
-`T-<number>` references (e.g. T-438) are this app's own task IDs — they are NOT Jira tickets. Do not use acli or any Jira tool to look them up.
+`T-<number>` references (e.g. T-438) are this app's own task IDs. Do not use any external issue tracker tooling to look them up.
 Always use TDD: write or update tests first, verify they fail, then implement the code to make them pass.
 Tests must cover business logic only — do not assert on CSS classes, Tailwind utilities, or visual styling. Keep visual aspects out of unit tests.
 Task context menus must use `TaskContextMenu` (`src/components/TaskContextMenu.svelte`) which provides Start Task, Move to, and Delete actions. For non-task context menus, use the lower-level `ContextMenu` + `ContextMenuItem` primitives — never build inline context menu markup.

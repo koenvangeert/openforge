@@ -208,6 +208,10 @@ vi.mock('../lib/router.svelte', () => ({
   }),
 }))
 
+vi.mock('../lib/moveToComplete', () => ({
+  moveTaskToComplete: vi.fn(async () => undefined),
+}))
+
 vi.mock('../lib/actions', () => ({
   loadActions: vi.fn(() => Promise.resolve([
     { id: 'builtin-go', name: 'Go', prompt: '', builtin: true, enabled: true },
@@ -223,11 +227,6 @@ const baseTask: Task = {
   id: 'T-42',
   initial_prompt: 'Implement auth middleware',
   status: 'backlog',
-  jira_key: 'PROJ-123',
-  jira_title: null,
-  jira_status: 'To Do',
-  jira_assignee: 'Alice',
-  jira_description: null,
   prompt: null,
   summary: null,
   agent: null,
@@ -235,6 +234,12 @@ const baseTask: Task = {
   project_id: null,
   created_at: 1000,
   updated_at: 2000,
+}
+
+const secondaryTask: Task = {
+  ...baseTask,
+  id: 'T-99',
+  initial_prompt: 'Implement audit logging',
 }
 
 const mockOnRunAction = vi.fn()
@@ -263,15 +268,8 @@ describe('TaskDetailView', () => {
     expect(screen.getByText('back')).toBeTruthy()
   })
 
-  it('renders task jira_key when present', () => {
+  it('renders task id', () => {
     render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
-    const matches = screen.getAllByText('PROJ-123')
-    expect(matches.length).toBeGreaterThanOrEqual(1)
-  })
-
-  it('renders task id when jira_key is null', () => {
-    const taskWithoutJira = { ...baseTask, jira_key: null }
-    render(TaskDetailView, { props: { task: taskWithoutJira, onRunAction: mockOnRunAction } })
     const matches = screen.getAllByText('T-42')
     expect(matches.length).toBeGreaterThanOrEqual(1)
   })
@@ -386,7 +384,7 @@ describe('TaskDetailView', () => {
   it('renders breadcrumb with task identifier', () => {
     render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
     const breadcrumbRoot = screen.getByText('$ cd board').closest('div')
-    expect(breadcrumbRoot?.textContent).toContain('PROJ-123')
+    expect(breadcrumbRoot?.textContent).toContain('T-42')
   })
 
   it('renders breadcrumb with code segment by default', () => {
@@ -395,9 +393,8 @@ describe('TaskDetailView', () => {
     expect(breadcrumbRoot?.textContent).toContain('code')
   })
 
-  it('renders breadcrumb with task id when no jira_key', () => {
-    const taskWithoutJira = { ...baseTask, jira_key: null }
-    render(TaskDetailView, { props: { task: taskWithoutJira, onRunAction: mockOnRunAction } })
+  it('renders breadcrumb with task id', () => {
+    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
     const breadcrumbRoot = screen.getByText('$ cd board').closest('div')
     expect(breadcrumbRoot?.textContent).toContain('T-42')
   })
@@ -674,42 +671,42 @@ describe('TaskDetailView', () => {
     const doingTask: Task = { ...baseTask, status: 'doing' }
     render(TaskDetailView, { props: { task: doingTask, onRunAction: mockOnRunAction } })
     await fireEvent.click(screen.getByText('Move to Done'))
-    const { updateTaskStatus } = await import('../lib/ipc')
+    const { moveTaskToComplete } = await import('../lib/moveToComplete')
     const { resetToBoard } = await import('../lib/router.svelte')
-    expect(updateTaskStatus).toHaveBeenCalledWith('T-42', 'done')
-    expect(resetToBoard).toHaveBeenCalled()
+    expect(moveTaskToComplete).toHaveBeenCalledWith('T-42')
+    expect(resetToBoard).not.toHaveBeenCalled()
   })
 
-  it('navigates to board immediately before IPC call when moved to done', async () => {
-    const { updateTaskStatus } = await import('../lib/ipc')
+  it('delegates task completion to moveTaskToComplete when moved to done', async () => {
+    const { moveTaskToComplete } = await import('../lib/moveToComplete')
     const { resetToBoard } = await import('../lib/router.svelte')
 
     const callOrder: string[] = []
     vi.mocked(resetToBoard).mockImplementation(() => { callOrder.push('resetToBoard') })
-    vi.mocked(updateTaskStatus).mockImplementation(async () => { callOrder.push('updateTaskStatus') })
+    vi.mocked(moveTaskToComplete).mockImplementation(async () => { callOrder.push('moveTaskToComplete') })
 
     const doingTask: Task = { ...baseTask, status: 'doing' }
     render(TaskDetailView, { props: { task: doingTask, onRunAction: mockOnRunAction } })
     await fireEvent.click(screen.getByText('Move to Done'))
 
     await vi.waitFor(() => {
-      expect(callOrder).toEqual(['resetToBoard', 'updateTaskStatus'])
+      expect(callOrder).toEqual(['moveTaskToComplete'])
     })
 
     vi.mocked(resetToBoard).mockReset()
-    vi.mocked(updateTaskStatus).mockReset()
-    vi.mocked(updateTaskStatus).mockResolvedValue(undefined)
+    vi.mocked(moveTaskToComplete).mockReset()
+    vi.mocked(moveTaskToComplete).mockResolvedValue(undefined)
   })
 
-  it('navigates to board immediately when moving task to done', async () => {
+  it('awaits moveTaskToComplete when moving task to done', async () => {
     const doingTask: Task = { ...baseTask, status: 'doing' }
-    const { updateTaskStatus } = await import('../lib/ipc')
+    const { moveTaskToComplete } = await import('../lib/moveToComplete')
     const { resetToBoard } = await import('../lib/router.svelte')
 
-    let resolveUpdate: (() => void) | undefined
-    vi.mocked(updateTaskStatus).mockImplementationOnce(
+    let resolveMove: (() => void) | undefined
+    vi.mocked(moveTaskToComplete).mockImplementationOnce(
       () => new Promise<void>((resolve) => {
-        resolveUpdate = resolve
+        resolveMove = resolve
       }),
     )
 
@@ -719,10 +716,10 @@ describe('TaskDetailView', () => {
 
     await fireEvent.click(screen.getByText('Move to Done'))
 
-    expect(updateTaskStatus).toHaveBeenCalledWith('T-42', 'done')
-    expect(resetToBoard).toHaveBeenCalled()
+    expect(moveTaskToComplete).toHaveBeenCalledWith('T-42')
+    expect(resetToBoard).not.toHaveBeenCalled()
 
-    resolveUpdate?.()
+    resolveMove?.()
   })
 
   it('shows action buttons in dropdown when actions exist', async () => {
@@ -1046,8 +1043,7 @@ describe('TaskDetailView', () => {
        vi.mocked(getWorktreeForTask).mockResolvedValue({ worktree_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' } as any)
 
        taskReviewModes.set(new Map([['T-42', true]]))
-       const taskB = { ...baseTask, id: 'T-99', initial_prompt: 'Task B', jira_key: null }
-       render(TaskDetailView, { props: { task: taskB, onRunAction: mockOnRunAction } })
+       render(TaskDetailView, { props: { task: secondaryTask, onRunAction: mockOnRunAction } })
 
        await waitFor(() => {
          const breadcrumb = screen.getByText('$ cd board').closest('div')
@@ -1118,8 +1114,7 @@ describe('TaskDetailView', () => {
         vi.mocked(getWorktreeForTask).mockResolvedValue({ worktree_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' } as any)
 
         taskTerminalOpen.set(new Map([['T-42', true]]))
-        const taskB = { ...baseTask, id: 'T-99', initial_prompt: 'Task B', jira_key: null }
-        render(TaskDetailView, { props: { task: taskB, onRunAction: mockOnRunAction } })
+        render(TaskDetailView, { props: { task: secondaryTask, onRunAction: mockOnRunAction } })
 
         await waitFor(() => {
           expect(screen.queryByTestId('resizable-bottom-panel')).toBeNull()

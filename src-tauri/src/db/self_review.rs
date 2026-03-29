@@ -371,8 +371,8 @@ mod tests {
         let conn = db.connection();
         let conn = conn.lock().unwrap();
         conn.execute(
-            "INSERT INTO tasks (id, initial_prompt, status, jira_key, jira_title, jira_status, jira_assignee, project_id, created_at, updated_at, jira_description, prompt, summary) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
-            rusqlite::params!["T-200", "Test task 2", "backlog", "PROJ-200", "Task 2 summary", "To Do", "bob", None::<String>, 1000, 1000, None::<String>, "Test task 2", None::<String>],
+            "INSERT INTO tasks (id, initial_prompt, status, project_id, created_at, updated_at, prompt, summary) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            rusqlite::params!["T-200", "Test task 2", "backlog", None::<String>, 1000, 1000, "Test task 2", None::<String>],
         ).expect("Failed to insert test task T-200");
         drop(conn);
 

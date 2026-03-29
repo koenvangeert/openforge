@@ -42,7 +42,6 @@
   // Project state
   let projectName = $state('')
   let projectPath = $state('')
-  let jiraBoardId = $state('')
   let githubDefaultRepo = $state('')
   let agentInstructions = $state('')
   let aiProvider = $state('claude-code')
@@ -51,9 +50,6 @@
 
   // Global state
   let taskIdPrefix = $state('')
-  let jiraBaseUrl = $state('')
-  let jiraUsername = $state('')
-  let jiraApiToken = $state('')
   let githubToken = $state('')
   let githubPollInterval = $state(30)
 
@@ -127,7 +123,6 @@
     const pid = $activeProjectId
     if (pid) {
       loadProjectSettings(pid).then((settings) => {
-        jiraBoardId = settings.jiraBoardId
         githubDefaultRepo = settings.githubDefaultRepo
         agentInstructions = settings.agentInstructions
         aiProvider = settings.aiProvider
@@ -137,7 +132,6 @@
         focusFilterStates = settings.focusFilterStates
       })
     } else {
-      jiraBoardId = ''
       githubDefaultRepo = ''
       agentInstructions = ''
       aiProvider = 'claude-code'
@@ -168,9 +162,6 @@
     ])
 
     taskIdPrefix = globalSettings.taskIdPrefix
-    jiraBaseUrl = globalSettings.jiraBaseUrl
-    jiraUsername = globalSettings.jiraUsername
-    jiraApiToken = globalSettings.jiraApiToken
     githubToken = globalSettings.githubToken
     isCodeCleanupTasksEnabled = globalSettings.codeCleanupTasksEnabled
     $codeCleanupTasksEnabled = isCodeCleanupTasksEnabled
@@ -236,7 +227,6 @@
           projectId: $activeProjectId,
           projectName,
           projectPath,
-          jiraBoardId,
           githubDefaultRepo,
           agentInstructions,
           aiProvider,
@@ -253,9 +243,6 @@
       }
       await saveGlobalSettings({
         taskIdPrefix,
-        jiraBaseUrl,
-        jiraUsername,
-        jiraApiToken,
         githubToken,
         codeCleanupTasksEnabled: isCodeCleanupTasksEnabled,
         githubPollInterval,
@@ -398,10 +385,8 @@
         />
 
         <SettingsIntegrationsCard
-          {jiraBoardId}
           {githubDefaultRepo}
           disabled={!hasProject}
-          onJiraBoardIdChange={(v) => { jiraBoardId = v; scheduleSave() }}
           onGithubDefaultRepoChange={(v) => { githubDefaultRepo = v; scheduleSave() }}
         />
 
@@ -471,13 +456,7 @@
         />
 
         <SettingsCredentialsCard
-          {jiraBaseUrl}
-          {jiraUsername}
-          {jiraApiToken}
           {githubToken}
-          onJiraBaseUrlChange={(v: string) => { jiraBaseUrl = v; scheduleSave() }}
-          onJiraUsernameChange={(v: string) => { jiraUsername = v; scheduleSave() }}
-          onJiraApiTokenChange={(v: string) => { jiraApiToken = v; scheduleSave() }}
           onGithubTokenChange={(v: string) => { githubToken = v; scheduleSave() }}
         />
 

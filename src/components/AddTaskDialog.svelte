@@ -15,15 +15,13 @@
   let { mode = 'create', task = null, onClose, onTaskSaved }: Props = $props()
 
   let initialPrompt = $state('')
-  let jiraKey = $state('')
   let status = $state<BoardStatus>('backlog')
   let isSubmitting = $state(false)
   let inputEl = $state<HTMLInputElement | null>(null)
-  let selectedAgent = $state('')
   let selectedPermissionMode = $state<PermissionMode>('default')
+  let selectedAgent = $state('')
   let aiProvider = $state<string | null>(null)
   let availableAgents = $state<AutocompleteAgentInfo[]>([])
-  let hasJiraConfigured = $state(false)
 
   const providerDisplayNames: Record<string, string> = {
     'claude-code': 'Claude Code',
@@ -44,9 +42,6 @@
     if ($activeProjectId) {
       const provider = await getProjectConfig($activeProjectId, 'ai_provider')
       aiProvider = provider ?? 'claude-code'
-      
-      const boardId = await getProjectConfig($activeProjectId, 'jira_board_id')
-      hasJiraConfigured = !!boardId
 
       if (aiProvider !== 'claude-code') {
         try {
@@ -64,7 +59,6 @@
   // Initialize form values from props
   $effect(() => {
     initialPrompt = mode === 'edit' && task ? task.initial_prompt : ''
-    jiraKey = mode === 'edit' && task ? (task.jira_key || '') : ''
     status = mode === 'edit' && task ? task.status : 'backlog'
   })
 
@@ -77,7 +71,6 @@
         const newTask = await createTask(
           initialPrompt.trim(),
           status,
-          jiraKey.trim() || null,
           $activeProjectId,
           selectedAgent || null,
           selectedPermissionMode
@@ -86,8 +79,7 @@
       } else if (task) {
         await updateTask(
           task.id,
-          initialPrompt.trim(),
-          jiraKey.trim() || null
+          initialPrompt.trim()
         )
         onTaskSaved?.()
       }
@@ -122,18 +114,6 @@
           required
         />
       </label>
-
-      {#if hasJiraConfigured || (mode === 'edit' && task?.jira_key)}
-      <label class="flex flex-col gap-1.5">
-        <span class="text-xs text-base-content/60 font-medium">JIRA Key</span>
-        <input
-          type="text"
-          class="input input-bordered input-sm w-full"
-          bind:value={jiraKey}
-          placeholder="e.g. PROJ-123"
-        />
-      </label>
-      {/if}
 
       {#if mode === 'create'}
         {#if aiProvider === 'claude-code'}

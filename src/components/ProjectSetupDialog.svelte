@@ -13,10 +13,8 @@
 
   let projectName = $state('')
   let path = $state('')
-  let jiraBoardId = $state('')
   let githubDefaultRepo = $state('')
   let isSubmitting = $state(false)
-  let showJiraSection = $state(false)
   let showGithubSection = $state(false)
   let projectNameInput = $state<HTMLInputElement | null>(null)
 
@@ -31,11 +29,6 @@
     isSubmitting = true
     try {
       const project = await createProject(projectName.trim(), path.trim())
-
-      // Set JIRA config if provided
-      if (jiraBoardId.trim()) {
-        await setProjectConfig(project.id, 'jira_board_id', jiraBoardId.trim())
-      }
 
       // Set GitHub config if provided
       if (githubDefaultRepo.trim()) {
@@ -85,33 +78,6 @@
       />
       <span class="text-[0.65rem] text-base-content/40">Absolute path to the git repository on your machine</span>
     </label>
-
-    <div class="divider my-2"></div>
-
-    <div class="my-1">
-      <button
-        class="btn btn-ghost btn-xs gap-2 text-base-content/60 font-semibold"
-        onclick={() => showJiraSection = !showJiraSection}
-        type="button"
-      >
-        <span class="text-[0.6rem] transition-transform duration-200 {showJiraSection ? 'rotate-90' : ''}">▶</span>
-        <span>JIRA Configuration (Optional)</span>
-      </button>
-    </div>
-
-    {#if showJiraSection}
-      <div class="flex flex-col gap-3.5 pl-4 mt-2">
-        <label class="flex flex-col gap-1.5">
-          <span class="text-xs text-base-content/60 font-medium">Board ID</span>
-          <input
-            type="text"
-            class="input input-bordered input-sm w-full"
-            bind:value={jiraBoardId}
-            placeholder="123"
-          />
-        </label>
-      </div>
-    {/if}
 
     <div class="divider my-2"></div>
 

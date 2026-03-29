@@ -226,9 +226,6 @@
             <div class="flex-1 min-w-0">
               <div class="flex items-center gap-1.5">
                 <span class="font-mono text-xs font-semibold text-primary shrink-0">{task.id}</span>
-                 {#if task.jira_key}
-                   <span class="badge badge-ghost badge-xs shrink-0">{task.jira_key}</span>
-                 {/if}
                  {#if label}
                    <span class="badge {badgeClass} badge-xs shrink-0 {sessionStatus === 'paused' ? 'animate-pulse' : ''}">{label}</span>
                  {/if}

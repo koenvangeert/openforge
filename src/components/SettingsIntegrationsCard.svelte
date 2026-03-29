@@ -1,15 +1,13 @@
 <script lang="ts">
-  import { Plug, Ticket, Github } from 'lucide-svelte'
+  import { Plug, Github } from 'lucide-svelte'
 
   interface Props {
-    jiraBoardId: string
     githubDefaultRepo: string
     disabled: boolean
-    onJiraBoardIdChange: (value: string) => void
     onGithubDefaultRepoChange: (value: string) => void
   }
 
-  let { jiraBoardId, githubDefaultRepo, disabled, onJiraBoardIdChange, onGithubDefaultRepoChange }: Props = $props()
+  let { githubDefaultRepo, disabled, onGithubDefaultRepoChange }: Props = $props()
 </script>
 
 <div id="section-integrations" class="rounded-lg border border-base-300 overflow-hidden" style="background-color: var(--project-bg, oklch(var(--b1)))">
@@ -19,25 +17,7 @@
   </div>
 
   <div class="p-5 {disabled ? 'opacity-50 pointer-events-none' : ''}">
-    <div class="grid grid-cols-2 gap-6">
-      <!-- JIRA Column -->
-      <div>
-        <div class="flex items-center gap-1.5 mb-3">
-          <Ticket size={14} class="text-info" />
-          <span class="text-xs font-semibold text-info uppercase tracking-wider">JIRA</span>
-        </div>
-        <label class="flex flex-col gap-1">
-          <span class="text-[0.7rem] text-base-content/50">Board ID</span>
-          <input
-            type="text"
-            value={jiraBoardId}
-            oninput={(e) => onJiraBoardIdChange(e.currentTarget.value)}
-            placeholder="e.g. PROJ"
-            class="input input-bordered input-sm w-full"
-          />
-        </label>
-      </div>
-
+    <div class="grid grid-cols-1 gap-6">
       <!-- GitHub Column -->
       <div>
         <div class="flex items-center gap-1.5 mb-3">

@@ -8,7 +8,6 @@ export interface ProjectSettingsSavePayload {
   projectId: string
   projectName: string
   projectPath: string
-  jiraBoardId: string
   githubDefaultRepo: string
   agentInstructions: string
   aiProvider: string
@@ -20,9 +19,6 @@ export interface ProjectSettingsSavePayload {
 
 export interface GlobalSettingsSavePayload {
   taskIdPrefix: string
-  jiraBaseUrl: string
-  jiraUsername: string
-  jiraApiToken: string
   githubToken: string
   codeCleanupTasksEnabled: boolean
   githubPollInterval: number
@@ -30,7 +26,6 @@ export interface GlobalSettingsSavePayload {
 
 export async function saveProjectSettings(payload: ProjectSettingsSavePayload): Promise<void> {
   await updateProject(payload.projectId, payload.projectName, payload.projectPath)
-  await setProjectConfig(payload.projectId, 'jira_board_id', payload.jiraBoardId)
   await setProjectConfig(payload.projectId, 'github_default_repo', payload.githubDefaultRepo)
   await setProjectConfig(payload.projectId, 'additional_instructions', payload.agentInstructions)
   await setProjectConfig(payload.projectId, 'ai_provider', payload.aiProvider)
@@ -42,9 +37,6 @@ export async function saveProjectSettings(payload: ProjectSettingsSavePayload): 
 
 export async function saveGlobalSettings(payload: GlobalSettingsSavePayload): Promise<void> {
   await setConfig('task_id_prefix', payload.taskIdPrefix)
-  await setConfig('jira_base_url', payload.jiraBaseUrl)
-  await setConfig('jira_username', payload.jiraUsername)
-  await setConfig('jira_api_token', payload.jiraApiToken)
   await setConfig('github_token', payload.githubToken)
   await setConfig('code_cleanup_tasks_enabled', payload.codeCleanupTasksEnabled ? 'true' : 'false')
   await setConfig('github_poll_interval', String(payload.githubPollInterval))

@@ -535,11 +535,6 @@
     })
 
     // Phase 1: Register ALL event listeners
-    unlisteners.push(
-      await listen('jira-sync-complete', () => {
-        loadTasks()
-      })
-    )
 
     unlisteners.push(
       await listen('github-sync-complete', () => {
@@ -676,7 +671,6 @@
           const task = $tasks.find(t => t.id === taskId)
           $checkpointNotification = {
             ticketId: taskId,
-            ticketKey: task?.jira_key ?? null,
             sessionId: session.id,
             stage: session.stage,
             message: 'Agent needs input',
@@ -765,7 +759,6 @@
           const task = $tasks.find(t => t.id === taskId)
           $checkpointNotification = {
             ticketId: taskId,
-            ticketKey: task?.jira_key ?? null,
             sessionId: session.id,
             stage: session.stage,
             message: 'Agent needs permission',
@@ -931,15 +924,14 @@
             <PromptInput
               projectId={$activeProjectId}
               value={editingTask ? editingTask.initial_prompt : ''}
-              jiraKey={editingTask ? (editingTask.jira_key || '') : ''}
               autofocus={true}
               actions={editingTask ? [] : dialogActions}
-              onSubmit={async (prompt, jiraKey) => {
+              onSubmit={async (prompt) => {
                 try {
                   if (editingTask) {
-                    await updateTask(editingTask.id, prompt, jiraKey)
+                    await updateTask(editingTask.id, prompt)
                   } else {
-                    await createTask(prompt, 'backlog', jiraKey, $activeProjectId, dialogSelectedAgent || null, dialogSelectedPermissionMode)
+                    await createTask(prompt, 'backlog', $activeProjectId, dialogSelectedAgent || null, dialogSelectedPermissionMode)
                   }
                   showAddDialog = false
                   editingTask = null
@@ -949,10 +941,10 @@
                   $error = String(e)
                 }
               }}
-              onStartTask={editingTask ? undefined : async (prompt, jiraKey) => {
+              onStartTask={editingTask ? undefined : async (prompt) => {
                 try {
                   const agent = dialogSelectedAgent || null
-                  const newTask = await createTask(prompt, 'backlog', jiraKey, $activeProjectId, agent, dialogSelectedPermissionMode)
+                  const newTask = await createTask(prompt, 'backlog', $activeProjectId, agent, dialogSelectedPermissionMode)
                   showAddDialog = false
                   editingTask = null
                   await loadTasks()
@@ -962,10 +954,10 @@
                   $error = String(e)
                 }
               }}
-              onRunAction={editingTask ? undefined : async (prompt, jiraKey, actionPrompt) => {
+              onRunAction={editingTask ? undefined : async (prompt, actionPrompt) => {
                 try {
                   const agent = dialogSelectedAgent || null
-                  const newTask = await createTask(prompt, 'backlog', jiraKey, $activeProjectId, agent, dialogSelectedPermissionMode)
+                  const newTask = await createTask(prompt, 'backlog', $activeProjectId, agent, dialogSelectedPermissionMode)
                   showAddDialog = false
                   editingTask = null
                   await loadTasks()

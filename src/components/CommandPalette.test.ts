@@ -17,11 +17,6 @@ function makeTask(overrides: Partial<Task> & { id: string }): Task {
   return {
     initial_prompt: 'Test task',
     status: 'doing',
-    jira_key: null,
-    jira_title: null,
-    jira_status: null,
-    jira_assignee: null,
-    jira_description: null,
     prompt: null,
     summary: null,
     agent: null,
@@ -169,21 +164,6 @@ describe('CommandPalette search filtering', () => {
     const task = makeTask({ id: 'T-1', initial_prompt: 'Fix the login bug' })
     expect(matchesSearch(task, 'login')).toBe(true)
     expect(matchesSearch(task, 'signup')).toBe(false)
-  })
-
-  it('matches by jira key', () => {
-    const task = makeTask({ id: 'T-1', jira_key: 'PROJ-123' })
-    expect(matchesSearch(task, 'proj-123')).toBe(true)
-  })
-
-  it('matches by jira title', () => {
-    const task = makeTask({ id: 'T-1', jira_title: 'Implement OAuth' })
-    expect(matchesSearch(task, 'oauth')).toBe(true)
-  })
-
-  it('matches by jira assignee', () => {
-    const task = makeTask({ id: 'T-1', jira_assignee: 'john.doe' })
-    expect(matchesSearch(task, 'john')).toBe(true)
   })
 
   it('returns all tasks when query is empty', () => {

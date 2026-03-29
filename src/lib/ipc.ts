@@ -5,13 +5,13 @@ import { normalizeTask, normalizeWorkQueueEntry } from './boardStatus'
 type RawTask = Omit<Task, 'status'> & { status: string }
 type RawWorkQueueEntry = Omit<WorkQueueEntry, 'task'> & { task: RawTask }
 
-export async function createTask(initialPrompt: string, status: BoardStatus, jiraKey: string | null, projectId: string | null, agent: string | null, permissionMode: string | null): Promise<Task> {
-  const task = await invoke<RawTask>("create_task", { initialPrompt, status, jiraKey, projectId, agent, permissionMode });
+export async function createTask(initialPrompt: string, status: BoardStatus, projectId: string | null, agent: string | null, permissionMode: string | null): Promise<Task> {
+  const task = await invoke<RawTask>("create_task", { initialPrompt, status, projectId, agent, permissionMode });
   return normalizeTask(task)
 }
 
-export async function updateTask(id: string, initialPrompt: string, jiraKey: string | null): Promise<void> {
-  return invoke("update_task", { id, initialPrompt, jiraKey });
+export async function updateTask(id: string, initialPrompt: string): Promise<void> {
+  return invoke("update_task", { id, initialPrompt });
 }
 
 export async function updateTaskInitialPromptAndSummary(id: string, initialPrompt: string | null, summary: string | null): Promise<void> {
@@ -35,9 +35,6 @@ export async function getWorkQueueTasks(): Promise<WorkQueueEntry[]> {
   return entries.map(normalizeWorkQueueEntry)
 }
 
-export async function refreshJiraInfo(): Promise<number> {
-  return invoke<number>("refresh_jira_info");
-}
 
 export async function getAppMode(): Promise<string> {
   return invoke<string>("get_app_mode");

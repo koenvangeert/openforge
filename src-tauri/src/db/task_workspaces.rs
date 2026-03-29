@@ -222,7 +222,6 @@ mod tests {
             .create_task(
                 "Workspace task",
                 "doing",
-                None,
                 Some(&project.id),
                 None,
                 None,
@@ -280,26 +279,10 @@ mod tests {
             .create_project("Test Project", "/tmp/test-repo")
             .expect("create project failed");
         let doing_task = db
-            .create_task(
-                "Doing task",
-                "doing",
-                None,
-                Some(&project.id),
-                None,
-                None,
-                None,
-            )
+            .create_task("Doing task", "doing", Some(&project.id), None, None, None)
             .expect("create doing task failed");
         let done_task = db
-            .create_task(
-                "Done task",
-                "done",
-                None,
-                Some(&project.id),
-                None,
-                None,
-                None,
-            )
+            .create_task("Done task", "done", Some(&project.id), None, None, None)
             .expect("create done task failed");
 
         db.create_task_workspace_record(
@@ -362,7 +345,6 @@ mod tests {
             .create_task(
                 "Workspace task",
                 "doing",
-                None,
                 Some(&project.id),
                 None,
                 None,
@@ -417,7 +399,6 @@ mod tests {
             .create_task(
                 "Workspace task",
                 "doing",
-                None,
                 Some(&project.id),
                 None,
                 None,

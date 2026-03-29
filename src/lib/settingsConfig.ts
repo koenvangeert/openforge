@@ -12,7 +12,6 @@ import type { Action } from './types'
 import type { TaskState } from './taskState'
 
 export interface ProjectSettingsConfig {
-  jiraBoardId: string
   githubDefaultRepo: string
   agentInstructions: string
   aiProvider: string
@@ -24,9 +23,6 @@ export interface ProjectSettingsConfig {
 
 export interface GlobalSettingsConfig {
   taskIdPrefix: string
-  jiraBaseUrl: string
-  jiraUsername: string
-  jiraApiToken: string
   githubToken: string
   codeCleanupTasksEnabled: boolean
   githubPollInterval: number
@@ -47,7 +43,6 @@ interface OpenCodeInstallStatus {
 }
 
 const DEFAULT_PROJECT_SETTINGS: Omit<ProjectSettingsConfig, 'actions' | 'focusFilterStates'> = {
-  jiraBoardId: '',
   githubDefaultRepo: '',
   agentInstructions: '',
   aiProvider: 'claude-code',
@@ -57,17 +52,13 @@ const DEFAULT_PROJECT_SETTINGS: Omit<ProjectSettingsConfig, 'actions' | 'focusFi
 
 const DEFAULT_GLOBAL_SETTINGS: GlobalSettingsConfig = {
   taskIdPrefix: '',
-  jiraBaseUrl: '',
-  jiraUsername: '',
-  jiraApiToken: '',
   githubToken: '',
   codeCleanupTasksEnabled: false,
   githubPollInterval: 30,
 }
 
 export async function loadProjectSettings(projectId: string): Promise<ProjectSettingsConfig> {
-  const [boardId, repo, instructions, provider, worktrees, color, actions, focusFilterStates] = await Promise.all([
-    getProjectConfig(projectId, 'jira_board_id'),
+  const [repo, instructions, provider, worktrees, color, actions, focusFilterStates] = await Promise.all([
     getProjectConfig(projectId, 'github_default_repo'),
     getProjectConfig(projectId, 'additional_instructions'),
     getProjectConfig(projectId, 'ai_provider'),
@@ -78,7 +69,6 @@ export async function loadProjectSettings(projectId: string): Promise<ProjectSet
   ])
 
   return {
-    jiraBoardId: boardId ?? DEFAULT_PROJECT_SETTINGS.jiraBoardId,
     githubDefaultRepo: repo ?? DEFAULT_PROJECT_SETTINGS.githubDefaultRepo,
     agentInstructions: instructions ?? DEFAULT_PROJECT_SETTINGS.agentInstructions,
     aiProvider: provider ?? DEFAULT_PROJECT_SETTINGS.aiProvider,
@@ -90,11 +80,8 @@ export async function loadProjectSettings(projectId: string): Promise<ProjectSet
 }
 
 export async function loadGlobalSettings(): Promise<GlobalSettingsConfig> {
-  const [taskIdPrefix, jiraBaseUrl, jiraUsername, jiraApiToken, githubToken, codeCleanupTasksEnabled, githubPollInterval] = await Promise.all([
+  const [taskIdPrefix, githubToken, codeCleanupTasksEnabled, githubPollInterval] = await Promise.all([
     getConfig('task_id_prefix'),
-    getConfig('jira_base_url'),
-    getConfig('jira_username'),
-    getConfig('jira_api_token'),
     getConfig('github_token'),
     getConfig('code_cleanup_tasks_enabled'),
     getConfig('github_poll_interval'),
@@ -102,9 +89,6 @@ export async function loadGlobalSettings(): Promise<GlobalSettingsConfig> {
 
   return {
     taskIdPrefix: taskIdPrefix ?? DEFAULT_GLOBAL_SETTINGS.taskIdPrefix,
-    jiraBaseUrl: jiraBaseUrl ?? DEFAULT_GLOBAL_SETTINGS.jiraBaseUrl,
-    jiraUsername: jiraUsername ?? DEFAULT_GLOBAL_SETTINGS.jiraUsername,
-    jiraApiToken: jiraApiToken ?? DEFAULT_GLOBAL_SETTINGS.jiraApiToken,
     githubToken: githubToken ?? DEFAULT_GLOBAL_SETTINGS.githubToken,
     codeCleanupTasksEnabled: codeCleanupTasksEnabled === 'true',
     githubPollInterval: parseInt(githubPollInterval ?? String(DEFAULT_GLOBAL_SETTINGS.githubPollInterval), 10) || DEFAULT_GLOBAL_SETTINGS.githubPollInterval,
