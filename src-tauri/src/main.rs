@@ -33,6 +33,16 @@ use std::sync::{Arc, Mutex};
 use tauri::{Emitter, Manager};
 use whisper_manager::{WhisperManager, WhisperModelSize};
 
+#[cfg(not(test))]
+fn tauri_context() -> tauri::Context<tauri::Wry> {
+    tauri::generate_context!()
+}
+
+#[cfg(test)]
+fn tauri_context() -> tauri::Context<tauri::Wry> {
+    panic!("unit tests should use tauri::test::mock_context instead of the production Tauri context")
+}
+
 // ============================================================================
 // Startup: Resume OpenCode Servers
 // ============================================================================
@@ -789,7 +799,7 @@ fn main() {
             commands::agent_review::dismiss_all_agent_review_comments,
             commands::agent_review::abort_agent_review,
         ])
-        .build(tauri::generate_context!())
+        .build(tauri_context())
         .expect("error while building tauri application");
 
     // Fix Ctrl+C to route through Tauri's exit path so RunEvent::Exit fires
@@ -836,6 +846,14 @@ mod tests {
     use crate::opencode_client::SessionStatusInfo;
     use std::collections::HashMap;
     use std::fs;
+    use tauri::test::{mock_builder, mock_context, noop_assets};
+
+    #[test]
+    fn test_mock_builder_does_not_require_frontend_dist_assets() {
+        let app = mock_builder().build(mock_context(noop_assets()));
+
+        assert!(app.is_ok(), "mock builder should not require frontendDist assets");
+    }
 
     #[test]
     fn test_should_start_project_root_server_for_opencode_project() {
