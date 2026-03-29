@@ -228,7 +228,7 @@ describe('getTaskReasonText', () => {
     it('handles undefined unaddressed_comment_count as 0', () => {
       const task = makeTask({ id: 'T-1' })
       const pr = makePr({ id: 1 })
-      delete (pr as any).unaddressed_comment_count
+      Object.defineProperty(pr, 'unaddressed_comment_count', { value: undefined })
       const reason = getTaskReasonText(task, 'pr-open', null, [pr])
       expect(reason).toBe('Pull request is open — awaiting review.')
     })
@@ -244,7 +244,7 @@ describe('getTaskReasonText', () => {
   describe('Fallback behavior', () => {
     it('returns fallback for unknown state', () => {
       const task = makeTask({ id: 'T-1' })
-      const reason = getTaskReasonText(task, 'unknown-state' as any, null, [])
+      const reason = getTaskReasonText(task, 'unknown-state', null, [])
       expect(reason).toBe('Status: unknown-state')
     })
   })
@@ -252,7 +252,7 @@ describe('getTaskReasonText', () => {
   describe('getTaskReasonText - unaddressed-comments state', () => {
     it('returns reason text for unaddressed-comments state with no PRs', () => {
       const task = makeTask({ id: 'T-1' })
-      const reason = getTaskReasonText(task, 'unaddressed-comments' as any, null, [])
+      const reason = getTaskReasonText(task, 'unaddressed-comments', null, [])
       expect(reason).toBeTruthy()
       expect(typeof reason).toBe('string')
       expect(reason).not.toBe('Status: unaddressed-comments')
@@ -261,7 +261,7 @@ describe('getTaskReasonText', () => {
     it('does not double-count when state is unaddressed-comments and PR has comments', () => {
       const task = makeTask({ id: 'T-1' })
       const pr = makePr({ id: 1, unaddressed_comment_count: 3 })
-      const reason = getTaskReasonText(task, 'unaddressed-comments' as any, null, [pr])
+      const reason = getTaskReasonText(task, 'unaddressed-comments', null, [pr])
       const countMatches = (reason.match(/3/g) ?? []).length
       expect(countMatches).toBeLessThanOrEqual(1)
     })

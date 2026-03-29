@@ -430,7 +430,7 @@ describe('taskStateToBorderClass', () => {
   })
 
   it('maps unaddressed-comments to unaddressed-comments', () => {
-    expect(taskStateToBorderClass('unaddressed-comments' as any)).toBe('unaddressed-comments')
+    expect(taskStateToBorderClass('unaddressed-comments')).toBe('unaddressed-comments')
   })
 })
 
