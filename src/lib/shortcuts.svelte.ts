@@ -13,6 +13,10 @@ export interface ShortcutRegistry {
 export function useShortcutRegistry(): ShortcutRegistry {
   let shortcuts = $state<Map<string, ShortcutHandler>>(new Map())
 
+  function hasImplicitShift(key: string): boolean {
+    return key.length === 1 && !/[a-z]/i.test(key)
+  }
+
   function isPlainKey(key: string): boolean {
     const plainKeys = new Set([
       '1', '2', '3', '4', '5', '6', '7', '8', '9', '0',
@@ -38,15 +42,16 @@ export function useShortcutRegistry(): ShortcutRegistry {
     if (metaKey) shortcutKey += '⌘'
     if (ctrlKey) shortcutKey += '⌃'
     if (altKey) shortcutKey += '⌥'
-    if (shiftKey) shortcutKey += '⇧'
+    if (shiftKey && !hasImplicitShift(key)) shortcutKey += '⇧'
     shortcutKey += normalizeShortcutKey(key)
     return shortcutKey
   }
 
   function handleKeydown(e: KeyboardEvent): void {
     const { key, metaKey, shiftKey, ctrlKey, altKey } = e
+    const hasExplicitShiftModifier = shiftKey && !hasImplicitShift(key)
 
-    const hasModifier = metaKey || ctrlKey || altKey || shiftKey
+    const hasModifier = metaKey || ctrlKey || altKey || hasExplicitShiftModifier
     const isPlain = isPlainKey(key)
 
     if (isPlain && !hasModifier && isInputFocused()) {

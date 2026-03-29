@@ -186,4 +186,23 @@ describe('useShortcutRegistry', () => {
     registry.handleKeydown(event)
     expect(handler).toHaveBeenCalledTimes(1)
   })
+
+  it('handles browser Shift+/ events for registered ? shortcuts', () => {
+    const registry = useShortcutRegistry()
+    const handler = vi.fn()
+
+    registry.register('?', handler)
+
+    const mockIsInputFocused = isInputFocused as ReturnType<typeof vi.fn>
+    mockIsInputFocused.mockReturnValueOnce(false)
+
+    const event = new KeyboardEvent('keydown', {
+      key: '?',
+      shiftKey: true,
+      metaKey: false,
+    })
+
+    registry.handleKeydown(event)
+    expect(handler).toHaveBeenCalledTimes(1)
+  })
 })

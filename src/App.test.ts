@@ -952,13 +952,13 @@ describe('App onMount initialization order', () => {
       expect(commandPaletteModule.default).toHaveBeenCalled()
     })
 
-    it('? opens the keyboard shortcuts dialog', async () => {
+    it('Shift+/ opens the keyboard shortcuts dialog', async () => {
       const App = (await import('./App.svelte')).default
       const modalModule = await import('./components/Modal.svelte')
 
       render(App)
 
-      await fireEvent.keyDown(window, { key: '?', bubbles: true })
+      await fireEvent.keyDown(window, { key: '?', shiftKey: true, bubbles: true })
 
       expect(modalModule.default).toHaveBeenCalled()
     })
@@ -1166,7 +1166,7 @@ describe('App onMount initialization order', () => {
       expect(get(stores.activeProjectId)).toBe('proj-1')
     })
 
-    it('? does NOT open dialog when input is focused', async () => {
+    it('Shift+/ does NOT open dialog when input is focused', async () => {
       const App = (await import('./App.svelte')).default
       render(App)
 
@@ -1176,7 +1176,7 @@ describe('App onMount initialization order', () => {
       input.focus()
 
       // Dispatch ? key and check if preventDefault was called
-      const event = new KeyboardEvent('keydown', { key: '?', bubbles: true })
+      const event = new KeyboardEvent('keydown', { key: '?', shiftKey: true, bubbles: true })
       const preventDefaultSpy = vi.spyOn(event, 'preventDefault')
       window.dispatchEvent(event)
 
@@ -1200,12 +1200,12 @@ describe('App onMount initialization order', () => {
       expect(get(stores.currentView)).toBe('board')
     })
 
-    it('? opens dialog when input is NOT focused', async () => {
+    it('Shift+/ opens dialog when input is NOT focused', async () => {
       const App = (await import('./App.svelte')).default
       render(App)
 
       // Dispatch ? key and check if preventDefault was called
-      const event = new KeyboardEvent('keydown', { key: '?', bubbles: true })
+      const event = new KeyboardEvent('keydown', { key: '?', shiftKey: true, bubbles: true })
       const preventDefaultSpy = vi.spyOn(event, 'preventDefault')
       window.dispatchEvent(event)
 
