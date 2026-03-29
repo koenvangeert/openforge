@@ -21,6 +21,7 @@ const STATE_REASONS: Record<TaskState, string> = {
   'ready-to-merge': 'Ready to merge — all checks passed.',
   'pr-queued': 'Pull request is queued for merge.',
   'pr-merged': 'Pull request merged.',
+  'merge-conflict': 'Pull request has merge conflicts that must be resolved.',
 }
 
 export function getTaskReasonText(

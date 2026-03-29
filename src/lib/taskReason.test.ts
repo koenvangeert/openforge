@@ -181,6 +181,13 @@ describe('getTaskReasonText', () => {
       const reason = getTaskReasonText(task, 'pr-merged', null, [pr])
       expect(reason).toBe('Pull request merged.')
     })
+
+    it('returns "Pull request has merge conflicts that must be resolved." for merge-conflict state', () => {
+      const task = makeTask({ id: 'T-1' })
+      const pr = makePr({ id: 1, mergeable_state: 'dirty' })
+      const reason = getTaskReasonText(task, 'merge-conflict', null, [pr])
+      expect(reason).toBe('Pull request has merge conflicts that must be resolved.')
+    })
   })
 
   describe('Unaddressed comments prepending', () => {

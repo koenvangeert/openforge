@@ -1,6 +1,7 @@
 use rusqlite::{Connection, Result};
 use rusqlite_migration::{Migrations, M};
 
+#[allow(dead_code)]
 /// The user_version that a fully-migrated fresh database will have.
 /// Equals the number of migrations returned by [`get_migrations`].
 pub const LATEST_USER_VERSION: i32 = 19;

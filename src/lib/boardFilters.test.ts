@@ -83,13 +83,19 @@ describe('isFocusTask', () => {
 
   it('returns true for unaddressed-comments state', () => {
     const task = makeTask({ id: 'T-1' })
-    const result = isFocusTask(task, 'unaddressed-comments' as any, [])
+    const result = isFocusTask(task, 'unaddressed-comments', [])
     expect(result).toBe(true)
   })
 
   it('returns true for failed state', () => {
     const task = makeTask({ id: 'T-1' })
     const result = isFocusTask(task, 'failed', [])
+    expect(result).toBe(true)
+  })
+
+  it('returns true for merge-conflict state', () => {
+    const task = makeTask({ id: 'T-1' })
+    const result = isFocusTask(task, 'merge-conflict', [])
     expect(result).toBe(true)
   })
 
@@ -297,6 +303,10 @@ describe('getFilterCounts', () => {
       backlog: 1,
     })
   })
+
+  it('includes merge-conflict', () => {
+    expect(DEFAULT_FOCUS_STATES).toContain('merge-conflict')
+  })
 })
 
 describe('loadFocusFilterStates', () => {
@@ -310,6 +320,28 @@ describe('loadFocusFilterStates', () => {
     vi.mocked(getProjectConfig).mockResolvedValue(JSON.stringify(['idle', 'active']))
     const result = await loadFocusFilterStates('proj-1')
     expect(result).toEqual(['idle', 'active'])
+  })
+
+  it('migrates legacy default stored states to include merge-conflict', async () => {
+    vi.mocked(getProjectConfig).mockResolvedValue(JSON.stringify([
+      'idle',
+      'needs-input',
+      'paused',
+      'agent-done',
+      'failed',
+      'interrupted',
+      'pr-draft',
+      'pr-open',
+      'ci-failed',
+      'changes-requested',
+      'unaddressed-comments',
+      'ready-to-merge',
+      'pr-merged',
+    ]))
+
+    const result = await loadFocusFilterStates('proj-1')
+
+    expect(result).toEqual(DEFAULT_FOCUS_STATES)
   })
 
   it('returns defaults when invalid JSON stored', async () => {

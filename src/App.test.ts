@@ -645,28 +645,32 @@ describe('App onMount initialization order', () => {
       const { getTasksForProject } = await import('./lib/ipc')
       const actionPaletteModule = await import('./components/ActionPalette.svelte')
 
+      const selectedTask: Task = {
+        id: 'task-123',
+        initial_prompt: 'Finish task',
+        prompt: null,
+        summary: null,
+        status: 'doing',
+        agent: null,
+        permission_mode: null,
+        project_id: 'proj-1',
+        created_at: 1000,
+        updated_at: 1000,
+      }
+
       vi.mocked(getTasksForProject).mockResolvedValue([
-        {
-          id: 'task-123',
-          initial_prompt: 'Finish task',
-          prompt: null,
-          summary: null,
-          status: 'doing',
-          agent: null,
-          permission_mode: null,
-          project_id: 'proj-1',
-          created_at: 1000,
-          updated_at: 1000,
-        },
+        selectedTask,
       ])
+
+      stores.tasks.set([selectedTask])
+      stores.pendingTask.set(null)
+      stores.selectedTaskId.set(selectedTask.id)
 
       render(App)
 
       await vi.waitFor(() => {
         expect(getTasksForProject).toHaveBeenCalled()
       })
-
-      stores.selectedTaskId.set('task-123')
 
       await fireEvent.keyDown(window, { key: 'k', metaKey: true, bubbles: true })
 
@@ -714,8 +718,7 @@ describe('App onMount initialization order', () => {
       const { moveTaskToComplete } = await import('./lib/moveToComplete')
       const actionPaletteModule = await import('./components/ActionPalette.svelte')
 
-    vi.mocked(getTasksForProject).mockResolvedValue([
-      {
+      const selectedTask: Task = {
         id: 'task-123',
         initial_prompt: 'Finish task',
         prompt: null,
@@ -726,8 +729,13 @@ describe('App onMount initialization order', () => {
         project_id: 'proj-1',
         created_at: 1000,
         updated_at: 1000,
-      },
-    ])
+      }
+
+      vi.mocked(getTasksForProject).mockResolvedValue([selectedTask])
+
+      stores.tasks.set([selectedTask])
+      stores.pendingTask.set(null)
+      stores.selectedTaskId.set(selectedTask.id)
 
       let resolveMove: (() => void) | undefined
       vi.mocked(moveTaskToComplete).mockImplementationOnce(
@@ -736,48 +744,46 @@ describe('App onMount initialization order', () => {
         }),
       )
 
-    render(App)
+      render(App)
 
-    await vi.waitFor(() => {
-      expect(getTasksForProject).toHaveBeenCalled()
-    })
-
-    stores.selectedTaskId.set('task-123')
-
-    await fireEvent.keyDown(window, { key: 'k', metaKey: true, bubbles: true })
-
-    await vi.waitFor(() => {
-      expect(actionPaletteModule.default).toHaveBeenCalled()
-    })
-
-    const lastCall = vi.mocked(actionPaletteModule.default).mock.calls.at(-1)
-    expect(lastCall).toBeTruthy()
-
-    if (!lastCall) {
-      throw new Error('Expected ActionPalette to receive props')
-    }
-
-    const propsCandidate = lastCall
-      .flatMap((arg) => {
-        if (typeof arg !== 'object' || arg === null) {
-          return []
-        }
-
-        if ('props' in arg && typeof arg.props === 'object' && arg.props !== null) {
-          return [arg, arg.props]
-        }
-
-        return [arg]
+      await vi.waitFor(() => {
+        expect(getTasksForProject).toHaveBeenCalled()
       })
-      .find((arg): arg is { onExecute: (actionId: string) => Promise<void> } => 'onExecute' in arg && typeof arg.onExecute === 'function')
 
-    if (!propsCandidate) {
-      throw new Error('Expected ActionPalette props to include onExecute')
-    }
+      await fireEvent.keyDown(window, { key: 'k', metaKey: true, bubbles: true })
 
-    vi.mocked(nav.resetToBoard).mockClear()
+      await vi.waitFor(() => {
+        expect(actionPaletteModule.default).toHaveBeenCalled()
+      })
 
-    const execution = propsCandidate.onExecute('move-to-done')
+      const lastCall = vi.mocked(actionPaletteModule.default).mock.calls.at(-1)
+      expect(lastCall).toBeTruthy()
+
+      if (!lastCall) {
+        throw new Error('Expected ActionPalette to receive props')
+      }
+
+      const propsCandidate = lastCall
+        .flatMap((arg) => {
+          if (typeof arg !== 'object' || arg === null) {
+            return []
+          }
+
+          if ('props' in arg && typeof arg.props === 'object' && arg.props !== null) {
+            return [arg, arg.props]
+          }
+
+          return [arg]
+        })
+        .find((arg): arg is { onExecute: (actionId: string) => Promise<void> } => 'onExecute' in arg && typeof arg.onExecute === 'function')
+
+      if (!propsCandidate) {
+        throw new Error('Expected ActionPalette props to include onExecute')
+      }
+
+      vi.mocked(nav.resetToBoard).mockClear()
+
+      const execution = propsCandidate.onExecute('move-to-done')
 
       expect(moveTaskToComplete).toHaveBeenCalledWith('task-123')
       expect(nav.resetToBoard).not.toHaveBeenCalled()
@@ -794,42 +800,36 @@ describe('App onMount initialization order', () => {
       const { moveTaskToComplete } = await import('./lib/moveToComplete')
       const actionPaletteModule = await import('./components/ActionPalette.svelte')
 
+      const selectedTask: Task = {
+        id: 'task-200',
+        initial_prompt: 'Order test',
+        prompt: null,
+        summary: null,
+        status: 'doing',
+        agent: null,
+        permission_mode: null,
+        project_id: 'proj-1',
+        created_at: 1000,
+        updated_at: 1000,
+      }
+
       vi.mocked(getTasksForProject).mockResolvedValue([
-        {
-          id: 'task-200',
-          initial_prompt: 'Order test',
-          prompt: null,
-          summary: null,
-          status: 'doing',
-          agent: null,
-          permission_mode: null,
-          project_id: 'proj-1',
-          created_at: 1000,
-          updated_at: 1000,
-        },
+        selectedTask,
       ])
+
+      stores.tasks.set([selectedTask])
+      stores.pendingTask.set(null)
+      stores.selectedTaskId.set(selectedTask.id)
+
+      const callOrder: string[] = []
+      vi.mocked(nav.resetToBoard).mockImplementation(() => { callOrder.push('resetToBoard') })
+      vi.mocked(moveTaskToComplete).mockImplementation(async () => { callOrder.push('moveTaskToComplete') })
 
       render(App)
 
       await vi.waitFor(() => {
         expect(getTasksForProject).toHaveBeenCalled()
       })
-
-      stores.selectedTaskId.set('task-200')
-      stores.tasks.set([
-        {
-          id: 'task-200',
-          initial_prompt: 'Order test',
-          prompt: null,
-          summary: null,
-          status: 'doing',
-          agent: null,
-          permission_mode: null,
-          project_id: 'proj-1',
-          created_at: 1000,
-          updated_at: 1000,
-        },
-      ])
 
       await fireEvent.keyDown(window, { key: 'k', metaKey: true, bubbles: true })
 
@@ -849,10 +849,6 @@ describe('App onMount initialization order', () => {
         .find((arg): arg is { onExecute: (actionId: string) => Promise<void> } => 'onExecute' in arg && typeof arg.onExecute === 'function')
 
       if (!propsCandidate) throw new Error('Expected ActionPalette props to include onExecute')
-
-      const callOrder: string[] = []
-      vi.mocked(nav.resetToBoard).mockImplementation(() => { callOrder.push('resetToBoard') })
-      vi.mocked(moveTaskToComplete).mockImplementation(async () => { callOrder.push('moveTaskToComplete') })
 
       await propsCandidate.onExecute('move-to-done')
 
