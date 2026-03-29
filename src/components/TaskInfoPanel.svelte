@@ -40,18 +40,19 @@
     mergeFeedbackByPr = nextFeedback
   }
 
-  function setTaskPullRequests(nextPrs: PullRequestInfo[]) {
+  function setTaskPullRequests(taskId: string, nextPrs: PullRequestInfo[]) {
     const nextTicketPrs = new Map($ticketPrs)
-    nextTicketPrs.set(task.id, nextPrs)
+    nextTicketPrs.set(taskId, nextPrs)
     ticketPrs.set(nextTicketPrs)
   }
 
-  async function refreshTaskPullRequests() {
+  async function refreshTaskPullRequests(taskId: string) {
     const prs = await getPullRequests()
-    setTaskPullRequests(prs.filter((pr) => pr.ticket_id === task.id))
+    setTaskPullRequests(taskId, prs.filter((pr) => pr.ticket_id === taskId))
   }
 
   async function handleMerge(pr: PullRequestInfo) {
+    const taskId = task.id
     mergingPrId = pr.id
     setMergeFeedback(pr.id, null)
 
@@ -59,6 +60,7 @@
       await mergePullRequest(pr.repo_owner, pr.repo_name, pr.id)
 
       setTaskPullRequests(
+        taskId,
         taskPrs.map((taskPr) => taskPr.id === pr.id
           ? { ...taskPr, state: 'merged', merged_at: Math.floor(Date.now() / 1000) }
           : taskPr)
@@ -76,7 +78,7 @@
             message: `${reason} Pull request state may take a moment to fully refresh.`,
           })
         } else {
-          await refreshTaskPullRequests()
+          await refreshTaskPullRequests(taskId)
         }
       } catch (e) {
         setMergeFeedback(pr.id, {
@@ -97,6 +99,7 @@
   function runMergeSmokeTest(pr: PullRequestInfo, outcome: MergeSmokeOutcome) {
     if (outcome === 'success') {
       setTaskPullRequests(
+        task.id,
         taskPrs.map((taskPr) => taskPr.id === pr.id
           ? { ...taskPr, state: 'merged', merged_at: Math.floor(Date.now() / 1000) }
           : taskPr)
@@ -107,6 +110,7 @@
 
     if (outcome === 'warning') {
       setTaskPullRequests(
+        task.id,
         taskPrs.map((taskPr) => taskPr.id === pr.id
           ? { ...taskPr, state: 'merged', merged_at: Math.floor(Date.now() / 1000) }
           : taskPr)

@@ -456,4 +456,52 @@ describe('TaskInfoPanel', () => {
     expect(getPullRequests).toHaveBeenCalled()
     expect(await screen.findByText(/Merged on/)).toBeTruthy()
   })
+
+  it('does not overwrite Task B PR data when task prop changes during merge async chain', async () => {
+    const taskA = baseTask
+    const taskB: Task = { ...baseTask, id: 'T-99' }
+
+    const prA = createPullRequest({
+      id: 42,
+      ticket_id: 'T-42',
+      ci_status: 'success',
+      review_status: 'approved',
+      mergeable: true,
+      mergeable_state: 'clean',
+    })
+    const prB = createPullRequest({
+      id: 99,
+      ticket_id: 'T-99',
+      ci_status: 'success',
+      review_status: 'approved',
+      mergeable: true,
+      mergeable_state: 'clean',
+    })
+
+    ticketPrs.set(new Map([['T-42', [prA]], ['T-99', [prB]]]))
+
+    const mergedPrA = { ...prA, state: 'merged' as const, merged_at: 3000 }
+    const prBWithNullMergeability = { ...prB, mergeable_state: null, mergeable: null }
+    vi.mocked(getPullRequests).mockResolvedValue([mergedPrA, prBWithNullMergeability])
+
+    let resolveMerge!: () => void
+    vi.mocked(mergePullRequest).mockImplementationOnce(
+      () => new Promise<void>((resolve) => { resolveMerge = resolve })
+    )
+
+    const { rerender } = render(TaskInfoPanel, { props: { task: taskA, worktreePath: null, jiraBaseUrl: '' } })
+
+    await fireEvent.click(await screen.findByRole('button', { name: 'Merge' }))
+
+    await rerender({ task: taskB, worktreePath: null, jiraBaseUrl: '' })
+
+    resolveMerge()
+    await new Promise((r) => setTimeout(r, 50))
+
+    let taskBPrs: PullRequestInfo[] = []
+    ticketPrs.subscribe((map) => { taskBPrs = map.get('T-99') ?? [] })()
+    expect(taskBPrs).toHaveLength(1)
+    expect(taskBPrs[0].id).toBe(99)
+    expect(taskBPrs[0].mergeable_state).toBe('clean')
+  })
 })
