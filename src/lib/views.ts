@@ -3,6 +3,7 @@ import SettingsView from '../components/SettingsView.svelte'
 import PrReviewView from '../components/PrReviewView.svelte'
 import SkillsView from '../components/SkillsView.svelte'
 import WorkQueueView from '../components/WorkQueueView.svelte'
+import FilesView from '../components/FilesView.svelte'
 import type { AppView } from './types'
 
 export type RunActionHandler = (data: { taskId: string; actionPrompt: string; agent: string | null }) => void | Promise<void>
@@ -24,6 +25,7 @@ export const TASK_CLEARING_VIEWS: ReadonlySet<AppView> = new Set([
   'settings',
   'workqueue',
   'global_settings',
+  'files',
 ])
 
 export const ICON_RAIL_HIDDEN_VIEWS: ReadonlySet<AppView> = new Set([
@@ -59,5 +61,9 @@ export const VIEWS: Record<Exclude<AppView, 'board'>, ViewEntry> = {
   workqueue: {
     component: WorkQueueView,
     getProps: ({ onRunAction }) => ({ onRunAction }),
+  },
+  files: {
+    component: FilesView,
+    getProps: ({ projectName }) => ({ projectName }),
   },
 }

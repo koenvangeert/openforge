@@ -4,6 +4,7 @@ import { ICON_RAIL_HIDDEN_VIEWS, TASK_CLEARING_VIEWS, VIEWS } from './views'
 describe('views registry', () => {
   it('registers all non-board top-level views', () => {
     expect(Object.keys(VIEWS).sort()).toEqual([
+      'files',
       'global_settings',
       'pr_review',
       'settings',
@@ -44,6 +45,7 @@ describe('views registry', () => {
 
   it('tracks navigation metadata for view behavior', () => {
     expect([...TASK_CLEARING_VIEWS].sort()).toEqual([
+      'files',
       'global_settings',
       'pr_review',
       'settings',
