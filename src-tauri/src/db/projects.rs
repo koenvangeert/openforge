@@ -130,29 +130,47 @@ impl super::Database {
 
     /// Delete a project and all associated data
     pub fn delete_project(&self, id: &str) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
-        conn.execute(
+        let mut conn = self.conn.lock().unwrap();
+        let tx = conn.transaction()?;
+        tx.execute(
             "DELETE FROM agent_sessions WHERE ticket_id IN (SELECT id FROM tasks WHERE project_id = ?1)",
             rusqlite::params![id],
         )?;
-        conn.execute(
+        tx.execute(
             "DELETE FROM pr_comments WHERE pr_id IN (SELECT id FROM pull_requests WHERE ticket_id IN (SELECT id FROM tasks WHERE project_id = ?1))",
             rusqlite::params![id],
         )?;
-        conn.execute(
+        tx.execute(
             "DELETE FROM pull_requests WHERE ticket_id IN (SELECT id FROM tasks WHERE project_id = ?1)",
             rusqlite::params![id],
         )?;
-        conn.execute(
+        tx.execute(
             "DELETE FROM worktrees WHERE project_id = ?1",
             rusqlite::params![id],
         )?;
-        conn.execute(
+        tx.execute(
+            "DELETE FROM task_workspaces WHERE project_id = ?1",
+            rusqlite::params![id],
+        )?;
+        tx.execute(
+            "DELETE FROM shepherd_messages WHERE project_id = ?1",
+            rusqlite::params![id],
+        )?;
+        tx.execute(
+            "DELETE FROM action_items WHERE project_id = ?1",
+            rusqlite::params![id],
+        )?;
+        tx.execute(
+            "DELETE FROM self_review_comments WHERE task_id IN (SELECT id FROM tasks WHERE project_id = ?1)",
+            rusqlite::params![id],
+        )?;
+        tx.execute(
             "DELETE FROM tasks WHERE project_id = ?1",
             rusqlite::params![id],
         )?;
         // project_config cascades automatically via ON DELETE CASCADE
-        conn.execute("DELETE FROM projects WHERE id = ?1", rusqlite::params![id])?;
+        tx.execute("DELETE FROM projects WHERE id = ?1", rusqlite::params![id])?;
+        tx.commit()?;
         Ok(())
     }
 
@@ -390,6 +408,36 @@ mod tests {
 
         db.create_agent_session("ses-1", &task.id, None, "implement", "running", "opencode")
             .expect("create session failed");
+        db.create_task_workspace_record(
+            &task.id,
+            &project.id,
+            "/tmp/workspace",
+            "/tmp/repo",
+            "git_worktree",
+            Some("feature/test"),
+            "opencode",
+        )
+        .expect("create task workspace failed");
+
+        let conn = db.connection();
+        {
+            let conn = conn.lock().unwrap();
+            conn.execute(
+                "INSERT INTO self_review_comments (task_id, round, comment_type, file_path, line_number, body, created_at, archived_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                rusqlite::params![&task.id, 1_i64, "issue", Some("src/main.rs"), Some(1_i64), "Needs follow-up", 1_i64, Option::<i64>::None],
+            )
+            .expect("insert self review comment failed");
+            conn.execute(
+                "INSERT INTO shepherd_messages (project_id, role, content, event_context, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
+                rusqlite::params![&project.id, "assistant", "message", Some("test"), 1_i64],
+            )
+            .expect("insert shepherd message failed");
+            conn.execute(
+                "INSERT INTO action_items (project_id, source, title, description, task_id, status, created_at, dismissed_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                rusqlite::params![&project.id, "shepherd", "title", "description", Option::<String>::None, "active", 1_i64, Option::<i64>::None],
+            )
+            .expect("insert action item failed");
+        }
 
         db.delete_project(&project.id)
             .expect("delete_project should succeed even with associated tasks and sessions");
@@ -398,6 +446,50 @@ mod tests {
         assert!(
             projects.iter().all(|p| p.id != project.id),
             "project should be gone"
+        );
+
+        let conn = db.connection();
+        let conn = conn.lock().unwrap();
+        let remaining_shepherd_messages: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM shepherd_messages WHERE project_id = ?1",
+                rusqlite::params![&project.id],
+                |row| row.get(0),
+            )
+            .expect("count shepherd messages failed");
+        let remaining_self_review_comments: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM self_review_comments WHERE task_id = ?1",
+                rusqlite::params![&task.id],
+                |row| row.get(0),
+            )
+            .expect("count self review comments failed");
+        let remaining_action_items: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM action_items WHERE project_id = ?1",
+                rusqlite::params![&project.id],
+                |row| row.get(0),
+            )
+            .expect("count action items failed");
+        let remaining_task_workspaces: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM task_workspaces WHERE project_id = ?1",
+                rusqlite::params![&project.id],
+                |row| row.get(0),
+            )
+            .expect("count task workspaces failed");
+        assert_eq!(
+            remaining_shepherd_messages, 0,
+            "shepherd messages should be removed"
+        );
+        assert_eq!(
+            remaining_self_review_comments, 0,
+            "self review comments should be removed"
+        );
+        assert_eq!(remaining_action_items, 0, "action items should be removed");
+        assert_eq!(
+            remaining_task_workspaces, 0,
+            "task workspaces should be removed"
         );
 
         drop(db);
