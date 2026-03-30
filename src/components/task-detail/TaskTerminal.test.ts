@@ -118,7 +118,7 @@ describe('TaskTerminal', () => {
     })
 
     // simulate matching instance
-    const { updateShellLifecycleState } = await import('../lib/terminalPool')
+    const { updateShellLifecycleState } = await import('../../lib/terminalPool')
     updateShellLifecycleState('T-1-shell-2', { ptyActive: true, shellExited: false, currentPtyInstance: 1 })
     
     if (!listenCallback) {

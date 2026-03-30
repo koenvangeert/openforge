@@ -5,7 +5,7 @@
   import type { FileEntry, FileContent } from '../lib/types'
   import ProjectFileTree from './ProjectFileTree.svelte'
   import FileContentViewer from './FileContentViewer.svelte'
-  import ResizablePanel from './ResizablePanel.svelte'
+  import ResizablePanel from './shared/ui/ResizablePanel.svelte'
 
   interface Props {
     projectName: string
