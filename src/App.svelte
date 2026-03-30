@@ -6,6 +6,7 @@
   import { getProjects, getTasksForProject, getPullRequests, startImplementation, getSessionStatus, getLatestSession, getLatestSessions, forceGithubSync, createTask, updateTask, deleteTask, getProjectAttention, getAppMode, finalizeClaudeSession, getConfig, getProjectConfig, listOpenCodeAgents, getReviewPrs, getAuthoredPrs } from './lib/ipc'
   import { writePtyWithSubmit } from './lib/ptySubmit'
   import SearchableSelect from './components/SearchableSelect.svelte'
+  import { applyProjectOrder } from './lib/projectOrder'
   import { hasMergeConflicts, preservePullRequestState } from './lib/types'
   import type { Task, PullRequestInfo, AgentEvent, ProjectAttention, AppView, PermissionMode, AgentSession } from './lib/types'
   import { moveTaskToComplete } from './lib/moveToComplete'
@@ -160,7 +161,16 @@
 
   async function loadProjects() {
     try {
-      $projects = await getProjects()
+      const fetchedProjects = await getProjects()
+      let savedOrder: string | null = null
+
+      try {
+        savedOrder = await getConfig('project_sidebar_order')
+      } catch (configError) {
+        console.error('Failed to load saved project order:', configError)
+      }
+
+      $projects = applyProjectOrder(fetchedProjects, savedOrder)
       if ($activeProjectId && !$projects.find(p => p.id === $activeProjectId)) {
         $activeProjectId = $projects.length > 0 ? $projects[0].id : null
       } else if ($projects.length > 0 && !$activeProjectId) {
