@@ -504,6 +504,46 @@ describe('App onMount initialization order', () => {
         expect(get(stores.selectedTaskId)).toBe(pendingTask.id)
       })
     })
+
+    it('loads projects and respects saved order', async () => {
+      const App = (await import('./App.svelte')).default
+      const stores = await import('./lib/stores')
+      const ipc = await import('./lib/ipc')
+      const { get } = await import('svelte/store')
+
+      const projectList: Project[] = [
+        { id: 'proj-1', name: 'Project One', path: '/test/one', created_at: 0, updated_at: 0 },
+        { id: 'proj-2', name: 'Project Two', path: '/test/two', created_at: 0, updated_at: 0 },
+      ]
+      vi.mocked(ipc.getProjects).mockResolvedValue(projectList)
+      vi.mocked(ipc.getConfig).mockImplementation(async (key) => key === 'project_sidebar_order' ? JSON.stringify(['proj-2', 'proj-1']) : null)
+
+      render(App)
+      await vi.waitFor(() => {
+        expect(get(stores.projects).map(p => p.id)).toEqual(['proj-2', 'proj-1'])
+      })
+    })
+
+    it('loads projects even when reading saved order fails', async () => {
+      const App = (await import('./App.svelte')).default
+      const stores = await import('./lib/stores')
+      const ipc = await import('./lib/ipc')
+      const { get } = await import('svelte/store')
+
+      const projectList: Project[] = [
+        { id: 'proj-1', name: 'Project One', path: '/test/one', created_at: 0, updated_at: 0 },
+        { id: 'proj-2', name: 'Project Two', path: '/test/two', created_at: 0, updated_at: 0 },
+      ]
+      vi.mocked(ipc.getProjects).mockResolvedValue(projectList)
+      vi.mocked(ipc.getConfig).mockReset()
+      vi.mocked(ipc.getConfig).mockRejectedValueOnce(new Error('config unavailable'))
+
+      render(App)
+
+      await vi.waitFor(() => {
+        expect(get(stores.projects).map((project) => project.id)).toEqual(['proj-1', 'proj-2'])
+      })
+    })
   })
 
   describe('keyboard shortcuts', () => {

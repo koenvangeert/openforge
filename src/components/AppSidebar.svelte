@@ -1,9 +1,9 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import { projects, activeProjectId, projectAttention } from '../lib/stores'
-  import { getProjectAttention, getGitBranch } from '../lib/ipc'
+  import { getProjectAttention, getGitBranch, setConfig } from '../lib/ipc'
   import { useAppRouter } from '../lib/router.svelte'
-  import { ChevronLeft, ChevronRight, ListChecks, Settings, Plus } from 'lucide-svelte'
+  import { ChevronLeft, ChevronRight, ListChecks, Settings, Plus, ArrowUp, ArrowDown } from 'lucide-svelte'
   import type { ProjectAttention, AppView } from '../lib/types'
 
   interface Props {
@@ -19,6 +19,7 @@
   const router = useAppRouter()
 
   let branchName = $state<string | null>(null)
+  let isSavingProjectOrder = $state(false)
 
   onMount(async () => {
     try {
@@ -64,6 +65,37 @@
       return { dot: 'bg-error', text: `${attention.ci_failures} CI failures`, color: 'text-error' }
     }
     return { dot: 'bg-base-content/30', text: 'idle', color: 'text-base-content/50' }
+  }
+
+  
+  async function moveProject(index: number, direction: 'up' | 'down') {
+    if (isSavingProjectOrder) {
+      return
+    }
+
+    const previousProjects = [...$projects]
+    const nextProjects = [...$projects]
+
+    if (direction === 'up' && index > 0) {
+      ;[nextProjects[index - 1], nextProjects[index]] = [nextProjects[index], nextProjects[index - 1]]
+    } else if (direction === 'down' && index < nextProjects.length - 1) {
+      ;[nextProjects[index], nextProjects[index + 1]] = [nextProjects[index + 1], nextProjects[index]]
+    } else {
+      return
+    }
+
+    $projects = nextProjects
+    isSavingProjectOrder = true
+
+    try {
+      const newOrder = nextProjects.map((project) => project.id)
+      await setConfig('project_sidebar_order', JSON.stringify(newOrder))
+    } catch (error) {
+      console.error('Failed to persist project order:', error)
+      $projects = previousProjects
+    } finally {
+      isSavingProjectOrder = false
+    }
   }
 
   const bottomNavItems: { view: AppView; Icon: typeof ListChecks; label: string }[] = [
@@ -115,7 +147,7 @@
   </div>
 
   <div class="flex-1 overflow-y-auto">
-    {#each $projects as project (project.id)}
+    {#each $projects as project, index (project.id)}
       {@const status = getAttentionStatus(project.id)}
       {@const isActive = project.id === $activeProjectId && currentView !== 'workqueue' && currentView !== 'global_settings'}
 
@@ -135,18 +167,44 @@
           </div>
         </button>
       {:else}
-        <button
-          type="button"
-           class="w-full px-3 py-2 text-left border-l-2 transition-colors {isActive ? 'border-primary bg-base-100' : 'border-transparent hover:bg-base-300/30'}"
-          aria-current={isActive ? 'true' : undefined}
-          onclick={() => selectProject(project.id)}
-        >
-           <div class="text-xs {isActive ? 'font-bold text-base-content' : 'font-medium text-base-content'}">{project.name}</div>
-           <div class="mt-1 flex items-center gap-1.5">
-             <span class="w-1.5 h-1.5 rounded-full {status.dot}"></span>
-             <span class="text-[10px] {status.color}">{status.text}</span>
-           </div>
-        </button>
+        <div class="group relative flex border-l-2 transition-colors {isActive ? 'border-primary bg-base-100' : 'border-transparent hover:bg-base-300/30'}">
+          <button
+            type="button"
+            class="flex-1 px-3 py-2 text-left"
+            aria-current={isActive ? 'true' : undefined}
+            onclick={() => selectProject(project.id)}
+          >
+             <div class="text-xs {isActive ? 'font-bold text-base-content' : 'font-medium text-base-content'}">{project.name}</div>
+             <div class="mt-1 flex items-center gap-1.5" aria-hidden="true">
+               <span class="w-1.5 h-1.5 rounded-full {status.dot}"></span>
+               <span class="text-[10px] {status.color}">{status.text}</span>
+             </div>
+          </button>
+          <div class="absolute right-1 top-1/2 flex -translate-y-1/2 flex-col gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+            {#if index > 0}
+              <button
+                type="button"
+                class="btn btn-ghost btn-xs p-0.5 min-h-0 h-auto"
+                aria-label="Move {project.name} up"
+                disabled={isSavingProjectOrder}
+                onclick={(e) => { e.stopPropagation(); moveProject(index, 'up') }}
+              >
+                <ArrowUp size={12} />
+              </button>
+            {/if}
+            {#if index < $projects.length - 1}
+              <button
+                type="button"
+                class="btn btn-ghost btn-xs p-0.5 min-h-0 h-auto"
+                aria-label="Move {project.name} down"
+                disabled={isSavingProjectOrder}
+                onclick={(e) => { e.stopPropagation(); moveProject(index, 'down') }}
+              >
+                <ArrowDown size={12} />
+              </button>
+            {/if}
+          </div>
+        </div>
       {/if}
     {/each}
   </div>
