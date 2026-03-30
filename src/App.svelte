@@ -37,6 +37,7 @@
   import { getOpenCodeSessionUpdate } from './lib/opencodeSessionEvents'
   import { useShortcutRegistry } from './lib/shortcuts.svelte'
   import { ICON_RAIL_HIDDEN_VIEWS, VIEWS } from './lib/views'
+  import { shouldLoadTaskDialogAgents, shouldShowTaskDialogAgentSelector } from './lib/taskDialogVisibility'
 
   let unlisteners: UnlistenFn[] = []
   let showAddDialog = $state(false)
@@ -57,14 +58,19 @@
       if ($activeProjectId) {
         provider = await getProjectConfig($activeProjectId, 'ai_provider')
       }
-      dialogAiProvider = provider ?? 'claude-code'
-      if ($activeProjectId) {
+      const resolvedProvider = provider ?? 'claude-code'
+      dialogAiProvider = resolvedProvider
+      if ($activeProjectId && shouldLoadTaskDialogAgents(resolvedProvider)) {
         const agents = await listOpenCodeAgents($activeProjectId)
         dialogAgents = agents.filter(a => !a.hidden).map(a => a.name)
+      } else {
+        dialogAgents = []
+      }
+
+      if ($activeProjectId) {
         const all = await loadActions($activeProjectId)
         dialogActions = getEnabledActions(all)
       } else {
-        dialogAgents = []
         dialogActions = []
       }
     } catch {
@@ -1012,7 +1018,7 @@
                     </select>
                   </div>
                 {/if}
-                {#if !editingTask && dialogAgents.length > 0}
+                {#if shouldShowTaskDialogAgentSelector({ isEditing: !!editingTask, aiProvider: dialogAiProvider, availableAgents: dialogAgents })}
                   <div class="flex items-center gap-2">
                     <span class="text-xs text-base-content/50 font-medium shrink-0">Agent</span>
                     <div class="flex-1">
