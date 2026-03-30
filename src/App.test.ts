@@ -151,26 +151,26 @@ vi.mock('./lib/ipc', () => ({
     }),
   }))
 
-vi.mock('./components/FocusBoard.svelte', () => ({ default: vi.fn() }))
-vi.mock('./components/TaskDetailView.svelte', () => ({ default: vi.fn() }))
-vi.mock('./components/PrReviewView.svelte', () => ({ default: vi.fn() }))
+vi.mock('./components/focus-board/FocusBoard.svelte', () => ({ default: vi.fn() }))
+vi.mock('./components/task-detail/TaskDetailView.svelte', () => ({ default: vi.fn() }))
+vi.mock('./components/review/pr/PrReviewView.svelte', () => ({ default: vi.fn() }))
 vi.mock('./components/SkillsView.svelte', () => ({ default: vi.fn() }))
-vi.mock('./components/SettingsView.svelte', () => ({ default: vi.fn() }))
-vi.mock('./components/WorkQueueView.svelte', () => ({ default: vi.fn() }))
-vi.mock('./components/ClaudeAgentPanel.svelte', () => ({ default: vi.fn() }))
-vi.mock('./components/PromptInput.svelte', () => ({ default: vi.fn() }))
-vi.mock('./components/Modal.svelte', () => ({ default: vi.fn() }))
-vi.mock('./components/SearchableSelect.svelte', () => ({ default: vi.fn() }))
-vi.mock('./components/Toast.svelte', () => ({ default: vi.fn() }))
-vi.mock('./components/CheckpointToast.svelte', () => ({ default: vi.fn() }))
-vi.mock('./components/CiFailureToast.svelte', () => ({ default: vi.fn() }))
-vi.mock('./components/TaskSpawnedToast.svelte', () => ({ default: vi.fn() }))
-vi.mock('./components/AppSidebar.svelte', () => ({ default: vi.fn() }))
-vi.mock('./components/ProjectSwitcherModal.svelte', () => ({ default: vi.fn() }))
-vi.mock('./components/ProjectSetupDialog.svelte', () => ({ default: vi.fn() }))
-vi.mock('./components/IconRail.svelte', () => ({ default: vi.fn() }))
-vi.mock('./components/CommandPalette.svelte', () => ({ default: vi.fn() }))
-vi.mock('./components/ActionPalette.svelte', () => ({ default: vi.fn() }))
+vi.mock('./components/settings/SettingsView.svelte', () => ({ default: vi.fn() }))
+vi.mock('./components/work-queue/WorkQueueView.svelte', () => ({ default: vi.fn() }))
+vi.mock('./components/task-detail/ClaudeAgentPanel.svelte', () => ({ default: vi.fn() }))
+vi.mock('./components/prompt/PromptInput.svelte', () => ({ default: vi.fn() }))
+vi.mock('./components/shared/ui/Modal.svelte', () => ({ default: vi.fn() }))
+vi.mock('./components/shared/ui/SearchableSelect.svelte', () => ({ default: vi.fn() }))
+vi.mock('./components/feedback/toasts/Toast.svelte', () => ({ default: vi.fn() }))
+vi.mock('./components/feedback/toasts/CheckpointToast.svelte', () => ({ default: vi.fn() }))
+vi.mock('./components/feedback/toasts/CiFailureToast.svelte', () => ({ default: vi.fn() }))
+vi.mock('./components/feedback/toasts/TaskSpawnedToast.svelte', () => ({ default: vi.fn() }))
+vi.mock('./components/shell/AppSidebar.svelte', () => ({ default: vi.fn() }))
+vi.mock('./components/project/ProjectSwitcherModal.svelte', () => ({ default: vi.fn() }))
+vi.mock('./components/project/ProjectSetupDialog.svelte', () => ({ default: vi.fn() }))
+vi.mock('./components/shell/IconRail.svelte', () => ({ default: vi.fn() }))
+vi.mock('./components/shell/CommandPalette.svelte', () => ({ default: vi.fn() }))
+vi.mock('./components/shell/ActionPalette.svelte', () => ({ default: vi.fn() }))
 
 vi.mock('./lib/doingStatus', () => ({
   computeDoingStatus: vi.fn(() => 'idle'),
@@ -623,7 +623,7 @@ describe('App onMount initialization order', () => {
       const App = (await import('./App.svelte')).default
       const stores = await import('./lib/stores')
       const nav = await import('./lib/router.svelte')
-      const iconRailModule = await import('./components/IconRail.svelte')
+      const iconRailModule = await import('./components/shell/IconRail.svelte')
 
       stores.selectedTaskId.set('task-123')
       stores.currentView.set('board')
@@ -668,7 +668,7 @@ describe('App onMount initialization order', () => {
 
     it('CMD+K opens the action palette', async () => {
       const App = (await import('./App.svelte')).default
-      const actionPaletteModule = await import('./components/ActionPalette.svelte')
+      const actionPaletteModule = await import('./components/shell/ActionPalette.svelte')
 
       render(App)
 
@@ -684,7 +684,7 @@ describe('App onMount initialization order', () => {
       const stores = await import('./lib/stores')
       const nav = await import('./lib/router.svelte')
       const { getTasksForProject } = await import('./lib/ipc')
-      const actionPaletteModule = await import('./components/ActionPalette.svelte')
+      const actionPaletteModule = await import('./components/shell/ActionPalette.svelte')
 
       const selectedTask: Task = {
         id: 'task-123',
@@ -757,7 +757,7 @@ describe('App onMount initialization order', () => {
       const nav = await import('./lib/router.svelte')
       const { getTasksForProject } = await import('./lib/ipc')
       const { moveTaskToComplete } = await import('./lib/moveToComplete')
-      const actionPaletteModule = await import('./components/ActionPalette.svelte')
+      const actionPaletteModule = await import('./components/shell/ActionPalette.svelte')
 
       const selectedTask: Task = {
         id: 'task-124',
@@ -818,7 +818,7 @@ describe('App onMount initialization order', () => {
       const nav = await import('./lib/router.svelte')
       const { getTasksForProject } = await import('./lib/ipc')
       const { moveTaskToComplete } = await import('./lib/moveToComplete')
-      const actionPaletteModule = await import('./components/ActionPalette.svelte')
+      const actionPaletteModule = await import('./components/shell/ActionPalette.svelte')
 
       const selectedTask: Task = {
         id: 'task-123',
@@ -900,7 +900,7 @@ describe('App onMount initialization order', () => {
       const nav = await import('./lib/router.svelte')
       const { getTasksForProject } = await import('./lib/ipc')
       const { moveTaskToComplete } = await import('./lib/moveToComplete')
-      const actionPaletteModule = await import('./components/ActionPalette.svelte')
+      const actionPaletteModule = await import('./components/shell/ActionPalette.svelte')
 
       const selectedTask: Task = {
         id: 'task-200',
@@ -963,7 +963,7 @@ describe('App onMount initialization order', () => {
 
     it('CMD+SHIFT+F opens search tasks', async () => {
       const App = (await import('./App.svelte')).default
-      const commandPaletteModule = await import('./components/CommandPalette.svelte')
+      const commandPaletteModule = await import('./components/shell/CommandPalette.svelte')
 
       render(App)
 
@@ -974,7 +974,7 @@ describe('App onMount initialization order', () => {
 
     it('Shift+/ opens the keyboard shortcuts dialog', async () => {
       const App = (await import('./App.svelte')).default
-      const modalModule = await import('./components/Modal.svelte')
+      const modalModule = await import('./components/shared/ui/Modal.svelte')
 
       render(App)
 

@@ -1,8 +1,8 @@
 import type { Component } from 'svelte'
-import SettingsView from '../components/SettingsView.svelte'
-import PrReviewView from '../components/PrReviewView.svelte'
+import SettingsView from '../components/settings/SettingsView.svelte'
+import PrReviewView from '../components/review/pr/PrReviewView.svelte'
 import SkillsView from '../components/SkillsView.svelte'
-import WorkQueueView from '../components/WorkQueueView.svelte'
+import WorkQueueView from '../components/work-queue/WorkQueueView.svelte'
 import FilesView from '../components/FilesView.svelte'
 import type { AppView } from './types'
 

@@ -10,8 +10,8 @@
 
   let { projectName }: Props = $props()
   import { useVimNavigation } from '../lib/useVimNavigation.svelte'
-  import ProjectPageHeader from './ProjectPageHeader.svelte'
-  import MarkdownContent from './MarkdownContent.svelte'
+  import ProjectPageHeader from './project/ProjectPageHeader.svelte'
+  import MarkdownContent from './shared/content/MarkdownContent.svelte'
   import type { SkillInfo } from '../lib/types'
 
   const router = useAppRouter()

@@ -1,0 +1,113 @@
+import { render, screen, fireEvent } from '@testing-library/svelte'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import VoiceInput from './VoiceInput.svelte'
+
+vi.mock('../../../lib/ipc', () => ({
+  transcribeAudio: vi.fn(),
+  getWhisperModelStatus: vi.fn(),
+  listOpenCodeCommands: vi.fn().mockResolvedValue([]),
+  searchOpenCodeFiles: vi.fn().mockResolvedValue([]),
+  listOpenCodeAgents: vi.fn().mockResolvedValue([]),
+  createTask: vi.fn(),
+  updateTask: vi.fn(),
+  downloadWhisperModel: vi.fn(),
+}))
+
+vi.mock('../../../lib/audioRecorder', () => ({
+  createAudioRecorder: vi.fn(),
+}))
+
+import { getWhisperModelStatus } from '../../../lib/ipc'
+
+describe('VoiceInput', () => {
+  const baseProps = {
+    onTranscription: vi.fn(),
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('renders mic button in idle state', () => {
+    render(VoiceInput, { props: baseProps })
+    const button = screen.getByRole('button', { name: 'Start voice input' })
+    expect(button).toBeTruthy()
+  })
+
+  it('shows model not downloaded message when model status returns downloaded: false', async () => {
+    vi.mocked(getWhisperModelStatus).mockResolvedValue({
+      size: 'small',
+      display_name: 'Small',
+      downloaded: false,
+      model_path: null,
+      model_size_bytes: null,
+      model_name: 'ggml-small.bin',
+      disk_size_mb: 466,
+      ram_usage_mb: 1000,
+      is_active: true,
+    })
+
+    render(VoiceInput, { props: baseProps })
+    const button = screen.getByRole('button', { name: 'Start voice input' })
+    await fireEvent.click(button)
+    await new Promise((r) => setTimeout(r, 10))
+
+    expect(screen.getByText('Download model in Settings first')).toBeTruthy()
+  })
+
+  it('disables button when disabled prop is true', () => {
+    render(VoiceInput, { props: { ...baseProps, disabled: true } })
+    const button = screen.getByRole('button', { name: 'Start voice input' })
+    expect(button.hasAttribute('disabled')).toBe(true)
+  })
+
+  it('button has microphone SVG icon', () => {
+    render(VoiceInput, { props: baseProps })
+    const button = screen.getByRole('button', { name: 'Start voice input' })
+    const svg = button.querySelector('svg')
+    expect(svg).toBeTruthy()
+  })
+
+
+  it('shows keyboard shortcut hint in tooltip', () => {
+    render(VoiceInput, { props: baseProps })
+    const button = screen.getByRole('button', { name: 'Start voice input' })
+    expect(button.getAttribute('title')).toBe('Voice input (⌘D)')
+  })
+
+  it('responds to toggle-voice-recording event when listenToHotkey is true', async () => {
+    vi.mocked(getWhisperModelStatus).mockResolvedValue({
+      size: 'small',
+      display_name: 'Small',
+      downloaded: false,
+      model_path: null,
+      model_size_bytes: null,
+      model_name: 'ggml-small.bin',
+      disk_size_mb: 466,
+      ram_usage_mb: 1000,
+      is_active: true,
+    })
+
+    render(VoiceInput, { props: { ...baseProps, listenToHotkey: true } })
+    window.dispatchEvent(new CustomEvent('toggle-voice-recording'))
+    await new Promise((r) => setTimeout(r, 10))
+
+    expect(getWhisperModelStatus).toHaveBeenCalled()
+  })
+
+  it('ignores toggle-voice-recording event when listenToHotkey is false', async () => {
+    render(VoiceInput, { props: { ...baseProps, listenToHotkey: false } })
+    window.dispatchEvent(new CustomEvent('toggle-voice-recording'))
+    await new Promise((r) => setTimeout(r, 10))
+
+    expect(getWhisperModelStatus).not.toHaveBeenCalled()
+  })
+
+  it('ignores toggle-voice-recording event when disabled', async () => {
+    render(VoiceInput, { props: { ...baseProps, listenToHotkey: true, disabled: true } })
+    window.dispatchEvent(new CustomEvent('toggle-voice-recording'))
+    await new Promise((r) => setTimeout(r, 10))
+
+    expect(getWhisperModelStatus).not.toHaveBeenCalled()
+  })
+})

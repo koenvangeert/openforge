@@ -3,7 +3,7 @@
   import type { Task, BoardStatus, PermissionMode, AutocompleteAgentInfo } from '../lib/types'
   import { createTask, updateTask, getProjectConfig, listOpenCodeAgents } from '../lib/ipc'
   import { activeProjectId } from '../lib/stores'
-  import Modal from './Modal.svelte'
+  import Modal from './shared/ui/Modal.svelte'
 
   interface Props {
     mode?: 'create' | 'edit'
