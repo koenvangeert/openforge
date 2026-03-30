@@ -21,6 +21,10 @@
   let activeTabIndex = $state(0)
   let nextIndex = $state(0)
 
+  interface CloseTabOptions {
+    allowClosingLastTab?: boolean
+  }
+
   function hydrateFromSession(taskId: string) {
     session = getTaskTerminalTabsSession(taskId)
     tabs = session.tabs
@@ -77,30 +81,35 @@
     if (activeTab) focusTerminal(activeTab.key)
   }
 
-  async function closeTab(tab: TerminalTab) {
-      if (tabs.length <= 1) return
+  async function closeTab(tab: TerminalTab, options: CloseTabOptions = {}) {
+      const { allowClosingLastTab = false } = options
+      if (tabs.length <= 1 && !allowClosingLastTab) return
 
-     await killPty(tab.key).catch(e => {
-       console.error('[TerminalTabs] Failed to kill PTY on close:', e)
-     })
-     release(tab.key)
+      const tabArrayIndex = tabs.findIndex(t => t.index === tab.index)
+      if (tabArrayIndex === -1) return
 
-       const tabArrayIndex = tabs.findIndex(t => t.index === tab.index)
-       const newTabs = tabs.filter(t => t.index !== tab.index)
-       tabs = newTabs
+      await killPty(tab.key).catch(e => {
+        console.error('[TerminalTabs] Failed to kill PTY on close:', e)
+      })
+      release(tab.key)
 
-       if (activeTabIndex === tab.index) {
-         const nextTab = newTabs[tabArrayIndex] ?? newTabs[tabArrayIndex - 1]
-         if (nextTab) {
-           activeTabIndex = nextTab.index
-           onTabChange?.(nextTab.index)
-           focusTerminal(nextTab.key)
-         }
-       }
+      const newTabs = tabs.filter(t => t.index !== tab.index)
+      tabs = newTabs
 
-       syncSession()
-       onTabCountChange?.(tabs.length)
-     }
+      if (activeTabIndex === tab.index) {
+        const nextTab = newTabs[tabArrayIndex] ?? newTabs[tabArrayIndex - 1]
+        if (nextTab) {
+          activeTabIndex = nextTab.index
+          onTabChange?.(nextTab.index)
+          focusTerminal(nextTab.key)
+        } else {
+          activeTabIndex = 0
+        }
+      }
+
+      syncSession()
+      onTabCountChange?.(tabs.length)
+    }
 
   function handleKeyDown(e: KeyboardEvent) {
     if (e.metaKey && e.code === 'KeyT' && !e.ctrlKey && !e.altKey && !e.shiftKey) {
@@ -171,6 +180,7 @@
           terminalKey={tab.key}
           terminalIndex={tab.index}
           isActive={tab.index === activeTabIndex}
+          onExit={() => closeTab(tab, { allowClosingLastTab: true })}
         />
       </div>
     {/each}

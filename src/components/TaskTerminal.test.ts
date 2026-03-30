@@ -102,6 +102,34 @@ vi.mock('../lib/terminalPool', () => ({
 import TaskTerminal from './TaskTerminal.svelte'
 
 describe('TaskTerminal', () => {
+  it('calls onExit when a matching pty-exit event fires', async () => {
+    const onExitMock = vi.fn()
+    
+    render(TaskTerminal, { 
+      props: { 
+        taskId: 'T-1', worktreePath: '/path/to/worktree', 
+        terminalKey: 'T-1-shell-2', terminalIndex: 2, 
+        isActive: true, onExit: onExitMock 
+      } 
+    })
+
+    await vi.waitFor(() => {
+      expect(listenCallback).not.toBeNull()
+    })
+
+    // simulate matching instance
+    const { updateShellLifecycleState } = await import('../lib/terminalPool')
+    updateShellLifecycleState('T-1-shell-2', { ptyActive: true, shellExited: false, currentPtyInstance: 1 })
+    
+    if (!listenCallback) {
+      throw new Error('Expected pty-exit listener to be registered')
+    }
+
+    listenCallback({ payload: { instance_id: 1 } })
+
+    expect(onExitMock).toHaveBeenCalled()
+  })
+
   beforeEach(() => {
     vi.clearAllMocks()
     mockPoolEntry.taskId = ''
@@ -113,6 +141,14 @@ describe('TaskTerminal', () => {
     mockPoolEntry.terminal.rows = 24
     listenCallback = null
   })
+
+  function emitPtyExit(payload: unknown = {}): void {
+    if (!listenCallback) {
+      throw new Error('Expected pty-exit listener to be registered')
+    }
+
+    listenCallback({ payload })
+  }
 
   it('renders terminal wrapper div', async () => {
     render(TaskTerminal, { props: { taskId: 'T-1', worktreePath: '/path/to/worktree', terminalKey: 'T-1-shell-0', terminalIndex: 0, isActive: true } })
@@ -276,7 +312,7 @@ describe('TaskTerminal', () => {
       expect(listenCallback).not.toBeNull()
     })
 
-    listenCallback!({ payload: {} })
+    emitPtyExit()
 
     await vi.waitFor(() => {
       expect(screen.getByText('Shell exited')).toBeTruthy()
@@ -294,7 +330,7 @@ describe('TaskTerminal', () => {
       expect(spawnShellPty).toHaveBeenCalled()
     })
 
-    listenCallback!({ payload: { instance_id: 1 } })
+    emitPtyExit({ instance_id: 1 })
 
     await new Promise(resolve => setTimeout(resolve, 0))
 
@@ -308,7 +344,7 @@ describe('TaskTerminal', () => {
       expect(listenCallback).not.toBeNull()
     })
 
-    listenCallback!({ payload: {} })
+    emitPtyExit()
 
     await vi.waitFor(() => {
       expect(screen.getByRole('button', { name: 'Restart' })).toBeTruthy()
@@ -365,7 +401,7 @@ describe('TaskTerminal', () => {
     })
 
     // Simulate shell exit
-    listenCallback!({ payload: {} })
+    emitPtyExit()
 
     // Wait for restart button to appear
     await vi.waitFor(() => {
@@ -395,7 +431,7 @@ describe('TaskTerminal', () => {
       expect(listenCallback).not.toBeNull()
     })
 
-    listenCallback!({ payload: {} })
+    emitPtyExit()
 
     await vi.waitFor(() => {
       expect(screen.getByRole('button', { name: 'Restart' })).toBeTruthy()

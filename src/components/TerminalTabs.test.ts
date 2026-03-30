@@ -67,6 +67,10 @@ const { taskTabSessions } = vi.hoisted(() => ({
   taskTabSessions: new Map<string, { tabs: Array<{ index: number, key: string, label: string }>, activeTabIndex: number, nextIndex: number }>(),
 }))
 
+const { lastTaskTerminalProps } = vi.hoisted(() => ({
+  lastTaskTerminalProps: { onExit: null as null | (() => void) },
+}))
+
 vi.mock('../lib/terminalPool', () => ({
   acquire: vi.fn().mockResolvedValue({
     taskId: '',
@@ -129,17 +133,83 @@ vi.mock('../lib/terminalPool', () => ({
 
 // Mock TaskTerminal to avoid complex terminal setup in tab tests
 vi.mock('./TaskTerminal.svelte', () => ({
-  default: vi.fn(),
+  default: vi.fn((_node, props) => {
+    lastTaskTerminalProps.onExit = props.onExit
+    return { update() {}, destroy() {} }
+  }),
 }))
 
 import TerminalTabs from './TerminalTabs.svelte'
 
 describe('TerminalTabs', () => {
+  it('closes the only tab automatically when onExit is called', async () => {
+    render(TerminalTabs, {
+      props: {
+        taskId: 'T-1',
+        worktreePath: '/path/to/worktree',
+        isFullscreen: false,
+        onFullscreenToggle: null,
+        onTabChange: null,
+        onTabCountChange: null,
+      },
+    })
+
+    await vi.waitFor(() => {
+      expect(screen.getByText('Shell 1')).toBeTruthy()
+    })
+
+    if (!lastTaskTerminalProps.onExit) {
+      throw new Error('Expected TaskTerminal to receive onExit callback')
+    }
+
+    lastTaskTerminalProps.onExit()
+
+    await vi.waitFor(() => {
+      expect(screen.queryByText('Shell 1')).toBeNull()
+    })
+  })
+
+  it('closes a later tab automatically when onExit is called', async () => {
+    render(TerminalTabs, {
+      props: {
+        taskId: 'T-1',
+        worktreePath: '/path/to/worktree',
+        isFullscreen: false,
+        onFullscreenToggle: null,
+        onTabChange: null,
+        onTabCountChange: null,
+      },
+    })
+
+    await vi.waitFor(() => {
+      expect(screen.getByText('Shell 1')).toBeTruthy()
+    })
+
+    const addButton = screen.getByRole('button', { name: '+' })
+    await fireEvent.click(addButton)
+
+    await vi.waitFor(() => {
+      expect(screen.getByText('Shell 2')).toBeTruthy()
+    })
+
+    if (!lastTaskTerminalProps.onExit) {
+      throw new Error('Expected TaskTerminal to receive onExit callback')
+    }
+
+    lastTaskTerminalProps.onExit()
+
+    await vi.waitFor(() => {
+      expect(screen.queryByText('Shell 2')).toBeNull()
+      expect(screen.getByText('Shell 1')).toBeTruthy()
+    })
+  })
+
   beforeEach(() => {
     vi.clearAllMocks()
     killPtyMock.mockResolvedValue(undefined)
     releaseMock.mockReturnValue(undefined)
     taskTabSessions.clear()
+    lastTaskTerminalProps.onExit = null
   })
 
   it('renders with 1 tab "Shell 1" on mount', async () => {

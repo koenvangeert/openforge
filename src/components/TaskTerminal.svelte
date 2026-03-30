@@ -12,9 +12,10 @@
     terminalKey: string
     terminalIndex: number
     isActive: boolean
+    onExit?: () => void
   }
 
-  let { taskId, worktreePath, terminalKey, terminalIndex, isActive }: Props = $props()
+  let { taskId, worktreePath, terminalKey, terminalIndex, isActive, onExit }: Props = $props()
 
   let terminalEl: HTMLDivElement
   let unlisteners: UnlistenFn[] = []
@@ -78,6 +79,7 @@
         currentPtyInstance: lifecycle.currentPtyInstance,
       })
       syncLifecycleState()
+      onExit?.()
     }))
   })
 
