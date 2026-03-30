@@ -44,11 +44,7 @@ pub async fn get_task_diff(
 ) -> Result<Vec<diff_parser::TaskFileDiff>, String> {
     let worktree_path = {
         let db = crate::db::acquire_db(&db);
-        let row = db
-            .get_worktree_for_task(&task_id)
-            .map_err(|e| format!("Failed to get worktree for task: {}", e))?;
-        row.ok_or_else(|| format!("No worktree found for task {}", task_id))?
-            .worktree_path
+        resolve_workspace_path(&db, &task_id)?
     };
 
     let merge_base_output = tokio::process::Command::new("git")
@@ -230,11 +226,7 @@ pub async fn get_task_file_contents(
 ) -> Result<(String, String), String> {
     let worktree_path = {
         let db = crate::db::acquire_db(&db);
-        let row = db
-            .get_worktree_for_task(&task_id)
-            .map_err(|e| format!("Failed to get worktree for task: {}", e))?;
-        row.ok_or_else(|| format!("No worktree found for task {}", task_id))?
-            .worktree_path
+        resolve_workspace_path(&db, &task_id)?
     };
 
     let merge_base_output = tokio::process::Command::new("git")
@@ -285,14 +277,9 @@ pub async fn get_task_batch_file_contents(
 ) -> Result<Vec<(String, String)>, String> {
     let worktree_path = {
         let db = crate::db::acquire_db(&db);
-        let row = db
-            .get_worktree_for_task(&task_id)
-            .map_err(|e| format!("Failed to get worktree for task: {}", e))?;
-        row.ok_or_else(|| format!("No worktree found for task {}", task_id))?
-            .worktree_path
+        resolve_workspace_path(&db, &task_id)?
     };
 
-    // Compute merge-base ONCE for the entire batch.
     let merge_base_output = tokio::process::Command::new("git")
         .arg("-C")
         .arg(&worktree_path)
@@ -395,11 +382,7 @@ pub async fn get_task_commits(
 ) -> Result<Vec<CommitInfo>, String> {
     let worktree_path = {
         let db = crate::db::acquire_db(&db);
-        let row = db
-            .get_worktree_for_task(&task_id)
-            .map_err(|e| format!("Failed to get worktree for task: {}", e))?;
-        row.ok_or_else(|| format!("No worktree found for task {}", task_id))?
-            .worktree_path
+        resolve_workspace_path(&db, &task_id)?
     };
 
     let merge_base_output = tokio::process::Command::new("git")
@@ -526,11 +509,7 @@ pub async fn get_commit_diff(
 ) -> Result<Vec<diff_parser::TaskFileDiff>, String> {
     let worktree_path = {
         let db = crate::db::acquire_db(&db);
-        let row = db
-            .get_worktree_for_task(&task_id)
-            .map_err(|e| format!("Failed to get worktree for task: {}", e))?;
-        row.ok_or_else(|| format!("No worktree found for task {}", task_id))?
-            .worktree_path
+        resolve_workspace_path(&db, &task_id)?
     };
 
     let parent_sha = get_parent_sha(&worktree_path, &commit_sha).await?;
@@ -563,11 +542,7 @@ pub async fn get_commit_file_contents(
 ) -> Result<(String, String), String> {
     let worktree_path = {
         let db = crate::db::acquire_db(&db);
-        let row = db
-            .get_worktree_for_task(&task_id)
-            .map_err(|e| format!("Failed to get worktree for task: {}", e))?;
-        row.ok_or_else(|| format!("No worktree found for task {}", task_id))?
-            .worktree_path
+        resolve_workspace_path(&db, &task_id)?
     };
 
     let parent_sha = get_parent_sha(&worktree_path, &commit_sha).await?;
@@ -592,14 +567,9 @@ pub async fn get_commit_batch_file_contents(
 ) -> Result<Vec<(String, String)>, String> {
     let worktree_path = {
         let db = crate::db::acquire_db(&db);
-        let row = db
-            .get_worktree_for_task(&task_id)
-            .map_err(|e| format!("Failed to get worktree for task: {}", e))?;
-        row.ok_or_else(|| format!("No worktree found for task {}", task_id))?
-            .worktree_path
+        resolve_workspace_path(&db, &task_id)?
     };
 
-    // Compute parent SHA once for the entire batch.
     let parent_sha = get_parent_sha(&worktree_path, &commit_sha).await?;
 
     let mut results = Vec::with_capacity(files.len());
@@ -619,6 +589,30 @@ pub async fn get_commit_batch_file_contents(
     Ok(results)
 }
 
+pub fn resolve_workspace_path(db: &crate::db::Database, task_id: &str) -> Result<String, String> {
+    let worktree = db
+        .get_worktree_for_task(task_id)
+        .map_err(|e| format!("Failed to get worktree for task: {}", e))?;
+
+    if let Some(row) = &worktree {
+        if std::path::Path::new(&row.worktree_path).is_dir() {
+            return Ok(row.worktree_path.clone());
+        }
+    }
+
+    let workspace = db
+        .get_task_workspace_for_task(task_id)
+        .map_err(|e| format!("Failed to get task workspace for task: {}", e))?;
+
+    if let Some(workspace) = workspace {
+        if std::path::Path::new(&workspace.workspace_path).is_dir() {
+            return Ok(workspace.workspace_path);
+        }
+    }
+
+    Err(format!("No workspace found for task {}", task_id))
+}
+
 // ============================================================================
 // Tests
 // ============================================================================
@@ -626,6 +620,167 @@ pub async fn get_commit_batch_file_contents(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::db::test_helpers::make_test_db;
+    use tempfile::tempdir;
+
+    #[test]
+    fn test_resolve_workspace_path_from_task_workspaces_only() {
+        let (db, db_path) = make_test_db("resolve_workspace_path_task_workspaces_only");
+        let workspace_dir = tempdir().expect("create temp workspace dir");
+        let workspace_path = workspace_dir.path().to_string_lossy().to_string();
+        let project = db
+            .create_project("Test Project", "/tmp/test-repo")
+            .expect("create project failed");
+        let task = db
+            .create_task(
+                "No worktree task",
+                "doing",
+                Some(&project.id),
+                None,
+                None,
+                None,
+            )
+            .expect("create task failed");
+
+        db.create_task_workspace_record(
+            &task.id,
+            &project.id,
+            &workspace_path,
+            "/tmp/test-repo",
+            "project_dir",
+            None,
+            "opencode",
+        )
+        .expect("create task workspace failed");
+
+        let path = resolve_workspace_path(&db, &task.id).expect("should resolve path");
+        assert_eq!(path, workspace_path);
+
+        drop(db);
+        let _ = std::fs::remove_file(&db_path);
+    }
+
+    #[test]
+    fn test_resolve_workspace_path_prefers_worktrees_row() {
+        let (db, db_path) = make_test_db("resolve_workspace_path_prefers_worktrees");
+        let worktree_dir = tempdir().expect("create temp worktree dir");
+        let worktree_path = worktree_dir.path().to_string_lossy().to_string();
+        let workspace_dir = tempdir().expect("create temp workspace dir");
+        let workspace_path = workspace_dir.path().to_string_lossy().to_string();
+        let project = db
+            .create_project("Test Project", "/tmp/test-repo")
+            .expect("create project failed");
+        let task = db
+            .create_task(
+                "Both sources task",
+                "doing",
+                Some(&project.id),
+                None,
+                None,
+                None,
+            )
+            .expect("create task failed");
+
+        db.create_worktree_record(
+            &task.id,
+            &project.id,
+            "/tmp/test-repo",
+            &worktree_path,
+            "branch-1",
+        )
+        .expect("create worktree record failed");
+
+        db.create_task_workspace_record(
+            &task.id,
+            &project.id,
+            &workspace_path,
+            "/tmp/test-repo",
+            "project_dir",
+            None,
+            "opencode",
+        )
+        .expect("create task workspace failed");
+
+        let path = resolve_workspace_path(&db, &task.id).expect("should resolve path");
+        assert_eq!(path, worktree_path);
+
+        drop(db);
+        let _ = std::fs::remove_file(&db_path);
+    }
+
+    #[test]
+    fn test_resolve_workspace_path_falls_back_when_worktree_path_is_stale() {
+        let (db, db_path) = make_test_db("resolve_workspace_path_stale_worktree");
+        let workspace_dir = tempdir().expect("create temp workspace dir");
+        let workspace_path = workspace_dir.path().to_string_lossy().to_string();
+        let project = db
+            .create_project("Test Project", "/tmp/test-repo")
+            .expect("create project failed");
+        let task = db
+            .create_task(
+                "Stale worktree task",
+                "doing",
+                Some(&project.id),
+                None,
+                None,
+                None,
+            )
+            .expect("create task failed");
+
+        db.create_worktree_record(
+            &task.id,
+            &project.id,
+            "/tmp/test-repo",
+            "/tmp/non-existent-worktree-path",
+            "branch-1",
+        )
+        .expect("create worktree record failed");
+
+        db.create_task_workspace_record(
+            &task.id,
+            &project.id,
+            &workspace_path,
+            "/tmp/test-repo",
+            "project_dir",
+            None,
+            "opencode",
+        )
+        .expect("create task workspace failed");
+
+        let path = resolve_workspace_path(&db, &task.id).expect("should resolve path");
+        assert_eq!(path, workspace_path);
+
+        drop(db);
+        let _ = std::fs::remove_file(&db_path);
+    }
+
+    #[test]
+    fn test_resolve_workspace_path_returns_err_when_no_row_exists() {
+        let (db, db_path) = make_test_db("resolve_workspace_path_no_row");
+        let project = db
+            .create_project("Test Project", "/tmp/test-repo")
+            .expect("create project failed");
+        let task = db
+            .create_task(
+                "Task with no workspace",
+                "doing",
+                Some(&project.id),
+                None,
+                None,
+                None,
+            )
+            .expect("create task failed");
+
+        let result = resolve_workspace_path(&db, &task.id);
+        assert!(result.is_err(), "expected Err but got {:?}", result);
+        assert!(
+            result.unwrap_err().contains(&task.id),
+            "error message should contain task id"
+        );
+
+        drop(db);
+        let _ = std::fs::remove_file(&db_path);
+    }
 
     #[test]
     fn test_file_content_request_deserialize() {
