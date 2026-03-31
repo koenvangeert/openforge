@@ -438,4 +438,10 @@ describe('TaskCard', () => {
     render(TaskCard, { props: { task: baseTask, pullRequests: [pr], isFeatured: true } })
     expect(screen.getByText('Queued for merge')).toBeTruthy()
   })
+
+  it('shows prompt first line as fallback title when initial_prompt is only whitespace', () => {
+    const taskWithPrompt = { ...baseTask, initial_prompt: '   \n   ', prompt: 'Fallback title from prompt' }
+    render(TaskCard, { props: { task: taskWithPrompt } })
+    expect(screen.getByText('Fallback title from prompt')).toBeTruthy()
+  })
 })

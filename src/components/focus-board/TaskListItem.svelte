@@ -4,6 +4,7 @@
   import { getStateDrivingPr } from '../../lib/taskState'
   import { TASK_STATE_COMPACT_LABELS, getTaskStateBadgeClass } from '../../lib/taskStatePresentation'
   import { timeAgoFromSeconds } from '../../lib/timeAgo'
+  import { getTaskTitle } from '../../lib/taskTitle'
 
   interface Props {
     task: Task
@@ -22,16 +23,7 @@
   function truncate(text: string, max: number): string {
     return text.length > max ? text.slice(0, max) + '...' : text
   }
-
-  function firstLine(text: string): string {
-    return text.split('\n')[0]
-  }
-
-  
-
-  
-
-  let title = $derived(truncate(firstLine(task.initial_prompt), 80))
+  let title = $derived(truncate(getTaskTitle(task), 80))
   let badgeClass = $derived(getTaskStateBadgeClass(state))
   let stateLabel = $derived(TASK_STATE_COMPACT_LABELS[state] ?? state)
   let firstPr = $derived(getStateDrivingPr(pullRequests))

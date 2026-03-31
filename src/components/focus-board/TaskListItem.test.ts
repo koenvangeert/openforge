@@ -161,4 +161,10 @@ describe('TaskListItem', () => {
     expect(screen.getByText(/PR #42/)).toBeTruthy()
     expect(screen.queryByText(/PR #7/)).toBeNull()
   })
+
+  it('falls back to prompt if initial_prompt is empty', () => {
+    const task = { ...baseTask, initial_prompt: '', prompt: 'Fallback title' }
+    render(TaskListItem, { props: { ...baseProps, task } })
+    expect(screen.getByText('Fallback title')).toBeTruthy()
+  })
 })

@@ -7,6 +7,7 @@
   import { openUrl } from '../../lib/ipc'
   import { timeAgoFromSeconds } from '../../lib/timeAgo'
   import Card from '../shared/ui/Card.svelte'
+  import { getTaskTitle } from '../../lib/taskTitle'
 
   interface Props {
     task: Task
@@ -28,11 +29,6 @@
   function truncate(text: string, max: number): string {
     return text.length > max ? text.slice(0, max) + '...' : text
   }
-
-  function firstLine(text: string): string {
-    return text.split('\n')[0]
-  }
-
   let taskState = $derived(computeTaskState(task, session ?? null, pullRequests))
   let borderClass = $derived(taskStateToBorderClass(taskState))
 
@@ -138,7 +134,7 @@
     </div>
 
     <div class={titleClasses}>
-      {truncate(firstLine(task.initial_prompt || (task.prompt?.split('\n')[0]) || task.id), 80)}
+      {truncate(getTaskTitle(task), 80)}
       {#if task.initial_prompt.includes('\n')}
         <span class="text-[10px] text-base-content/40 ml-1">+{task.initial_prompt.split('\n').length - 1} lines</span>
       {/if}
