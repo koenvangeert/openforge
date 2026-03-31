@@ -23,6 +23,7 @@ export const isLoading = writable(false);
 export const error = writable<string | null>(null);
 export const projects = writable<Project[]>([]);
 export const activeProjectId = writable<string | null>(null);
+export const pendingFileReveal = writable<string | null>(null);
 export const projectAttention = writable<Map<string, ProjectAttention>>(new Map());
 export const agentEvents = writable<Map<string, AgentEvent[]>>(new Map());
 export const taskRuntimeInfo = writable<Map<string, TaskRuntimeInfo>>(new Map());
