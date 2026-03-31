@@ -24,10 +24,11 @@
   import ProjectSwitcherModal from './components/project/ProjectSwitcherModal.svelte'
   import ProjectSetupDialog from './components/project/ProjectSetupDialog.svelte'
   import IconRail from './components/shell/IconRail.svelte'
-  import CommandPalette from './components/shell/CommandPalette.svelte'
-  import ActionPalette from './components/shell/ActionPalette.svelte'
+   import CommandPalette from './components/shell/CommandPalette.svelte'
+   import ActionPalette from './components/shell/ActionPalette.svelte'
+   import FileQuickOpen from './components/shell/FileQuickOpen.svelte'
 
-  import { useAppRouter } from './lib/router.svelte'
+   import { useAppRouter } from './lib/router.svelte'
   import { loadActions, getEnabledActions } from './lib/actions'
   import { getProjectColor } from './lib/projectColors'
   import { themeMode } from './lib/theme'
@@ -82,12 +83,13 @@
   }
   let showProjectSetup = $state(false)
   let appMode = $state<string | null>(null)
-  let showShortcutsDialog = $state(false)
-  let showProjectSwitcher = $state(false)
-  let appSidebarCollapsed = $state(localStorage.getItem('appSidebarCollapsed') === 'true')
-  let showCommandPalette = $state(false)
-  let showActionPalette = $state(false)
-  let actionPaletteTask = $state<Task | null>(null)
+   let showShortcutsDialog = $state(false)
+   let showProjectSwitcher = $state(false)
+   let appSidebarCollapsed = $state(localStorage.getItem('appSidebarCollapsed') === 'true')
+   let showCommandPalette = $state(false)
+   let showActionPalette = $state(false)
+   let showFileQuickOpen = $state(false)
+   let actionPaletteTask = $state<Task | null>(null)
   let actionPaletteActions = $state<Action[]>([])
   let workQueueRefreshTrigger = $state(0)
   let router = useAppRouter()
@@ -525,6 +527,15 @@
       showCommandPalette = !showCommandPalette
     })
 
+    shortcuts.register('⌘⇧o', () => {
+      if (showCommandPalette || showProjectSwitcher || showActionPalette || showShortcutsDialog) return
+      showFileQuickOpen = !showFileQuickOpen
+    })
+    shortcuts.register('⌃⇧o', () => {
+      if (showCommandPalette || showProjectSwitcher || showActionPalette || showShortcutsDialog) return
+      showFileQuickOpen = !showFileQuickOpen
+    })
+
     shortcuts.register('⌘r', () => {
       router.navigate('workqueue')
     })
@@ -918,7 +929,7 @@
     onNavigate={handleNavigate}
   />
   {#if !ICON_RAIL_HIDDEN_VIEWS.has($currentView)}
-    <IconRail currentView={$currentView} onNavigate={handleNavigate} reviewRequestCount={$reviewRequestCount} authoredPrCount={$authoredPrCount} modalsOpen={showCommandPalette || showProjectSwitcher || showActionPalette || showAddDialog} railBg={iconRailBg} />
+    <IconRail currentView={$currentView} onNavigate={handleNavigate} reviewRequestCount={$reviewRequestCount} authoredPrCount={$authoredPrCount} modalsOpen={showCommandPalette || showProjectSwitcher || showActionPalette || showAddDialog || showFileQuickOpen} railBg={iconRailBg} />
   {/if}
 
   <div class="flex flex-col flex-1 min-w-0 relative" style="background: linear-gradient(180deg, var(--project-bg-alt) 0%, var(--project-bg) 100%)">
@@ -1088,6 +1099,10 @@
     onClose={closeActionPalette}
     onExecute={executeAction}
   />
+{/if}
+
+{#if showFileQuickOpen}
+  <FileQuickOpen onClose={() => { showFileQuickOpen = false }} />
 {/if}
 
 <!-- Keyboard shortcuts help dialog (global) -->
