@@ -70,6 +70,12 @@ impl GitHubClient {
         *self.last_rate_limit_reset.lock().unwrap() = None;
     }
 
+    #[cfg(test)]
+    pub(crate) fn shares_cache_with(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.etag_cache, &other.etag_cache)
+            && Arc::ptr_eq(&self.last_rate_limit_reset, &other.last_rate_limit_reset)
+    }
+
     fn github_get(&self, url: &str, token: &str) -> reqwest::RequestBuilder {
         self.client
             .get(url)

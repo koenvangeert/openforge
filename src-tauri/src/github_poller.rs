@@ -307,7 +307,7 @@ pub async fn poll_github_once(app: &AppHandle, github_client: &GitHubClient) -> 
 /// # Arguments
 /// * `app` - Tauri AppHandle for accessing managed state and emitting events
 pub async fn start_github_poller(app: AppHandle) {
-    let github_client = GitHubClient::new();
+    let github_client = managed_github_client(&app);
 
     loop {
         let db = app.state::<Arc<Mutex<Database>>>();
@@ -391,6 +391,10 @@ fn get_open_prs_for_project(db: &Mutex<Database>, project_id: &str) -> Result<Ve
         .into_iter()
         .filter(|pr| task_ids.contains(&pr.ticket_id))
         .collect())
+}
+
+fn managed_github_client<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> GitHubClient {
+    app.state::<GitHubClient>().inner().clone()
 }
 
 fn should_fetch_comments_for_pr(pr_id: i64, changed_pr_numbers: &HashSet<i64>) -> bool {
@@ -1395,6 +1399,8 @@ fn mergeability_after_pr_details(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::github_client::GitHubClient;
+    use tauri::test::{mock_builder, mock_context, noop_assets};
 
     #[test]
     fn test_poll_result_construction() {
@@ -1696,5 +1702,18 @@ mod tests {
 
         assert!(should_fetch_comments_for_pr(20, &changed_pr_numbers));
         assert!(should_fetch_comments_for_pr(21, &changed_pr_numbers));
+    }
+
+    #[test]
+    fn test_poller_uses_managed_github_client() {
+        let managed_client = GitHubClient::new();
+        let app = mock_builder()
+            .manage(managed_client.clone())
+            .build(mock_context(noop_assets()))
+            .expect("mock app should build");
+
+        let poller_client = managed_github_client(&app.handle());
+
+        assert!(poller_client.shares_cache_with(&managed_client));
     }
 }

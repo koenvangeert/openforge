@@ -1,11 +1,15 @@
 use crate::github_client::GitHubClient;
 use crate::{db, github_poller};
 use std::sync::{Arc, Mutex};
-use tauri::{Emitter, State};
+use tauri::{Emitter, Manager, State};
+
+fn managed_github_client<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> GitHubClient {
+    app.state::<GitHubClient>().inner().clone()
+}
 
 #[tauri::command]
 pub async fn force_github_sync(app: tauri::AppHandle) -> Result<github_poller::PollResult, String> {
-    let github_client = crate::github_client::GitHubClient::new();
+    let github_client = managed_github_client(&app);
     let result = github_poller::poll_github_once(&app, &github_client).await;
     Ok(result)
 }
@@ -114,6 +118,7 @@ pub async fn merge_pull_request(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tauri::test::{mock_builder, mock_context, noop_assets};
 
     #[test]
     fn test_valid_http_url() {
@@ -176,5 +181,18 @@ mod tests {
     fn test_case_insensitive_scheme() {
         assert!(validate_url_scheme("HTTP://example.com").is_ok());
         assert!(validate_url_scheme("HTTPS://example.com").is_ok());
+    }
+
+    #[test]
+    fn test_force_sync_uses_managed_github_client() {
+        let managed_client = GitHubClient::new();
+        let app = mock_builder()
+            .manage(managed_client.clone())
+            .build(mock_context(noop_assets()))
+            .expect("mock app should build");
+
+        let sync_client = managed_github_client(&app.handle());
+
+        assert!(sync_client.shares_cache_with(&managed_client));
     }
 }
