@@ -18,7 +18,7 @@ import {
 // CSS.highlights is a HighlightRegistry (Map-like), and Highlight is a class
 // that accepts Range objects in its constructor.
 
-const mockHighlights = new Map<string, unknown>()
+const mockHighlights = new Map<string, MockHighlight | object>()
 
 Object.defineProperty(globalThis, 'CSS', {
   value: { highlights: mockHighlights },
@@ -33,7 +33,11 @@ class MockHighlight {
   }
 }
 
-;(globalThis as unknown as Record<string, unknown>).Highlight = MockHighlight
+Object.defineProperty(globalThis, 'Highlight', {
+  value: MockHighlight,
+  writable: true,
+  configurable: true,
+})
 
 // ============================================================================
 // DOM Fixture Helpers
@@ -77,6 +81,121 @@ function createFragmentedLine(fragments: string[]): HTMLDivElement {
 
   container.appendChild(contentItem)
   return container
+}
+
+function appendText(parent: Node, text: string): Text {
+  const textNode = document.createTextNode(text)
+  parent.appendChild(textNode)
+  return textNode
+}
+
+function getMockHighlight(name: string): MockHighlight {
+  const highlight = mockHighlights.get(name)
+  if (!(highlight instanceof MockHighlight)) {
+    throw new Error(`Expected ${name} highlight to be a MockHighlight instance`)
+  }
+  return highlight
+}
+
+interface MockSelectionOptions {
+  isCollapsed: boolean
+  rangeCount: number
+  anchorNode: Node | null
+  text: string
+}
+
+class MockSelection implements Selection {
+  readonly anchorNode
+  readonly anchorOffset = 0
+  readonly focusNode
+  readonly focusOffset = 0
+  readonly isCollapsed
+  readonly rangeCount
+  readonly type
+
+  private readonly text
+
+  constructor({ isCollapsed, rangeCount, anchorNode, text }: MockSelectionOptions) {
+    this.anchorNode = anchorNode
+    this.focusNode = anchorNode
+    this.isCollapsed = isCollapsed
+    this.rangeCount = rangeCount
+    this.type = rangeCount > 0 ? 'Range' : 'None'
+    this.text = text
+  }
+
+  addRange(_range: Range): void {
+    throw new Error('MockSelection.addRange is not implemented for this test')
+  }
+
+  collapse(_node?: Node | null, _offset?: number): void {
+    throw new Error('MockSelection.collapse is not implemented for this test')
+  }
+
+  collapseToEnd(): void {
+    throw new Error('MockSelection.collapseToEnd is not implemented for this test')
+  }
+
+  collapseToStart(): void {
+    throw new Error('MockSelection.collapseToStart is not implemented for this test')
+  }
+
+  containsNode(_node: Node, _allowPartialContainment?: boolean): boolean {
+    throw new Error('MockSelection.containsNode is not implemented for this test')
+  }
+
+  deleteFromDocument(): void {
+    throw new Error('MockSelection.deleteFromDocument is not implemented for this test')
+  }
+
+  empty(): void {
+    throw new Error('MockSelection.empty is not implemented for this test')
+  }
+
+  extend(_node: Node, _offset?: number): void {
+    throw new Error('MockSelection.extend is not implemented for this test')
+  }
+
+  getRangeAt(_index: number): Range {
+    throw new Error('MockSelection.getRangeAt is not implemented for this test')
+  }
+
+  modify(_alter?: string, _direction?: string, _granularity?: string): void {
+    throw new Error('MockSelection.modify is not implemented for this test')
+  }
+
+  removeAllRanges(): void {
+    throw new Error('MockSelection.removeAllRanges is not implemented for this test')
+  }
+
+  removeRange(_range: Range): void {
+    throw new Error('MockSelection.removeRange is not implemented for this test')
+  }
+
+  selectAllChildren(_node: Node): void {
+    throw new Error('MockSelection.selectAllChildren is not implemented for this test')
+  }
+
+  setBaseAndExtent(
+    _anchorNode: Node,
+    _anchorOffset: number,
+    _focusNode: Node,
+    _focusOffset: number,
+  ): void {
+    throw new Error('MockSelection.setBaseAndExtent is not implemented for this test')
+  }
+
+  setPosition(_node?: Node | null, _offset?: number): void {
+    throw new Error('MockSelection.setPosition is not implemented for this test')
+  }
+
+  toString(): string {
+    return this.text
+  }
+}
+
+function createSelection(options: MockSelectionOptions): Selection {
+  return new MockSelection(options)
 }
 
 // ============================================================================
@@ -225,7 +344,7 @@ describe('applySearchHighlights', () => {
 
     applySearchHighlights(matches, matches[0])
 
-    const matchHighlight = mockHighlights.get('diff-search-match') as MockHighlight
+    const matchHighlight = getMockHighlight('diff-search-match')
     expect(matchHighlight.ranges).toHaveLength(2)
   })
 
@@ -244,7 +363,7 @@ describe('applySearchHighlights', () => {
 
     applySearchHighlights(matches, matches[0])
 
-    const currentHighlight = mockHighlights.get('diff-search-current') as MockHighlight
+    const currentHighlight = getMockHighlight('diff-search-current')
     expect(currentHighlight.ranges).toHaveLength(1)
     expect(currentHighlight.ranges[0]).toBe(matches[0])
   })
@@ -255,7 +374,7 @@ describe('applySearchHighlights', () => {
 
     applySearchHighlights(matches, matches[1])
 
-    const currentHighlight = mockHighlights.get('diff-search-current') as MockHighlight
+    const currentHighlight = getMockHighlight('diff-search-current')
     expect(currentHighlight.ranges[0]).toBe(matches[1])
   })
 
@@ -287,7 +406,7 @@ describe('applySearchHighlights', () => {
 
     expect(mockHighlights.has('diff-search-match')).toBe(true)
     expect(mockHighlights.has('diff-search-current')).toBe(true)
-    const currentHighlight = mockHighlights.get('diff-search-current') as MockHighlight
+    const currentHighlight = getMockHighlight('diff-search-current')
     expect(currentHighlight.ranges).toHaveLength(1)
   })
 })
@@ -366,7 +485,7 @@ describe('applyOccurrenceHighlights', () => {
 
     applyOccurrenceHighlights(matches)
 
-    const highlight = mockHighlights.get('diff-occurrence-match') as MockHighlight
+    const highlight = getMockHighlight('diff-occurrence-match')
     expect(highlight.ranges).toHaveLength(2)
   })
 
@@ -437,12 +556,12 @@ describe('getWordAtSelection', () => {
 
   it('returns null when selection is collapsed (cursor only, no range)', () => {
     const textNode = document.createTextNode('hello')
-    const mockSelection = {
+    const mockSelection = createSelection({
       isCollapsed: true,
       rangeCount: 1,
       anchorNode: textNode,
-      toString: () => 'hello',
-    } as unknown as Selection
+      text: 'hello',
+    })
     vi.spyOn(window, 'getSelection').mockReturnValue(mockSelection)
 
     expect(getWordAtSelection()).toBeNull()
@@ -450,24 +569,24 @@ describe('getWordAtSelection', () => {
 
   it('returns null when rangeCount is 0', () => {
     const textNode = document.createTextNode('hello')
-    const mockSelection = {
+    const mockSelection = createSelection({
       isCollapsed: false,
       rangeCount: 0,
       anchorNode: textNode,
-      toString: () => 'hello',
-    } as unknown as Selection
+      text: 'hello',
+    })
     vi.spyOn(window, 'getSelection').mockReturnValue(mockSelection)
 
     expect(getWordAtSelection()).toBeNull()
   })
 
   it('returns null when anchorNode is null', () => {
-    const mockSelection = {
+    const mockSelection = createSelection({
       isCollapsed: false,
       rangeCount: 1,
       anchorNode: null,
-      toString: () => 'hello',
-    } as unknown as Selection
+      text: 'hello',
+    })
     vi.spyOn(window, 'getSelection').mockReturnValue(mockSelection)
 
     expect(getWordAtSelection()).toBeNull()
@@ -475,15 +594,14 @@ describe('getWordAtSelection', () => {
 
   it('returns null when selection anchor is outside .diff-line-content-item', () => {
     const outsideDiv = document.createElement('div')
-    outsideDiv.textContent = 'hello'
-    const textNode = outsideDiv.firstChild as Text
+    const textNode = appendText(outsideDiv, 'hello')
 
-    const mockSelection = {
+    const mockSelection = createSelection({
       isCollapsed: false,
       rangeCount: 1,
       anchorNode: textNode,
-      toString: () => 'hello',
-    } as unknown as Selection
+      text: 'hello',
+    })
     vi.spyOn(window, 'getSelection').mockReturnValue(mockSelection)
 
     expect(getWordAtSelection()).toBeNull()
@@ -492,15 +610,14 @@ describe('getWordAtSelection', () => {
   it('returns trimmed selected text when anchor is a direct child of .diff-line-content-item', () => {
     const contentItem = document.createElement('div')
     contentItem.className = 'diff-line-content-item'
-    const textNode = document.createTextNode('hello')
-    contentItem.appendChild(textNode)
+    const textNode = appendText(contentItem, 'hello')
 
-    const mockSelection = {
+    const mockSelection = createSelection({
       isCollapsed: false,
       rangeCount: 1,
       anchorNode: textNode,
-      toString: () => 'hello',
-    } as unknown as Selection
+      text: 'hello',
+    })
     vi.spyOn(window, 'getSelection').mockReturnValue(mockSelection)
 
     expect(getWordAtSelection()).toBe('hello')
@@ -510,16 +627,15 @@ describe('getWordAtSelection', () => {
     const contentItem = document.createElement('div')
     contentItem.className = 'diff-line-content-item'
     const span = document.createElement('span')
-    span.textContent = 'nested'
+    const textNode = appendText(span, 'nested')
     contentItem.appendChild(span)
-    const textNode = span.firstChild as Text
 
-    const mockSelection = {
+    const mockSelection = createSelection({
       isCollapsed: false,
       rangeCount: 1,
       anchorNode: textNode,
-      toString: () => 'nested',
-    } as unknown as Selection
+      text: 'nested',
+    })
     vi.spyOn(window, 'getSelection').mockReturnValue(mockSelection)
 
     expect(getWordAtSelection()).toBe('nested')
@@ -530,17 +646,16 @@ describe('getWordAtSelection', () => {
     contentItem.className = 'diff-line-content-item'
     const outer = document.createElement('span')
     const inner = document.createElement('span')
-    inner.textContent = 'deep'
+    const textNode = appendText(inner, 'deep')
     outer.appendChild(inner)
     contentItem.appendChild(outer)
-    const textNode = inner.firstChild as Text
 
-    const mockSelection = {
+    const mockSelection = createSelection({
       isCollapsed: false,
       rangeCount: 1,
       anchorNode: textNode,
-      toString: () => 'deep',
-    } as unknown as Selection
+      text: 'deep',
+    })
     vi.spyOn(window, 'getSelection').mockReturnValue(mockSelection)
 
     expect(getWordAtSelection()).toBe('deep')
@@ -549,15 +664,14 @@ describe('getWordAtSelection', () => {
   it('returns null when selected text is only whitespace', () => {
     const contentItem = document.createElement('div')
     contentItem.className = 'diff-line-content-item'
-    const textNode = document.createTextNode('   ')
-    contentItem.appendChild(textNode)
+    const textNode = appendText(contentItem, '   ')
 
-    const mockSelection = {
+    const mockSelection = createSelection({
       isCollapsed: false,
       rangeCount: 1,
       anchorNode: textNode,
-      toString: () => '   ',
-    } as unknown as Selection
+      text: '   ',
+    })
     vi.spyOn(window, 'getSelection').mockReturnValue(mockSelection)
 
     expect(getWordAtSelection()).toBeNull()
@@ -566,15 +680,14 @@ describe('getWordAtSelection', () => {
   it('trims leading and trailing whitespace from selected text', () => {
     const contentItem = document.createElement('div')
     contentItem.className = 'diff-line-content-item'
-    const textNode = document.createTextNode('  hello  ')
-    contentItem.appendChild(textNode)
+    const textNode = appendText(contentItem, '  hello  ')
 
-    const mockSelection = {
+    const mockSelection = createSelection({
       isCollapsed: false,
       rangeCount: 1,
       anchorNode: textNode,
-      toString: () => '  hello  ',
-    } as unknown as Selection
+      text: '  hello  ',
+    })
     vi.spyOn(window, 'getSelection').mockReturnValue(mockSelection)
 
     expect(getWordAtSelection()).toBe('hello')
@@ -728,7 +841,7 @@ describe('scrollToMatch', () => {
     const contentItem = document.createElement('div')
     contentItem.className = 'diff-line-content-item'
     const span = document.createElement('span')
-    span.textContent = 'hello'
+    const textNode = appendText(span, 'hello')
     contentItem.appendChild(span)
     document.body.appendChild(contentItem)
 
@@ -736,8 +849,8 @@ describe('scrollToMatch', () => {
     span.scrollIntoView = scrollIntoViewMock
 
     const range = document.createRange()
-    range.setStart(span.firstChild!, 0)
-    range.setEnd(span.firstChild!, 5)
+    range.setStart(textNode, 0)
+    range.setEnd(textNode, 5)
 
     scrollToMatch(range)
 

@@ -9,17 +9,20 @@ vi.mock('./domUtils', () => ({
 import { isInputFocused } from './domUtils'
 const mockIsInputFocused = vi.mocked(isInputFocused)
 
-function makeKeyEvent(key: string, overrides: Partial<KeyboardEvent> = {}): KeyboardEvent {
-  return {
+function makeKeyEvent(key: string, overrides: KeyboardEventInit = {}): KeyboardEvent {
+  const event = new KeyboardEvent('keydown', {
     key,
     metaKey: false,
     ctrlKey: false,
     altKey: false,
     shiftKey: false,
-    preventDefault: vi.fn(),
-    stopPropagation: vi.fn(),
+    bubbles: true,
+    cancelable: true,
     ...overrides,
-  } as unknown as KeyboardEvent
+  })
+  vi.spyOn(event, 'preventDefault')
+  vi.spyOn(event, 'stopPropagation')
+  return event
 }
 
 describe('useVimNavigation', () => {
@@ -159,9 +162,9 @@ describe('useVimNavigation', () => {
   describe('modifier guard', () => {
     it('skips keys with meta/ctrl/alt modifiers', () => {
       const nav = useVimNavigation({ getItemCount: () => 5 })
-      nav.handleKeydown(makeKeyEvent('j', { metaKey: true } as Partial<KeyboardEvent>))
+      nav.handleKeydown(makeKeyEvent('j', { metaKey: true }))
       expect(nav.focusedIndex).toBe(0)
-      nav.handleKeydown(makeKeyEvent('j', { ctrlKey: true } as Partial<KeyboardEvent>))
+      nav.handleKeydown(makeKeyEvent('j', { ctrlKey: true }))
       expect(nav.focusedIndex).toBe(0)
     })
   })

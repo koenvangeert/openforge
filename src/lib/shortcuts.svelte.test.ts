@@ -7,6 +7,7 @@ vi.mock('./domUtils', () => ({
 }))
 
 import { isInputFocused } from './domUtils'
+const mockIsInputFocused = vi.mocked(isInputFocused)
 
 describe('useShortcutRegistry', () => {
   it('registers a handler that gets called when key matches', () => {
@@ -74,7 +75,6 @@ describe('useShortcutRegistry', () => {
 
     registry.register('1', handler)
 
-    const mockIsInputFocused = isInputFocused as ReturnType<typeof vi.fn>
     mockIsInputFocused.mockReturnValueOnce(true)
 
     const event = new KeyboardEvent('keydown', {
@@ -92,7 +92,6 @@ describe('useShortcutRegistry', () => {
 
     registry.register('1', handler)
 
-    const mockIsInputFocused = isInputFocused as ReturnType<typeof vi.fn>
     mockIsInputFocused.mockReturnValueOnce(false)
 
     const event = new KeyboardEvent('keydown', {
@@ -110,7 +109,6 @@ describe('useShortcutRegistry', () => {
 
     registry.register('⌘K', handler)
 
-    const mockIsInputFocused = isInputFocused as ReturnType<typeof vi.fn>
     mockIsInputFocused.mockReturnValueOnce(true)
 
     const event = new KeyboardEvent('keydown', {
@@ -175,7 +173,6 @@ describe('useShortcutRegistry', () => {
 
     registry.register('?', handler)
 
-    const mockIsInputFocused = isInputFocused as ReturnType<typeof vi.fn>
     mockIsInputFocused.mockReturnValueOnce(false)
 
     const event = new KeyboardEvent('keydown', {
@@ -193,7 +190,6 @@ describe('useShortcutRegistry', () => {
 
     registry.register('?', handler)
 
-    const mockIsInputFocused = isInputFocused as ReturnType<typeof vi.fn>
     mockIsInputFocused.mockReturnValueOnce(false)
 
     const event = new KeyboardEvent('keydown', {
