@@ -1,5 +1,6 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/svelte'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { requireElement } from '../test-utils/dom'
 import AddTaskDialog from './AddTaskDialog.svelte'
 import type { Task } from '../lib/types'
 
@@ -63,7 +64,7 @@ describe('AddTaskDialog', () => {
     render(AddTaskDialog, { props: { mode: 'create' } })
     expect(screen.getByRole('heading', { name: 'Create Task' })).toBeTruthy()
     
-    const promptInput = screen.getByPlaceholderText('Describe what you want the agent to do') as HTMLInputElement
+    const promptInput = requireElement(screen.getByPlaceholderText('Describe what you want the agent to do'), HTMLInputElement)
     expect(promptInput.value).toBe('')
   })
 
@@ -101,7 +102,7 @@ describe('AddTaskDialog', () => {
     render(AddTaskDialog, { props: { mode: 'edit', task: mockTask } })
     expect(screen.getByText('Edit Task')).toBeTruthy()
     
-    const promptInput = screen.getByPlaceholderText('Describe what you want the agent to do') as HTMLInputElement
+    const promptInput = requireElement(screen.getByPlaceholderText('Describe what you want the agent to do'), HTMLInputElement)
     expect(promptInput.value).toBe('Existing Task')
   })
 
@@ -113,7 +114,7 @@ describe('AddTaskDialog', () => {
       },
     })
 
-    const promptInput = screen.getByPlaceholderText('Describe what you want the agent to do') as HTMLInputElement
+    const promptInput = requireElement(screen.getByPlaceholderText('Describe what you want the agent to do'), HTMLInputElement)
     expect(promptInput.value).toBe('Prompt fallback text')
   })
 
@@ -245,7 +246,7 @@ describe('AddTaskDialog', () => {
     await waitFor(() => {
       expect(screen.queryByLabelText('OpenCode Agent')).toBeTruthy()
     })
-    const agentSelect = screen.getByLabelText('OpenCode Agent') as HTMLSelectElement
+    const agentSelect = requireElement(screen.getByLabelText('OpenCode Agent'), HTMLSelectElement)
     const options = Array.from(agentSelect.options).map(o => o.textContent)
     expect(options).toContain('visible-agent')
     expect(options).toContain('null-hidden-agent')

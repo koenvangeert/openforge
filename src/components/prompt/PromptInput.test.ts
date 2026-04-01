@@ -1,5 +1,6 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/svelte'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { requireElement } from '../../test-utils/dom'
 import PromptInput from './PromptInput.svelte'
 
 // Mock IPC functions
@@ -71,7 +72,10 @@ describe('PromptInput', () => {
       },
     })
 
-    const textarea = screen.getByPlaceholderText('Describe what you want to implement...') as HTMLTextAreaElement
+    const textarea = requireElement(
+      screen.getByPlaceholderText('Describe what you want to implement...'),
+      HTMLTextAreaElement,
+    )
     textarea.value = 'Fix the bug'
     await fireEvent.input(textarea)
     await fireEvent.keyDown(textarea, { key: 'Enter', metaKey: true })
@@ -88,7 +92,10 @@ describe('PromptInput', () => {
       },
     })
 
-    const textarea = screen.getByPlaceholderText('Describe what you want to implement...') as HTMLTextAreaElement
+    const textarea = requireElement(
+      screen.getByPlaceholderText('Describe what you want to implement...'),
+      HTMLTextAreaElement,
+    )
     textarea.value = 'Fix the bug'
     await fireEvent.input(textarea)
     await fireEvent.keyDown(textarea, { key: 'Enter' })
@@ -119,7 +126,7 @@ describe('PromptInput', () => {
 
   it('submit button is disabled when textarea is empty', () => {
     render(PromptInput, { props: { ...baseProps } })
-    const button = screen.getByRole('button', { name: 'Submit' }) as HTMLButtonElement
+    const button = requireElement(screen.getByRole('button', { name: 'Submit' }), HTMLButtonElement)
     expect(button.disabled).toBe(true)
   })
 
@@ -132,7 +139,10 @@ describe('PromptInput', () => {
       },
     })
 
-    const textarea = screen.getByPlaceholderText('Describe what you want to implement...') as HTMLTextAreaElement
+    const textarea = requireElement(
+      screen.getByPlaceholderText('Describe what you want to implement...'),
+      HTMLTextAreaElement,
+    )
     textarea.value = 'Fix the bug'
     await fireEvent.input(textarea)
     const button = screen.getByRole('button', { name: 'Submit' })
@@ -164,8 +174,11 @@ describe('PromptInput', () => {
       },
     })
 
-    const textarea = screen.getByPlaceholderText('Describe what you want to implement...')
-    expect((textarea as HTMLTextAreaElement).value).toBe('Fix the bug')
+    const textarea = requireElement(
+      screen.getByPlaceholderText('Describe what you want to implement...'),
+      HTMLTextAreaElement,
+    )
+    expect(textarea.value).toBe('Fix the bug')
   })
 
   describe('dual buttons (onStartTask provided)', () => {
@@ -190,7 +203,10 @@ describe('PromptInput', () => {
           onStartTask: vi.fn(),
         },
       })
-      const textarea = screen.getByPlaceholderText('Describe what you want to implement...') as HTMLTextAreaElement
+      const textarea = requireElement(
+        screen.getByPlaceholderText('Describe what you want to implement...'),
+        HTMLTextAreaElement,
+      )
       textarea.value = 'New feature'
       await fireEvent.input(textarea)
       await fireEvent.click(screen.getByText('Add to Backlog', { exact: false }))
@@ -205,7 +221,10 @@ describe('PromptInput', () => {
           onStartTask,
         },
       })
-      const textarea = screen.getByPlaceholderText('Describe what you want to implement...') as HTMLTextAreaElement
+      const textarea = requireElement(
+        screen.getByPlaceholderText('Describe what you want to implement...'),
+        HTMLTextAreaElement,
+      )
       textarea.value = 'New feature'
       await fireEvent.input(textarea)
       await fireEvent.click(screen.getByText('Start Task', { exact: false }))
@@ -222,7 +241,10 @@ describe('PromptInput', () => {
           onStartTask,
         },
       })
-      const textarea = screen.getByPlaceholderText('Describe what you want to implement...') as HTMLTextAreaElement
+      const textarea = requireElement(
+        screen.getByPlaceholderText('Describe what you want to implement...'),
+        HTMLTextAreaElement,
+      )
       textarea.value = 'New feature'
       await fireEvent.input(textarea)
       await fireEvent.keyDown(textarea, { key: 'Enter', metaKey: true })
@@ -240,7 +262,10 @@ describe('PromptInput', () => {
           onStartTask,
         },
       })
-      const textarea = screen.getByPlaceholderText('Describe what you want to implement...') as HTMLTextAreaElement
+      const textarea = requireElement(
+        screen.getByPlaceholderText('Describe what you want to implement...'),
+        HTMLTextAreaElement,
+      )
       textarea.value = 'New feature'
       await fireEvent.input(textarea)
       await fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: true })
@@ -262,7 +287,10 @@ describe('PromptInput', () => {
       ])
 
       render(PromptInput, { props: { ...baseProps } })
-      const textarea = screen.getByPlaceholderText('Describe what you want to implement...') as HTMLTextAreaElement
+      const textarea = requireElement(
+        screen.getByPlaceholderText('Describe what you want to implement...'),
+        HTMLTextAreaElement,
+      )
 
       textarea.value = '@'
       textarea.selectionStart = 1
@@ -288,7 +316,10 @@ describe('PromptInput', () => {
       ])
       
       render(PromptInput, { props: { ...baseProps } })
-      const textarea = screen.getByPlaceholderText('Describe what you want to implement...') as HTMLTextAreaElement
+      const textarea = requireElement(
+        screen.getByPlaceholderText('Describe what you want to implement...'),
+        HTMLTextAreaElement,
+      )
       
       textarea.value = '/'
       textarea.selectionStart = 1
