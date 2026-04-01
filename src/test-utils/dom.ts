@@ -3,7 +3,14 @@ type Constructor<T> = {
   name: string
 }
 
-export function requireDefined<T>(value: T | null | undefined, message = 'Expected value to be defined'): T {
+export function requireDefined<T>(
+  value: T | null | undefined,
+  message?: string,
+): NonNullable<T>
+export function requireDefined<T>(
+  value: T | null | undefined,
+  message = 'Expected value to be defined',
+) {
   if (value == null) {
     throw new Error(message)
   }
