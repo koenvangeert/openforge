@@ -88,7 +88,7 @@ describe('createPtyBridge', () => {
   it('accepts a legitimate early pty-exit before spawnPty resolves', async () => {
     vi.mocked(getTaskWorkspace).mockResolvedValue({ opencode_port: 9000 } as never)
 
-    let resolveSpawn: ((instanceId: number) => void) | null = null
+    let resolveSpawn!: (instanceId: number) => void
     vi.mocked(spawnPty).mockImplementation(() => new Promise<number>((resolve) => {
       resolveSpawn = resolve
     }))
@@ -104,7 +104,7 @@ describe('createPtyBridge', () => {
     expect(exitCb).toBeDefined()
 
     exitCb?.({ payload: { instance_id: 7 } })
-    resolveSpawn?.(7)
+    resolveSpawn(7)
     await attachPromise
 
     expect(bridge.ptySpawned).toBe(false)
@@ -114,7 +114,7 @@ describe('createPtyBridge', () => {
   it('keeps the PTY spawned when an early pty-exit is for a different instance', async () => {
     vi.mocked(getTaskWorkspace).mockResolvedValue({ opencode_port: 9000 } as never)
 
-    let resolveSpawn: ((instanceId: number) => void) | null = null
+    let resolveSpawn!: (instanceId: number) => void
     vi.mocked(spawnPty).mockImplementation(() => new Promise<number>((resolve) => {
       resolveSpawn = resolve
     }))
@@ -130,7 +130,7 @@ describe('createPtyBridge', () => {
     expect(exitCb).toBeDefined()
 
     exitCb?.({ payload: { instance_id: 6 } })
-    resolveSpawn?.(7)
+    resolveSpawn(7)
     await attachPromise
 
     expect(bridge.ptySpawned).toBe(true)

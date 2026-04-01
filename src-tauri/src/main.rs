@@ -37,7 +37,9 @@ fn tauri_context() -> tauri::Context<tauri::Wry> {
 
 #[cfg(test)]
 fn tauri_context() -> tauri::Context<tauri::Wry> {
-    panic!("unit tests should use tauri::test::mock_context instead of the production Tauri context")
+    panic!(
+        "unit tests should use tauri::test::mock_context instead of the production Tauri context"
+    )
 }
 
 // ============================================================================
@@ -841,7 +843,10 @@ mod tests {
     fn test_mock_builder_does_not_require_frontend_dist_assets() {
         let app = mock_builder().build(mock_context(noop_assets()));
 
-        assert!(app.is_ok(), "mock builder should not require frontendDist assets");
+        assert!(
+            app.is_ok(),
+            "mock builder should not require frontendDist assets"
+        );
     }
 
     #[test]

@@ -4,7 +4,7 @@ import { writable } from 'svelte/store'
 import TaskInfoPanel from './TaskInfoPanel.svelte'
 import type { Task, PullRequestInfo } from '../../lib/types'
 import { ticketPrs } from '../../lib/stores'
-import { forceGithubSync, getPullRequests, mergePullRequest, openUrl } from '../../lib/ipc'
+import { forceGithubSync, getPullRequests, mergePullRequest } from '../../lib/ipc'
 
 vi.mock('../../lib/stores', () => ({
   ticketPrs: writable(new Map()),

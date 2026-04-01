@@ -416,7 +416,11 @@ mod tests {
 
     #[test]
     fn test_build_task_prompt_uses_prompt_over_initial_prompt() {
-        let task = sample_task("T-456", "Initial title", Some("Specific implementation prompt"));
+        let task = sample_task(
+            "T-456",
+            "Initial title",
+            Some("Specific implementation prompt"),
+        );
 
         let prompt = build_task_prompt(&task, None, false);
 

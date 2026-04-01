@@ -842,7 +842,7 @@ mod tests {
 
     #[test]
     fn test_parse_git_log_output_multiple() {
-        let output = "abc123\0abc\0First commit\0Alice\02025-01-01T00:00:00Z\ndef456\0def\0Second commit\0Bob\02025-01-02T00:00:00Z";
+        let output = "abc123\0abc\0First commit\0Alice\x002025-01-01T00:00:00Z\ndef456\0def\0Second commit\0Bob\x002025-01-02T00:00:00Z";
         let result = super::parse_git_log_output(output);
         assert_eq!(result.len(), 2);
         assert_eq!(result[0].sha, "abc123");
@@ -863,7 +863,7 @@ mod tests {
 
     #[test]
     fn test_parse_git_log_output_malformed_line() {
-        let output = "abc123\0abc\0Commit msg\0Author\02025-01-01\nbadline";
+        let output = "abc123\0abc\0Commit msg\0Author\x002025-01-01\nbadline";
         let result = super::parse_git_log_output(output);
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].sha, "abc123");

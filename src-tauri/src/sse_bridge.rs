@@ -584,12 +584,8 @@ impl SseBridgeManager {
                                     }
                                 } else if real_event_type == "session.error" {
                                     Some("failed")
-                                } else if let Some(session_status) =
-                                    map_checkpoint_event_to_session_status(real_event_type)
-                                {
-                                    Some(session_status)
                                 } else {
-                                    None
+                                    map_checkpoint_event_to_session_status(real_event_type)
                                 };
 
                                 if let Some(new_status) = new_session_status {

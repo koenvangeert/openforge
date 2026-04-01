@@ -36,6 +36,7 @@ export interface ClaudeInstallStatus {
 
 export interface CheckpointNotification {
   ticketId: string;
+  ticketKey: string | null;
   sessionId: string;
   stage: string;
   message: string;

@@ -273,7 +273,7 @@ describe('SettingsView', () => {
     })
 
     it('keeps newer input while a previous save is still in flight and reruns with the latest value', async () => {
-      let resolveFirstSave: (() => void) | null = null
+      let resolveFirstSave!: () => void
       vi.mocked(updateProject)
         .mockImplementationOnce(() => new Promise<void>((resolve) => {
           resolveFirstSave = resolve
@@ -297,9 +297,7 @@ describe('SettingsView', () => {
 
       expect(nameInput.value).toBe('Second Name')
 
-      if (resolveFirstSave) {
-        resolveFirstSave()
-      }
+      resolveFirstSave()
       await vi.advanceTimersByTimeAsync(0)
       await vi.waitFor(() => {
         expect(updateProject).toHaveBeenCalledTimes(2)
@@ -355,7 +353,7 @@ describe('SettingsView', () => {
         { id: 'custom-1', name: 'Custom', prompt: 'test', builtin: false, enabled: true },
       ])
 
-      let resolveSaveActions: (() => void) | null = null
+      let resolveSaveActions!: () => void
       vi.mocked(saveActions).mockImplementation(
         () => new Promise<void>((resolve) => {
           resolveSaveActions = resolve
@@ -385,9 +383,7 @@ describe('SettingsView', () => {
 
       expect(saveActions).toHaveBeenCalledTimes(1)
 
-      if (resolveSaveActions) {
-        resolveSaveActions()
-      }
+      resolveSaveActions()
 
       await vi.advanceTimersByTimeAsync(0)
       await vi.waitFor(() => {
@@ -400,7 +396,7 @@ describe('SettingsView', () => {
         { id: 'builtin-go', name: 'Go', prompt: '', builtin: true, enabled: true },
       ])
 
-      let resolveSaveActions: (() => void) | null = null
+      let resolveSaveActions!: () => void
       vi.mocked(saveActions).mockImplementation(
         () => new Promise<void>((resolve) => {
           resolveSaveActions = resolve
@@ -430,9 +426,7 @@ describe('SettingsView', () => {
 
       expect(saveActions).toHaveBeenCalledTimes(1)
 
-      if (resolveSaveActions) {
-        resolveSaveActions()
-      }
+      resolveSaveActions()
 
       await vi.advanceTimersByTimeAsync(0)
       await vi.waitFor(() => {

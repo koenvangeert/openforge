@@ -280,7 +280,7 @@ describe('AppSidebar', () => {
     })
 
     it('disables further reordering while a save is in progress', async () => {
-      let resolveSave: (() => void) | null = null
+      let resolveSave!: () => void
       vi.mocked(setConfig).mockImplementationOnce(
         () =>
           new Promise<void>((resolve) => {
@@ -298,7 +298,7 @@ describe('AppSidebar', () => {
       expect(get(projects).map((project) => project.id)).toEqual(['proj-2', 'proj-1', 'proj-3'])
       expect(setConfig).toHaveBeenCalledTimes(1)
 
-      resolveSave?.()
+      resolveSave()
     })
   })
 })

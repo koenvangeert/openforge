@@ -47,7 +47,7 @@ describe('createTrackedDebouncedSave', () => {
   })
 
   it('returns the same in-flight promise and reruns once when an immediate save happens during a save', async () => {
-    let resolveFirstSave: (() => void) | null = null
+    let resolveFirstSave!: () => void
     const firstSave = new Promise<void>((resolve) => {
       resolveFirstSave = resolve
     })
@@ -68,7 +68,7 @@ describe('createTrackedDebouncedSave', () => {
     expect(firstCompletion).toBe(secondCompletion)
     expect(save).toHaveBeenCalledTimes(1)
 
-    resolveFirstSave?.()
+    resolveFirstSave()
     await firstCompletion
 
     expect(save).toHaveBeenCalledTimes(2)

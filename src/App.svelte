@@ -704,6 +704,7 @@
           const task = $tasks.find(t => t.id === taskId)
           $checkpointNotification = {
             ticketId: taskId,
+            ticketKey: task?.id ?? null,
             sessionId: session.id,
             stage: session.stage,
             message: 'Agent needs input',
@@ -792,6 +793,7 @@
           const task = $tasks.find(t => t.id === taskId)
           $checkpointNotification = {
             ticketId: taskId,
+            ticketKey: task?.id ?? null,
             sessionId: session.id,
             stage: session.stage,
             message: 'Agent needs permission',

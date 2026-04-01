@@ -25,7 +25,7 @@ export interface OpenForgeChunkGroup {
 }
 
 export function getOpenForgeChunkGroupName(id: string): string | null {
-  const normalizedId = id.replaceAll('\\', '/')
+  const normalizedId = id.replace(/\\/g, '/')
 
   for (const rule of OPEN_FORGE_CHUNK_GROUP_RULES) {
     if (rule.test.test(normalizedId)) {

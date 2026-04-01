@@ -49,7 +49,7 @@ const mockTask: Task = {
 describe('AddTaskDialog', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(getProjectConfig).mockImplementation(async (_projectId, key) => {
+    vi.mocked(getProjectConfig).mockImplementation(async (_projectId, _key) => {
       return 'claude-code'
     })
     vi.mocked(listOpenCodeAgents).mockResolvedValue([
@@ -126,7 +126,7 @@ describe('AddTaskDialog', () => {
   })
 
   it('shows permission mode dropdown when ai_provider is claude-code', async () => {
-    vi.mocked(getProjectConfig).mockImplementation(async (_projectId, key) => {
+    vi.mocked(getProjectConfig).mockImplementation(async (_projectId, _key) => {
       return 'claude-code'
     })
     render(AddTaskDialog, { props: { mode: 'create' } })
@@ -137,7 +137,7 @@ describe('AddTaskDialog', () => {
   })
 
   it('hides agent dropdown when ai_provider is claude-code even with agents', async () => {
-    vi.mocked(getProjectConfig).mockImplementation(async (_projectId, key) => {
+    vi.mocked(getProjectConfig).mockImplementation(async (_projectId, _key) => {
       return 'claude-code'
     })
     vi.mocked(listOpenCodeAgents).mockResolvedValue([
@@ -164,7 +164,7 @@ describe('AddTaskDialog', () => {
   })
 
   it('never shows agent dropdown when ai_provider is claude-code regardless of agents', async () => {
-    vi.mocked(getProjectConfig).mockImplementation(async (_projectId, key) => {
+    vi.mocked(getProjectConfig).mockImplementation(async (_projectId, _key) => {
       return 'claude-code'
     })
     vi.mocked(listOpenCodeAgents).mockResolvedValue([
@@ -179,7 +179,7 @@ describe('AddTaskDialog', () => {
   })
 
   it('hides agent dropdown when ai_provider is claude-code and no agents', async () => {
-    vi.mocked(getProjectConfig).mockImplementation(async (_projectId, key) => {
+    vi.mocked(getProjectConfig).mockImplementation(async (_projectId, _key) => {
       return 'claude-code'
     })
     vi.mocked(listOpenCodeAgents).mockResolvedValue([])
@@ -192,7 +192,7 @@ describe('AddTaskDialog', () => {
   })
 
   it('does not call listOpenCodeAgents when ai_provider is claude-code', async () => {
-    vi.mocked(getProjectConfig).mockImplementation(async (_projectId, key) => {
+    vi.mocked(getProjectConfig).mockImplementation(async (_projectId, _key) => {
       return 'claude-code'
     })
     render(AddTaskDialog, { props: { mode: 'create' } })

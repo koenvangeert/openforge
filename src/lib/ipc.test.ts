@@ -112,7 +112,7 @@ describe('ipc spawnShellPty', () => {
     })
 
     await expect(
-      createTask('Created task', 'doing', null, null, null, null),
+      createTask('Created task', 'doing', null, null, null),
     ).resolves.toEqual(expect.objectContaining({ id: 'T-4', status: 'doing' }))
   })
 })

@@ -368,8 +368,10 @@ mod tests {
             crate::pty_manager::PtyManager::new(),
         ));
         let commands = p.list_commands(None);
-        let command_names: std::collections::HashSet<_> =
-            commands.iter().map(|command| command.name.as_str()).collect();
+        let command_names: std::collections::HashSet<_> = commands
+            .iter()
+            .map(|command| command.name.as_str())
+            .collect();
 
         for builtin in crate::command_discovery::builtin_claude_commands() {
             assert!(
