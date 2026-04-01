@@ -26,25 +26,17 @@ impl GitHubClient {
         };
 
         let response = self
-            .client
-            .put(&url)
-            .header("Authorization", format!("token {}", token))
-            .header("User-Agent", "openforge")
-            .json(&request_body)
-            .send()
-            .await
-            .map_err(|e| GitHubError::NetworkError(e.to_string()))?;
+            .send_github(
+                self.client
+                    .put(&url)
+                    .header("Authorization", format!("token {}", token))
+                    .header("User-Agent", "openforge")
+                    .json(&request_body),
+            )
+            .await?;
 
         if !response.status().is_success() {
-            let status = response.status();
-            let body = response
-                .text()
-                .await
-                .unwrap_or_else(|_| "Unable to read response body".to_string());
-            return Err(GitHubError::ApiError {
-                status: status.as_u16(),
-                message: body,
-            });
+            return Err(Self::api_error_from_response(response).await);
         }
 
         response
@@ -66,25 +58,10 @@ impl GitHubClient {
             owner, repo, pr_number
         );
 
-        let response = self
-            .client
-            .get(&url)
-            .header("Authorization", format!("token {}", token))
-            .header("User-Agent", "openforge")
-            .send()
-            .await
-            .map_err(|e| GitHubError::NetworkError(e.to_string()))?;
+        let response = self.send_github(self.github_get(&url, token)).await?;
 
         if !response.status().is_success() {
-            let status = response.status();
-            let body = response
-                .text()
-                .await
-                .unwrap_or_else(|_| "Unable to read response body".to_string());
-            return Err(GitHubError::ApiError {
-                status: status.as_u16(),
-                message: body,
-            });
+            return Err(Self::api_error_from_response(response).await);
         }
 
         let pr: PullRequest = response
@@ -116,68 +93,9 @@ impl GitHubClient {
             review_comments_url.push_str(&format!("&since={}", ts));
         }
 
-        let review_cached_etag = {
-            self.etag_cache
-                .lock()
-                .unwrap()
-                .get(&review_comments_url)
-                .map(|c| c.etag.clone())
-        };
-
-        let mut review_req = self
-            .client
-            .get(&review_comments_url)
-            .header("Authorization", format!("token {}", token))
-            .header("User-Agent", "openforge");
-        if let Some(ref etag) = review_cached_etag {
-            review_req = review_req.header("If-None-Match", etag);
-        }
-
-        let review_response = review_req
-            .send()
-            .await
-            .map_err(|e| GitHubError::NetworkError(e.to_string()))?;
-
-        let mut review_comments: Vec<ReviewComment> =
-            if review_response.status() == reqwest::StatusCode::NOT_MODIFIED {
-                if let Some(cached) = self.etag_cache.lock().unwrap().get(&review_comments_url) {
-                    serde_json::from_str(&cached.body)
-                        .map_err(|e| GitHubError::ParseError(e.to_string()))?
-                } else {
-                    vec![]
-                }
-            } else {
-                if !review_response.status().is_success() {
-                    let status = review_response.status();
-                    let body = review_response
-                        .text()
-                        .await
-                        .unwrap_or_else(|_| "Unable to read response body".to_string());
-                    return Err(GitHubError::ApiError {
-                        status: status.as_u16(),
-                        message: body,
-                    });
-                }
-                let review_etag = review_response
-                    .headers()
-                    .get("etag")
-                    .and_then(|v| v.to_str().ok())
-                    .map(String::from);
-                let body = review_response
-                    .text()
-                    .await
-                    .map_err(|e| GitHubError::NetworkError(e.to_string()))?;
-                if let Some(etag_value) = review_etag {
-                    self.etag_cache.lock().unwrap().insert(
-                        review_comments_url.clone(),
-                        super::CachedResponse {
-                            etag: etag_value,
-                            body: body.clone(),
-                        },
-                    );
-                }
-                serde_json::from_str(&body).map_err(|e| GitHubError::ParseError(e.to_string()))?
-            };
+        let mut review_comments: Vec<ReviewComment> = self
+            .get_with_etag::<Vec<ReviewComment>>(&review_comments_url, token)
+            .await?;
 
         let mut issue_comments_url = format!(
             "https://api.github.com/repos/{}/{}/issues/{}/comments?per_page=100",
@@ -187,68 +105,9 @@ impl GitHubClient {
             issue_comments_url.push_str(&format!("&since={}", ts));
         }
 
-        let issue_cached_etag = {
-            self.etag_cache
-                .lock()
-                .unwrap()
-                .get(&issue_comments_url)
-                .map(|c| c.etag.clone())
-        };
-
-        let mut issue_req = self
-            .client
-            .get(&issue_comments_url)
-            .header("Authorization", format!("token {}", token))
-            .header("User-Agent", "openforge");
-        if let Some(ref etag) = issue_cached_etag {
-            issue_req = issue_req.header("If-None-Match", etag);
-        }
-
-        let issue_response = issue_req
-            .send()
-            .await
-            .map_err(|e| GitHubError::NetworkError(e.to_string()))?;
-
-        let mut issue_comments: Vec<IssueComment> =
-            if issue_response.status() == reqwest::StatusCode::NOT_MODIFIED {
-                if let Some(cached) = self.etag_cache.lock().unwrap().get(&issue_comments_url) {
-                    serde_json::from_str(&cached.body)
-                        .map_err(|e| GitHubError::ParseError(e.to_string()))?
-                } else {
-                    vec![]
-                }
-            } else {
-                if !issue_response.status().is_success() {
-                    let status = issue_response.status();
-                    let body = issue_response
-                        .text()
-                        .await
-                        .unwrap_or_else(|_| "Unable to read response body".to_string());
-                    return Err(GitHubError::ApiError {
-                        status: status.as_u16(),
-                        message: body,
-                    });
-                }
-                let issue_etag = issue_response
-                    .headers()
-                    .get("etag")
-                    .and_then(|v| v.to_str().ok())
-                    .map(String::from);
-                let body = issue_response
-                    .text()
-                    .await
-                    .map_err(|e| GitHubError::NetworkError(e.to_string()))?;
-                if let Some(etag_value) = issue_etag {
-                    self.etag_cache.lock().unwrap().insert(
-                        issue_comments_url.clone(),
-                        super::CachedResponse {
-                            etag: etag_value,
-                            body: body.clone(),
-                        },
-                    );
-                }
-                serde_json::from_str(&body).map_err(|e| GitHubError::ParseError(e.to_string()))?
-            };
+        let mut issue_comments: Vec<IssueComment> = self
+            .get_with_etag::<Vec<IssueComment>>(&issue_comments_url, token)
+            .await?;
 
         let mut all_comments = Vec::new();
 
@@ -341,25 +200,10 @@ impl GitHubClient {
             username
         );
 
-        let response = self
-            .client
-            .get(&url)
-            .header("Authorization", format!("token {}", token))
-            .header("User-Agent", "openforge")
-            .send()
-            .await
-            .map_err(|e| GitHubError::NetworkError(e.to_string()))?;
+        let response = self.send_github(self.github_get(&url, token)).await?;
 
         if !response.status().is_success() {
-            let status = response.status();
-            let body = response
-                .text()
-                .await
-                .unwrap_or_else(|_| "Unable to read response body".to_string());
-            return Err(GitHubError::ApiError {
-                status: status.as_u16(),
-                message: body,
-            });
+            return Err(Self::api_error_from_response(response).await);
         }
 
         let search_response: SearchResponse = response
@@ -460,25 +304,10 @@ impl GitHubClient {
             username
         );
 
-        let response = self
-            .client
-            .get(&url)
-            .header("Authorization", format!("token {}", token))
-            .header("User-Agent", "openforge")
-            .send()
-            .await
-            .map_err(|e| GitHubError::NetworkError(e.to_string()))?;
+        let response = self.send_github(self.github_get(&url, token)).await?;
 
         if !response.status().is_success() {
-            let status = response.status();
-            let body = response
-                .text()
-                .await
-                .unwrap_or_else(|_| "Unable to read response body".to_string());
-            return Err(GitHubError::ApiError {
-                status: status.as_u16(),
-                message: body,
-            });
+            return Err(Self::api_error_from_response(response).await);
         }
 
         let search_response: SearchResponse = response
@@ -582,25 +411,10 @@ impl GitHubClient {
             owner, repo, pr_number
         );
 
-        let response = self
-            .client
-            .get(&url)
-            .header("Authorization", format!("token {}", token))
-            .header("User-Agent", "openforge")
-            .send()
-            .await
-            .map_err(|e| GitHubError::NetworkError(e.to_string()))?;
+        let response = self.send_github(self.github_get(&url, token)).await?;
 
         if !response.status().is_success() {
-            let status = response.status();
-            let body = response
-                .text()
-                .await
-                .unwrap_or_else(|_| "Unable to read response body".to_string());
-            return Err(GitHubError::ApiError {
-                status: status.as_u16(),
-                message: body,
-            });
+            return Err(Self::api_error_from_response(response).await);
         }
 
         let files: Vec<PrFileDiff> = response
@@ -624,25 +438,10 @@ impl GitHubClient {
             owner, repo, sha
         );
 
-        let response = self
-            .client
-            .get(&url)
-            .header("Authorization", format!("token {}", token))
-            .header("User-Agent", "openforge")
-            .send()
-            .await
-            .map_err(|e| GitHubError::NetworkError(e.to_string()))?;
+        let response = self.send_github(self.github_get(&url, token)).await?;
 
         if !response.status().is_success() {
-            let status = response.status();
-            let body = response
-                .text()
-                .await
-                .unwrap_or_else(|_| "Unable to read response body".to_string());
-            return Err(GitHubError::ApiError {
-                status: status.as_u16(),
-                message: body,
-            });
+            return Err(Self::api_error_from_response(response).await);
         }
 
         let blob: BlobResponse = response

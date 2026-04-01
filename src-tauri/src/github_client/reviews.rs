@@ -21,25 +21,10 @@ impl GitHubClient {
             owner, repo, pr_number
         );
 
-        let response = self
-            .client
-            .get(&url)
-            .header("Authorization", format!("token {}", token))
-            .header("User-Agent", "openforge")
-            .send()
-            .await
-            .map_err(|e| GitHubError::NetworkError(e.to_string()))?;
+        let response = self.send_github(self.github_get(&url, token)).await?;
 
         if !response.status().is_success() {
-            let status = response.status();
-            let body = response
-                .text()
-                .await
-                .unwrap_or_else(|_| "Unable to read response body".to_string());
-            return Err(GitHubError::ApiError {
-                status: status.as_u16(),
-                message: body,
-            });
+            return Err(Self::api_error_from_response(response).await);
         }
 
         let comments: Vec<PrReviewComment> = response
@@ -77,25 +62,17 @@ impl GitHubClient {
         };
 
         let response = self
-            .client
-            .post(&url)
-            .header("Authorization", format!("token {}", token))
-            .header("User-Agent", "openforge")
-            .json(&request_body)
-            .send()
-            .await
-            .map_err(|e| GitHubError::NetworkError(e.to_string()))?;
+            .send_github(
+                self.client
+                    .post(&url)
+                    .header("Authorization", format!("token {}", token))
+                    .header("User-Agent", "openforge")
+                    .json(&request_body),
+            )
+            .await?;
 
         if !response.status().is_success() {
-            let status = response.status();
-            let body = response
-                .text()
-                .await
-                .unwrap_or_else(|_| "Unable to read response body".to_string());
-            return Err(GitHubError::ApiError {
-                status: status.as_u16(),
-                message: body,
-            });
+            return Err(Self::api_error_from_response(response).await);
         }
 
         Ok(())
@@ -133,26 +110,11 @@ impl GitHubClient {
             owner, repo, branch
         );
 
-        let cached_etag = {
-            self.etag_cache
-                .lock()
-                .unwrap()
-                .get(&url)
-                .map(|c| c.etag.clone())
-        };
-
-        let mut req = self
-            .client
-            .get(&url)
-            .header("Authorization", format!("token {}", token))
-            .header("User-Agent", "openforge");
-
-        if let Some(ref etag) = cached_etag {
-            req = req.header("If-None-Match", etag);
-        }
-
-        let response = match req.send().await {
-            Ok(r) => r,
+        let response = match self
+            .send_github(self.apply_cached_etag(self.github_get(&url, token), &url))
+            .await
+        {
+            Ok(response) => response,
             Err(e) => {
                 warn!(
                     "[GitHub] Failed to fetch required reviews for {}/{} branch {}: {}",
@@ -171,9 +133,9 @@ impl GitHubClient {
         }
 
         if response.status() == reqwest::StatusCode::NOT_MODIFIED {
-            if let Some(cached) = self.etag_cache.lock().unwrap().get(&url) {
+            if let Some(cached_body) = self.cached_body_for_url(&url) {
                 if let Ok(result) =
-                    serde_json::from_str::<RequiredPullRequestReviewsResponse>(&cached.body)
+                    serde_json::from_str::<RequiredPullRequestReviewsResponse>(&cached_body)
                 {
                     return Some(result.required_approving_review_count);
                 }
@@ -203,15 +165,7 @@ impl GitHubClient {
             Err(_) => return None,
         };
 
-        if let Some(etag_value) = etag {
-            self.etag_cache.lock().unwrap().insert(
-                url.clone(),
-                super::CachedResponse {
-                    etag: etag_value,
-                    body: body.clone(),
-                },
-            );
-        }
+        self.cache_response_body(&url, etag, &body);
 
         match serde_json::from_str::<RequiredPullRequestReviewsResponse>(&body) {
             Ok(result) => Some(result.required_approving_review_count),

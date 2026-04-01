@@ -23,59 +23,40 @@ impl GitHubClient {
             owner, repo, sha, per_page
         );
 
-        let cached_etag = {
-            self.etag_cache
-                .lock()
-                .unwrap()
-                .get(&first_page_url)
-                .map(|c| c.etag.clone())
-        };
+        let (first_etag, first_page_response) =
+            match self.conditional_get(&first_page_url, token).await? {
+                super::ConditionalResponse::NotModified(Some(cached_body)) => {
+                    let result: CheckRunsResponse = serde_json::from_str(&cached_body)
+                        .map_err(|e| GitHubError::ParseError(e.to_string()))?;
+                    return Ok(result);
+                }
+                super::ConditionalResponse::NotModified(None) => {
+                    return Err(GitHubError::ParseError(
+                        "Received 304 but no cached response found".to_string(),
+                    ));
+                }
+                super::ConditionalResponse::Fresh(response) => {
+                    if !response.status().is_success() {
+                        return Err(Self::api_error_from_response(response).await);
+                    }
 
-        let mut req = self
-            .client
-            .get(&first_page_url)
-            .header("Authorization", format!("token {}", token))
-            .header("User-Agent", "openforge");
+                    let first_etag = response
+                        .headers()
+                        .get("etag")
+                        .and_then(|v| v.to_str().ok())
+                        .map(String::from);
 
-        if let Some(ref etag) = cached_etag {
-            req = req.header("If-None-Match", etag);
-        }
+                    let body = response
+                        .text()
+                        .await
+                        .map_err(|e| GitHubError::NetworkError(e.to_string()))?;
 
-        let response = req
-            .send()
-            .await
-            .map_err(|e| GitHubError::NetworkError(e.to_string()))?;
+                    let first_page_response: CheckRunsResponse = serde_json::from_str(&body)
+                        .map_err(|e| GitHubError::ParseError(e.to_string()))?;
 
-        if response.status() == reqwest::StatusCode::NOT_MODIFIED {
-            if let Some(cached) = self.etag_cache.lock().unwrap().get(&first_page_url) {
-                let result: CheckRunsResponse = serde_json::from_str(&cached.body)
-                    .map_err(|e| GitHubError::ParseError(e.to_string()))?;
-                return Ok(result);
-            }
-        }
-
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response
-                .text()
-                .await
-                .unwrap_or_else(|_| "Unable to read response body".to_string());
-            return Err(GitHubError::ApiError {
-                status: status.as_u16(),
-                message: body,
-            });
-        }
-
-        let first_etag = response
-            .headers()
-            .get("etag")
-            .and_then(|v| v.to_str().ok())
-            .map(String::from);
-
-        let first_page_response: CheckRunsResponse = response
-            .json()
-            .await
-            .map_err(|e| GitHubError::ParseError(e.to_string()))?;
+                    (first_etag, first_page_response)
+                }
+            };
 
         let total_count = first_page_response.total_count;
         let mut all_check_runs: Vec<CheckRun> = first_page_response.check_runs;
@@ -87,25 +68,10 @@ impl GitHubClient {
                 owner, repo, sha, per_page, page
             );
 
-            let response = self
-                .client
-                .get(&url)
-                .header("Authorization", format!("token {}", token))
-                .header("User-Agent", "openforge")
-                .send()
-                .await
-                .map_err(|e| GitHubError::NetworkError(e.to_string()))?;
+            let response = self.send_github(self.github_get(&url, token)).await?;
 
             if !response.status().is_success() {
-                let status = response.status();
-                let body = response
-                    .text()
-                    .await
-                    .unwrap_or_else(|_| "Unable to read response body".to_string());
-                return Err(GitHubError::ApiError {
-                    status: status.as_u16(),
-                    message: body,
-                });
+                return Err(Self::api_error_from_response(response).await);
             }
 
             let page_response: CheckRunsResponse = response
@@ -131,17 +97,9 @@ impl GitHubClient {
             check_runs: all_check_runs,
         };
 
-        if let Some(etag_value) = first_etag {
-            let body = serde_json::to_string(&result)
-                .map_err(|e| GitHubError::ParseError(e.to_string()))?;
-            self.etag_cache.lock().unwrap().insert(
-                first_page_url,
-                super::CachedResponse {
-                    etag: etag_value,
-                    body,
-                },
-            );
-        }
+        let body =
+            serde_json::to_string(&result).map_err(|e| GitHubError::ParseError(e.to_string()))?;
+        self.cache_response_body(&first_page_url, first_etag, &body);
 
         Ok(result)
     }
@@ -162,59 +120,41 @@ impl GitHubClient {
             owner, repo, sha, per_page
         );
 
-        let cached_etag = {
-            self.etag_cache
-                .lock()
-                .unwrap()
-                .get(&first_page_url)
-                .map(|c| c.etag.clone())
-        };
+        let (first_etag, first_page_response) =
+            match self.conditional_get(&first_page_url, token).await? {
+                super::ConditionalResponse::NotModified(Some(cached_body)) => {
+                    let result: CombinedStatusResponse = serde_json::from_str(&cached_body)
+                        .map_err(|e| GitHubError::ParseError(e.to_string()))?;
+                    return Ok(result);
+                }
+                super::ConditionalResponse::NotModified(None) => {
+                    return Err(GitHubError::ParseError(
+                        "Received 304 but no cached response found".to_string(),
+                    ));
+                }
+                super::ConditionalResponse::Fresh(response) => {
+                    if !response.status().is_success() {
+                        return Err(Self::api_error_from_response(response).await);
+                    }
 
-        let mut req = self
-            .client
-            .get(&first_page_url)
-            .header("Authorization", format!("token {}", token))
-            .header("User-Agent", "openforge");
+                    let first_etag = response
+                        .headers()
+                        .get("etag")
+                        .and_then(|v| v.to_str().ok())
+                        .map(String::from);
 
-        if let Some(ref etag) = cached_etag {
-            req = req.header("If-None-Match", etag);
-        }
+                    let body = response
+                        .text()
+                        .await
+                        .map_err(|e| GitHubError::NetworkError(e.to_string()))?;
 
-        let response = req
-            .send()
-            .await
-            .map_err(|e| GitHubError::NetworkError(e.to_string()))?;
+                    let first_page_response: CombinedStatusResponse =
+                        serde_json::from_str(&body)
+                            .map_err(|e| GitHubError::ParseError(e.to_string()))?;
 
-        if response.status() == reqwest::StatusCode::NOT_MODIFIED {
-            if let Some(cached) = self.etag_cache.lock().unwrap().get(&first_page_url) {
-                let result: CombinedStatusResponse = serde_json::from_str(&cached.body)
-                    .map_err(|e| GitHubError::ParseError(e.to_string()))?;
-                return Ok(result);
-            }
-        }
-
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response
-                .text()
-                .await
-                .unwrap_or_else(|_| "Unable to read response body".to_string());
-            return Err(GitHubError::ApiError {
-                status: status.as_u16(),
-                message: body,
-            });
-        }
-
-        let first_etag = response
-            .headers()
-            .get("etag")
-            .and_then(|v| v.to_str().ok())
-            .map(String::from);
-
-        let first_page_response: CombinedStatusResponse = response
-            .json()
-            .await
-            .map_err(|e| GitHubError::ParseError(e.to_string()))?;
+                    (first_etag, first_page_response)
+                }
+            };
 
         let result_state = first_page_response.state;
         let result_sha = first_page_response.sha;
@@ -229,25 +169,10 @@ impl GitHubClient {
                 owner, repo, sha, per_page, page
             );
 
-            let response = self
-                .client
-                .get(&url)
-                .header("Authorization", format!("token {}", token))
-                .header("User-Agent", "openforge")
-                .send()
-                .await
-                .map_err(|e| GitHubError::NetworkError(e.to_string()))?;
+            let response = self.send_github(self.github_get(&url, token)).await?;
 
             if !response.status().is_success() {
-                let status = response.status();
-                let body = response
-                    .text()
-                    .await
-                    .unwrap_or_else(|_| "Unable to read response body".to_string());
-                return Err(GitHubError::ApiError {
-                    status: status.as_u16(),
-                    message: body,
-                });
+                return Err(Self::api_error_from_response(response).await);
             }
 
             let page_response: CombinedStatusResponse = response
@@ -276,17 +201,9 @@ impl GitHubClient {
             extra: result_extra,
         };
 
-        if let Some(etag_value) = first_etag {
-            let body = serde_json::to_string(&result)
-                .map_err(|e| GitHubError::ParseError(e.to_string()))?;
-            self.etag_cache.lock().unwrap().insert(
-                first_page_url,
-                super::CachedResponse {
-                    etag: etag_value,
-                    body,
-                },
-            );
-        }
+        let body =
+            serde_json::to_string(&result).map_err(|e| GitHubError::ParseError(e.to_string()))?;
+        self.cache_response_body(&first_page_url, first_etag, &body);
 
         Ok(result)
     }
@@ -307,26 +224,11 @@ impl GitHubClient {
             owner, repo, branch
         );
 
-        let cached_etag = {
-            self.etag_cache
-                .lock()
-                .unwrap()
-                .get(&url)
-                .map(|c| c.etag.clone())
-        };
-
-        let mut req = self
-            .client
-            .get(&url)
-            .header("Authorization", format!("token {}", token))
-            .header("User-Agent", "openforge");
-
-        if let Some(ref etag) = cached_etag {
-            req = req.header("If-None-Match", etag);
-        }
-
-        let response = match req.send().await {
-            Ok(r) => r,
+        let response = match self
+            .send_github(self.apply_cached_etag(self.github_get(&url, token), &url))
+            .await
+        {
+            Ok(response) => response,
             Err(e) => {
                 warn!(
                     "[GitHub] Failed to fetch required status checks for {}/{} branch {}: {}",
@@ -345,9 +247,9 @@ impl GitHubClient {
         }
 
         if response.status() == reqwest::StatusCode::NOT_MODIFIED {
-            if let Some(cached) = self.etag_cache.lock().unwrap().get(&url) {
+            if let Some(cached_body) = self.cached_body_for_url(&url) {
                 if let Ok(result) =
-                    serde_json::from_str::<RequiredStatusChecksResponse>(&cached.body)
+                    serde_json::from_str::<RequiredStatusChecksResponse>(&cached_body)
                 {
                     return result.into_context_names();
                 }
@@ -377,15 +279,7 @@ impl GitHubClient {
             Err(_) => return vec![],
         };
 
-        if let Some(etag_value) = etag {
-            self.etag_cache.lock().unwrap().insert(
-                url.clone(),
-                super::CachedResponse {
-                    etag: etag_value,
-                    body: body.clone(),
-                },
-            );
-        }
+        self.cache_response_body(&url, etag, &body);
 
         match serde_json::from_str::<RequiredStatusChecksResponse>(&body) {
             Ok(result) => result.into_context_names(),
