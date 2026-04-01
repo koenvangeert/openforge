@@ -1,6 +1,7 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/svelte'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { writable, get } from 'svelte/store'
+import { requireDefined, requireElement } from '../../../test-utils/dom'
 import type { ReviewPullRequest, AuthoredPullRequest, PrFileDiff, ReviewSubmissionComment } from '../../../lib/types'
 
 vi.mock('../../../lib/stores', () => ({
@@ -669,7 +670,7 @@ describe('PrReviewView', () => {
       // Type a repo name and submit
       const input = screen.getByPlaceholderText('owner/repo')
       await fireEvent.input(input, { target: { value: 'org/secret-repo' } })
-      await fireEvent.submit(input.closest('form')!)
+      await fireEvent.submit(requireElement(input.closest('form'), HTMLFormElement))
 
       await waitFor(() => {
         expect(mockSetConfig).toHaveBeenCalledWith('P-1', 'pr_excluded_repos', JSON.stringify(['org/secret-repo']))
@@ -742,7 +743,7 @@ describe('PrReviewView', () => {
 
       const callback = getListenCallback('review-pr-count-changed')
       expect(callback).toBeDefined()
-      callback!()
+      requireDefined(callback)()
 
       // Store should update without the loading spinner ever appearing
       await waitFor(() => {
@@ -770,7 +771,7 @@ describe('PrReviewView', () => {
 
       const callback = getListenCallback('authored-prs-updated')
       expect(callback).toBeDefined()
-      callback!()
+      requireDefined(callback)()
 
       await waitFor(() => {
         expect(vi.mocked(getAuthoredPrs)).toHaveBeenCalled()
@@ -802,7 +803,7 @@ describe('PrReviewView', () => {
 
       const callback = getListenCallback('review-pr-count-changed')
       expect(callback).toBeDefined()
-      callback!()
+      requireDefined(callback)()
 
       await waitFor(() => {
         expect(vi.mocked(getReviewPrs)).toHaveBeenCalled()

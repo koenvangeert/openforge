@@ -2,6 +2,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/svelte'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { writable } from 'svelte/store'
 import type { ReviewSubmissionComment } from '../../../lib/types'
+import { requireElement } from '../../../test-utils/dom'
 
 vi.mock('../../../lib/stores', () => ({
   pendingManualComments: writable([]),
@@ -122,10 +123,10 @@ describe('ReviewSubmitPanel', () => {
       },
     })
 
-    const textarea = container.querySelector('textarea')
+    const textarea = requireElement(container.querySelector('textarea'), HTMLTextAreaElement)
     expect(textarea).toBeTruthy()
 
-    await fireEvent.input(textarea!, { target: { value: 'Review summary' } })
+    await fireEvent.input(textarea, { target: { value: 'Review summary' } })
 
     const commentBtn = screen.getByText('Comment')
     const approveBtn = screen.getByText('Approve')
@@ -172,8 +173,8 @@ describe('ReviewSubmitPanel', () => {
       },
     })
 
-    const textarea = container.querySelector('textarea')
-    await fireEvent.input(textarea!, { target: { value: 'Review summary' } })
+    const textarea = requireElement(container.querySelector('textarea'), HTMLTextAreaElement)
+    await fireEvent.input(textarea, { target: { value: 'Review summary' } })
 
     const commentBtn = screen.getByText('Comment')
     await fireEvent.click(commentBtn)
@@ -193,8 +194,8 @@ describe('ReviewSubmitPanel', () => {
       },
     })
 
-    const textarea = container.querySelector('textarea')
-    await fireEvent.input(textarea!, { target: { value: 'LGTM' } })
+    const textarea = requireElement(container.querySelector('textarea'), HTMLTextAreaElement)
+    await fireEvent.input(textarea, { target: { value: 'LGTM' } })
 
     const approveBtn = screen.getByText('Approve')
     await fireEvent.click(approveBtn)
@@ -232,8 +233,8 @@ describe('ReviewSubmitPanel', () => {
       },
     })
 
-    const textarea = container.querySelector('textarea')
-    await fireEvent.input(textarea!, { target: { value: 'Needs work' } })
+    const textarea = requireElement(container.querySelector('textarea'), HTMLTextAreaElement)
+    await fireEvent.input(textarea, { target: { value: 'Needs work' } })
 
     const requestChangesBtn = screen.getByText('Request Changes')
     await fireEvent.click(requestChangesBtn)
@@ -253,8 +254,8 @@ describe('ReviewSubmitPanel', () => {
       },
     })
 
-    const textarea = container.querySelector('textarea')
-    await fireEvent.input(textarea!, { target: { value: 'LGTM' } })
+    const textarea = requireElement(container.querySelector('textarea'), HTMLTextAreaElement)
+    await fireEvent.input(textarea, { target: { value: 'LGTM' } })
 
     const approveBtn = screen.getByText('Approve')
     await fireEvent.click(approveBtn)
@@ -276,8 +277,8 @@ describe('ReviewSubmitPanel', () => {
       },
     })
 
-    const textarea = container.querySelector('textarea')
-    await fireEvent.input(textarea!, { target: { value: 'LGTM' } })
+    const textarea = requireElement(container.querySelector('textarea'), HTMLTextAreaElement)
+    await fireEvent.input(textarea, { target: { value: 'LGTM' } })
 
     const commentBtn = screen.getByText('Comment')
     await fireEvent.click(commentBtn)
@@ -324,10 +325,10 @@ describe('ReviewSubmitPanel', () => {
       },
     })
 
-    const textarea = container.querySelector('textarea')
-    await fireEvent.input(textarea!, { target: { value: 'Quick comment' } })
+    const textarea = requireElement(container.querySelector('textarea'), HTMLTextAreaElement)
+    await fireEvent.input(textarea, { target: { value: 'Quick comment' } })
 
-    await fireEvent.keyDown(textarea!, { key: 'Enter', shiftKey: true })
+    await fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: true })
 
     await waitFor(() => {
       expect(mockSubmit).toHaveBeenCalledWith('acme', 'repo', 42, 'COMMENT', 'Quick comment', [], 'abc123')
