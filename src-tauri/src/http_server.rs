@@ -560,15 +560,8 @@ mod tests {
             let project = db
                 .create_project("Project", "/tmp/project")
                 .expect("create project");
-            db.create_task(
-                "Task A",
-                "backlog",
-                Some(&project.id),
-                None,
-                None,
-                None,
-            )
-            .expect("create task a");
+            db.create_task("Task A", "backlog", Some(&project.id), None, None, None)
+                .expect("create task a");
             db.create_task("Task B", "doing", Some(&project.id), None, None, None)
                 .expect("create task b");
         }
@@ -610,15 +603,8 @@ mod tests {
                 None,
             )
             .expect("create backlog task");
-            db.create_task(
-                "Task doing",
-                "doing",
-                Some(&project.id),
-                None,
-                None,
-                None,
-            )
-            .expect("create doing task");
+            db.create_task("Task doing", "doing", Some(&project.id), None, None, None)
+                .expect("create doing task");
         }
 
         let router = create_router(state);
@@ -738,24 +724,10 @@ mod tests {
                 .expect("create project 2");
 
             let task1 = db
-                .create_task(
-                    "Task P1",
-                    "doing",
-                    Some(&project1.id),
-                    None,
-                    None,
-                    None,
-                )
+                .create_task("Task P1", "doing", Some(&project1.id), None, None, None)
                 .expect("create task p1");
             let _task2 = db
-                .create_task(
-                    "Task P2",
-                    "doing",
-                    Some(&project2.id),
-                    None,
-                    None,
-                    None,
-                )
+                .create_task("Task P2", "doing", Some(&project2.id), None, None, None)
                 .expect("create task p2");
 
             db.create_agent_session(
@@ -1342,7 +1314,11 @@ mod tests {
                 && json_value.get("prompt").is_some()
                 && json_value.get("summary").is_some()
                 && json_value.get("status").is_some()
-                && json_value.as_object().map(|obj| obj.len()).unwrap_or_default() == 5,
+                && json_value
+                    .as_object()
+                    .map(|obj| obj.len())
+                    .unwrap_or_default()
+                    == 5,
             "HTTP task info response must only expose the expected task fields"
         );
     }

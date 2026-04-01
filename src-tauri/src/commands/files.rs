@@ -8,17 +8,17 @@ use tauri::State;
 #[serde(rename_all = "camelCase")]
 pub struct FileEntry {
     name: String,
-    path: String,                 // relative to project root
+    path: String, // relative to project root
     is_dir: bool,
     size: Option<u64>,
-    modified_at: Option<u64>,     // unix timestamp ms
+    modified_at: Option<u64>, // unix timestamp ms
 }
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FileContent {
-    r#type: String,               // "text" | "image" | "binary"
-    content: String,              // text content or base64 for images
+    r#type: String,  // "text" | "image" | "binary"
+    content: String, // text content or base64 for images
     mime_type: Option<String>,
     size: u64,
 }
@@ -60,9 +60,39 @@ fn detect_file_type(path: &Path) -> &'static str {
         .to_lowercase();
 
     let text_exts = [
-        "ts", "tsx", "js", "jsx", "rs", "py", "rb", "go", "json", "yaml", "yml", "md", "txt",
-        "toml", "css", "html", "svelte", "vue", "sh", "bash", "zsh", "sql", "graphql", "xml",
-        "csv", "env", "gitignore", "prettierrc", "eslintrc", "cfg", "ini", "conf", "log",
+        "ts",
+        "tsx",
+        "js",
+        "jsx",
+        "rs",
+        "py",
+        "rb",
+        "go",
+        "json",
+        "yaml",
+        "yml",
+        "md",
+        "txt",
+        "toml",
+        "css",
+        "html",
+        "svelte",
+        "vue",
+        "sh",
+        "bash",
+        "zsh",
+        "sql",
+        "graphql",
+        "xml",
+        "csv",
+        "env",
+        "gitignore",
+        "prettierrc",
+        "eslintrc",
+        "cfg",
+        "ini",
+        "conf",
+        "log",
         "lock",
     ];
 
@@ -177,14 +207,11 @@ pub async fn fs_read_dir(
 
                 let size = if is_dir { None } else { Some(metadata.len()) };
 
-                let modified_at = metadata
-                    .modified()
-                    .ok()
-                    .and_then(|t| {
-                        t.duration_since(std::time::UNIX_EPOCH)
-                            .ok()
-                            .map(|d| d.as_millis() as u64)
-                    });
+                let modified_at = metadata.modified().ok().and_then(|t| {
+                    t.duration_since(std::time::UNIX_EPOCH)
+                        .ok()
+                        .map(|d| d.as_millis() as u64)
+                });
 
                 let entry = FileEntry {
                     name: name_str,
@@ -264,8 +291,7 @@ pub async fn fs_read_file(
                 .await
                 .map_err(|e| format!("Failed to read file: {}", e))?;
 
-            String::from_utf8(bytes)
-                .map_err(|e| format!("File is not valid UTF-8: {}", e))?
+            String::from_utf8(bytes).map_err(|e| format!("File is not valid UTF-8: {}", e))?
         }
         "image" => {
             let bytes = tokio::fs::read(&full_path)
@@ -307,7 +333,10 @@ mod tests {
         assert!(result.is_ok());
         let resolved = result.unwrap();
         let canonical_root = std::fs::canonicalize(root).expect("Failed to canonicalize root");
-        assert!(resolved.starts_with(&canonical_root), "resolved path should be within root");
+        assert!(
+            resolved.starts_with(&canonical_root),
+            "resolved path should be within root"
+        );
     }
 
     #[test]
@@ -491,14 +520,11 @@ mod tests {
                     } else {
                         None
                     },
-                    modified_at: metadata
-                        .modified()
-                        .ok()
-                        .and_then(|t| {
-                            t.duration_since(std::time::UNIX_EPOCH)
-                                .ok()
-                                .map(|d| d.as_millis() as u64)
-                        }),
+                    modified_at: metadata.modified().ok().and_then(|t| {
+                        t.duration_since(std::time::UNIX_EPOCH)
+                            .ok()
+                            .map(|d| d.as_millis() as u64)
+                    }),
                 })
             })
             .collect();
@@ -529,8 +555,7 @@ mod tests {
         let temp = tempfile::tempdir().expect("Failed to create temp dir");
         let root = temp.path();
 
-        fs::write(root.join("test.ts"), "console.log('hello')")
-            .expect("Failed to write file");
+        fs::write(root.join("test.ts"), "console.log('hello')").expect("Failed to write file");
 
         let file_path =
             resolve_project_path(root, Some("test.ts")).expect("Failed to resolve path");
@@ -612,8 +637,7 @@ mod tests {
         let temp = tempfile::tempdir().expect("Failed to create temp dir");
         let root = temp.path();
 
-        fs::create_dir_all(root.join("src").join("lib"))
-            .expect("Failed to create nested dirs");
+        fs::create_dir_all(root.join("src").join("lib")).expect("Failed to create nested dirs");
 
         // Resolve nested path
         let resolved =
