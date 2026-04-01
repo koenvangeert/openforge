@@ -1,6 +1,8 @@
-import { render, screen, fireEvent } from '@testing-library/svelte'
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { writable, get } from 'svelte/store'
+import fs from 'node:fs'
+import path from 'node:path'
+import { fireEvent, render, screen } from '@testing-library/svelte'
+import { get, writable } from 'svelte/store'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('../../lib/ipc', () => ({
   getProjectConfig: vi.fn(),
@@ -45,10 +47,18 @@ vi.mock('../../lib/stores', () => ({
   codeCleanupTasksEnabled: writable(false),
 }))
 
-import SettingsView from './SettingsView.svelte'
-import { getProjectConfig, setProjectConfig, updateProject, deleteProject, getConfig, setConfig, getAllWhisperModelStatuses } from '../../lib/ipc'
-import { loadActions, saveActions, createAction } from '../../lib/actions'
+import { createAction, loadActions, saveActions } from '../../lib/actions'
+import {
+  deleteProject,
+  getAllWhisperModelStatuses,
+  getConfig,
+  getProjectConfig,
+  setConfig,
+  setProjectConfig,
+  updateProject,
+} from '../../lib/ipc'
 import { activeProjectId, projects } from '../../lib/stores'
+import SettingsView from './SettingsView.svelte'
 
 const defaultProps = {
   onClose: vi.fn(),
@@ -132,20 +142,22 @@ describe('SettingsView', () => {
     expect(screen.queryAllByText(/instructions/i).length).toBeGreaterThan(0)
   })
 
-  it('does not render sidebar nav in global mode', () => {
+  it('implements single-column architecture: does not render in-page sidebar navigation in any mode', () => {
+    const { unmount } = render(SettingsView, { props: defaultProps })
+    let links = screen.queryAllByRole('link')
+    expect(links.length).toBe(0)
+    unmount()
+
     activeProjectId.set(null)
     projects.set([])
     render(SettingsView, { props: { ...defaultProps, mode: 'global' as const } })
-    const links = screen.queryAllByRole('link')
+    links = screen.queryAllByRole('link')
     expect(links.length).toBe(0)
   })
 
-  it('does not render sidebar nav with Credentials link on global page', () => {
-    activeProjectId.set(null)
-    projects.set([])
-    render(SettingsView, { props: { ...defaultProps, mode: 'global' as const } })
-    const links = screen.queryAllByRole('link')
-    expect(links.length).toBe(0)
+  it('ensures SettingsSidebar component has been removed as part of the single-column architecture', () => {
+    const sidebarPath = path.join(process.cwd(), 'src/components/settings/SettingsSidebar.svelte')
+    expect(fs.existsSync(sidebarPath)).toBe(false)
   })
 
   it('renders Actions section card', () => {
@@ -199,14 +211,6 @@ describe('SettingsView', () => {
   it('renders project name in header in project mode', () => {
     render(SettingsView, { props: defaultProps })
     expect(screen.getByText(/Test Project/)).toBeTruthy()
-  })
-
-  it('does not render sidebar Global group label in global mode', () => {
-    activeProjectId.set(null)
-    projects.set([])
-    render(SettingsView, { props: { ...defaultProps, mode: 'global' as const } })
-    const links = screen.queryAllByRole('link')
-    expect(links.length).toBe(0)
   })
 
   it('does not show global cards on project page', () => {
