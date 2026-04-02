@@ -26,7 +26,10 @@
       <span class="text-[0.7rem] text-base-content/50">Instructions</span>
       <textarea
         value={agentInstructions}
-        oninput={(e) => onInstructionsChange((e.currentTarget as HTMLTextAreaElement).value)}
+        oninput={(e) => {
+          if (!(e.currentTarget instanceof HTMLTextAreaElement)) return
+          onInstructionsChange(e.currentTarget.value)
+        }}
         placeholder="Optional instructions prepended to the first prompt when starting a new task..."
         rows="4"
         class="textarea textarea-bordered w-full text-sm resize-y {disabled ? 'opacity-50 pointer-events-none' : ''}"

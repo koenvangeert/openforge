@@ -10,7 +10,7 @@
   import { getWorkQueueTasks, getConfig, setConfig } from '../../lib/ipc'
   import { activeProjectId, currentView, selectedTaskId, activeSessions, ticketPrs, startingTasks } from '../../lib/stores'
   import { useAppRouter } from '../../lib/router.svelte'
-  import { isInputFocused } from '../../lib/domUtils'
+  import { getHTMLElementAt, isInputFocused } from '../../lib/domUtils'
   import { useVimNavigation } from '../../lib/useVimNavigation.svelte'
   import TaskCard from './TaskCard.svelte'
   import TaskContextMenu from '../shared/tasks/TaskContextMenu.svelte'
@@ -238,7 +238,7 @@
       const container = document.querySelector(`[data-vim-wq-col="${col[0]}"]`)
       if (!container) return
       const items = container.querySelectorAll('[data-vim-wq-item]')
-      const el = items[idx] as HTMLElement | undefined
+      const el = getHTMLElementAt(items, idx)
       el?.scrollIntoView?.({ block: 'nearest' })
     })
   })

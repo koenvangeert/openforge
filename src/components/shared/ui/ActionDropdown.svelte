@@ -35,7 +35,8 @@
   }
 
   function handleClickOutside(e: MouseEvent) {
-    if (dropdownRef && !dropdownRef.contains(e.target as Node)) {
+    if (!(e.target instanceof Node)) return
+    if (dropdownRef && !dropdownRef.contains(e.target)) {
       isOpen = false
     }
   }

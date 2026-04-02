@@ -1,5 +1,6 @@
 <script lang="ts">
   import { tick } from 'svelte'
+  import { getHTMLElementAt } from '../../../lib/domUtils'
   import { useListNavigation } from '../../../lib/useListNavigation.svelte'
 
   interface Option {
@@ -39,7 +40,7 @@
 
   $effect(() => {
     if (open && listEl) {
-      const el = listEl.children[highlightedIndex] as HTMLElement | undefined
+      const el = getHTMLElementAt(listEl.children, highlightedIndex)
       el?.scrollIntoView?.({ block: 'nearest' })
     }
   })

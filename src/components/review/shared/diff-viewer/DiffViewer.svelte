@@ -228,7 +228,10 @@
         class="input input-xs input-bordered w-40"
         placeholder="Search diff..."
         value={search.query}
-        oninput={(e: Event) => search.setQuery((e.target as HTMLInputElement).value)}
+        oninput={(e: Event) => {
+          if (!(e.currentTarget instanceof HTMLInputElement)) return
+          search.setQuery(e.currentTarget.value)
+        }}
         bind:this={search.inputEl}
         onkeydown={search.handleKeydown}
       />
