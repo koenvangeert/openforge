@@ -9,6 +9,7 @@ import {
   scrollToMatch,
   countMatchesInPatch,
 } from './diffSearch'
+import { getHTMLElement } from './domUtils'
 import type { PrFileDiff } from './types'
 
 interface FileMatchInfo {
@@ -167,8 +168,8 @@ export function createDiffSearch(deps: {
   ): Range | null {
     const fileEls = container.querySelectorAll('[data-diff-file]')
     for (const el of fileEls) {
-      if (el.getAttribute('data-diff-file') === target.filename) {
-        const fileRanges = findMatchesInContainer(el as HTMLElement, q)
+      if (el.getAttribute('data-diff-file') === target.filename && el instanceof HTMLElement) {
+        const fileRanges = findMatchesInContainer(el, q)
         const localIndex = globalIndex - target.cumulativeStart
         if (localIndex >= 0 && localIndex < fileRanges.length) {
           return fileRanges[localIndex]
@@ -262,7 +263,8 @@ export function createDiffSearch(deps: {
       clickClearTimeout = null
     }
 
-    const clickTarget = e.target as HTMLElement
+    const clickTarget = getHTMLElement(e.target)
+    if (!clickTarget) return
     if (!clickTarget.closest('.diff-line-content-item')) return
 
     const word = getWordAtSelection()

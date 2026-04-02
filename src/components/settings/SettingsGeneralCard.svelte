@@ -79,7 +79,10 @@
         <select
           class="select select-bordered select-sm w-full max-w-xs"
           value={aiProvider}
-          onchange={(e) => onAiProviderChange((e.currentTarget as HTMLSelectElement).value)}
+          onchange={(e) => {
+            if (!(e.currentTarget instanceof HTMLSelectElement)) return
+            onAiProviderChange(e.currentTarget.value)
+          }}
         >
           <option value="claude-code">Claude Code</option>
           <option value="opencode">OpenCode</option>

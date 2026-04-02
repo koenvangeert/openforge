@@ -2,7 +2,7 @@
   import { skills, selectedSkillName, activeProjectId } from '../lib/stores'
   import { listOpenCodeSkills, saveSkillContent } from '../lib/ipc'
   import { useAppRouter } from '../lib/router.svelte'
-  import { isInputFocused } from '../lib/domUtils'
+  import { getHTMLElementAt, isInputFocused } from '../lib/domUtils'
 
   interface Props {
     projectName: string
@@ -154,7 +154,7 @@
   $effect(() => {
     const idx = vimSkills.focusedIndex
     const items = document.querySelectorAll('[data-vim-skill]')
-    const el = items[idx] as HTMLElement | undefined
+    const el = getHTMLElementAt(items, idx)
     el?.scrollIntoView?.({ block: 'nearest' })
   })
 

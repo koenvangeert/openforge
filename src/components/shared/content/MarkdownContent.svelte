@@ -17,7 +17,9 @@
   let html = $derived(sanitizeHtml(marked.parse(content) as string))
 
   function handleClick(e: MouseEvent) {
-    const anchor = (e.target as HTMLElement).closest('a')
+    if (!(e.target instanceof Element)) return
+
+    const anchor = e.target.closest('a')
     if (anchor?.href) {
       e.preventDefault()
       openUrl(anchor.href)

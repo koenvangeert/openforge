@@ -5,7 +5,7 @@
   import { reviewPrs, selectedReviewPr, prFileDiffs, reviewRequestCount, reviewComments, pendingManualComments, prOverviewComments, agentReviewComments, agentReviewLoading, agentReviewError, authoredPrs, authoredPrCount, activeProjectId } from '../../../lib/stores'
   import { fetchReviewPrs, getReviewPrs, fetchAuthoredPrs, getAuthoredPrs, getPrFileDiffs, openUrl, getReviewComments, getFileContent, getFileAtRef, markReviewPrViewed, startAgentReview, getAgentReviewComments, abortAgentReview, getProjectConfig, setProjectConfig } from '../../../lib/ipc'
   import { useAppRouter } from '../../../lib/router.svelte'
-  import { isInputFocused } from '../../../lib/domUtils'
+  import { getHTMLElementAt, isInputFocused } from '../../../lib/domUtils'
   import { useVimNavigation } from '../../../lib/useVimNavigation.svelte'
   import { timeAgoFromSeconds } from '../../../lib/timeAgo'
   import ReviewPrCard from './ReviewPrCard.svelte'
@@ -162,7 +162,7 @@
     if ($selectedReviewPr) return
     const idx = vimList.focusedIndex
     const items = document.querySelectorAll('[data-vim-pr-item]')
-    const el = items[idx] as HTMLElement | undefined
+    const el = getHTMLElementAt(items, idx)
     el?.scrollIntoView?.({ block: 'nearest' })
   })
 

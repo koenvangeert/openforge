@@ -1,7 +1,7 @@
 use crate::github_client::GitHubClient;
 use crate::{db, github_poller};
 use std::sync::{Arc, Mutex};
-use tauri::{Emitter, Manager, State};
+use tauri::{Emitter, State};
 
 #[tauri::command]
 pub async fn force_github_sync(
@@ -116,6 +116,7 @@ pub async fn merge_pull_request(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tauri::Manager;
     use tauri::test::{mock_builder, mock_context, noop_assets};
 
     #[test]

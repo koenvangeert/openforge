@@ -14,13 +14,15 @@
 
 	// Sanitize input: strip non-alphanumeric, uppercase, max 5 chars
 	function handleInput(e: Event) {
-		const raw = (e.currentTarget as HTMLInputElement).value
+		if (!(e.currentTarget instanceof HTMLInputElement)) return
+		const raw = e.currentTarget.value
 		const sanitized = raw.replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 5)
 		onTaskIdPrefixChange(sanitized)
 	}
 
 	function handlePollIntervalInput(e: Event) {
-		const raw = parseInt((e.currentTarget as HTMLInputElement).value, 10)
+		if (!(e.currentTarget instanceof HTMLInputElement)) return
+		const raw = parseInt(e.currentTarget.value, 10)
 		const clamped = Math.max(30, Math.min(300, isNaN(raw) ? 30 : raw))
 		onGithubPollIntervalChange(clamped)
 	}

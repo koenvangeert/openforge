@@ -8,25 +8,23 @@
 
   interface Props {
     task: Task
-    workspacePath?: string | null
-    worktreePath?: string | null
+    workspacePath: string | null
   }
 
-  let { task, workspacePath = null, worktreePath = null }: Props = $props()
+  let { task, workspacePath }: Props = $props()
 
-  let resolvedWorkspacePath = $derived(workspacePath ?? worktreePath)
   let taskPrs = $derived($ticketPrs.get(task.id) || [])
 </script>
 
 <div class="flex flex-col gap-5 p-5 overflow-y-auto bg-base-200 h-full">
   <TaskPromptSummary {task} />
 
-  {#if resolvedWorkspacePath}
+  {#if workspacePath}
     <section class="flex flex-col gap-2.5">
       <h3 class="text-[10px] font-bold text-primary font-mono tracking-[1.2px] m-0" aria-label="Workspace">// WORKSPACE</h3>
       <div class="flex items-center gap-2 bg-base-100 border border-base-300 rounded-md px-3 py-2">
-        <span class="text-xs font-mono text-base-content/70 truncate flex-1" title={resolvedWorkspacePath}>{resolvedWorkspacePath}</span>
-        <CopyButton text={resolvedWorkspacePath} label="Copy workspace path" />
+        <span class="text-xs font-mono text-base-content/70 truncate flex-1" title={workspacePath}>{workspacePath}</span>
+        <CopyButton text={workspacePath} label="Copy workspace path" />
       </div>
     </section>
   {/if}

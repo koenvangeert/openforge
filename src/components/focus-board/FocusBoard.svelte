@@ -8,7 +8,7 @@
   import type { TaskState } from '../../lib/taskState'
   import { sortBySessionActivity } from '../../lib/taskSort'
   import { useVimNavigation } from '../../lib/useVimNavigation.svelte'
-  import { isInputFocused } from '../../lib/domUtils'
+  import { getHTMLElementAt, isInputFocused } from '../../lib/domUtils'
   import { loadActions, getEnabledActions } from '../../lib/actions'
   import TaskListItem from './TaskListItem.svelte'
   import TaskDetailPane from './TaskDetailPane.svelte'
@@ -101,7 +101,7 @@
     const idx = vim.focusedIndex
     untrack(() => {
       const items = document.querySelectorAll('[data-vim-item]')
-      const el = items[idx] as HTMLElement | undefined
+      const el = getHTMLElementAt(items, idx)
       el?.scrollIntoView?.({ block: 'nearest' })
     })
   })

@@ -30,7 +30,7 @@
   let bottomPanelOpen = $state(false)
   let terminalFullscreen = $state(false)
   let terminalEverOpened = $state(false)
-  let worktreePath = $state<string | null>(null)
+  let workspacePath = $state<string | null>(null)
   let lastTaskId = ''
   let actions = $state<Action[]>([])
   let terminalTabsRef = $state<TerminalTabs | null>(null)
@@ -64,9 +64,9 @@
       bottomPanelOpen = wasOpen
       terminalFullscreen = false
       terminalEverOpened = wasOpen
-      worktreePath = null
+      workspacePath = null
       getWorktreeForTask(taskId).then((worktree) => {
-        worktreePath = worktree?.worktree_path ?? null
+        workspacePath = worktree?.worktree_path ?? null
       })
     }
   })
@@ -144,7 +144,7 @@
       return
     }
 
-    if (e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey && worktreePath !== null) {
+    if (e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey && workspacePath !== null) {
       if (e.code === 'Digit1') {
         e.preventDefault()
         setReviewMode(false)
@@ -184,12 +184,12 @@
       handleBack()
       return
     }
-    if (e.key === 'h' && worktreePath !== null) {
+    if (e.key === 'h' && workspacePath !== null) {
       e.preventDefault()
       setReviewMode(false)
       return
     }
-    if (e.key === 'l' && worktreePath !== null) {
+    if (e.key === 'l' && workspacePath !== null) {
       e.preventDefault()
       setReviewMode(true)
       return
@@ -249,7 +249,7 @@
       <span class="text-base-content/20 mx-1">/</span>
       <span class="text-primary font-semibold">{reviewMode ? 'self_review' : 'code'}</span>
     </div>
-    {#if worktreePath !== null}
+    {#if workspacePath !== null}
        <div class="flex items-center gap-1">
         <button
             class="btn btn-ghost btn-xs gap-1.5 {!reviewMode ? 'text-primary border border-primary' : 'text-base-content/50 border border-base-300'}"
@@ -281,7 +281,7 @@
           <ResizablePanel storageKey="task-detail-sidebar" defaultWidth={360} minWidth={200} maxWidth={600} side="right">
             <div class="overflow-hidden bg-base-200 border-l border-base-300 flex flex-col h-full">
               <div class="flex-1 overflow-y-auto">
-                <TaskInfoPanel task={task} {worktreePath} />
+                <TaskInfoPanel task={task} {workspacePath} />
               </div>
             </div>
           </ResizablePanel>
@@ -290,13 +290,13 @@
     {/if}
 
     <!-- Bottom panel: stays mounted once opened so tabs survive ⌘J toggle -->
-    {#if terminalEverOpened && worktreePath !== null}
+    {#if terminalEverOpened && workspacePath !== null}
       <div class="{bottomPanelOpen ? (terminalFullscreen ? 'flex flex-col flex-1 min-h-0' : 'shrink-0') : 'hidden'}">
         <ResizableBottomPanel storageKey="terminal-panel-height" defaultHeight={300} minHeight={100} maxHeight={null} fillParent={terminalFullscreen}>
           <TerminalTabs
             bind:this={terminalTabsRef}
             taskId={task.id}
-            {worktreePath}
+            {workspacePath}
             isFullscreen={terminalFullscreen}
             onFullscreenToggle={() => { terminalFullscreen = !terminalFullscreen }}
             onTabChange={null}

@@ -8,14 +8,14 @@
 
   interface Props {
     taskId: string
-    worktreePath: string
+    workspacePath: string
     terminalKey: string
     terminalIndex: number
     isActive: boolean
     onExit?: () => void
   }
 
-  let { taskId, worktreePath, terminalKey, terminalIndex, isActive, onExit }: Props = $props()
+  let { taskId, workspacePath, terminalKey, terminalIndex, isActive, onExit }: Props = $props()
 
   let terminalEl: HTMLDivElement
   let unlisteners: UnlistenFn[] = []
@@ -39,7 +39,7 @@
 
     markPtySpawnPending(entry)
     try {
-      const instanceId = await spawnShellPty(taskId, worktreePath, entry.terminal.cols, entry.terminal.rows, terminalIndex)
+      const instanceId = await spawnShellPty(taskId, workspacePath, entry.terminal.cols, entry.terminal.rows, terminalIndex)
       setCurrentPtyInstance(entry, instanceId)
       updateShellLifecycleState(terminalKey, {
         ptyActive: true,
@@ -115,7 +115,7 @@
         console.error('[TaskTerminal] Failed to kill PTY on restart:', e)
       })
       markPtySpawnPending(poolEntry)
-      const instanceId = await spawnShellPty(taskId, worktreePath, poolEntry.terminal.cols, poolEntry.terminal.rows, terminalIndex)
+      const instanceId = await spawnShellPty(taskId, workspacePath, poolEntry.terminal.cols, poolEntry.terminal.rows, terminalIndex)
       setCurrentPtyInstance(poolEntry, instanceId)
       updateShellLifecycleState(terminalKey, {
         ptyActive: true,

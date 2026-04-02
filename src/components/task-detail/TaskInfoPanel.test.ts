@@ -76,39 +76,39 @@ describe('TaskInfoPanel', () => {
   }
 
   it('renders Initial Prompt section with task initial_prompt', () => {
-    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null } })
+    render(TaskInfoPanel, { props: { task: baseTask, workspacePath: null } })
     expect(screen.getByText('// INITIAL_PROMPT')).toBeTruthy()
     expect(screen.getByText('Implement auth middleware')).toBeTruthy()
     expect(screen.queryByText('Build the auth middleware implementation with JWT support')).toBeNull()
   })
 
   it('renders prompt as read-only text (no input elements in prompt section)', () => {
-    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null } })
+    render(TaskInfoPanel, { props: { task: baseTask, workspacePath: null } })
     const promptSection = screen.getByLabelText('Initial Prompt').closest('section')
     expect(promptSection?.querySelector('input')).toBeNull()
     expect(promptSection?.querySelector('textarea')).toBeNull()
   })
 
   it('renders // SUMMARY label', () => {
-    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null } })
+    render(TaskInfoPanel, { props: { task: baseTask, workspacePath: null } })
     expect(screen.getByText('// SUMMARY')).toBeTruthy()
   })
 
   it('renders "No summary yet" in muted text when summary is null', () => {
-    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null } })
+    render(TaskInfoPanel, { props: { task: baseTask, workspacePath: null } })
     expect(screen.getByText('No summary yet')).toBeTruthy()
   })
 
   it('renders summary content when summary is present', () => {
     const taskWithSummary = { ...baseTask, summary: 'Implemented JWT auth with refresh token support.' }
-    render(TaskInfoPanel, { props: { task: taskWithSummary, worktreePath: null } })
+    render(TaskInfoPanel, { props: { task: taskWithSummary, workspacePath: null } })
     expect(screen.getByText('Implemented JWT auth with refresh token support.')).toBeTruthy()
     expect(screen.queryByText('No summary yet')).toBeNull()
   })
 
   it('renders literal \\n in summary as actual line breaks', () => {
     const taskWithNewlines = { ...baseTask, summary: 'Added feature.\\n\\nChanges:\\n- New file added' }
-    render(TaskInfoPanel, { props: { task: taskWithNewlines, worktreePath: null } })
+    render(TaskInfoPanel, { props: { task: taskWithNewlines, workspacePath: null } })
     const summarySection = screen.getByLabelText('Summary').closest('section')
     expect(summarySection).not.toBeNull()
     if (!summarySection) {
@@ -122,14 +122,14 @@ describe('TaskInfoPanel', () => {
 
   it('renders summary as read-only text (no input elements in summary section)', () => {
     const taskWithSummary = { ...baseTask, summary: 'Done.' }
-    render(TaskInfoPanel, { props: { task: taskWithSummary, worktreePath: null } })
+    render(TaskInfoPanel, { props: { task: taskWithSummary, workspacePath: null } })
     const summarySection = screen.getByLabelText('Summary').closest('section')
     expect(summarySection?.querySelector('input')).toBeNull()
     expect(summarySection?.querySelector('textarea')).toBeNull()
   })
 
   it('does not show Edit Task or Delete buttons', () => {
-    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null } })
+    render(TaskInfoPanel, { props: { task: baseTask, workspacePath: null } })
     expect(screen.queryByText('Edit Task')).toBeNull()
     expect(screen.queryByText('Delete')).toBeNull()
   })
@@ -162,7 +162,7 @@ describe('TaskInfoPanel', () => {
 
     ticketPrs.set(new Map([['T-42', [prWithCi]]]))
 
-    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null } })
+    render(TaskInfoPanel, { props: { task: baseTask, workspacePath: null } })
 
     await new Promise((r) => setTimeout(r, 10))
     expect(screen.getByText('// PIPELINE_STATUS')).toBeTruthy()
@@ -194,7 +194,7 @@ describe('TaskInfoPanel', () => {
 
     ticketPrs.set(new Map([['T-42', [draftPr]]]))
 
-    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null } })
+    render(TaskInfoPanel, { props: { task: baseTask, workspacePath: null } })
 
     await new Promise((r) => setTimeout(r, 10))
     expect(screen.getByText('Draft')).toBeTruthy()
@@ -225,20 +225,20 @@ describe('TaskInfoPanel', () => {
 
     ticketPrs.set(new Map([['T-42', [openPr]]]))
 
-    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null } })
+    render(TaskInfoPanel, { props: { task: baseTask, workspacePath: null } })
 
     await new Promise((r) => setTimeout(r, 10))
     expect(screen.queryByText('Draft')).toBeNull()
   })
 
-  it('renders workspace path section when worktreePath is provided', () => {
-    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: '/home/user/worktrees/T-42' } })
+  it('renders workspace path section when workspacePath is provided', () => {
+    render(TaskInfoPanel, { props: { task: baseTask, workspacePath: '/home/user/worktrees/T-42' } })
     expect(screen.getByText('// WORKSPACE')).toBeTruthy()
     expect(screen.getByText('/home/user/worktrees/T-42')).toBeTruthy()
   })
 
-  it('does not render workspace section when worktreePath is null', () => {
-    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null } })
+  it('does not render workspace section when workspacePath is null', () => {
+    render(TaskInfoPanel, { props: { task: baseTask, workspacePath: null } })
     expect(screen.queryByText('// WORKSPACE')).toBeNull()
   })
 
@@ -252,7 +252,7 @@ describe('TaskInfoPanel', () => {
 
     ticketPrs.set(new Map([['T-42', [readyPr]]]))
 
-    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null } })
+    render(TaskInfoPanel, { props: { task: baseTask, workspacePath: null } })
 
     await screen.findByRole('button', { name: 'Merge' })
     expect(screen.getByText(/Ready to Merge/)).toBeTruthy()
@@ -268,7 +268,7 @@ describe('TaskInfoPanel', () => {
 
     ticketPrs.set(new Map([['T-42', [readyPr]]]))
 
-    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null } })
+    render(TaskInfoPanel, { props: { task: baseTask, workspacePath: null } })
 
     await screen.findByRole('button', { name: 'Merge' })
     expect(screen.getByText(/Ready to Merge/)).toBeTruthy()
@@ -284,7 +284,7 @@ describe('TaskInfoPanel', () => {
 
     ticketPrs.set(new Map([['T-42', [readyPr]]]))
 
-    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null } })
+    render(TaskInfoPanel, { props: { task: baseTask, workspacePath: null } })
 
     await screen.findByRole('button', { name: 'Merge' })
     expect(screen.getByText(/Ready to Merge/)).toBeTruthy()
@@ -301,7 +301,7 @@ describe('TaskInfoPanel', () => {
 
     ticketPrs.set(new Map([['T-42', [queuedPr]]]))
 
-    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null } })
+    render(TaskInfoPanel, { props: { task: baseTask, workspacePath: null } })
 
     await new Promise((r) => setTimeout(r, 10))
     expect(screen.queryByRole('button', { name: 'Merge' })).toBeNull()
@@ -319,7 +319,7 @@ describe('TaskInfoPanel', () => {
 
     ticketPrs.set(new Map([['T-42', [queuedPr]]]))
 
-    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null } })
+    render(TaskInfoPanel, { props: { task: baseTask, workspacePath: null } })
 
     await new Promise((r) => setTimeout(r, 10))
     expect(screen.getByText(/In Merge Queue/)).toBeTruthy()
@@ -334,7 +334,7 @@ describe('TaskInfoPanel', () => {
 
     ticketPrs.set(new Map([['T-42', [conflictedPr]]]))
 
-    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null } })
+    render(TaskInfoPanel, { props: { task: baseTask, workspacePath: null } })
 
     await new Promise((r) => setTimeout(r, 10))
     expect(screen.getByText('Merge Conflict')).toBeTruthy()
@@ -351,7 +351,7 @@ describe('TaskInfoPanel', () => {
     ticketPrs.set(new Map([['T-42', [readyPr]]]))
     vi.mocked(getPullRequests).mockResolvedValue([readyPr])
 
-    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null } })
+    render(TaskInfoPanel, { props: { task: baseTask, workspacePath: null } })
 
     await fireEvent.click(await screen.findByRole('button', { name: 'Merge' }))
 
@@ -373,7 +373,7 @@ describe('TaskInfoPanel', () => {
     ticketPrs.set(new Map([['T-42', [readyPr]]]))
     vi.mocked(getPullRequests).mockResolvedValue([readyPr])
 
-    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null } })
+    render(TaskInfoPanel, { props: { task: baseTask, workspacePath: null } })
 
     await fireEvent.click(await screen.findByRole('button', { name: 'Merge' }))
 
@@ -407,7 +407,7 @@ describe('TaskInfoPanel', () => {
     }))
     ticketPrs.set(new Map([['T-42', [firstReadyPr, secondReadyPr]]]))
 
-    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null } })
+    render(TaskInfoPanel, { props: { task: baseTask, workspacePath: null } })
 
     const [firstMergeButton] = await screen.findAllByRole('button', { name: 'Merge' })
     await fireEvent.click(firstMergeButton)
@@ -433,7 +433,7 @@ describe('TaskInfoPanel', () => {
     vi.mocked(mergePullRequest).mockRejectedValueOnce(new Error('merge blocked by branch protection'))
     ticketPrs.set(new Map([['T-42', [readyPr]]]))
 
-    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null } })
+    render(TaskInfoPanel, { props: { task: baseTask, workspacePath: null } })
 
     await fireEvent.click(await screen.findByRole('button', { name: 'Merge' }))
 
@@ -452,7 +452,7 @@ describe('TaskInfoPanel', () => {
     ticketPrs.set(new Map([['T-42', [readyPr]]]))
     vi.mocked(getPullRequests).mockResolvedValue([mergedPr])
 
-    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null } })
+    render(TaskInfoPanel, { props: { task: baseTask, workspacePath: null } })
 
     await fireEvent.click(await screen.findByRole('button', { name: 'Merge' }))
 
@@ -492,11 +492,11 @@ describe('TaskInfoPanel', () => {
       () => new Promise<void>((resolve) => { resolveMerge = resolve })
     )
 
-    const { rerender } = render(TaskInfoPanel, { props: { task: taskA, worktreePath: null } })
+    const { rerender } = render(TaskInfoPanel, { props: { task: taskA, workspacePath: null } })
 
     await fireEvent.click(await screen.findByRole('button', { name: 'Merge' }))
 
-    await rerender({ task: taskB, worktreePath: null })
+    await rerender({ task: taskB, workspacePath: null })
 
     resolveMerge()
     await new Promise((r) => setTimeout(r, 50))
@@ -548,7 +548,7 @@ describe('TaskInfoPanel', () => {
       rate_limit_reset_at: null,
     })
 
-    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null } })
+    render(TaskInfoPanel, { props: { task: baseTask, workspacePath: null } })
 
     const [firstMergeButton] = await screen.findAllByRole('button', { name: 'Merge' })
     await fireEvent.click(firstMergeButton)
@@ -587,7 +587,7 @@ describe('TaskInfoPanel', () => {
     })
     ticketPrs.set(new Map([['T-42', [readyPr]]]))
 
-    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null } })
+    render(TaskInfoPanel, { props: { task: baseTask, workspacePath: null } })
     await fireEvent.click(await screen.findByRole('button', { name: 'Merge' }))
 
     expect(await screen.findByText(/GitHub sync reported errors after merge/)).toBeTruthy()
@@ -613,7 +613,7 @@ describe('TaskInfoPanel', () => {
     })
     ticketPrs.set(new Map([['T-42', [readyPr]]]))
 
-    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null } })
+    render(TaskInfoPanel, { props: { task: baseTask, workspacePath: null } })
     await fireEvent.click(await screen.findByRole('button', { name: 'Merge' }))
 
     expect(await screen.findByText(/GitHub sync was rate limited after merge/)).toBeTruthy()
@@ -631,7 +631,7 @@ describe('TaskInfoPanel', () => {
     vi.mocked(forceGithubSync).mockRejectedValueOnce(new Error('network timeout'))
     ticketPrs.set(new Map([['T-42', [readyPr]]]))
 
-    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null } })
+    render(TaskInfoPanel, { props: { task: baseTask, workspacePath: null } })
     await fireEvent.click(await screen.findByRole('button', { name: 'Merge' }))
 
     expect(await screen.findByText(/Pull request merged, but refresh failed: network timeout/)).toBeTruthy()
@@ -648,7 +648,7 @@ describe('TaskInfoPanel', () => {
 
     ticketPrs.set(new Map([['T-42', [transientPr]]]))
 
-    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null } })
+    render(TaskInfoPanel, { props: { task: baseTask, workspacePath: null } })
 
     await new Promise((r) => setTimeout(r, 10))
     expect(screen.queryByRole('button', { name: 'Merge' })).toBeNull()
@@ -665,7 +665,7 @@ describe('TaskInfoPanel', () => {
 
     ticketPrs.set(new Map([['T-42', [unknownPr]]]))
 
-    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null } })
+    render(TaskInfoPanel, { props: { task: baseTask, workspacePath: null } })
 
     await new Promise((r) => setTimeout(r, 10))
     expect(screen.queryByRole('button', { name: 'Merge' })).toBeNull()
@@ -683,13 +683,13 @@ describe('TaskInfoPanel', () => {
 
     ticketPrs.set(new Map([['T-42', [transientPr]]]))
 
-    const { unmount } = render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null } })
+    const { unmount } = render(TaskInfoPanel, { props: { task: baseTask, workspacePath: null } })
     await new Promise((r) => setTimeout(r, 10))
     expect(screen.queryByRole('button', { name: 'Merge' })).toBeNull()
     unmount()
 
     ticketPrs.set(new Map([['T-42', [resolvedPr]]]))
-    render(TaskInfoPanel, { props: { task: baseTask, worktreePath: null } })
+    render(TaskInfoPanel, { props: { task: baseTask, workspacePath: null } })
     await screen.findByRole('button', { name: 'Merge' })
   })
 })

@@ -7,14 +7,14 @@
 
   interface Props {
     taskId: string
-    worktreePath: string
+    workspacePath: string
     isFullscreen: boolean
     onFullscreenToggle: (() => void) | null
     onTabChange: ((index: number) => void) | null
     onTabCountChange: ((count: number) => void) | null
   }
 
-  let { taskId, worktreePath, isFullscreen, onFullscreenToggle, onTabChange, onTabCountChange }: Props = $props()
+  let { taskId, workspacePath, isFullscreen, onFullscreenToggle, onTabChange, onTabCountChange }: Props = $props()
 
   let session: TaskTerminalTabsSession | null = null
   let tabs = $state<TerminalTab[]>([])
@@ -176,7 +176,7 @@
       <div class="absolute inset-0 {tab.index === activeTabIndex ? '' : 'invisible pointer-events-none'}">
         <TaskTerminal
           {taskId}
-          {worktreePath}
+          {workspacePath}
           terminalKey={tab.key}
           terminalIndex={tab.index}
           isActive={tab.index === activeTabIndex}

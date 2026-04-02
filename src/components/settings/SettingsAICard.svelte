@@ -45,7 +45,10 @@
       <select
         class="select select-bordered select-sm w-full max-w-xs"
         value={activeModelSize ?? 'small'}
-        onchange={(e) => onWhisperModelSelect((e.currentTarget as HTMLSelectElement).value)}
+        onchange={(e) => {
+          if (!(e.currentTarget instanceof HTMLSelectElement)) return
+          onWhisperModelSelect(e.currentTarget.value)
+        }}
       >
         {#each modelStatuses as model}
           <option value={model.size}>

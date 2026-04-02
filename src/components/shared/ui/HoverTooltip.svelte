@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import type { Snippet } from 'svelte'
+  import { getFirstHTMLElementChild, getHTMLElement } from '../../../lib/domUtils'
 
   interface Props {
     text: string
@@ -28,7 +29,7 @@
     if (!portalEl) return
     if (visible) {
       portalEl.innerHTML = `<div style="position:fixed;left:${tooltipX}px;top:${tooltipY}px;z-index:9999;max-width:280px;pointer-events:none;" class="px-3 py-2 bg-base-100 border border-base-300 rounded-lg shadow-xl text-xs text-base-content/70 whitespace-pre-wrap break-words" role="tooltip"></div>`
-      const inner = portalEl.firstElementChild as HTMLElement
+      const inner = getFirstHTMLElementChild(portalEl)
       if (inner) inner.textContent = text
     } else {
       portalEl.innerHTML = ''
@@ -38,8 +39,10 @@
   function show(e: MouseEvent | FocusEvent) {
     if (hoverTimer) clearTimeout(hoverTimer)
 
-    const wrapper = e.currentTarget as HTMLElement
-    const targetElement = (wrapper.firstElementChild as HTMLElement) || wrapper
+    const wrapper = getHTMLElement(e.currentTarget)
+    if (!wrapper) return
+
+    const targetElement = getFirstHTMLElementChild(wrapper) ?? wrapper
     const rect = targetElement.getBoundingClientRect()
 
     hoverTimer = setTimeout(() => {

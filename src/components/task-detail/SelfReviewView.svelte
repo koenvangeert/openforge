@@ -149,7 +149,8 @@
                         class="checkbox checkbox-xs"
                         checked={includeUncommitted}
                         onchange={(e: Event) => {
-                          includeUncommitted = (e.target as HTMLInputElement).checked
+                          if (!(e.currentTarget instanceof HTMLInputElement)) return
+                          includeUncommitted = e.currentTarget.checked
                           diffLoader.refresh()
                         }}
                       />
