@@ -264,6 +264,7 @@ export function createDiffSearch(deps: {
     }
 
     const clickTarget = getHTMLElement(e.target)
+    if (!clickTarget) return
     if (!clickTarget.closest('.diff-line-content-item')) return
 
     const word = getWordAtSelection()
