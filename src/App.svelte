@@ -3,11 +3,11 @@
   import { listen } from '@tauri-apps/api/event'
   import type { UnlistenFn, Event } from '@tauri-apps/api/event'
   import { tasks, pendingTask, selectedTaskId, activeSessions, checkpointNotification, ciFailureNotification, ticketPrs, error, isLoading, projects, activeProjectId, currentView, reviewRequestCount, authoredPrCount, projectAttention, taskSpawned, startingTasks, codeCleanupTasksEnabled, rateLimitNotification, taskRuntimeInfo, focusBoardFilters } from './lib/stores'
-  import { getProjects, getTasksForProject, getPullRequests, startImplementation, getSessionStatus, getLatestSession, getLatestSessions, forceGithubSync, createTask, updateTask, deleteTask, getProjectAttention, getAppMode, finalizeClaudeSession, getConfig, getProjectConfig, listOpenCodeAgents, getReviewPrs, getAuthoredPrs, getTaskDetail } from './lib/ipc'
+  import { getProjects, getTasksForProject, getPullRequests, startImplementation, getSessionStatus, getLatestSession, getLatestSessions, forceGithubSync, createTask, updateTask, deleteTask, getProjectAttention, getAppMode, finalizeClaudeSession, getConfig, getProjectConfig, listOpenCodeAgents, getReviewPrs, getAuthoredPrs, getTaskDetail, mergePullRequest } from './lib/ipc'
   import { writePtyWithSubmit } from './lib/ptySubmit'
   import SearchableSelect from './components/shared/ui/SearchableSelect.svelte'
   import { applyProjectOrder } from './lib/projectOrder'
-  import { hasMergeConflicts, preservePullRequestState } from './lib/types'
+  import { hasMergeConflicts, preservePullRequestState, isReadyToMerge } from './lib/types'
   import type { Task, PullRequestInfo, AgentEvent, ProjectAttention, AppView, PermissionMode, AgentSession } from './lib/types'
   import { moveTaskToComplete } from './lib/moveToComplete'
   import { getTaskPromptText } from './lib/taskPrompt'
@@ -411,6 +411,26 @@
           await loadTasks()
         }
         break
+      case 'merge-pr': {
+        const prs = task ? ($ticketPrs.get(task.id) || []) : []
+        const pr = prs.find(candidate => isReadyToMerge(candidate) && !candidate.is_queued)
+        if (task && pr) {
+          try {
+            await mergePullRequest(pr.repo_owner, pr.repo_name, pr.id)
+            const nextMap = new Map($ticketPrs)
+            const taskPrs = nextMap.get(task.id) || []
+            nextMap.set(task.id, taskPrs.map(p => 
+              p.id === pr.id ? { ...p, state: 'merged', merged_at: Math.floor(Date.now() / 1000) } : p
+            ))
+            $ticketPrs = nextMap
+            await triggerGithubSync()
+          } catch (e) {
+            console.error('Failed to merge PR:', e)
+            $error = String(e)
+          }
+        }
+        break
+      }
       case 'go-back':
         router.back()
         break
@@ -1096,6 +1116,7 @@
   <ActionPalette
     task={actionPaletteTask}
     customActions={actionPaletteActions}
+    taskPrs={actionPaletteTask ? ($ticketPrs.get(actionPaletteTask.id) || []) : []}
     onClose={closeActionPalette}
     onExecute={executeAction}
   />

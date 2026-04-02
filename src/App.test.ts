@@ -118,6 +118,7 @@ vi.mock('./lib/ipc', () => ({
   getProjectConfig: vi.fn(async () => null),
   setProjectConfig: vi.fn(),
   startImplementation: vi.fn(),
+  mergePullRequest: vi.fn(),
   getWorktreeForTask: vi.fn(),
   getSessionStatus: vi.fn(),
   abortSession: vi.fn(),
@@ -964,6 +965,93 @@ describe('App onMount initialization order', () => {
       vi.mocked(nav.resetToBoard).mockReset()
       vi.mocked(moveTaskToComplete).mockReset()
       vi.mocked(moveTaskToComplete).mockResolvedValue(undefined)
+    })
+
+    it('action palette merge-pr merges the selected task PR and refreshes GitHub state', async () => {
+      const App = (await import('./App.svelte')).default
+      const stores = await import('./lib/stores')
+      const ipc = await import('./lib/ipc')
+      const actionPaletteModule = await import('./components/shell/ActionPalette.svelte')
+      const { get } = await import('svelte/store')
+
+      const selectedTask: Task = {
+        id: 'task-merge',
+        initial_prompt: 'Merge ready PR',
+        prompt: null,
+        summary: null,
+        status: 'doing',
+        agent: null,
+        permission_mode: null,
+        project_id: 'proj-1',
+        created_at: 1000,
+        updated_at: 1000,
+      }
+
+      const readyPr: PullRequestInfo = {
+        id: 42,
+        ticket_id: selectedTask.id,
+        repo_owner: 'owner',
+        repo_name: 'repo',
+        title: 'Ready PR',
+        url: 'https://github.com/owner/repo/pull/42',
+        state: 'open',
+        head_sha: 'abc123',
+        ci_status: 'success',
+        ci_check_runs: null,
+        review_status: 'approved',
+        mergeable: true,
+        mergeable_state: 'clean',
+        merged_at: null,
+        created_at: 1000,
+        updated_at: 1000,
+        draft: false,
+        is_queued: false,
+        unaddressed_comment_count: 0,
+      }
+
+      vi.mocked(ipc.getTasksForProject).mockResolvedValue([selectedTask])
+      vi.mocked(ipc.getPullRequests).mockResolvedValue([readyPr])
+      vi.mocked(ipc.mergePullRequest).mockResolvedValue(undefined)
+      vi.mocked(ipc.forceGithubSync).mockResolvedValue(undefined)
+
+      stores.tasks.set([selectedTask])
+      stores.pendingTask.set(null)
+      stores.selectedTaskId.set(selectedTask.id)
+      stores.ticketPrs.set(new Map([[selectedTask.id, [readyPr]]]))
+
+      render(App)
+
+      await vi.waitFor(() => {
+        expect(ipc.getTasksForProject).toHaveBeenCalled()
+      })
+
+      await fireEvent.keyDown(window, { key: 'k', metaKey: true, bubbles: true })
+
+      await vi.waitFor(() => {
+        expect(actionPaletteModule.default).toHaveBeenCalled()
+      })
+
+      const lastCall = vi.mocked(actionPaletteModule.default).mock.calls.at(-1)
+      if (!lastCall) throw new Error('Expected ActionPalette to receive props')
+
+      const propsCandidate = lastCall
+        .flatMap((arg) => {
+          if (typeof arg !== 'object' || arg === null) return []
+          if ('props' in arg && typeof arg.props === 'object' && arg.props !== null) return [arg, arg.props]
+          return [arg]
+        })
+        .find((arg): arg is { onExecute: (actionId: string) => Promise<void> } => 'onExecute' in arg && typeof arg.onExecute === 'function')
+
+      if (!propsCandidate) throw new Error('Expected ActionPalette props to include onExecute')
+
+      await propsCandidate.onExecute('merge-pr')
+
+      expect(ipc.mergePullRequest).toHaveBeenCalledWith('owner', 'repo', 42)
+      expect(ipc.forceGithubSync).toHaveBeenCalled()
+
+      const mergedPr = get(stores.ticketPrs).get(selectedTask.id)?.[0]
+      expect(mergedPr?.state).toBe('merged')
+      expect(mergedPr?.merged_at).not.toBeNull()
     })
 
     it('CMD+SHIFT+F opens search tasks', async () => {
