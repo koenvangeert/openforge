@@ -2,6 +2,7 @@ import { render, fireEvent } from '@testing-library/svelte'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { get, writable } from 'svelte/store'
 import type { Task, AgentSession, Project, ProjectAttention, PullRequestInfo, CheckpointNotification, CiFailureNotification, RateLimitNotification, AuthoredPullRequest } from './lib/types'
+import { requireDefined } from './test-utils/dom'
 
 const callOrder: string[] = []
 
@@ -395,7 +396,10 @@ describe('App onMount initialization order', () => {
 
     expect(get(stores.authoredPrCount)).toBe(0)
 
-    const callback = eventListeners.get('authored-prs-updated')!
+    const callback = requireDefined(
+      eventListeners.get('authored-prs-updated'),
+      'Expected authored-prs-updated listener to be registered',
+    )
     await callback({ payload: undefined })
 
     await vi.waitFor(() => {
@@ -1304,9 +1308,11 @@ describe('App onMount initialization order', () => {
 
       render(App)
 
-      const syncCallback = eventListeners.get('github-sync-complete')
-      expect(syncCallback).toBeDefined()
-      await syncCallback!()
+      const syncCallback = requireDefined(
+        eventListeners.get('github-sync-complete'),
+        'Expected github-sync-complete listener to be registered',
+      )
+      await syncCallback()
 
       await new Promise(r => setTimeout(r, 0))
 

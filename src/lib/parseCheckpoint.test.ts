@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import { requireDefined } from '../test-utils/dom'
 import { parseCheckpointQuestion } from './parseCheckpoint'
 
 describe('parseCheckpointQuestion', () => {
@@ -37,8 +38,10 @@ describe('parseCheckpointQuestion', () => {
     const longText = 'A'.repeat(600)
     const data = JSON.stringify({ properties: { description: longText } })
     const result = parseCheckpointQuestion(data)
-    expect(result).toHaveLength(503)
-    expect(result!.endsWith('...')).toBe(true)
+    const definedResult = requireDefined(result)
+
+    expect(definedResult).toHaveLength(503)
+    expect(definedResult.endsWith('...')).toBe(true)
   })
 
   it('prefers properties.description over properties.title', () => {
