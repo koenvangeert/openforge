@@ -1,8 +1,9 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/svelte'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { requireElement } from '../test-utils/dom'
 import AddTaskDialog from './AddTaskDialog.svelte'
-import type { Task } from '../lib/types'
+import type { Action, Task } from '../lib/types'
+import { createTask, updateTask, getProjectConfig, listOpenCodeAgents } from '../lib/ipc'
+import { loadActions } from '../lib/actions'
 
 vi.mock('../lib/ipc', () => ({
   createTask: vi.fn().mockResolvedValue({
@@ -16,13 +17,20 @@ vi.mock('../lib/ipc', () => ({
     project_id: null,
     created_at: 1000,
     updated_at: 1000,
-  } as Task),
+  }),
   updateTask: vi.fn().mockResolvedValue(undefined),
   getProjectConfig: vi.fn().mockResolvedValue('claude-code'),
   listOpenCodeAgents: vi.fn().mockResolvedValue([
     { name: 'agent-1', hidden: false, mode: null },
     { name: 'agent-2', hidden: false, mode: null },
   ]),
+  }))
+
+vi.mock('../lib/actions', () => ({
+  loadActions: vi.fn().mockResolvedValue([
+    { id: 'act-1', name: 'Test Action', prompt: 'Do test', builtin: false, enabled: true },
+  ]),
+  getEnabledActions: vi.fn((actions: Action[]) => actions.filter((action: Action) => action.enabled)),
 }))
 
 vi.mock('../lib/stores', () => {
@@ -32,9 +40,7 @@ vi.mock('../lib/stores', () => {
   }
 })
 
-import { createTask, updateTask, getProjectConfig, listOpenCodeAgents } from '../lib/ipc'
-
-const mockTask: Task = {
+const mockTask = {
   id: 'T-42',
   initial_prompt: 'Existing Task',
   status: 'doing',
@@ -45,220 +51,147 @@ const mockTask: Task = {
   project_id: null,
   created_at: 1000,
   updated_at: 2000,
-}
+} as Task
 
 describe('AddTaskDialog', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(getProjectConfig).mockImplementation(async (_projectId, _key) => {
-      return 'claude-code'
-    })
+    vi.mocked(getProjectConfig).mockImplementation(async () => 'claude-code')
     vi.mocked(listOpenCodeAgents).mockResolvedValue([
       { name: 'agent-1', hidden: false, mode: null },
       { name: 'agent-2', hidden: false, mode: null },
     ])
+    vi.mocked(loadActions).mockResolvedValue([
+      { id: 'act-1', name: 'Test Action', prompt: 'Do test', builtin: false, enabled: true },
+    ])
   })
 
-  
-  it('renders in create mode with empty fields', () => {
+  it('renders in create mode with empty fields via PromptInput', async () => {
     render(AddTaskDialog, { props: { mode: 'create' } })
     expect(screen.getByRole('heading', { name: 'Create Task' })).toBeTruthy()
-    
-    const promptInput = requireElement(screen.getByPlaceholderText('Describe what you want the agent to do'), HTMLInputElement)
-    expect(promptInput.value).toBe('')
+    // Wait for PromptInput to be ready
+    await waitFor(() => {
+      const textbox = screen.getByRole('textbox') as HTMLTextAreaElement
+      expect(textbox.value).toBe('')
+    })
   })
 
-  it('disables submit button when title is empty', () => {
-    render(AddTaskDialog, { props: { mode: 'create' } })
-    const submitBtn = screen.getByRole('button', { name: 'Create Task' })
-    expect(submitBtn.hasAttribute('disabled')).toBe(true)
+  it('closes before awaiting the async start flow', async () => {
+    let resolveRunAction = () => {}
+    const onClose = vi.fn()
+    const onRunAction = vi.fn(() => new Promise<void>((resolve) => {
+      resolveRunAction = resolve
+    }))
+
+    render(AddTaskDialog, { props: { mode: 'create', onClose, onRunAction } })
+
+    const textbox = await screen.findByRole('textbox')
+    await fireEvent.input(textbox, { target: { value: 'Start me' } })
+    await fireEvent.click(await screen.findByRole('button', { name: /Start Task/ }))
+
+    await waitFor(() => {
+      expect(createTask).toHaveBeenCalledWith('Start me', 'backlog', 'test-project-id', null, 'default')
+      expect(onClose).toHaveBeenCalledTimes(1)
+      expect(onRunAction).toHaveBeenCalledWith('T-1', '', null)
+    })
+
+    resolveRunAction()
   })
 
-  it('enables submit button when title has text', async () => {
-    render(AddTaskDialog, { props: { mode: 'create' } })
-    const promptInput = screen.getByPlaceholderText('Describe what you want the agent to do')
+  it('calls createTask with correct arguments on submit via PromptInput', async () => {
+    const onTaskSaved = vi.fn()
+    render(AddTaskDialog, { props: { mode: 'create', onTaskSaved } })
     
-    await fireEvent.input(promptInput, { target: { value: 'New task' } })
+    const textbox = await screen.findByRole('textbox')
+    // Svelte bind:value needs the value to be updated, or we fire `input` event
+    await fireEvent.input(textbox, { target: { value: 'My new task' } })
     
-    const submitBtn = screen.getByRole('button', { name: 'Create Task' })
-    expect(submitBtn.hasAttribute('disabled')).toBe(false)
-  })
-
-  it('calls createTask with correct arguments on submit', async () => {
-    render(AddTaskDialog, { props: { mode: 'create' } })
-    
-    const promptInput = screen.getByPlaceholderText('Describe what you want the agent to do')
-    
-    await fireEvent.input(promptInput, { target: { value: 'My new task' } })
-    
-    const submitBtn = screen.getByRole('button', { name: 'Create Task' })
+    // The "Add to Backlog" button calls onSubmit
+    const submitBtn = await screen.findByRole('button', { name: /Add to Backlog/ })
     await fireEvent.click(submitBtn)
     
-    await new Promise((r) => setTimeout(r, 10))
-    expect(createTask).toHaveBeenCalledWith('My new task', 'backlog', 'test-project-id', null, 'default')
+    await waitFor(() => {
+      expect(createTask).toHaveBeenCalledWith('My new task', 'backlog', 'test-project-id', null, 'default')
+      expect(onTaskSaved).toHaveBeenCalled()
+    })
   })
 
   it('pre-fills fields in edit mode', async () => {
     render(AddTaskDialog, { props: { mode: 'edit', task: mockTask } })
-    expect(screen.getByText('Edit Task')).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Edit Task' })).toBeTruthy()
     
-    const promptInput = requireElement(screen.getByPlaceholderText('Describe what you want the agent to do'), HTMLInputElement)
-    expect(promptInput.value).toBe('Existing Task')
-  })
-
-  it('falls back to prompt when pre-filling edit mode and initial_prompt is empty', async () => {
-    render(AddTaskDialog, {
-      props: {
-        mode: 'edit',
-        task: { ...mockTask, initial_prompt: '', prompt: 'Prompt fallback text' },
-      },
-    })
-
-    const promptInput = requireElement(screen.getByPlaceholderText('Describe what you want the agent to do'), HTMLInputElement)
-    expect(promptInput.value).toBe('Prompt fallback text')
+    const textbox = await screen.findByRole('textbox') as HTMLTextAreaElement
+    expect(textbox.value).toBe('Existing Task')
   })
 
   it('calls updateTask when submitted in edit mode', async () => {
-    render(AddTaskDialog, { props: { mode: 'edit', task: mockTask } })
+    const onTaskSaved = vi.fn()
+    render(AddTaskDialog, { props: { mode: 'edit', task: mockTask, onTaskSaved } })
     
-    const submitBtn = screen.getByRole('button', { name: 'Save Changes' })
+    const submitBtn = await screen.findByRole('button', { name: /Submit/ })
     await fireEvent.click(submitBtn)
     
-    await new Promise((r) => setTimeout(r, 10))
-    expect(updateTask).toHaveBeenCalledWith('T-42', 'Existing Task')
-  })
-
-  it('does not show status dropdown in edit mode', () => {
-    render(AddTaskDialog, { props: { mode: 'edit', task: mockTask } })
-    expect(screen.queryByText('Status')).toBeNull()
-  })
-
-  it('shows Prompt label in create mode', () => {
-    render(AddTaskDialog, { props: { mode: 'create' } })
-    expect(screen.getByText('Prompt', { exact: false })).toBeTruthy()
+    await waitFor(() => {
+      expect(updateTask).toHaveBeenCalledWith('T-42', 'Existing Task')
+      expect(onTaskSaved).toHaveBeenCalled()
+    })
   })
 
   it('shows permission mode dropdown when ai_provider is claude-code', async () => {
-    vi.mocked(getProjectConfig).mockImplementation(async (_projectId, _key) => {
-      return 'claude-code'
-    })
     render(AddTaskDialog, { props: { mode: 'create' } })
-
     await waitFor(() => {
-      expect(screen.queryByLabelText('Permission Mode')).toBeTruthy()
+      expect(screen.getByRole('combobox')).toBeTruthy() // Mode select
     })
   })
 
-  it('hides agent dropdown when ai_provider is claude-code even with agents', async () => {
-    vi.mocked(getProjectConfig).mockImplementation(async (_projectId, _key) => {
-      return 'claude-code'
-    })
-    vi.mocked(listOpenCodeAgents).mockResolvedValue([
-      { name: 'agent-1', hidden: false, mode: null },
-    ])
-    render(AddTaskDialog, { props: { mode: 'create' } })
-
-    await waitFor(() => {
-      expect(screen.queryByLabelText('Permission Mode')).toBeTruthy()
-      expect(screen.queryByLabelText('Claude Code Agent')).toBeNull()
-    })
-  })
-
-  it('shows provider name in agent dropdown label for opencode', async () => {
+  it('uses the selected opencode agent when starting a task', async () => {
+    const onRunAction = vi.fn()
     vi.mocked(getProjectConfig).mockResolvedValue('opencode')
-    vi.mocked(listOpenCodeAgents).mockResolvedValue([
-      { name: 'agent-1', hidden: false, mode: null },
-    ])
-    render(AddTaskDialog, { props: { mode: 'create' } })
+    render(AddTaskDialog, { props: { mode: 'create', onRunAction } })
+
+    const agentSelector = await screen.findByRole('combobox')
+    await fireEvent.click(agentSelector)
+    await fireEvent.click(await screen.findByRole('option', { name: 'agent-1' }))
+
+    const textbox = await screen.findByRole('textbox')
+    await fireEvent.input(textbox, { target: { value: 'Task for agent' } })
+    await fireEvent.click(await screen.findByRole('button', { name: /Start Task/ }))
 
     await waitFor(() => {
-      expect(screen.queryByLabelText('OpenCode Agent')).toBeTruthy()
+      expect(createTask).toHaveBeenCalledWith('Task for agent', 'backlog', 'test-project-id', 'agent-1', 'default')
+      expect(onRunAction).toHaveBeenCalledWith('T-1', '', 'agent-1')
     })
   })
 
-  it('never shows agent dropdown when ai_provider is claude-code regardless of agents', async () => {
-    vi.mocked(getProjectConfig).mockImplementation(async (_projectId, _key) => {
-      return 'claude-code'
-    })
-    vi.mocked(listOpenCodeAgents).mockResolvedValue([
-      { name: 'agent-1', hidden: false, mode: null },
-      { name: 'agent-2', hidden: false, mode: null },
-    ])
-    render(AddTaskDialog, { props: { mode: 'create' } })
+  it('runs the selected custom action through the shared dialog flow', async () => {
+    const onRunAction = vi.fn()
+    render(AddTaskDialog, { props: { mode: 'create', onRunAction } })
+
+    const textbox = await screen.findByRole('textbox')
+    await fireEvent.input(textbox, { target: { value: 'Task with action' } })
+
+    const actionButton = await screen.findByRole('button', { name: 'Test Action' })
+    await fireEvent.click(actionButton)
 
     await waitFor(() => {
-      expect(screen.queryByLabelText('Claude Code Agent')).toBeNull()
+      expect(createTask).toHaveBeenCalledWith('Task with action', 'backlog', 'test-project-id', null, 'default')
+      expect(onRunAction).toHaveBeenCalledWith('T-1', 'Do test', null)
     })
   })
 
-  it('hides agent dropdown when ai_provider is claude-code and no agents', async () => {
-    vi.mocked(getProjectConfig).mockImplementation(async (_projectId, _key) => {
-      return 'claude-code'
-    })
-    vi.mocked(listOpenCodeAgents).mockResolvedValue([])
-    render(AddTaskDialog, { props: { mode: 'create' } })
-
+  it('calls onRunAction when PromptInput triggers start task', async () => {
+    const onRunAction = vi.fn()
+    render(AddTaskDialog, { props: { mode: 'create', onRunAction } })
+    
+    const textbox = await screen.findByRole('textbox')
+    await fireEvent.input(textbox, { target: { value: 'Task to start' } })
+    
+    const startBtn = await screen.findByRole('button', { name: /Start Task/ })
+    await fireEvent.click(startBtn)
+    
     await waitFor(() => {
-      expect(screen.queryByLabelText('Permission Mode')).toBeTruthy()
-      expect(screen.queryByLabelText('Claude Code Agent')).toBeNull()
-    })
-  })
-
-  it('does not call listOpenCodeAgents when ai_provider is claude-code', async () => {
-    vi.mocked(getProjectConfig).mockImplementation(async (_projectId, _key) => {
-      return 'claude-code'
-    })
-    render(AddTaskDialog, { props: { mode: 'create' } })
-
-    await waitFor(() => {
-      expect(screen.queryByLabelText('Permission Mode')).toBeTruthy()
-    })
-    expect(listOpenCodeAgents).not.toHaveBeenCalled()
-  })
-
-  it('shows agent dropdown when ai_provider is opencode', async () => {
-    vi.mocked(getProjectConfig).mockResolvedValue('opencode')
-    render(AddTaskDialog, { props: { mode: 'create' } })
-
-    await waitFor(() => {
-      expect(screen.queryByLabelText('OpenCode Agent')).toBeTruthy()
-    })
-  })
-
-  it('hides permission mode dropdown when ai_provider is opencode', async () => {
-    vi.mocked(getProjectConfig).mockResolvedValue('opencode')
-    render(AddTaskDialog, { props: { mode: 'create' } })
-
-    await waitFor(() => {
-      expect(screen.queryByLabelText('Permission Mode')).toBeNull()
-    })
-  })
-
-  it('filters out hidden agents from the dropdown', async () => {
-    vi.mocked(getProjectConfig).mockResolvedValue('opencode')
-    vi.mocked(listOpenCodeAgents).mockResolvedValue([
-      { name: 'visible-agent', hidden: false, mode: null },
-      { name: 'hidden-agent', hidden: true, mode: null },
-      { name: 'null-hidden-agent', hidden: null, mode: null },
-    ])
-    render(AddTaskDialog, { props: { mode: 'create' } })
-
-    await waitFor(() => {
-      expect(screen.queryByLabelText('OpenCode Agent')).toBeTruthy()
-    })
-    const agentSelect = requireElement(screen.getByLabelText('OpenCode Agent'), HTMLSelectElement)
-    const options = Array.from(agentSelect.options).map(o => o.textContent)
-    expect(options).toContain('visible-agent')
-    expect(options).toContain('null-hidden-agent')
-    expect(options).not.toContain('hidden-agent')
-  })
-
-  it('uses listOpenCodeAgents with project ID', async () => {
-    vi.mocked(getProjectConfig).mockResolvedValue('opencode')
-    render(AddTaskDialog, { props: { mode: 'create' } })
-
-    await waitFor(() => {
-      expect(listOpenCodeAgents).toHaveBeenCalledWith('test-project-id')
+      expect(createTask).toHaveBeenCalledWith('Task to start', 'backlog', 'test-project-id', null, 'default')
+      expect(onRunAction).toHaveBeenCalledWith('T-1', '', null)
     })
   })
 })

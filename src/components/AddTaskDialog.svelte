@@ -1,166 +1,148 @@
 <script lang="ts">
-  import { tick, onMount } from 'svelte'
-  import type { Task, BoardStatus, PermissionMode, AutocompleteAgentInfo } from '../lib/types'
+  import { onMount } from 'svelte'
+  import type { Task, PermissionMode, Action } from '../lib/types'
   import { createTask, updateTask, getProjectConfig, listOpenCodeAgents } from '../lib/ipc'
   import { getTaskPromptText } from '../lib/taskPrompt'
   import { activeProjectId } from '../lib/stores'
   import Modal from './shared/ui/Modal.svelte'
+  import PromptInput from './prompt/PromptInput.svelte'
+  import SearchableSelect from './shared/ui/SearchableSelect.svelte'
+  import { shouldLoadTaskDialogAgents, shouldShowTaskDialogAgentSelector } from '../lib/taskDialogVisibility'
+  import { getEnabledActions, loadActions } from '../lib/actions'
 
   interface Props {
     mode?: 'create' | 'edit'
     task?: Task | null
     onClose?: () => void
-    onTaskSaved?: (task?: Task) => void
+    onTaskSaved?: (task?: Task) => void | Promise<void>
+    onRunAction?: (taskId: string, actionPrompt: string, agent: string | null) => Promise<void>
   }
 
-  let { mode = 'create', task = null, onClose, onTaskSaved }: Props = $props()
+  let { mode = 'create', task = null, onClose, onTaskSaved, onRunAction }: Props = $props()
 
-  let initialPrompt = $state('')
-  let status = $state<BoardStatus>('backlog')
-  let isSubmitting = $state(false)
-  let inputEl = $state<HTMLInputElement | null>(null)
   let selectedPermissionMode = $state<PermissionMode>('default')
   let selectedAgent = $state('')
   let aiProvider = $state<string | null>(null)
-  let availableAgents = $state<AutocompleteAgentInfo[]>([])
-
-  const providerDisplayNames: Record<string, string> = {
-    'claude-code': 'Claude Code',
-    'opencode': 'OpenCode',
-  }
-  let agentLabel = $derived(
-    aiProvider ? `${providerDisplayNames[aiProvider] ?? aiProvider} Agent` : 'Agent'
-  )
-
-  // Focus the title input after Modal's own focus effect has run
-  $effect(() => {
-    if (inputEl) {
-      tick().then(() => inputEl?.focus())
-    }
-  })
+  let availableAgents = $state<string[]>([])
+  let availableActions = $state<Action[]>([])
+  let error = $state<string | null>(null)
 
   onMount(async () => {
-    if ($activeProjectId) {
-      const provider = await getProjectConfig($activeProjectId, 'ai_provider')
-      aiProvider = provider ?? 'claude-code'
+    selectedAgent = ''
+    selectedPermissionMode = 'default'
+    try {
+      if ($activeProjectId) {
+        const provider = await getProjectConfig($activeProjectId, 'ai_provider')
+        aiProvider = provider ?? 'claude-code'
 
-      if (aiProvider !== 'claude-code') {
-        try {
+        if (shouldLoadTaskDialogAgents(aiProvider)) {
           const agents = await listOpenCodeAgents($activeProjectId)
-          availableAgents = agents.filter(a => !a.hidden)
-        } catch {
+          availableAgents = agents.filter(a => !a.hidden).map(a => a.name)
+        } else {
           availableAgents = []
         }
+
+        const allActions = await loadActions($activeProjectId)
+        availableActions = getEnabledActions(allActions)
+      } else {
+        aiProvider = 'claude-code'
+        availableAgents = []
+        availableActions = []
       }
-    } else {
-      aiProvider = 'claude-code'
+    } catch {
+      aiProvider = null
+      availableAgents = []
+      availableActions = []
     }
   })
 
-  // Initialize form values from props
-  $effect(() => {
-    initialPrompt = mode === 'edit' && task ? getTaskPromptText(task) : ''
-    status = mode === 'edit' && task ? task.status : 'backlog'
-  })
+  async function handleCreateOrUpdate(prompt: string, actionPrompt: string | null = null, autoStart: boolean = false) {
+    if (!$activeProjectId) return
+    error = null
 
-  async function handleSubmit() {
-    if (!initialPrompt.trim()) return
-    
-    isSubmitting = true
     try {
-      if (mode === 'create') {
-        const newTask = await createTask(
-          initialPrompt.trim(),
-          status,
+      let savedTask: Task
+      const agent = selectedAgent || null
+
+      if (mode === 'edit' && task) {
+        await updateTask(task.id, prompt)
+        savedTask = task
+        await onTaskSaved?.()
+      } else {
+        savedTask = await createTask(
+          prompt,
+          'backlog',
           $activeProjectId,
-          selectedAgent || null,
+          agent,
           selectedPermissionMode
         )
-        onTaskSaved?.(newTask)
-      } else if (task) {
-        await updateTask(
-          task.id,
-          initialPrompt.trim()
-        )
-        onTaskSaved?.()
+
+        if (autoStart && onRunAction) {
+          onClose?.()
+          await onRunAction(savedTask.id, actionPrompt || '', agent)
+          return
+        } else {
+          await onTaskSaved?.(savedTask)
+        }
       }
-      close()
+      onClose?.()
     } catch (e) {
       console.error('Failed to save task:', e)
-    } finally {
-      isSubmitting = false
+      error = String(e)
     }
-  }
-
-  function close() {
-    onClose?.()
   }
 </script>
 
-<Modal onClose={close} maxWidth="500px">
+<Modal onClose={onClose} maxWidth="640px" overflowVisible>
   {#snippet header()}
     <h2 class="text-[0.95rem] font-semibold text-base-content m-0">{mode === 'create' ? 'Create Task' : 'Edit Task'}</h2>
   {/snippet}
 
-  <form onsubmit={(e: SubmitEvent) => { e.preventDefault(); handleSubmit() }}>
-    <div class="flex-1 overflow-y-auto p-5 flex flex-col gap-4">
-      <label class="flex flex-col gap-1.5">
-        <span class="text-xs text-base-content/60 font-medium">Prompt <span class="text-error">*</span></span>
-        <input
-          type="text"
-          class="input input-bordered input-sm w-full"
-          bind:this={inputEl}
-          bind:value={initialPrompt}
-          placeholder="Describe what you want the agent to do"
-          required
-        />
-      </label>
-
-      {#if mode === 'create'}
-        {#if aiProvider === 'claude-code'}
-          <label class="flex flex-col gap-1.5">
-            <span class="text-xs text-base-content/60 font-medium">Permission Mode</span>
+  <div class="p-4 overflow-visible">
+    {#if error}
+      <div class="text-error text-sm mb-4">{error}</div>
+    {/if}
+    <PromptInput
+      projectId={$activeProjectId || ''}
+      value={mode === 'edit' && task ? getTaskPromptText(task) : ''}
+      autofocus={true}
+      actions={mode === 'edit' ? [] : availableActions}
+      onSubmit={(prompt) => handleCreateOrUpdate(prompt)}
+      onStartTask={mode === 'edit' ? undefined : (prompt) => handleCreateOrUpdate(prompt, '', true)}
+      onRunAction={mode === 'edit' ? undefined : (prompt, actionPrompt) => handleCreateOrUpdate(prompt, actionPrompt, true)}
+      onCancel={() => onClose?.()}
+    >
+      {#snippet extras()}
+        {#if mode === 'create' && aiProvider === 'claude-code'}
+          <div class="flex items-center gap-2">
+            <span class="text-xs text-base-content/50 font-medium shrink-0">Mode</span>
             <select
-              class="select select-bordered select-sm w-full"
+              class="select select-bordered select-xs flex-1"
               bind:value={selectedPermissionMode}
             >
               <option value="default">Default</option>
               <option value="acceptEdits">Accept Edits</option>
               <option value="plan">Plan</option>
               <option value="bypassPermissions">Bypass Permissions</option>
-              <option value="dontAsk" class="text-error">Don't Ask (dangerous)</option>
+              <option value="dontAsk">Don't Ask (dangerous)</option>
             </select>
-          </label>
+          </div>
         {/if}
-
-        {#if aiProvider !== null && aiProvider !== 'claude-code'}
-          <label class="flex flex-col gap-1.5">
-            <span class="text-xs text-base-content/60 font-medium">{agentLabel}</span>
-            <select
-              class="select select-bordered select-sm w-full"
-              bind:value={selectedAgent}
-            >
-              <option value="">Default</option>
-              {#each availableAgents as agent}
-                <option value={agent.name}>{agent.name}</option>
-              {/each}
-            </select>
-          </label>
+        {#if shouldShowTaskDialogAgentSelector({ isEditing: mode === 'edit', aiProvider, availableAgents })}
+          <div class="flex items-center gap-2">
+            <span class="text-xs text-base-content/50 font-medium shrink-0">Agent</span>
+            <div class="flex-1">
+              <SearchableSelect
+                options={[{ value: '', label: 'Default' }, ...availableAgents.map(a => ({ value: a, label: a }))]}
+                value={selectedAgent}
+                placeholder="Search agents..."
+                size="xs"
+                onSelect={(v) => { selectedAgent = v }}
+              />
+            </div>
+          </div>
         {/if}
-      {/if}
-    </div>
-
-    <div class="flex gap-2.5 px-5 py-4 border-t border-base-300 justify-end">
-      <button class="btn btn-ghost btn-sm" onclick={close} type="button" disabled={isSubmitting}>
-        Cancel
-      </button>
-      <button
-        class="btn btn-primary btn-sm"
-        type="submit"
-        disabled={!initialPrompt.trim() || isSubmitting}
-      >
-        {isSubmitting ? 'Saving...' : mode === 'create' ? 'Create Task' : 'Save Changes'}
-      </button>
-    </div>
-  </form>
+      {/snippet}
+    </PromptInput>
+  </div>
 </Modal>

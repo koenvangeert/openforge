@@ -3,19 +3,18 @@
   import { listen } from '@tauri-apps/api/event'
   import type { UnlistenFn, Event } from '@tauri-apps/api/event'
   import { tasks, pendingTask, selectedTaskId, activeSessions, checkpointNotification, ciFailureNotification, ticketPrs, error, isLoading, projects, activeProjectId, currentView, reviewRequestCount, authoredPrCount, projectAttention, taskSpawned, startingTasks, codeCleanupTasksEnabled, rateLimitNotification, taskRuntimeInfo, focusBoardFilters } from './lib/stores'
-  import { getProjects, getTasksForProject, getPullRequests, startImplementation, getSessionStatus, getLatestSession, getLatestSessions, forceGithubSync, createTask, updateTask, deleteTask, getProjectAttention, getAppMode, finalizeClaudeSession, getConfig, getProjectConfig, listOpenCodeAgents, getReviewPrs, getAuthoredPrs, getTaskDetail } from './lib/ipc'
+  import { getProjects, getTasksForProject, getPullRequests, startImplementation, getSessionStatus, getLatestSession, getLatestSessions, forceGithubSync, deleteTask, getProjectAttention, getAppMode, finalizeClaudeSession, getConfig, getProjectConfig, getReviewPrs, getAuthoredPrs, getTaskDetail } from './lib/ipc'
   import { writePtyWithSubmit } from './lib/ptySubmit'
-  import SearchableSelect from './components/shared/ui/SearchableSelect.svelte'
   import { applyProjectOrder } from './lib/projectOrder'
   import { hasMergeConflicts, preservePullRequestState } from './lib/types'
-  import type { Task, PullRequestInfo, AgentEvent, ProjectAttention, AppView, PermissionMode, AgentSession } from './lib/types'
+  import type { Task, PullRequestInfo, AgentEvent, ProjectAttention, AppView, AgentSession } from './lib/types'
   import { moveTaskToComplete } from './lib/moveToComplete'
   import { getTaskPromptText } from './lib/taskPrompt'
   import FocusBoard from './components/focus-board/FocusBoard.svelte'
   import TaskDetailView from './components/task-detail/TaskDetailView.svelte'
-   import PromptInput from './components/prompt/PromptInput.svelte'
+  import AddTaskDialog from './components/AddTaskDialog.svelte'
   import Modal from './components/shared/ui/Modal.svelte'
-   import Toast from './components/feedback/toasts/Toast.svelte'
+  import Toast from './components/feedback/toasts/Toast.svelte'
   import CheckpointToast from './components/feedback/toasts/CheckpointToast.svelte'
   import CiFailureToast from './components/feedback/toasts/CiFailureToast.svelte'
   import TaskSpawnedToast from './components/feedback/toasts/TaskSpawnedToast.svelte'
@@ -24,11 +23,11 @@
   import ProjectSwitcherModal from './components/project/ProjectSwitcherModal.svelte'
   import ProjectSetupDialog from './components/project/ProjectSetupDialog.svelte'
   import IconRail from './components/shell/IconRail.svelte'
-   import CommandPalette from './components/shell/CommandPalette.svelte'
-   import ActionPalette from './components/shell/ActionPalette.svelte'
-   import FileQuickOpen from './components/shell/FileQuickOpen.svelte'
+  import CommandPalette from './components/shell/CommandPalette.svelte'
+  import ActionPalette from './components/shell/ActionPalette.svelte'
+  import FileQuickOpen from './components/shell/FileQuickOpen.svelte'
 
-   import { useAppRouter } from './lib/router.svelte'
+  import { useAppRouter } from './lib/router.svelte'
   import { loadActions, getEnabledActions } from './lib/actions'
   import { getProjectColor } from './lib/projectColors'
   import { themeMode } from './lib/theme'
@@ -39,57 +38,22 @@
   import { getOpenCodeSessionUpdate } from './lib/opencodeSessionEvents'
   import { useShortcutRegistry } from './lib/shortcuts.svelte'
   import { ICON_RAIL_HIDDEN_VIEWS, VIEWS } from './lib/views'
-  import { shouldLoadTaskDialogAgents, shouldShowTaskDialogAgentSelector } from './lib/taskDialogVisibility'
-
+  
   let unlisteners: UnlistenFn[] = []
   let showAddDialog = $state(false)
   let isSyncing = $state(false)
   let editingTask = $state<Task | null>(null)
-  let dialogAiProvider = $state<string | null>(null)
-  let dialogAgents = $state<string[]>([])
-  let dialogSelectedAgent = $state('')
-  let dialogSelectedPermissionMode = $state<PermissionMode>('default')
-  let dialogActions = $state<Action[]>([])
   let shortcuts: ReturnType<typeof useShortcutRegistry> | null = null
 
-  async function loadDialogAgentInfo() {
-    dialogSelectedAgent = ''
-    dialogSelectedPermissionMode = 'default'
-    try {
-      let provider: string | null = null
-      if ($activeProjectId) {
-        provider = await getProjectConfig($activeProjectId, 'ai_provider')
-      }
-      const resolvedProvider = provider ?? 'claude-code'
-      dialogAiProvider = resolvedProvider
-      if ($activeProjectId && shouldLoadTaskDialogAgents(resolvedProvider)) {
-        const agents = await listOpenCodeAgents($activeProjectId)
-        dialogAgents = agents.filter(a => !a.hidden).map(a => a.name)
-      } else {
-        dialogAgents = []
-      }
-
-      if ($activeProjectId) {
-        const all = await loadActions($activeProjectId)
-        dialogActions = getEnabledActions(all)
-      } else {
-        dialogActions = []
-      }
-    } catch {
-      dialogAiProvider = null
-      dialogAgents = []
-      dialogActions = []
-    }
-  }
   let showProjectSetup = $state(false)
   let appMode = $state<string | null>(null)
-   let showShortcutsDialog = $state(false)
-   let showProjectSwitcher = $state(false)
-   let appSidebarCollapsed = $state(localStorage.getItem('appSidebarCollapsed') === 'true')
-   let showCommandPalette = $state(false)
-   let showActionPalette = $state(false)
-   let showFileQuickOpen = $state(false)
-   let actionPaletteTask = $state<Task | null>(null)
+  let showShortcutsDialog = $state(false)
+  let showProjectSwitcher = $state(false)
+  let appSidebarCollapsed = $state(localStorage.getItem('appSidebarCollapsed') === 'true')
+  let showCommandPalette = $state(false)
+  let showActionPalette = $state(false)
+  let showFileQuickOpen = $state(false)
+  let actionPaletteTask = $state<Task | null>(null)
   let actionPaletteActions = $state<Action[]>([])
   let workQueueRefreshTrigger = $state(0)
   let router = useAppRouter()
@@ -127,14 +91,14 @@
     previousActiveProjectId = projectId
   })
 
-     // Reload tasks when active project changes
-   $effect(() => {
-      if ($activeProjectId) {
-        loadTasks()
-        loadPullRequests()
-        refreshPrCounts()
-      }
-    })
+  // Reload tasks when active project changes
+  $effect(() => {
+    if ($activeProjectId) {
+      loadTasks()
+      loadPullRequests()
+      refreshPrCounts()
+    }
+  })
 
   // Find active project
   let activeProject = $derived($projects.find(p => p.id === $activeProjectId) || null)
@@ -423,7 +387,6 @@
       case 'new-task':
         editingTask = null
         showAddDialog = true
-        loadDialogAgentInfo()
         break
       case 'switch-project':
         showProjectSwitcher = true
@@ -504,7 +467,6 @@
       if (!showAddDialog) {
         editingTask = null
         showAddDialog = true
-        loadDialogAgentInfo()
       }
     })
 
@@ -967,93 +929,16 @@
       {/if}
 
       {#if showAddDialog && $activeProjectId}
-        <Modal onClose={() => { showAddDialog = false; editingTask = null }} maxWidth="640px" overflowVisible>
-          {#snippet header()}
-            <h2 class="text-[0.95rem] font-semibold text-base-content m-0">{editingTask ? 'Edit Task' : 'Create Task'}</h2>
-          {/snippet}
-          <div class="p-4 overflow-visible">
-            <PromptInput
-              projectId={$activeProjectId}
-               value={editingTask ? getTaskPromptText(editingTask) : ''}
-              autofocus={true}
-              actions={editingTask ? [] : dialogActions}
-              onSubmit={async (prompt) => {
-                try {
-                  if (editingTask) {
-                    await updateTask(editingTask.id, prompt)
-                  } else {
-                    await createTask(prompt, 'backlog', $activeProjectId, dialogSelectedAgent || null, dialogSelectedPermissionMode)
-                  }
-                  showAddDialog = false
-                  editingTask = null
-                  await loadTasks()
-                } catch (e) {
-                  console.error('Failed to save task:', e)
-                  $error = String(e)
-                }
-              }}
-              onStartTask={editingTask ? undefined : async (prompt) => {
-                try {
-                  const agent = dialogSelectedAgent || null
-                  const newTask = await createTask(prompt, 'backlog', $activeProjectId, agent, dialogSelectedPermissionMode)
-                  showAddDialog = false
-                  editingTask = null
-                  await loadTasks()
-                  await handleRunAction({ taskId: newTask.id, actionPrompt: '', agent })
-                } catch (e) {
-                  console.error('Failed to start task:', e)
-                  $error = String(e)
-                }
-              }}
-              onRunAction={editingTask ? undefined : async (prompt, actionPrompt) => {
-                try {
-                  const agent = dialogSelectedAgent || null
-                  const newTask = await createTask(prompt, 'backlog', $activeProjectId, agent, dialogSelectedPermissionMode)
-                  showAddDialog = false
-                  editingTask = null
-                  await loadTasks()
-                  await handleRunAction({ taskId: newTask.id, actionPrompt, agent })
-                } catch (e) {
-                  console.error('Failed to run custom action:', e)
-                  $error = String(e)
-                }
-              }}
-              onCancel={() => { showAddDialog = false; editingTask = null }}
-            >
-              {#snippet extras()}
-                {#if !editingTask && dialogAiProvider === 'claude-code'}
-                  <div class="flex items-center gap-2">
-                    <span class="text-xs text-base-content/50 font-medium shrink-0">Mode</span>
-                    <select
-                      class="select select-bordered select-xs flex-1"
-                      bind:value={dialogSelectedPermissionMode}
-                    >
-                      <option value="default">Default</option>
-                      <option value="acceptEdits">Accept Edits</option>
-                      <option value="plan">Plan</option>
-                      <option value="bypassPermissions">Bypass Permissions</option>
-                      <option value="dontAsk">Don't Ask (dangerous)</option>
-                    </select>
-                  </div>
-                {/if}
-                {#if shouldShowTaskDialogAgentSelector({ isEditing: !!editingTask, aiProvider: dialogAiProvider, availableAgents: dialogAgents })}
-                  <div class="flex items-center gap-2">
-                    <span class="text-xs text-base-content/50 font-medium shrink-0">Agent</span>
-                    <div class="flex-1">
-                      <SearchableSelect
-                        options={[{ value: '', label: 'Default' }, ...dialogAgents.map(a => ({ value: a, label: a }))]}
-                        value={dialogSelectedAgent}
-                        placeholder="Search agents..."
-                        size="xs"
-                        onSelect={(v) => { dialogSelectedAgent = v }}
-                      />
-                    </div>
-                  </div>
-                {/if}
-              {/snippet}
-            </PromptInput>
-          </div>
-        </Modal>
+        <AddTaskDialog
+          mode={editingTask ? 'edit' : 'create'}
+          task={editingTask}
+          onClose={() => { showAddDialog = false; editingTask = null }}
+          onTaskSaved={async () => { await loadTasks() }}
+          onRunAction={async (taskId, actionPrompt, agent) => {
+            await loadTasks()
+            await handleRunAction({ taskId, actionPrompt, agent })
+          }}
+        />
       {/if}
 
       {#if showProjectSetup}
@@ -1069,7 +954,6 @@
         onclick={() => {
           editingTask = null
           showAddDialog = true
-          loadDialogAgentInfo()
         }}
       >
         +
