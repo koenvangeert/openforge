@@ -60,6 +60,9 @@ export const taskReviewModes = writable<Map<string, boolean>>(new Map());
 /** Per-task terminal panel open state — preserved across navigation */
 export const taskTerminalOpen = writable<Map<string, boolean>>(new Map());
 
+/** Per-task active view — 'code', 'review', or 'terminal' — preserved across navigation */
+export const taskActiveView = writable<Map<string, 'code' | 'review' | 'terminal'>>(new Map());
+
 /** Per-task draft note text — preserved across navigation */
 export const taskDraftNotes = writable<Map<string, string>>(new Map());
 
