@@ -17,6 +17,12 @@ import FilesView from './FilesView.svelte'
 import { activeProjectId } from '../lib/stores'
 import { fsReadDir, fsReadFile } from '../lib/ipc'
 
+const sampleModifiedAt = Date.UTC(2024, 2, 9, 15, 30)
+const formattedModifiedAt = new Date(sampleModifiedAt).toLocaleString('en-US', {
+  dateStyle: 'medium',
+  timeStyle: 'short',
+})
+
 function makeFileEntry(overrides: Partial<FileEntry> = {}): FileEntry {
   return {
     name: 'file.ts',
@@ -260,7 +266,13 @@ describe('FilesView integration', () => {
   describe('file content types', () => {
     it('shows text content viewer for text files', async () => {
       const rootEntries: FileEntry[] = [
-        makeFileEntry({ name: 'hello.ts', path: 'hello.ts', isDir: false, size: 30 }),
+        makeFileEntry({
+          name: 'hello.ts',
+          path: 'hello.ts',
+          isDir: false,
+          size: 30,
+          modifiedAt: sampleModifiedAt,
+        }),
       ]
       const textContent: FileContent = {
         type: 'text',
@@ -283,6 +295,9 @@ describe('FilesView integration', () => {
       await waitFor(() => {
         expect(screen.getByLabelText('File text content')).toBeTruthy()
       })
+
+      expect(screen.getByText(`Modified ${formattedModifiedAt}`)).toBeTruthy()
+      expect(screen.getByText('1 line')).toBeTruthy()
     })
 
     it('shows image viewer for image files', async () => {
@@ -336,7 +351,89 @@ describe('FilesView integration', () => {
       await fireEvent.click(screen.getByRole('button', { name: /app\.exe/ }))
 
       await waitFor(() => {
-        expect(screen.getByText(/Cannot preview this file type/)).toBeTruthy()
+        expect(screen.getByText(/Binary preview unavailable/)).toBeTruthy()
+      })
+    })
+
+    it('shows document fallback for document files', async () => {
+      const rootEntries: FileEntry[] = [
+        makeFileEntry({ name: 'manual.pdf', path: 'manual.pdf', isDir: false, size: 2048 }),
+      ]
+      const documentContent: FileContent = {
+        type: 'document',
+        content: '',
+        mimeType: 'application/pdf',
+        size: 2048,
+      }
+
+      vi.mocked(fsReadDir).mockResolvedValue(rootEntries)
+      vi.mocked(fsReadFile).mockResolvedValue(documentContent)
+
+      render(FilesView, { props: { projectName: 'Doc Project' } })
+
+      await waitFor(() => {
+        expect(screen.getByText('manual.pdf')).toBeTruthy()
+      })
+
+      await fireEvent.click(screen.getByRole('button', { name: /manual\.pdf/ }))
+
+      await waitFor(() => {
+        expect(screen.getByText(/Document preview unavailable/)).toBeTruthy()
+      })
+    })
+
+    it('shows large-file fallback for huge files', async () => {
+      const rootEntries: FileEntry[] = [
+        makeFileEntry({ name: 'huge_log.txt', path: 'huge_log.txt', isDir: false, size: 10 * 1024 * 1024 }),
+      ]
+      const largeContent: FileContent = {
+        type: 'large-file',
+        content: '',
+        mimeType: 'text/plain',
+        size: 10 * 1024 * 1024,
+      }
+
+      vi.mocked(fsReadDir).mockResolvedValue(rootEntries)
+      vi.mocked(fsReadFile).mockResolvedValue(largeContent)
+
+      render(FilesView, { props: { projectName: 'Log Project' } })
+
+      await waitFor(() => {
+        expect(screen.getByText('huge_log.txt')).toBeTruthy()
+      })
+
+      await fireEvent.click(screen.getByRole('button', { name: /huge_log\.txt/ }))
+
+      await waitFor(() => {
+        expect(screen.getByText(/File too large to preview/)).toBeTruthy()
+      })
+    })
+
+    it('renders markdown properly for markdown files', async () => {
+      const rootEntries: FileEntry[] = [
+        makeFileEntry({ name: 'README.md', path: 'README.md', isDir: false, size: 100 }),
+      ]
+      const mdContent: FileContent = {
+        type: 'text',
+        content: '# Test MD',
+        mimeType: 'text/markdown',
+        size: 100,
+      }
+
+      vi.mocked(fsReadDir).mockResolvedValue(rootEntries)
+      vi.mocked(fsReadFile).mockResolvedValue(mdContent)
+
+      const { container } = render(FilesView, { props: { projectName: 'MD Project' } })
+
+      await waitFor(() => {
+        expect(screen.getByText('README.md')).toBeTruthy()
+      })
+
+      await fireEvent.click(screen.getByRole('button', { name: /README\.md/ }))
+
+      await waitFor(() => {
+        expect(container.querySelector('.markdown-body')).toBeTruthy()
+        expect(screen.getByText('Test MD')).toBeTruthy()
       })
     })
 
@@ -366,6 +463,56 @@ describe('FilesView integration', () => {
       })
 
       resolveFile({ type: 'text', content: '', mimeType: null, size: 0 })
+    })
+
+    it('ignores stale file responses after selecting a different file', async () => {
+      const rootEntries: FileEntry[] = [
+        makeFileEntry({ name: 'first.ts', path: 'first.ts', isDir: false, size: 10 }),
+        makeFileEntry({ name: 'second.ts', path: 'second.ts', isDir: false, size: 10 }),
+      ]
+
+      let resolveFirst!: (value: FileContent) => void
+      let resolveSecond!: (value: FileContent) => void
+      const firstFile = new Promise<FileContent>((resolve) => {
+        resolveFirst = resolve
+      })
+      const secondFile = new Promise<FileContent>((resolve) => {
+        resolveSecond = resolve
+      })
+
+      vi.mocked(fsReadDir).mockResolvedValue(rootEntries)
+      vi.mocked(fsReadFile).mockImplementation(async (_projectId, filePath) => {
+        if (filePath === 'first.ts') {
+          return firstFile
+        }
+
+        return secondFile
+      })
+
+      render(FilesView, { props: { projectName: 'Race Project' } })
+
+      await waitFor(() => {
+        expect(screen.getByText('first.ts')).toBeTruthy()
+        expect(screen.getByText('second.ts')).toBeTruthy()
+      })
+
+      await fireEvent.click(screen.getByRole('button', { name: /first\.ts/ }))
+      await fireEvent.click(screen.getByRole('button', { name: /second\.ts/ }))
+
+      resolveSecond({ type: 'text', content: 'second result', mimeType: 'text/plain', size: 13 })
+
+      await waitFor(() => {
+        expect(screen.getByText(/second result/)).toBeTruthy()
+      })
+
+      resolveFirst({ type: 'text', content: 'first result', mimeType: 'text/plain', size: 12 })
+
+      await waitFor(() => {
+        expect(screen.getByText(/second result/)).toBeTruthy()
+      })
+
+      expect(screen.queryByText(/first result/)).toBeNull()
+      expect(screen.getByLabelText('File text content')).toBeTruthy()
     })
   })
 })

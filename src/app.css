@@ -429,6 +429,52 @@
   margin-bottom: 0;
 }
 
+.file-preview-code {
+  color: var(--color-base-content);
+}
+
+.file-preview-code .hljs-comment,
+.file-preview-code .hljs-quote {
+  color: color-mix(in oklch, var(--color-base-content) 55%, transparent);
+  font-style: italic;
+}
+
+.file-preview-code .hljs-keyword,
+.file-preview-code .hljs-selector-tag,
+.file-preview-code .hljs-literal,
+.file-preview-code .hljs-section,
+.file-preview-code .hljs-link {
+  color: var(--color-primary);
+}
+
+.file-preview-code .hljs-string,
+.file-preview-code .hljs-addition,
+.file-preview-code .hljs-attribute,
+.file-preview-code .hljs-regexp,
+.file-preview-code .hljs-template-tag {
+  color: color-mix(in oklch, var(--color-success) 75%, var(--color-base-content));
+}
+
+.file-preview-code .hljs-number,
+.file-preview-code .hljs-symbol,
+.file-preview-code .hljs-bullet,
+.file-preview-code .hljs-meta,
+.file-preview-code .hljs-variable,
+.file-preview-code .hljs-template-variable {
+  color: color-mix(in oklch, var(--color-warning) 80%, var(--color-base-content));
+}
+
+.file-preview-code .hljs-title,
+.file-preview-code .hljs-type,
+.file-preview-code .hljs-built_in,
+.file-preview-code .hljs-function {
+  color: color-mix(in oklch, var(--color-info) 80%, var(--color-base-content));
+}
+
+.file-preview-code .hljs-deletion {
+  color: var(--color-error);
+}
+
 /* Drawer slide-in animation */
 @keyframes slide-in-right {
   from {
@@ -487,4 +533,3 @@
 .recording-pulse {
   animation: pulse-recording 1s ease-in-out infinite;
 }
-

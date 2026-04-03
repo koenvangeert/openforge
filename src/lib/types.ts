@@ -469,7 +469,7 @@ export interface FileEntry {
 
 /** File content with type information */
 export interface FileContent {
-  type: 'text' | 'image' | 'binary';
+  type: 'text' | 'image' | 'binary' | 'document' | 'large-file';
   content: string;       // text content, base64 for images, empty for binary
   mimeType: string | null;
   size: number;

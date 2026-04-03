@@ -17,7 +17,7 @@ pub struct FileEntry {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FileContent {
-    r#type: String,  // "text" | "image" | "binary"
+    r#type: String,
     content: String, // text content or base64 for images
     mime_type: Option<String>,
     size: u64,
@@ -97,11 +97,14 @@ fn detect_file_type(path: &Path) -> &'static str {
     ];
 
     let image_exts = ["png", "jpg", "jpeg", "gif", "svg", "webp", "ico", "bmp"];
+    let document_exts = ["pdf"];
 
     if text_exts.contains(&ext.as_str()) {
         "text"
     } else if image_exts.contains(&ext.as_str()) {
         "image"
+    } else if document_exts.contains(&ext.as_str()) {
+        "document"
     } else {
         "binary"
     }
@@ -149,10 +152,81 @@ fn get_mime_type(path: &Path) -> Option<String> {
         "webp" => "image/webp",
         "ico" => "image/x-icon",
         "bmp" => "image/bmp",
+        "pdf" => "application/pdf",
         _ => return None,
     };
 
     Some(mime.to_string())
+}
+
+async fn read_file_preview(full_path: &Path) -> Result<FileContent, String> {
+    let file_type = detect_file_type(full_path);
+    let mime_type = get_mime_type(full_path);
+
+    let metadata = tokio::fs::metadata(full_path)
+        .await
+        .map_err(|e| format!("Failed to read file metadata: {}", e))?;
+
+    if metadata.is_dir() {
+        return Err("Path is a directory, not a file".to_string());
+    }
+
+    let size = metadata.len();
+
+    match file_type {
+        "text" => {
+            const MAX_SIZE: u64 = 1_048_576;
+            if size > MAX_SIZE {
+                return Ok(FileContent {
+                    r#type: "large-file".to_string(),
+                    content: String::new(),
+                    mime_type,
+                    size,
+                });
+            }
+
+            let bytes = tokio::fs::read(full_path)
+                .await
+                .map_err(|e| format!("Failed to read file: {}", e))?;
+
+            let content =
+                String::from_utf8(bytes).map_err(|e| format!("File is not valid UTF-8: {}", e))?;
+
+            Ok(FileContent {
+                r#type: "text".to_string(),
+                content,
+                mime_type,
+                size,
+            })
+        }
+        "image" => {
+            let bytes = tokio::fs::read(full_path)
+                .await
+                .map_err(|e| format!("Failed to read file: {}", e))?;
+
+            use base64::Engine;
+
+            Ok(FileContent {
+                r#type: "image".to_string(),
+                content: base64::engine::general_purpose::STANDARD.encode(&bytes),
+                mime_type,
+                size,
+            })
+        }
+        "document" => Ok(FileContent {
+            r#type: "document".to_string(),
+            content: String::new(),
+            mime_type,
+            size,
+        }),
+        "binary" => Ok(FileContent {
+            r#type: "binary".to_string(),
+            content: String::new(),
+            mime_type,
+            size,
+        }),
+        _ => Err(format!("Unknown file type: {}", file_type)),
+    }
 }
 
 #[tauri::command]
@@ -263,57 +337,7 @@ pub async fn fs_read_file(
     let project_root = Path::new(&project.path);
     let full_path = resolve_project_path(project_root, Some(&file_path))?;
 
-    // Detect file type
-    let file_type = detect_file_type(&full_path);
-    let mime_type = get_mime_type(&full_path);
-
-    // Get file size
-    let metadata = tokio::fs::metadata(&full_path)
-        .await
-        .map_err(|e| format!("Failed to read file metadata: {}", e))?;
-
-    if metadata.is_dir() {
-        return Err("Path is a directory, not a file".to_string());
-    }
-
-    let size = metadata.len();
-
-    // Read content based on type
-    let content = match file_type {
-        "text" => {
-            // Check size limit (1MB)
-            const MAX_SIZE: u64 = 1_048_576;
-            if size > MAX_SIZE {
-                return Err(format!("File too large (max 1MB): {} bytes", size));
-            }
-
-            let bytes = tokio::fs::read(&full_path)
-                .await
-                .map_err(|e| format!("Failed to read file: {}", e))?;
-
-            String::from_utf8(bytes).map_err(|e| format!("File is not valid UTF-8: {}", e))?
-        }
-        "image" => {
-            let bytes = tokio::fs::read(&full_path)
-                .await
-                .map_err(|e| format!("Failed to read file: {}", e))?;
-
-            use base64::Engine;
-            base64::engine::general_purpose::STANDARD.encode(&bytes)
-        }
-        "binary" => {
-            // Return empty content for binary files
-            String::new()
-        }
-        _ => return Err(format!("Unknown file type: {}", file_type)),
-    };
-
-    Ok(FileContent {
-        r#type: file_type.to_string(),
-        content,
-        mime_type,
-        size,
-    })
+    read_file_preview(full_path.as_path()).await
 }
 
 #[tauri::command]
@@ -432,8 +456,12 @@ mod tests {
     fn test_detect_file_type_binary() {
         assert_eq!(detect_file_type(Path::new("file.exe")), "binary");
         assert_eq!(detect_file_type(Path::new("file.zip")), "binary");
-        assert_eq!(detect_file_type(Path::new("file.pdf")), "binary");
         assert_eq!(detect_file_type(Path::new("unknown")), "binary");
+    }
+
+    #[test]
+    fn test_detect_file_type_document() {
+        assert_eq!(detect_file_type(Path::new("file.pdf")), "document");
     }
 
     #[test]
@@ -461,6 +489,14 @@ mod tests {
         assert_eq!(
             get_mime_type(Path::new("file.jpg")),
             Some("image/jpeg".to_string())
+        );
+    }
+
+    #[test]
+    fn test_get_mime_type_document() {
+        assert_eq!(
+            get_mime_type(Path::new("file.pdf")),
+            Some("application/pdf".to_string())
         );
     }
 
@@ -646,6 +682,41 @@ mod tests {
         assert_eq!(metadata.len(), 1024);
     }
 
+    #[tokio::test]
+    async fn test_read_file_preview_returns_document_metadata() {
+        let temp = tempfile::tempdir().expect("Failed to create temp dir");
+        let root = temp.path();
+
+        fs::write(root.join("manual.pdf"), vec![0u8; 256]).expect("Failed to write pdf");
+
+        let content = read_file_preview(root.join("manual.pdf").as_path())
+            .await
+            .expect("Failed to read preview");
+
+        assert_eq!(content.r#type, "document");
+        assert_eq!(content.content, "");
+        assert_eq!(content.mime_type, Some("application/pdf".to_string()));
+        assert_eq!(content.size, 256);
+    }
+
+    #[tokio::test]
+    async fn test_read_file_preview_returns_large_file_type_for_oversized_text() {
+        let temp = tempfile::tempdir().expect("Failed to create temp dir");
+        let root = temp.path();
+
+        let large_text = "a".repeat(1_048_577);
+        fs::write(root.join("huge.txt"), large_text).expect("Failed to write text file");
+
+        let content = read_file_preview(root.join("huge.txt").as_path())
+            .await
+            .expect("Failed to read preview");
+
+        assert_eq!(content.r#type, "large-file");
+        assert_eq!(content.content, "");
+        assert_eq!(content.mime_type, Some("text/plain".to_string()));
+        assert_eq!(content.size, 1_048_577);
+    }
+
     #[test]
     fn test_empty_directory_listing() {
         let temp = tempfile::tempdir().expect("Failed to create temp dir");
@@ -691,7 +762,9 @@ mod tests {
             };
             fs::create_dir_all(&parent).expect("Failed to create dir");
             fs::write(root.join(file), "content").expect("Failed to write file");
-            index.add_path(std::path::Path::new(file)).expect("Failed to add to index");
+            index
+                .add_path(std::path::Path::new(file))
+                .expect("Failed to add to index");
         }
 
         index.write().expect("Failed to write index");
@@ -703,18 +776,18 @@ mod tests {
         let temp = tempfile::tempdir().expect("Failed to create temp dir");
         let root = temp.path();
 
-        init_git_repo_with_files(root, &[
-            "src/components/Button.tsx",
-            "src/components/Modal.tsx",
-            "src/lib/utils.ts",
-            "README.md",
-        ]);
-
-        let results = crate::command_discovery::search_project_files(
-            root.to_str().unwrap(),
-            "button",
-            50,
+        init_git_repo_with_files(
+            root,
+            &[
+                "src/components/Button.tsx",
+                "src/components/Modal.tsx",
+                "src/lib/utils.ts",
+                "README.md",
+            ],
         );
+
+        let results =
+            crate::command_discovery::search_project_files(root.to_str().unwrap(), "button", 50);
 
         assert_eq!(results.len(), 1);
         assert!(results[0].to_lowercase().contains("button"));
@@ -725,21 +798,12 @@ mod tests {
         let temp = tempfile::tempdir().expect("Failed to create temp dir");
         let root = temp.path();
 
-        init_git_repo_with_files(root, &[
-            "src/Button.tsx",
-            "src/modal.tsx",
-        ]);
+        init_git_repo_with_files(root, &["src/Button.tsx", "src/modal.tsx"]);
 
-        let results_upper = crate::command_discovery::search_project_files(
-            root.to_str().unwrap(),
-            "BUTTON",
-            50,
-        );
-        let results_lower = crate::command_discovery::search_project_files(
-            root.to_str().unwrap(),
-            "button",
-            50,
-        );
+        let results_upper =
+            crate::command_discovery::search_project_files(root.to_str().unwrap(), "BUTTON", 50);
+        let results_lower =
+            crate::command_discovery::search_project_files(root.to_str().unwrap(), "button", 50);
 
         assert_eq!(results_upper.len(), 1);
         assert_eq!(results_lower.len(), 1);
@@ -751,19 +815,13 @@ mod tests {
         let temp = tempfile::tempdir().expect("Failed to create temp dir");
         let root = temp.path();
 
-        init_git_repo_with_files(root, &[
-            "src/a.ts",
-            "src/b.ts",
-            "src/c.ts",
-            "src/d.ts",
-            "src/e.ts",
-        ]);
-
-        let results = crate::command_discovery::search_project_files(
-            root.to_str().unwrap(),
-            ".ts",
-            3,
+        init_git_repo_with_files(
+            root,
+            &["src/a.ts", "src/b.ts", "src/c.ts", "src/d.ts", "src/e.ts"],
         );
+
+        let results =
+            crate::command_discovery::search_project_files(root.to_str().unwrap(), ".ts", 3);
 
         assert_eq!(results.len(), 3, "Limit of 3 should be respected");
     }
@@ -776,7 +834,10 @@ mod tests {
             50,
         );
 
-        assert!(results.is_empty(), "Missing project path should return empty vec");
+        assert!(
+            results.is_empty(),
+            "Missing project path should return empty vec"
+        );
     }
 
     #[test]
@@ -784,10 +845,7 @@ mod tests {
         let temp = tempfile::tempdir().expect("Failed to create temp dir");
         let root = temp.path();
 
-        init_git_repo_with_files(root, &[
-            "src/Button.tsx",
-            "src/Modal.tsx",
-        ]);
+        init_git_repo_with_files(root, &["src/Button.tsx", "src/Modal.tsx"]);
 
         let results = crate::command_discovery::search_project_files(
             root.to_str().unwrap(),
@@ -795,6 +853,9 @@ mod tests {
             50,
         );
 
-        assert!(results.is_empty(), "Non-matching query should return empty vec");
+        assert!(
+            results.is_empty(),
+            "Non-matching query should return empty vec"
+        );
     }
 }
