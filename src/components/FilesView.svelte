@@ -21,6 +21,7 @@
   let loading = $state(true)
   let error = $state<string | null>(null)
   let hasLoaded = $state(false)
+  let activeFileRequestId = 0
 
   const selectedFileName = $derived(
     selectedPath ? selectedPath.split('/').at(-1) ?? selectedPath : ''
@@ -70,12 +71,17 @@
     const projectId = $activeProjectId
     if (!projectId) return
 
+    const requestId = ++activeFileRequestId
     selectedPath = path
     fileContent = null
     error = null
+
     try {
-      fileContent = await fsReadFile(projectId, path)
+      const nextContent = await fsReadFile(projectId, path)
+      if (requestId !== activeFileRequestId || selectedPath !== path) return
+      fileContent = nextContent
     } catch (e) {
+      if (requestId !== activeFileRequestId || selectedPath !== path) return
       error = String(e)
     }
   }
@@ -93,6 +99,9 @@
   }
 
   const flatEntries = $derived(flattenEntries(rootEntries))
+  const selectedEntry = $derived(
+    selectedPath ? flatEntries.find((entry) => entry.path === selectedPath) ?? null : null
+  )
 
   async function revealPath(targetPath: string) {
     const parts = targetPath.split('/')
@@ -173,6 +182,7 @@
             content={fileContent}
             fileName={selectedFileName}
             {error}
+            modifiedAt={selectedEntry?.modifiedAt ?? null}
           />
         {/if}
       </div>
