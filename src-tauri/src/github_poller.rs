@@ -274,18 +274,47 @@ pub async fn poll_github_once(app: &AppHandle, github_client: &GitHubClient) -> 
         authored_start.elapsed().as_secs_f64()
     );
 
+    let rate_limit_reset = github_client.get_last_rate_limit_reset();
+    let rate_limited = rate_limit_reset.is_some() || rate_limit_count > 0;
+
     debug!(
-        "[GitHub Poller] Cycle completed in {:.1}s ({} projects, {} new comments, {} CI changes, {} review changes, {} errors)",
+        "[GitHub Poller] Cycle completed in {:.1}s ({} projects, {} new comments, {} CI changes, {} review changes, {} errors, rate_limited={}, reset_at={})",
         cycle_start.elapsed().as_secs_f64(),
         project_count,
         total_new_comments,
         total_ci_changes,
         total_review_changes,
-        total_errors
+        total_errors,
+        rate_limited,
+        rate_limit_reset.map(|ts| ts.to_string()).unwrap_or_else(|| "none".to_string())
     );
 
-    let rate_limit_reset = github_client.get_last_rate_limit_reset();
-    let rate_limited = rate_limit_reset.is_some() || rate_limit_count > 0;
+    if rate_limited {
+        let has_changes =
+            total_new_comments > 0 || total_ci_changes > 0 || total_review_changes > 0;
+
+        if has_changes {
+            warn!(
+                "[GitHub Poller] Rate limit detected BUT cycle has changes: {} new comments, {} CI changes, {} review changes",
+                total_new_comments, total_ci_changes, total_review_changes
+            );
+        } else if let Some(reset_at) = rate_limit_reset {
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_secs() as i64;
+            let seconds_until_reset = (reset_at - now).max(0);
+
+            warn!(
+                "[GitHub Poller] Rate limit detected, no changes this cycle (resets in {} seconds)",
+                seconds_until_reset
+            );
+        } else {
+            warn!(
+                "[GitHub Poller] Rate limit detected, no changes this cycle (reset time unknown)"
+            );
+        }
+    }
 
     PollResult {
         new_comments: total_new_comments,
@@ -1712,5 +1741,58 @@ mod tests {
         let poller_client = state_client.inner();
 
         assert!(poller_client.shares_cache_with(&managed_client));
+    }
+
+    #[test]
+    fn test_poll_result_rate_limited_true_with_reset_timestamp() {
+        let result = PollResult {
+            new_comments: 5,
+            ci_changes: 0,
+            review_changes: 0,
+            pr_changes: 0,
+            errors: 0,
+            rate_limited: true,
+            rate_limit_reset_at: Some(1704067200),
+        };
+
+        assert!(result.rate_limited);
+        assert_eq!(result.rate_limit_reset_at, Some(1704067200));
+    }
+
+    #[test]
+    fn test_poll_result_rate_limited_with_changes_can_coexist() {
+        // This test verifies that rate_limited=true and new_comments>0 can both be true
+        // (the confusing case where a cycle detects rate limit but still has changes)
+        let result = PollResult {
+            new_comments: 3,
+            ci_changes: 1,
+            review_changes: 0,
+            pr_changes: 0,
+            errors: 0,
+            rate_limited: true,
+            rate_limit_reset_at: Some(1704067200),
+        };
+
+        // Verify both conditions are true simultaneously
+        assert!(result.rate_limited);
+        assert!(result.new_comments > 0);
+        assert!(result.ci_changes > 0);
+        assert_eq!(result.rate_limit_reset_at, Some(1704067200));
+    }
+
+    #[test]
+    fn test_poll_result_rate_limited_false_when_no_reset_detected() {
+        let result = PollResult {
+            new_comments: 2,
+            ci_changes: 0,
+            review_changes: 0,
+            pr_changes: 0,
+            errors: 0,
+            rate_limited: false,
+            rate_limit_reset_at: None,
+        };
+
+        assert!(!result.rate_limited);
+        assert_eq!(result.rate_limit_reset_at, None);
     }
 }

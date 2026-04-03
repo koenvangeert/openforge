@@ -30,6 +30,7 @@ pub use events::{
 pub use reviews::aggregate_review_status;
 pub use types::*;
 
+use log::warn;
 use reqwest::{header::HeaderMap, Client, Method, RequestBuilder, Response, StatusCode};
 use serde::de::DeserializeOwned;
 use std::collections::HashMap;
@@ -142,6 +143,20 @@ impl GitHubClient {
             .and_then(|value| value.parse::<i64>().ok())
         {
             *self.last_rate_limit_reset.lock().unwrap() = Some(reset_val);
+
+            // Calculate human-readable time until reset
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_secs() as i64;
+            let seconds_until_reset = (reset_val - now).max(0);
+
+            warn!(
+                "[GitHub Client] Rate limit detected (status {}): resets in {} seconds (at unix timestamp {})",
+                status.as_u16(),
+                seconds_until_reset,
+                reset_val
+            );
         }
     }
 
@@ -259,7 +274,9 @@ impl Default for GitHubClient {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, AUTHORIZATION, IF_NONE_MATCH, USER_AGENT};
+    use reqwest::header::{
+        HeaderMap, HeaderValue, ACCEPT, AUTHORIZATION, IF_NONE_MATCH, USER_AGENT,
+    };
     use reqwest::Method;
 
     #[test]
@@ -482,5 +499,43 @@ mod tests {
         );
 
         assert_eq!(client.get_last_rate_limit_reset(), None);
+    }
+
+    #[test]
+    fn test_capture_rate_limit_reset_forbidden_with_valid_reset() {
+        let client = GitHubClient::new();
+        let mut headers = HeaderMap::new();
+        headers.insert("x-ratelimit-reset", HeaderValue::from_static("1704067200"));
+
+        client.capture_rate_limit_reset_from_headers(StatusCode::FORBIDDEN, &headers);
+
+        assert_eq!(client.get_last_rate_limit_reset(), Some(1704067200));
+    }
+
+    #[test]
+    fn test_capture_rate_limit_reset_too_many_requests_with_valid_reset() {
+        let client = GitHubClient::new();
+        let mut headers = HeaderMap::new();
+        headers.insert("x-ratelimit-reset", HeaderValue::from_static("1704153600"));
+
+        client.capture_rate_limit_reset_from_headers(StatusCode::TOO_MANY_REQUESTS, &headers);
+
+        assert_eq!(client.get_last_rate_limit_reset(), Some(1704153600));
+    }
+
+    #[test]
+    fn test_capture_rate_limit_reset_stores_multiple_sequential_resets() {
+        let client = GitHubClient::new();
+        let mut headers1 = HeaderMap::new();
+        headers1.insert("x-ratelimit-reset", HeaderValue::from_static("1704067200"));
+
+        client.capture_rate_limit_reset_from_headers(StatusCode::FORBIDDEN, &headers1);
+        assert_eq!(client.get_last_rate_limit_reset(), Some(1704067200));
+
+        let mut headers2 = HeaderMap::new();
+        headers2.insert("x-ratelimit-reset", HeaderValue::from_static("1704153600"));
+
+        client.capture_rate_limit_reset_from_headers(StatusCode::TOO_MANY_REQUESTS, &headers2);
+        assert_eq!(client.get_last_rate_limit_reset(), Some(1704153600));
     }
 }
