@@ -257,18 +257,22 @@ pub async fn poll_github_once(app: &AppHandle, github_client: &GitHubClient) -> 
     }
 
     let review_start = Instant::now();
-    if let Err(e) = poll_review_prs(github_client, &db, app, &github_token).await {
-        error!("[GitHub Poller] Failed to poll review PRs: {}", e);
-    }
+    count_poll_phase_error(
+        "review PRs",
+        poll_review_prs(github_client, &db, app, &github_token).await,
+        &mut total_errors,
+    );
     debug!(
         "[GitHub Poller] Review PR polling took {:.1}s",
         review_start.elapsed().as_secs_f64()
     );
 
     let authored_start = Instant::now();
-    if let Err(e) = poll_authored_prs(github_client, &db, app, &github_token).await {
-        error!("[GitHub Poller] Failed to poll authored PRs: {}", e);
-    }
+    count_poll_phase_error(
+        "authored PRs",
+        poll_authored_prs(github_client, &db, app, &github_token).await,
+        &mut total_errors,
+    );
     debug!(
         "[GitHub Poller] Authored PR polling took {:.1}s",
         authored_start.elapsed().as_secs_f64()
@@ -1174,6 +1178,13 @@ async fn poll_prs_for_project(
     )
 }
 
+fn count_poll_phase_error(phase: &str, result: Result<(), String>, total_errors: &mut usize) {
+    if let Err(e) = result {
+        error!("[GitHub Poller] Failed to poll {}: {}", phase, e);
+        *total_errors += 1;
+    }
+}
+
 async fn poll_review_prs(
     github_client: &GitHubClient,
     db: &Mutex<Database>,
@@ -1794,5 +1805,24 @@ mod tests {
 
         assert!(!result.rate_limited);
         assert_eq!(result.rate_limit_reset_at, None);
+    }
+
+    #[test]
+    fn test_count_poll_phase_error_increments_total_errors_on_failure() {
+        let mut total_errors = 0;
+
+        count_poll_phase_error("review PRs", Err("boom".to_string()), &mut total_errors);
+        count_poll_phase_error("authored PRs", Err("boom".to_string()), &mut total_errors);
+
+        assert_eq!(total_errors, 2);
+    }
+
+    #[test]
+    fn test_count_poll_phase_error_leaves_total_errors_unchanged_on_success() {
+        let mut total_errors = 3;
+
+        count_poll_phase_error("review PRs", Ok(()), &mut total_errors);
+
+        assert_eq!(total_errors, 3);
     }
 }
