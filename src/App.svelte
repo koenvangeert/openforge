@@ -1119,9 +1119,9 @@
                <span class="text-sm text-base-content">New terminal tab</span>
                <kbd class="kbd kbd-sm">⌘T</kbd>
              </div>
-           </div>
-         </div>
-      {/if}
+            </div>
+          </div>
+       {/if}
 
       <!-- Board-specific shortcuts -->
       {#if $currentView === 'board' && !selectedTask}

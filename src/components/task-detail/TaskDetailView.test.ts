@@ -519,7 +519,7 @@ describe('TaskDetailView', () => {
     render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
     await waitFor(() => expect(screen.getByText('code_view')).toBeTruthy())
 
-    await fireEvent.keyDown(window, { code: 'Digit3', metaKey: true })
+    await fireEvent.keyDown(window, { key: '3', code: 'Digit3', metaKey: true })
 
     await waitFor(() => {
       const breadcrumb = screen.getByText('$ cd board').closest('div')
@@ -535,12 +535,34 @@ describe('TaskDetailView', () => {
     render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
     await waitFor(() => expect(screen.getByText('code_view')).toBeTruthy())
 
-    await fireEvent.keyDown(window, { code: 'KeyT', metaKey: true })
+    await fireEvent.keyDown(window, { key: 't', code: 'KeyT', metaKey: true })
 
     await waitFor(() => {
       const breadcrumb = screen.getByText('$ cd board').closest('div')
       expect(breadcrumb?.textContent).toContain('terminal')
     })
+    vi.mocked(getTaskWorkspace).mockResolvedValue(null)
+  })
+
+  it('⌘T adds a new terminal tab when already viewing terminal', async () => {
+    const { getTaskWorkspace } = await import('../../lib/ipc')
+    vi.mocked(getTaskWorkspace).mockResolvedValue(createTaskWorkspaceInfo({ workspace_path: '/path/to/worktree', repo_path: '/repo', branch_name: 'branch' }))
+
+    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+    await waitFor(() => expect(screen.getByText('code_view')).toBeTruthy())
+
+    await fireEvent.keyDown(window, { key: 't', code: 'KeyT', metaKey: true })
+    await waitFor(() => {
+      const breadcrumb = screen.getByText('$ cd board').closest('div')
+      expect(breadcrumb?.textContent).toContain('terminal')
+    })
+
+    await fireEvent.keyDown(window, { key: 't', code: 'KeyT', metaKey: true })
+
+    await waitFor(() => {
+      expect(screen.getByText('Shell 2')).toBeTruthy()
+    })
+
     vi.mocked(getTaskWorkspace).mockResolvedValue(null)
   })
 
@@ -569,12 +591,12 @@ describe('TaskDetailView', () => {
     await waitFor(() => expect(screen.getByText('code_view')).toBeTruthy())
 
     // Switch to review first
-    await fireEvent.keyDown(window, { code: 'Digit2', metaKey: true, shiftKey: false })
+    await fireEvent.keyDown(window, { key: '2', code: 'Digit2', metaKey: true, shiftKey: false })
     const breadcrumb = screen.getByText('$ cd board').closest('div')
     await waitFor(() => expect(breadcrumb?.textContent).toContain('self_review'))
 
     // Now switch back to code with CMD+1
-    await fireEvent.keyDown(window, { code: 'Digit1', metaKey: true, shiftKey: false })
+    await fireEvent.keyDown(window, { key: '1', code: 'Digit1', metaKey: true, shiftKey: false })
     await waitFor(() => {
       expect(breadcrumb?.textContent).toContain('code')
       expect(breadcrumb?.textContent).not.toContain('self_review')
@@ -589,11 +611,11 @@ describe('TaskDetailView', () => {
     render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
     await waitFor(() => expect(screen.getByText('review_view')).toBeTruthy())
 
-    await fireEvent.keyDown(window, { code: 'Digit2', metaKey: true, shiftKey: false })
+    await fireEvent.keyDown(window, { key: '2', code: 'Digit2', metaKey: true, shiftKey: false })
     const breadcrumb = screen.getByText('$ cd board').closest('div')
     await waitFor(() => expect(breadcrumb?.textContent).toContain('self_review'))
 
-    await fireEvent.keyDown(window, { code: 'Digit1', metaKey: true, shiftKey: false })
+    await fireEvent.keyDown(window, { key: '1', code: 'Digit1', metaKey: true, shiftKey: false })
     await waitFor(() => {
       expect(breadcrumb?.textContent).toContain('code')
       expect(breadcrumb?.textContent).not.toContain('self_review')
@@ -611,7 +633,7 @@ describe('TaskDetailView', () => {
     const breadcrumb = screen.getByText('$ cd board').closest('div')
     expect(breadcrumb?.textContent).toContain('code')
 
-    await fireEvent.keyDown(window, { code: 'Digit2', metaKey: true, shiftKey: false })
+    await fireEvent.keyDown(window, { key: '2', code: 'Digit2', metaKey: true, shiftKey: false })
     await waitFor(() => expect(breadcrumb?.textContent).toContain('self_review'))
     vi.mocked(getTaskWorkspace).mockResolvedValue(null)
   })
@@ -832,7 +854,7 @@ describe('TaskDetailView', () => {
       const breadcrumb = screen.getByText('$ cd board').closest('div')
       expect(breadcrumb?.textContent).toContain('code')
 
-      await fireEvent.keyDown(window, { code: 'Digit2', metaKey: true, shiftKey: false })
+      await fireEvent.keyDown(window, { key: '2', code: 'Digit2', metaKey: true, shiftKey: false })
 
       await waitFor(() => {
         expect(breadcrumb?.textContent).toContain('self_review')
@@ -850,13 +872,13 @@ describe('TaskDetailView', () => {
         expect(screen.getByText('review_view')).toBeTruthy()
       })
 
-      await fireEvent.keyDown(window, { code: 'Digit2', metaKey: true, shiftKey: false })
+      await fireEvent.keyDown(window, { key: '2', code: 'Digit2', metaKey: true, shiftKey: false })
       const breadcrumb = screen.getByText('$ cd board').closest('div')
       await waitFor(() => {
         expect(breadcrumb?.textContent).toContain('self_review')
       })
 
-      await fireEvent.keyDown(window, { code: 'Digit1', metaKey: true, shiftKey: false })
+      await fireEvent.keyDown(window, { key: '1', code: 'Digit1', metaKey: true, shiftKey: false })
       await waitFor(() => {
         expect(breadcrumb?.textContent).toContain('code')
         expect(breadcrumb?.textContent).not.toContain('self_review')
@@ -882,12 +904,12 @@ describe('TaskDetailView', () => {
 
         const breadcrumb = screen.getByText('$ cd board').closest('div')
 
-        await fireEvent.keyDown(window, { code: 'Digit2', metaKey: true, shiftKey: false })
+        await fireEvent.keyDown(window, { key: '2', code: 'Digit2', metaKey: true, shiftKey: false })
         await waitFor(() => {
           expect(breadcrumb?.textContent).toContain('self_review')
         })
 
-        await fireEvent.keyDown(window, { code: 'Digit1', metaKey: true, shiftKey: false })
+        await fireEvent.keyDown(window, { key: '1', code: 'Digit1', metaKey: true, shiftKey: false })
         await waitFor(() => {
           expect(breadcrumb?.textContent).toContain('code')
         })
@@ -903,7 +925,7 @@ describe('TaskDetailView', () => {
       const breadcrumb = screen.getByText('$ cd board').closest('div')
       expect(breadcrumb?.textContent).toContain('code')
 
-      await fireEvent.keyDown(window, { code: 'Digit2', metaKey: true, shiftKey: false })
+      await fireEvent.keyDown(window, { key: '2', code: 'Digit2', metaKey: true, shiftKey: false })
       expect(breadcrumb?.textContent).toContain('code')
       expect(breadcrumb?.textContent).not.toContain('self_review')
     })
@@ -914,7 +936,7 @@ describe('TaskDetailView', () => {
       const breadcrumb = screen.getByText('$ cd board').closest('div')
       expect(breadcrumb?.textContent).toContain('code')
 
-      await fireEvent.keyDown(window, { code: 'Digit3', metaKey: true, shiftKey: false })
+      await fireEvent.keyDown(window, { key: '3', code: 'Digit3', metaKey: true, shiftKey: false })
 
       expect(breadcrumb?.textContent).toContain('code')
       expect(breadcrumb?.textContent).not.toContain('terminal')

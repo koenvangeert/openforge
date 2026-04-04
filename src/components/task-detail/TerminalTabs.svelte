@@ -1,6 +1,5 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte'
-  import { Maximize2, Minimize2 } from 'lucide-svelte'
+  import { onMount } from 'svelte'
   import { killPty } from '../../lib/ipc'
   import { release, focusTerminal, getTaskTerminalTabsSession, updateTaskTerminalTabsSession, type TerminalTab, type TaskTerminalTabsSession } from '../../lib/terminalPool'
   import TaskTerminal from './TaskTerminal.svelte'
@@ -8,13 +7,11 @@
   interface Props {
     taskId: string
     workspacePath: string
-    isFullscreen: boolean
-    onFullscreenToggle: (() => void) | null
     onTabChange: ((index: number) => void) | null
     onTabCountChange: ((count: number) => void) | null
   }
 
-  let { taskId, workspacePath, isFullscreen, onFullscreenToggle, onTabChange, onTabCountChange }: Props = $props()
+  let { taskId, workspacePath, onTabChange, onTabCountChange }: Props = $props()
 
   let session: TaskTerminalTabsSession | null = null
   let tabs = $state<TerminalTab[]>([])
@@ -52,7 +49,7 @@
     }
   }
 
-  function addTab() {
+  export function addTab() {
       const tab = createTab()
       tabs = [...tabs, tab]
       activeTabIndex = tab.index
@@ -111,21 +108,9 @@
       onTabCountChange?.(tabs.length)
     }
 
-  function handleKeyDown(e: KeyboardEvent) {
-    if (e.metaKey && e.code === 'KeyT' && !e.ctrlKey && !e.altKey && !e.shiftKey) {
-      e.preventDefault()
-      addTab()
-    }
-  }
-
   onMount(() => {
     hydrateFromSession(taskId)
     onTabCountChange?.(tabs.length)
-    document.addEventListener('keydown', handleKeyDown)
-  })
-
-  onDestroy(() => {
-    document.removeEventListener('keydown', handleKeyDown)
   })
 </script>
 
@@ -161,15 +146,6 @@
     >
       +
     </button>
-    {#if onFullscreenToggle}
-      <button class="btn btn-ghost btn-xs ml-auto mr-1" aria-label={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'} onclick={() => onFullscreenToggle?.()}>
-        {#if isFullscreen}
-          <Minimize2 size={14} />
-        {:else}
-          <Maximize2 size={14} />
-        {/if}
-      </button>
-    {/if}
   </div>
   <div class="flex-1 min-h-0 overflow-hidden relative">
     {#each tabs as tab (tab.index)}

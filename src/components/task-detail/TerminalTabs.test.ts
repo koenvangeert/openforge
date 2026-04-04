@@ -148,8 +148,6 @@ describe('TerminalTabs', () => {
       props: {
         taskId: 'T-1',
         workspacePath: '/path/to/worktree',
-        isFullscreen: false,
-        onFullscreenToggle: null,
         onTabChange: null,
         onTabCountChange: null,
       },
@@ -175,8 +173,6 @@ describe('TerminalTabs', () => {
       props: {
         taskId: 'T-1',
         workspacePath: '/path/to/worktree',
-        isFullscreen: false,
-        onFullscreenToggle: null,
         onTabChange: null,
         onTabCountChange: null,
       },
@@ -218,8 +214,6 @@ describe('TerminalTabs', () => {
       props: {
         taskId: 'T-1',
         workspacePath: '/path/to/worktree',
-        isFullscreen: false,
-        onFullscreenToggle: null,
         onTabChange: null,
         onTabCountChange: null,
       },
@@ -235,8 +229,6 @@ describe('TerminalTabs', () => {
       props: {
         taskId: 'T-1',
         workspacePath: '/path/to/worktree',
-        isFullscreen: false,
-        onFullscreenToggle: null,
         onTabChange: null,
         onTabCountChange: null,
       },
@@ -260,8 +252,6 @@ describe('TerminalTabs', () => {
       props: {
         taskId: 'T-1',
         workspacePath: '/path/to/worktree',
-        isFullscreen: false,
-        onFullscreenToggle: null,
         onTabChange,
         onTabCountChange: null,
       },
@@ -293,8 +283,6 @@ describe('TerminalTabs', () => {
       props: {
         taskId: 'T-1',
         workspacePath: '/path/to/worktree',
-        isFullscreen: false,
-        onFullscreenToggle: null,
         onTabChange: null,
         onTabCountChange: null,
       },
@@ -318,8 +306,6 @@ describe('TerminalTabs', () => {
       props: {
         taskId: 'T-1',
         workspacePath: '/path/to/worktree',
-        isFullscreen: false,
-        onFullscreenToggle: null,
         onTabChange: null,
         onTabCountChange: null,
       },
@@ -349,8 +335,6 @@ describe('TerminalTabs', () => {
       props: {
         taskId: 'T-1',
         workspacePath: '/path/to/worktree',
-        isFullscreen: false,
-        onFullscreenToggle: null,
         onTabChange: null,
         onTabCountChange: null,
       },
@@ -383,8 +367,6 @@ describe('TerminalTabs', () => {
       props: {
         taskId: 'T-1',
         workspacePath: '/path/to/worktree',
-        isFullscreen: false,
-        onFullscreenToggle: null,
         onTabChange: null,
         onTabCountChange: null,
       },
@@ -419,13 +401,11 @@ describe('TerminalTabs', () => {
     })
   })
 
-  it('⌘T creates new terminal tab', async () => {
+  it('does not listen for ⌘T on document directly', async () => {
     render(TerminalTabs, {
       props: {
         taskId: 'T-1',
         workspacePath: '/path/to/worktree',
-        isFullscreen: false,
-        onFullscreenToggle: null,
         onTabChange: null,
         onTabCountChange: null,
       },
@@ -437,30 +417,6 @@ describe('TerminalTabs', () => {
 
     await fireEvent.keyDown(document, { code: 'KeyT', metaKey: true })
 
-    await vi.waitFor(() => {
-      expect(screen.getByText('Shell 2')).toBeTruthy()
-    })
-  })
-
-  it('⌘+Shift+T does nothing', async () => {
-    render(TerminalTabs, {
-      props: {
-        taskId: 'T-1',
-        workspacePath: '/path/to/worktree',
-        isFullscreen: false,
-        onFullscreenToggle: null,
-        onTabChange: null,
-        onTabCountChange: null,
-      },
-    })
-
-    await vi.waitFor(() => {
-      expect(screen.getByText('Shell 1')).toBeTruthy()
-    })
-
-    await fireEvent.keyDown(document, { code: 'KeyT', metaKey: true, shiftKey: true })
-
-    // Wait a moment and verify no new tab was created
     await new Promise(resolve => setTimeout(resolve, 100))
     expect(screen.queryByText('Shell 2')).toBeNull()
   })
@@ -471,8 +427,6 @@ describe('TerminalTabs', () => {
       props: {
         taskId: 'T-1',
         workspacePath: '/path/to/worktree',
-        isFullscreen: false,
-        onFullscreenToggle: null,
         onTabChange,
         onTabCountChange: null,
       },
@@ -497,8 +451,6 @@ describe('TerminalTabs', () => {
       props: {
         taskId: 'T-1',
         workspacePath: '/path/to/worktree',
-        isFullscreen: false,
-        onFullscreenToggle: null,
         onTabChange: null,
         onTabCountChange,
       },
@@ -527,8 +479,6 @@ describe('TerminalTabs', () => {
       props: {
         taskId: 'T-1',
         workspacePath: '/path/to/worktree',
-        isFullscreen: false,
-        onFullscreenToggle: null,
         onTabChange: null,
         onTabCountChange: null,
       },
@@ -562,8 +512,6 @@ describe('TerminalTabs', () => {
       props: {
         taskId: 'T-1',
         workspacePath: '/path/to/worktree',
-        isFullscreen: false,
-        onFullscreenToggle: null,
         onTabChange,
         onTabCountChange: null,
       },
@@ -598,8 +546,6 @@ describe('TerminalTabs', () => {
       props: {
         taskId: 'T-1',
         workspacePath: '/path/to/worktree',
-        isFullscreen: false,
-        onFullscreenToggle: null,
         onTabChange: null,
         onTabCountChange: null,
       },
@@ -621,8 +567,6 @@ describe('TerminalTabs', () => {
       props: {
         taskId: 'T-1',
         workspacePath: '/path/to/worktree',
-        isFullscreen: false,
-        onFullscreenToggle: null,
         onTabChange: null,
         onTabCountChange: null,
       },
