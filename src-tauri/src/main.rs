@@ -13,6 +13,7 @@ mod http_server;
 mod mcp_installer;
 mod migration;
 mod opencode_client;
+mod plugin_host;
 pub mod providers;
 mod pty_manager;
 pub mod review_parser;
@@ -626,6 +627,8 @@ fn main() {
             let server_manager = server_manager::ServerManager::new();
             let sse_bridge_manager = sse_bridge::SseBridgeManager::new();
             let pty_manager = PtyManager::new();
+            let plugin_host = plugin_host::PluginHost::new(app.handle().clone());
+            let plugin_host_startup = plugin_host.clone();
             let whisper_manager = WhisperManager::with_active_model(whisper_model_pref);
 
             app.manage(opencode_client);
@@ -633,8 +636,15 @@ fn main() {
             app.manage(server_manager);
             app.manage(sse_bridge_manager);
             app.manage(pty_manager);
+            app.manage(plugin_host);
             app.manage(whisper_manager);
             app.manage(Arc::new(tokio::sync::Notify::new()));
+
+            tauri::async_runtime::spawn(async move {
+                if let Err(e) = plugin_host_startup.start_sidecar().await {
+                    warn!("[startup] Plugin sidecar auto-start skipped: {}", e);
+                }
+            });
 
             if let Err(e) = server_manager::ServerManager::new().cleanup_stale_pids() {
                 warn!("Failed to cleanup stale server PIDs: {}", e);
@@ -866,6 +876,7 @@ fn main() {
             let sse_mgr = app_handle.state::<sse_bridge::SseBridgeManager>();
             let server_mgr = app_handle.state::<server_manager::ServerManager>();
             let pty_mgr = app_handle.state::<pty_manager::PtyManager>();
+            let plugin_host = app_handle.state::<plugin_host::PluginHost>();
 
             tauri::async_runtime::block_on(async {
                 info!("[shutdown] Killing all PTY sessions...");
@@ -878,6 +889,11 @@ fn main() {
                 info!("[shutdown] Stopping all OpenCode servers...");
                 if let Err(e) = server_mgr.stop_all().await {
                     error!("[shutdown] Error stopping servers: {}", e);
+                }
+
+                info!("[shutdown] Stopping plugin sidecar...");
+                if let Err(e) = plugin_host.stop_sidecar().await {
+                    error!("[shutdown] Error stopping plugin sidecar: {}", e);
                 }
 
                 info!("[shutdown] Cleanup complete");
