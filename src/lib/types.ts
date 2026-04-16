@@ -434,7 +434,10 @@ export interface AgentReviewComment {
 }
 
 /** App-level view for top-bar navigation */
-export type AppView = "board" | "pr_review" | "skills" | "settings" | "workqueue" | "global_settings" | "files";
+export type CoreAppView = 'board' | 'pr_review' | 'skills' | 'settings' | 'workqueue' | 'global_settings' | 'files'
+
+/** App-level view for top-bar navigation */
+export type AppView = CoreAppView | PluginViewKey
 
 export interface WorkQueueEntry {
   task: Task;
@@ -536,3 +539,4 @@ export interface WhisperModelStatus {
 
 /** Permission mode for Claude Code sessions */
 export type PermissionMode = 'default' | 'acceptEdits' | 'plan' | 'bypassPermissions' | 'dontAsk';
+import type { PluginViewKey } from './plugin/types'

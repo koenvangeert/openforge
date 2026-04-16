@@ -1,6 +1,14 @@
 import { writable, get } from 'svelte/store'
 import type { PluginEntry } from './types'
-import { listPlugins, setPluginEnabled, getEnabledPlugins } from '../ipc'
+import * as ipc from '../ipc'
+
+function getOptionalIpcMethod<T>(resolve: () => T): T | undefined {
+  try {
+    return resolve()
+  } catch {
+    return undefined
+  }
+}
 
 export const installedPlugins = writable<Map<string, PluginEntry>>(new Map())
 export const enabledPluginIds = writable<Set<string>>(new Set())
@@ -11,6 +19,12 @@ export async function loadInstalledPlugins(): Promise<void> {
   loading.set(true)
   error.set(null)
   try {
+    const listPlugins = getOptionalIpcMethod(() => ipc.listPlugins)
+    if (!listPlugins) {
+      installedPlugins.set(new Map())
+      return
+    }
+
     const rows = await listPlugins()
     installedPlugins.set(new Map(rows.map(row => [
       row.id,
@@ -38,6 +52,11 @@ export async function loadInstalledPlugins(): Promise<void> {
 }
 
 export async function enablePlugin(projectId: string, pluginId: string): Promise<void> {
+  const setPluginEnabled = getOptionalIpcMethod(() => ipc.setPluginEnabled)
+  if (!setPluginEnabled) {
+    return
+  }
+
   await setPluginEnabled(projectId, pluginId, true)
   enabledPluginIds.update(set => {
     const next = new Set(set)
@@ -47,6 +66,11 @@ export async function enablePlugin(projectId: string, pluginId: string): Promise
 }
 
 export async function disablePlugin(projectId: string, pluginId: string): Promise<void> {
+  const setPluginEnabled = getOptionalIpcMethod(() => ipc.setPluginEnabled)
+  if (!setPluginEnabled) {
+    return
+  }
+
   await setPluginEnabled(projectId, pluginId, false)
   enabledPluginIds.update(set => {
     const next = new Set(set)
@@ -64,6 +88,12 @@ export function getContributions(_contributionType: string): unknown[] {
 }
 
 export async function loadEnabledForProject(projectId: string): Promise<void> {
+  const getEnabledPlugins = getOptionalIpcMethod(() => ipc.getEnabledPlugins)
+  if (!getEnabledPlugins) {
+    enabledPluginIds.set(new Set())
+    return
+  }
+
   const rows = await getEnabledPlugins(projectId)
   enabledPluginIds.set(new Set(rows.map(r => r.id)))
 }

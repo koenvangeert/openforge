@@ -1,4 +1,5 @@
 import { ALLOWED_ICON_KEYS, normalizeShortcut } from './manifest'
+import { isPluginViewKey, parsePluginViewKey } from './types'
 import type { PluginManifest } from './types'
 
 export interface ResolvedView {
@@ -89,7 +90,16 @@ function toNamespacedId(pluginId: string, contributionId: string): string {
 }
 
 function matchesSlotId(item: { contributionId: string; namespacedId: string }, slotId: string): boolean {
-  return item.contributionId === slotId || item.namespacedId === slotId
+  if (item.contributionId === slotId || item.namespacedId === slotId) {
+    return true
+  }
+
+  if (isPluginViewKey(slotId)) {
+    const { pluginId, viewId } = parsePluginViewKey(slotId)
+    return item.namespacedId === `${pluginId}:${viewId}`
+  }
+
+  return false
 }
 
 function resolveView(pluginId: string, item: unknown): ResolvedView | null {

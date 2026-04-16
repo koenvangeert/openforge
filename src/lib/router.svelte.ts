@@ -1,3 +1,4 @@
+import { isPluginViewKey } from './plugin/types'
 import { get } from 'svelte/store'
 import {
   activeProjectId,
@@ -87,7 +88,7 @@ export function useAppRouter() {
     currentViewState = view
     currentView.set(view)
 
-    if (TASK_CLEARING_VIEWS.has(view)) {
+    if (TASK_CLEARING_VIEWS.has(view) || isPluginViewKey(view)) {
       selectedTaskId.set(null)
     }
   }

@@ -31,6 +31,7 @@
   import SettingsActionsCard from './SettingsActionsCard.svelte'
   import SettingsExperimentalCard from './SettingsExperimentalCard.svelte'
   import ProjectPageHeader from '../project/ProjectPageHeader.svelte'
+  import PluginSettingsPanel from '../plugin/PluginSettingsPanel.svelte'
 
   interface Props {
     onClose: () => void
@@ -105,7 +106,7 @@
   // Scroll spy
   let scrollContainer = $state<HTMLDivElement | null>(null)
   let isNavigating = false
-  const projectSections = ['general', 'integrations', 'instructions', 'actions']
+  const projectSections = ['general', 'integrations', 'instructions', 'plugins', 'actions']
   const globalSections = ['preferences', 'ai', 'credentials', 'experimental']
 
   // Derived state
@@ -395,6 +396,11 @@
           {agentInstructions}
           disabled={!hasProject}
           onInstructionsChange={(v) => { agentInstructions = v; scheduleSave() }}
+        />
+
+        <PluginSettingsPanel
+          projectId={$activeProjectId || ''}
+          disabled={!hasProject}
         />
 
         <SettingsActionsCard

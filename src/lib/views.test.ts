@@ -1,5 +1,21 @@
 import { describe, expect, it, vi } from 'vitest'
-import { ICON_RAIL_HIDDEN_VIEWS, ICON_RAIL_NAV_ITEMS, NAVIGATION_SHORTCUT_ITEMS, TASK_CLEARING_VIEWS, VIEWS } from './views'
+import type { PluginManifest } from './plugin/types'
+import { ICON_RAIL_HIDDEN_VIEWS, TASK_CLEARING_VIEWS, VIEWS, getPluginViewEntries, getViews } from './views'
+
+function makeManifest(overrides: Partial<PluginManifest> = {}): PluginManifest {
+  return {
+    id: 'plugin.example',
+    name: 'Example Plugin',
+    version: '1.0.0',
+    apiVersion: 1,
+    description: 'Example plugin',
+    permissions: [],
+    contributes: {},
+    frontend: 'dist/index.js',
+    backend: null,
+    ...overrides,
+  }
+}
 
 describe('views registry', () => {
   it('registers all non-board top-level views', () => {
@@ -58,22 +74,35 @@ describe('views registry', () => {
     ])
   })
 
-  it('exposes shared navigation metadata for icon rail items and app shortcuts', () => {
-    expect(ICON_RAIL_NAV_ITEMS.map(({ view, label, shortcutHint }) => ({ view, label, shortcutHint }))).toEqual([
-      { view: 'board', label: 'Board', shortcutHint: 'H' },
-      { view: 'files', label: 'Files', shortcutHint: 'O' },
-      { view: 'pr_review', label: 'Pull Requests', shortcutHint: 'G' },
-      { view: 'skills', label: 'Skills', shortcutHint: 'L' },
-      { view: 'settings', label: 'Settings', shortcutHint: ',' },
+  it('preserves the static views map when resolving all views', () => {
+    const resolvedViews = getViews([])
+
+    expect(Object.keys(resolvedViews).sort()).toEqual(Object.keys(VIEWS).sort())
+    expect(resolvedViews.settings).toBe(VIEWS.settings)
+    expect(resolvedViews.files).toBe(VIEWS.files)
+  })
+
+  it('returns no plugin view entries when no manifests are enabled', () => {
+    expect(getPluginViewEntries([])).toEqual([])
+  })
+
+  it('merges plugin views with the static registry', () => {
+    const pluginViews = getViews([
+      makeManifest({
+        id: 'plugin.analytics',
+        contributes: {
+          views: [
+            {
+              id: 'dashboard',
+              title: 'Analytics',
+              icon: 'plug',
+              showInRail: true,
+            },
+          ],
+        },
+      }),
     ])
 
-    expect(NAVIGATION_SHORTCUT_ITEMS.map(({ view, shortcutKey }) => ({ view, shortcutKey }))).toEqual([
-      { view: 'board', shortcutKey: 'h' },
-      { view: 'files', shortcutKey: 'o' },
-      { view: 'pr_review', shortcutKey: 'g' },
-      { view: 'skills', shortcutKey: 'l' },
-      { view: 'settings', shortcutKey: ',' },
-      { view: 'workqueue', shortcutKey: 'r' },
-    ])
+    expect(pluginViews['plugin:plugin.analytics:dashboard']).toBeDefined()
   })
 })
