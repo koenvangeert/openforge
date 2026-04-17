@@ -8,7 +8,7 @@ const callOrder: string[] = []
 
 const eventListeners = new Map<string, Function>()
 const mockSelectedTaskIdStore = writable<string | null>(null)
-const mockCurrentViewStore = writable<'board' | 'files' | 'pr_review' | 'settings' | 'workqueue' | 'global_settings' | 'plugin:com.openforge.file-viewer:files' | 'plugin:com.openforge.skills-viewer:skills'>('board')
+const mockCurrentViewStore = writable<'board' | 'files' | 'settings' | 'workqueue' | 'global_settings' | 'plugin:com.openforge.file-viewer:files' | 'plugin:com.openforge.github-sync:pr_review' | 'plugin:com.openforge.skills-viewer:skills'>('board')
 const mockSelectedReviewPrStore = writable(null)
 
 vi.mock('@tauri-apps/api/event', () => ({
@@ -200,7 +200,7 @@ const mockRouterNavigate = vi.fn((view: string) => {
     return
   }
   mockCurrentViewStore.set(view as any)
-  if (new Set(['pr_review', 'settings', 'workqueue', 'global_settings']).has(view)) {
+  if (new Set(['settings', 'workqueue', 'global_settings']).has(view) || view.startsWith('plugin:')) {
     mockSelectedTaskIdStore.set(null)
   }
 })
@@ -594,15 +594,22 @@ describe('App onMount initialization order', () => {
       expect(nav.resetToBoard).toHaveBeenCalled()
     })
 
-    it('CMD+G navigates to pr_review view', async () => {
+    it('CMD+G navigates to plugin PR review view', async () => {
       const App = (await import('./App.svelte')).default
       const stores = await import('./lib/stores')
+      const pluginStore = await import('./lib/plugin/pluginStore')
+      const { GITHUB_SYNC_PLUGIN_ID } = await import('./lib/githubSyncPlugin')
       const { get } = await import('svelte/store')
 
+      stores.currentView.set('board')
       render(App)
 
+      await vi.waitFor(() => {
+        expect(get(pluginStore.enabledPluginIds).has(GITHUB_SYNC_PLUGIN_ID)).toBe(true)
+      })
+
       window.dispatchEvent(new KeyboardEvent('keydown', { key: 'g', metaKey: true, bubbles: true }))
-      expect(get(stores.currentView)).toBe('pr_review')
+      expect(get(stores.currentView)).toBe('plugin:com.openforge.github-sync:pr_review')
     })
 
   it('CMD+O navigates to the plugin-provided files view', async () => {

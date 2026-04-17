@@ -1,0 +1,22 @@
+{
+  "id": "com.openforge.github-sync",
+  "name": "GitHub Sync",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "description": "Review pull requests assigned to you",
+  "permissions": ["github:read", "github:write"],
+  "contributes": {
+    "views": [
+      {
+        "id": "pr_review",
+        "title": "Pull Requests",
+        "icon": "git-pull-request",
+        "showInRail": true,
+        "railOrder": 20,
+        "shortcut": "Cmd+G"
+      }
+    ]
+  },
+  "frontend": "dist/index.js",
+  "backend": null
+}

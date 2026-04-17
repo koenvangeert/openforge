@@ -21,7 +21,6 @@ describe('views registry', () => {
   it('registers all non-board top-level views', () => {
     expect(Object.keys(VIEWS).sort()).toEqual([
       'global_settings',
-      'pr_review',
       'settings',
       'workqueue',
     ])
@@ -61,7 +60,6 @@ describe('views registry', () => {
     expect([...TASK_CLEARING_VIEWS].sort()).toEqual([
       'files',
       'global_settings',
-      'pr_review',
       'settings',
       'workqueue',
     ])
@@ -148,5 +146,28 @@ describe('views registry', () => {
 
     expect(pluginViews['plugin:com.openforge.skills-viewer:skills']).toBeDefined()
     expect('skills' in pluginViews).toBe(false)
+  })
+
+  it('resolves the github sync PR review view through plugin entries', () => {
+    const pluginViews = getViews([
+      makeManifest({
+        id: 'com.openforge.github-sync',
+        contributes: {
+          views: [
+            {
+              id: 'pr_review',
+              title: 'Pull Requests',
+              icon: 'git-pull-request',
+              shortcut: 'Cmd+G',
+              showInRail: true,
+              railOrder: 20,
+            },
+          ],
+        },
+      }),
+    ])
+
+    expect(pluginViews['plugin:com.openforge.github-sync:pr_review']).toBeDefined()
+    expect('pr_review' in pluginViews).toBe(false)
   })
 })

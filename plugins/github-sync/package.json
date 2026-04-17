@@ -1,0 +1,19 @@
+{
+  "name": "@openforge/plugin-github-sync",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "vite build --config vitest.config.ts",
+    "test": "vitest run --config vitest.config.ts"
+  },
+  "peerDependencies": {
+    "svelte": "^5.0.0"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^7.0.0",
+    "svelte": "^5.0.0",
+    "typescript": "^5.3.3",
+    "vite": "^8.0.0",
+    "vitest": "^4.1.0"
+  }
+}

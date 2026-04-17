@@ -18,7 +18,7 @@ vi.mock('../../../lib/stores', () => ({
   authoredPrs: writable([]),
   authoredPrCount: writable(0),
   activeProjectId: writable('P-1'),
-  currentView: writable('pr_review'),
+  currentView: writable('plugin:com.openforge.github-sync:pr_review'),
   selectedTaskId: writable<string | null>(null),
   selectedSkillName: writable<string | null>(null),
 }))

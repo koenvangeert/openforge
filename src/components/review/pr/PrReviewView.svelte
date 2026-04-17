@@ -286,7 +286,7 @@
   }
 
   async function selectPr(pr: ReviewPullRequest) {
-    router.navigate('pr_review')
+    router.navigate('plugin:com.openforge.github-sync:pr_review')
     const now = Math.floor(Date.now() / 1000)
     const updatedPr = { ...pr, viewed_at: now, viewed_head_sha: pr.head_sha }
     $selectedReviewPr = updatedPr

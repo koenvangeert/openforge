@@ -29,6 +29,7 @@
   import PluginSlot from './components/plugin/PluginSlot.svelte'
 
   import { FILE_VIEWER_PLUGIN_ID, FILE_VIEWER_PLUGIN_MANIFEST } from './lib/fileViewerPlugin'
+  import { GITHUB_SYNC_PLUGIN_ID, GITHUB_SYNC_PLUGIN_MANIFEST } from './lib/githubSyncPlugin'
   import { SKILLS_VIEWER_PLUGIN_ID, SKILLS_VIEWER_PLUGIN_MANIFEST } from './lib/skillsViewerPlugin'
   import { resolveContributions } from './lib/plugin/contributionResolver'
   import { enabledPluginIds, installedPlugins, loadEnabledForProject, loadInstalledPlugins } from './lib/plugin/pluginStore'
@@ -145,6 +146,7 @@
     if (projectId && projectId !== previousPluginProjectId) {
       void loadEnabledForProject(projectId).then(() => {
         ensureBuiltinPluginEnabled(FILE_VIEWER_PLUGIN_ID)
+        ensureBuiltinPluginEnabled(GITHUB_SYNC_PLUGIN_ID)
         ensureBuiltinPluginEnabled(SKILLS_VIEWER_PLUGIN_ID)
       })
     } else if (!projectId && previousPluginProjectId !== null) {
@@ -618,10 +620,6 @@
       router.resetToBoard()
     })
 
-    shortcuts.register('⌘g', () => {
-      handleNavigate('pr_review')
-    })
-
     shortcuts.register('⌘,', () => {
       handleNavigate('settings')
     })
@@ -952,8 +950,10 @@
     // Phase 2: Load data
     await loadInstalledPlugins()
     ensureBuiltinPluginInstalled(FILE_VIEWER_PLUGIN_MANIFEST)
+    ensureBuiltinPluginInstalled(GITHUB_SYNC_PLUGIN_MANIFEST)
     ensureBuiltinPluginInstalled(SKILLS_VIEWER_PLUGIN_MANIFEST)
     ensureBuiltinPluginEnabled(FILE_VIEWER_PLUGIN_ID)
+    ensureBuiltinPluginEnabled(GITHUB_SYNC_PLUGIN_ID)
     ensureBuiltinPluginEnabled(SKILLS_VIEWER_PLUGIN_ID)
     await loadProjects()
 

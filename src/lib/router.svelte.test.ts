@@ -22,14 +22,14 @@ describe('useAppRouter', () => {
     activeProjectId.set(null)
   })
 
-  it('navigate(pr_review) clears selectedTaskId synchronously', () => {
+  it('navigate(plugin PR review view) clears selectedTaskId synchronously', () => {
     const router = useAppRouter()
     selectedTaskId.set('task-1')
 
-    router.navigate('pr_review')
+    router.navigate('plugin:com.openforge.github-sync:pr_review')
 
     expect(get(selectedTaskId)).toBeNull()
-    expect(get(currentView)).toBe('pr_review')
+    expect(get(currentView)).toBe('plugin:com.openforge.github-sync:pr_review')
   })
 
   it('navigate(settings) clears selectedTaskId synchronously', () => {
@@ -146,8 +146,8 @@ describe('useAppRouter', () => {
     expect(get(activeProjectId)).toBeNull()
   })
 
-  it('resetToBoard resets from pr_review view', () => {
-    currentView.set('pr_review')
+  it('resetToBoard resets from plugin PR review view', () => {
+    currentView.set('plugin:com.openforge.github-sync:pr_review')
 
     resetToBoard()
 

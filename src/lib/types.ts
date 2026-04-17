@@ -434,7 +434,7 @@ export interface AgentReviewComment {
 }
 
 /** App-level view for top-bar navigation */
-export type CoreAppView = 'board' | 'pr_review' | 'settings' | 'workqueue' | 'global_settings' | 'files'
+export type CoreAppView = 'board' | 'settings' | 'workqueue' | 'global_settings' | 'files'
 
 /** App-level view for top-bar navigation */
 export type AppView = CoreAppView | PluginViewKey

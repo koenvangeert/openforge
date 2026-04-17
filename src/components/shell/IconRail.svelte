@@ -1,5 +1,6 @@
 <script lang="ts">
   import { Boxes, Code, FileText, FolderOpen, GitPullRequest, LayoutDashboard, Plug, Puzzle, Settings, Sparkles, Terminal, Wrench } from 'lucide-svelte'
+  import { GITHUB_SYNC_VIEW_KEY } from '../../lib/githubSyncPlugin'
   import type { AppView } from '../../lib/types'
   import { commandHeld } from '../../lib/stores'
 
@@ -41,7 +42,6 @@
 
   const staticNavItems: { view: AppView; Icon: IconComponent; shortcut: string; label: string }[] = [
     { view: 'board', Icon: LayoutDashboard, shortcut: 'H', label: 'Board' },
-    { view: 'pr_review', Icon: GitPullRequest, shortcut: 'G', label: 'Pull Requests' },
     { view: 'settings', Icon: Settings, shortcut: ',', label: 'Settings' },
   ]
 
@@ -64,10 +64,10 @@
       onclick={() => onNavigate(view)}
     >
       <Icon size={24} />
-      {#if view === 'pr_review' && reviewRequestCount > 0}
+      {#if view === GITHUB_SYNC_VIEW_KEY && reviewRequestCount > 0}
         <span class="badge badge-error badge-xs absolute -top-2 -right-3 text-[0.6rem] font-bold min-w-4 h-4">{reviewRequestCount}</span>
       {/if}
-      {#if view === 'pr_review' && authoredPrCount > 0}
+      {#if view === GITHUB_SYNC_VIEW_KEY && authoredPrCount > 0}
         <span class="badge badge-warning badge-xs absolute -bottom-2 -right-3 text-[0.6rem] font-bold min-w-4 h-4">{authoredPrCount}</span>
       {/if}
       {#if $commandHeld && !modalsOpen}
