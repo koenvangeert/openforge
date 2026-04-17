@@ -1,0 +1,26 @@
+{
+  "id": "com.openforge.terminal",
+  "name": "Terminal",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "description": "Embedded terminal with PTY management and agent panels",
+  "permissions": ["pty:read", "pty:write", "terminal:manage"],
+  "contributes": {
+    "taskPaneTabs": [
+      {
+        "id": "terminal",
+        "title": "Terminal",
+        "icon": "terminal",
+        "order": 10
+      }
+    ],
+    "backgroundServices": [
+      {
+        "id": "pty-manager",
+        "name": "PTY Process Manager"
+      }
+    ]
+  },
+  "frontend": "dist/index.js",
+  "backend": null
+}

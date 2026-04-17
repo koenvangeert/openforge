@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { validatePluginManifest, isPluginManifest, ALLOWED_ICON_KEYS, isValidShortcutFormat, normalizeShortcut } from './manifest'
+import { ALLOWED_ICON_KEYS, isPluginManifest, isValidShortcutFormat, normalizeShortcut, validatePluginManifest } from './manifest'
 
 function createValidManifest(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
@@ -22,6 +22,37 @@ describe('validatePluginManifest', () => {
   it('accepts a valid manifest', () => {
     const errors = validatePluginManifest(createValidManifest())
     expect(errors).toEqual([])
+  })
+
+  it('accepts task pane tab and background service contributions', () => {
+    const errors = validatePluginManifest(createValidManifest({
+      contributes: {
+        taskPaneTabs: [{ id: 'terminal', title: 'Terminal', icon: 'terminal', order: 10 }],
+        backgroundServices: [{ id: 'pty-manager', name: 'PTY Process Manager' }],
+      },
+    }))
+
+    expect(errors).toEqual([])
+  })
+
+  it('rejects invalid task pane tab icon key', () => {
+    const errors = validatePluginManifest(createValidManifest({
+      contributes: {
+        taskPaneTabs: [{ id: 'terminal', title: 'Terminal', icon: 'bad-icon' }],
+      },
+    }))
+
+    expect(errors).toContainEqual(expect.objectContaining({ path: 'contributes.taskPaneTabs[0].icon' }))
+  })
+
+  it('rejects background services without a name', () => {
+    const errors = validatePluginManifest(createValidManifest({
+      contributes: {
+        backgroundServices: [{ id: 'pty-manager' }],
+      },
+    }))
+
+    expect(errors).toContainEqual(expect.objectContaining({ path: 'contributes.backgroundServices[0].name' }))
   })
 
   it('rejects manifest without id', () => {

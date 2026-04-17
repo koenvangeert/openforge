@@ -31,6 +31,7 @@
   import { FILE_VIEWER_PLUGIN_ID, FILE_VIEWER_PLUGIN_MANIFEST } from './lib/fileViewerPlugin'
   import { GITHUB_SYNC_PLUGIN_ID, GITHUB_SYNC_PLUGIN_MANIFEST } from './lib/githubSyncPlugin'
   import { SKILLS_VIEWER_PLUGIN_ID, SKILLS_VIEWER_PLUGIN_MANIFEST } from './lib/skillsViewerPlugin'
+  import { TERMINAL_PLUGIN_ID, TERMINAL_PLUGIN_MANIFEST } from './lib/terminalPlugin'
   import { resolveContributions } from './lib/plugin/contributionResolver'
   import { enabledPluginIds, installedPlugins, loadEnabledForProject, loadInstalledPlugins } from './lib/plugin/pluginStore'
   import { isPluginViewKey, makePluginViewKey } from './lib/plugin/types'
@@ -148,6 +149,7 @@
         ensureBuiltinPluginEnabled(FILE_VIEWER_PLUGIN_ID)
         ensureBuiltinPluginEnabled(GITHUB_SYNC_PLUGIN_ID)
         ensureBuiltinPluginEnabled(SKILLS_VIEWER_PLUGIN_ID)
+        ensureBuiltinPluginEnabled(TERMINAL_PLUGIN_ID)
       })
     } else if (!projectId && previousPluginProjectId !== null) {
       enabledPluginIds.set(new Set())
@@ -952,9 +954,11 @@
     ensureBuiltinPluginInstalled(FILE_VIEWER_PLUGIN_MANIFEST)
     ensureBuiltinPluginInstalled(GITHUB_SYNC_PLUGIN_MANIFEST)
     ensureBuiltinPluginInstalled(SKILLS_VIEWER_PLUGIN_MANIFEST)
+    ensureBuiltinPluginInstalled(TERMINAL_PLUGIN_MANIFEST)
     ensureBuiltinPluginEnabled(FILE_VIEWER_PLUGIN_ID)
     ensureBuiltinPluginEnabled(GITHUB_SYNC_PLUGIN_ID)
     ensureBuiltinPluginEnabled(SKILLS_VIEWER_PLUGIN_ID)
+    ensureBuiltinPluginEnabled(TERMINAL_PLUGIN_ID)
     await loadProjects()
 
     try {

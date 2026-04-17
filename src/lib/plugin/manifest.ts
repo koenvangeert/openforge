@@ -97,6 +97,70 @@ function validateViewContributions(views: unknown): ValidationError[] {
   return errors
 }
 
+function validateTaskPaneTabContributions(taskPaneTabs: unknown): ValidationError[] {
+  const errors: ValidationError[] = []
+
+  if (!isArray(taskPaneTabs)) {
+    errors.push({ path: 'contributes.taskPaneTabs', message: 'Must be an array' })
+    return errors
+  }
+
+  taskPaneTabs.forEach((tab, index) => {
+    if (!isObject(tab)) {
+      errors.push({ path: `contributes.taskPaneTabs[${index}]`, message: 'Must be an object' })
+      return
+    }
+
+    if (!isString(tab.id) || !tab.id) {
+      errors.push({ path: `contributes.taskPaneTabs[${index}].id`, message: 'Required string' })
+    }
+
+    if (!isString(tab.title) || !tab.title) {
+      errors.push({ path: `contributes.taskPaneTabs[${index}].title`, message: 'Required string' })
+    }
+
+    if (tab.icon !== undefined) {
+      if (!isString(tab.icon) || !tab.icon) {
+        errors.push({ path: `contributes.taskPaneTabs[${index}].icon`, message: 'Must be a string' })
+      } else if (!ALLOWED_ICON_KEYS.has(tab.icon)) {
+        errors.push({ path: `contributes.taskPaneTabs[${index}].icon`, message: `Icon key "${tab.icon}" not allowed` })
+      }
+    }
+
+    if (tab.order !== undefined && !isNumber(tab.order)) {
+      errors.push({ path: `contributes.taskPaneTabs[${index}].order`, message: 'Must be a number' })
+    }
+  })
+
+  return errors
+}
+
+function validateBackgroundServices(backgroundServices: unknown): ValidationError[] {
+  const errors: ValidationError[] = []
+
+  if (!isArray(backgroundServices)) {
+    errors.push({ path: 'contributes.backgroundServices', message: 'Must be an array' })
+    return errors
+  }
+
+  backgroundServices.forEach((service, index) => {
+    if (!isObject(service)) {
+      errors.push({ path: `contributes.backgroundServices[${index}]`, message: 'Must be an object' })
+      return
+    }
+
+    if (!isString(service.id) || !service.id) {
+      errors.push({ path: `contributes.backgroundServices[${index}].id`, message: 'Required string' })
+    }
+
+    if (!isString(service.name) || !service.name) {
+      errors.push({ path: `contributes.backgroundServices[${index}].name`, message: 'Required string' })
+    }
+  })
+
+  return errors
+}
+
 function validateContributionPoints(contributes: unknown): ValidationError[] {
   const errors: ValidationError[] = []
 
@@ -107,6 +171,14 @@ function validateContributionPoints(contributes: unknown): ValidationError[] {
 
   if (contributes.views !== undefined) {
     errors.push(...validateViewContributions(contributes.views))
+  }
+
+  if (contributes.taskPaneTabs !== undefined) {
+    errors.push(...validateTaskPaneTabContributions(contributes.taskPaneTabs))
+  }
+
+  if (contributes.backgroundServices !== undefined) {
+    errors.push(...validateBackgroundServices(contributes.backgroundServices))
   }
 
   return errors
