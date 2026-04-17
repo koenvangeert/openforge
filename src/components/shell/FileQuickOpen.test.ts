@@ -116,7 +116,7 @@ describe('FileQuickOpen', () => {
     await fireEvent.keyDown(dialog, { key: 'Enter' })
 
     expect(get(mockPendingFileReveal)).toBe('b.ts')
-    expect(mockNavigate).toHaveBeenCalledWith('files')
+    expect(mockNavigate).toHaveBeenCalledWith('plugin:com.openforge.file-viewer:files')
     expect(onClose).toHaveBeenCalledOnce()
   })
 

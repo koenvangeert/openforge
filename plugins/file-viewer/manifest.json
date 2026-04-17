@@ -1,0 +1,22 @@
+{
+  "id": "com.openforge.file-viewer",
+  "name": "File Viewer",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "description": "Browse and preview project files",
+  "permissions": ["files:read"],
+  "contributes": {
+    "views": [
+      {
+        "id": "files",
+        "title": "Files",
+        "icon": "folder-open",
+        "showInRail": true,
+        "railOrder": 10,
+        "shortcut": "Cmd+O"
+      }
+    ]
+  },
+  "frontend": "dist/index.js",
+  "backend": null
+}

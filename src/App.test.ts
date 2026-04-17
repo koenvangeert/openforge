@@ -8,7 +8,7 @@ const callOrder: string[] = []
 
 const eventListeners = new Map<string, Function>()
 const mockSelectedTaskIdStore = writable<string | null>(null)
-const mockCurrentViewStore = writable<'board' | 'files' | 'pr_review' | 'settings' | 'skills' | 'workqueue' | 'global_settings'>('board')
+const mockCurrentViewStore = writable<'board' | 'files' | 'pr_review' | 'settings' | 'skills' | 'workqueue' | 'global_settings' | 'plugin:com.openforge.file-viewer:files'>('board')
 const mockSelectedReviewPrStore = writable(null)
 
 vi.mock('@tauri-apps/api/event', () => ({
@@ -605,16 +605,25 @@ describe('App onMount initialization order', () => {
       expect(get(stores.currentView)).toBe('pr_review')
     })
 
-    it('CMD+O navigates to files view', async () => {
-      const App = (await import('./App.svelte')).default
-      const stores = await import('./lib/stores')
-      const { get } = await import('svelte/store')
+  it('CMD+O navigates to the plugin-provided files view', async () => {
+    const App = (await import('./App.svelte')).default
+    const stores = await import('./lib/stores')
+    const { get } = await import('svelte/store')
+    const pluginStore = await import('./lib/plugin/pluginStore')
+    const { FILE_VIEWER_PLUGIN_ID } = await import('./lib/fileViewerPlugin')
 
-      render(App)
+    stores.currentView.set('board')
+    render(App)
 
-      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'o', metaKey: true, bubbles: true }))
-      expect(get(stores.currentView)).toBe('files')
+    await vi.waitFor(() => {
+      expect(get(pluginStore.enabledPluginIds).has(FILE_VIEWER_PLUGIN_ID)).toBe(true)
     })
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'o', metaKey: true, bubbles: true }))
+    await vi.waitFor(() => {
+      expect(get(stores.currentView)).toBe('plugin:com.openforge.file-viewer:files')
+    })
+  })
 
     it('CMD+L navigates to skills view', async () => {
       const App = (await import('./App.svelte')).default

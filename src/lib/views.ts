@@ -3,10 +3,11 @@ import SettingsView from '../components/settings/SettingsView.svelte'
 import PrReviewView from '../components/review/pr/PrReviewView.svelte'
 import SkillsView from '../components/SkillsView.svelte'
 import WorkQueueView from '../components/work-queue/WorkQueueView.svelte'
-import FilesView from '../components/FilesView.svelte'
 import PluginSlot from '../components/plugin/PluginSlot.svelte'
+import { FilesViewComponent } from '../../plugins/file-viewer/src/index'
 import { resolveContributions } from './plugin/contributionResolver'
 import { makePluginViewKey } from './plugin/types'
+import { FILE_VIEWER_PLUGIN_ID, FILE_VIEWER_VIEW_ID } from './fileViewerPlugin'
 import type { PluginManifest, PluginViewKey } from './plugin/types'
 import type { AppView, CoreAppView } from './types'
 
@@ -29,7 +30,7 @@ export interface PluginViewEntry {
   entry: ViewEntry
 }
 
-export type StaticViewKey = Exclude<CoreAppView, 'board'>
+export type StaticViewKey = Exclude<CoreAppView, 'board' | 'files'>
 export type ViewRegistry = Record<StaticViewKey, ViewEntry> & Partial<Record<PluginViewKey, ViewEntry>>
 
 export const TASK_CLEARING_VIEWS: ReadonlySet<AppView> = new Set([
@@ -74,10 +75,6 @@ export const VIEWS: Record<StaticViewKey, ViewEntry> = {
     component: WorkQueueView,
     getProps: ({ onRunAction }) => ({ onRunAction }),
   },
-  files: {
-    component: FilesView,
-    getProps: ({ projectName }) => ({ projectName }),
-  },
 }
 
 export function getPluginViewEntries(manifests: PluginManifest[]): PluginViewEntry[] {
@@ -86,11 +83,17 @@ export function getPluginViewEntries(manifests: PluginManifest[]): PluginViewEnt
   return contributions.views.map((view) => ({
     key: makePluginViewKey(view.pluginId, view.contributionId),
     entry: {
-      component: PluginSlot,
-      getProps: () => ({
-        slotType: 'views' as const,
-        slotId: makePluginViewKey(view.pluginId, view.contributionId),
-      }),
+      component:
+        view.pluginId === FILE_VIEWER_PLUGIN_ID && view.contributionId === FILE_VIEWER_VIEW_ID
+          ? FilesViewComponent
+          : PluginSlot,
+      getProps: ({ projectName }) =>
+        view.pluginId === FILE_VIEWER_PLUGIN_ID && view.contributionId === FILE_VIEWER_VIEW_ID
+          ? { projectName }
+          : {
+              slotType: 'views' as const,
+              slotId: makePluginViewKey(view.pluginId, view.contributionId),
+            },
     },
   }))
 }

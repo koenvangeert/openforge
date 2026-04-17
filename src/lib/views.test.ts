@@ -20,7 +20,6 @@ function makeManifest(overrides: Partial<PluginManifest> = {}): PluginManifest {
 describe('views registry', () => {
   it('registers all non-board top-level views', () => {
     expect(Object.keys(VIEWS).sort()).toEqual([
-      'files',
       'global_settings',
       'pr_review',
       'settings',
@@ -79,7 +78,7 @@ describe('views registry', () => {
 
     expect(Object.keys(resolvedViews).sort()).toEqual(Object.keys(VIEWS).sort())
     expect(resolvedViews.settings).toBe(VIEWS.settings)
-    expect(resolvedViews.files).toBe(VIEWS.files)
+    expect('files' in resolvedViews).toBe(false)
   })
 
   it('returns no plugin view entries when no manifests are enabled', () => {
@@ -104,5 +103,28 @@ describe('views registry', () => {
     ])
 
     expect(pluginViews['plugin:plugin.analytics:dashboard']).toBeDefined()
+  })
+
+  it('resolves the file viewer view through plugin entries', () => {
+    const pluginViews = getViews([
+      makeManifest({
+        id: 'com.openforge.file-viewer',
+        contributes: {
+          views: [
+            {
+              id: 'files',
+              title: 'Files',
+              icon: 'folder-open',
+              shortcut: 'Cmd+O',
+              showInRail: true,
+              railOrder: 10,
+            },
+          ],
+        },
+      }),
+    ])
+
+    expect(pluginViews['plugin:com.openforge.file-viewer:files']).toBeDefined()
+    expect('files' in pluginViews).toBe(false)
   })
 })

@@ -28,6 +28,7 @@
   import FileQuickOpen from './components/shell/FileQuickOpen.svelte'
   import PluginSlot from './components/plugin/PluginSlot.svelte'
 
+  import { FILE_VIEWER_PLUGIN_ID, FILE_VIEWER_PLUGIN_MANIFEST } from './lib/fileViewerPlugin'
   import { resolveContributions } from './lib/plugin/contributionResolver'
   import { enabledPluginIds, installedPlugins, loadEnabledForProject, loadInstalledPlugins } from './lib/plugin/pluginStore'
   import { isPluginViewKey, makePluginViewKey } from './lib/plugin/types'
@@ -48,7 +49,7 @@
   let showAddDialog = $state(false)
   let isSyncing = $state(false)
   let editingTask = $state<Task | null>(null)
-  let shortcuts: ReturnType<typeof useShortcutRegistry> | null = null
+  let shortcuts: ReturnType<typeof useShortcutRegistry> | null = $state(null)
 
   let showProjectSetup = $state(false)
   let appMode = $state<string | null>(null)
@@ -90,8 +91,29 @@
         shortcut: view.shortcut,
       }))
   )
-  let activeView = $derived($currentView === 'board' || isPluginViewKey($currentView) ? null : resolvedViews[$currentView])
-  let pluginViewActive = $derived(isPluginViewKey($currentView))
+  let activeView = $derived($currentView === 'board' ? null : resolvedViews[$currentView])
+  let pluginViewActive = $derived(isPluginViewKey($currentView) && !activeView)
+
+  function ensureBuiltinPluginInstalled(manifest: PluginManifest) {
+    installedPlugins.update((map) => {
+      const existing = map.get(manifest.id)
+      const next = new Map(map)
+      next.set(manifest.id, {
+        manifest,
+        state: existing?.state ?? 'installed',
+        error: existing?.error ?? null,
+      })
+      return next
+    })
+  }
+
+  function ensureBuiltinPluginEnabled(pluginId: string) {
+    enabledPluginIds.update((set) => {
+      const next = new Set(set)
+      next.add(pluginId)
+      return next
+    })
+  }
 
   $effect(() => {
     const pending = $pendingTask
@@ -120,7 +142,9 @@
   $effect(() => {
     const projectId = $activeProjectId
     if (projectId && projectId !== previousPluginProjectId) {
-      void loadEnabledForProject(projectId)
+      void loadEnabledForProject(projectId).then(() => {
+        ensureBuiltinPluginEnabled(FILE_VIEWER_PLUGIN_ID)
+      })
     } else if (!projectId && previousPluginProjectId !== null) {
       enabledPluginIds.set(new Set())
     }
@@ -600,10 +624,6 @@
       handleNavigate('skills')
     })
 
-    shortcuts.register('⌘o', () => {
-      handleNavigate('files')
-    })
-
     shortcuts.register('⌘,', () => {
       handleNavigate('settings')
     })
@@ -933,6 +953,8 @@
 
     // Phase 2: Load data
     await loadInstalledPlugins()
+    ensureBuiltinPluginInstalled(FILE_VIEWER_PLUGIN_MANIFEST)
+    ensureBuiltinPluginEnabled(FILE_VIEWER_PLUGIN_ID)
     await loadProjects()
 
     try {

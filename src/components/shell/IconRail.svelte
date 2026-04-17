@@ -41,7 +41,6 @@
 
   const staticNavItems: { view: AppView; Icon: IconComponent; shortcut: string; label: string }[] = [
     { view: 'board', Icon: LayoutDashboard, shortcut: 'H', label: 'Board' },
-    { view: 'files', Icon: FolderOpen, shortcut: 'O', label: 'Files' },
     { view: 'pr_review', Icon: GitPullRequest, shortcut: 'G', label: 'Pull Requests' },
     { view: 'skills', Icon: Sparkles, shortcut: 'L', label: 'Skills' },
     { view: 'settings', Icon: Settings, shortcut: ',', label: 'Settings' },

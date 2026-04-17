@@ -2,6 +2,7 @@
   import { onMount, tick, onDestroy } from 'svelte'
   import { activeProjectId, pendingFileReveal } from '../../lib/stores'
   import { fsSearchFiles } from '../../lib/ipc'
+  import { FILE_VIEWER_VIEW_KEY } from '../../lib/fileViewerPlugin'
   import { useListNavigation } from '../../lib/useListNavigation.svelte'
   import { useAppRouter } from '../../lib/router.svelte'
 
@@ -84,7 +85,7 @@
 
   function handleSelectFile(path: string) {
     $pendingFileReveal = path
-    router.navigate('files')
+    router.navigate(FILE_VIEWER_VIEW_KEY)
     closeModal()
   }
 
