@@ -43,6 +43,8 @@ use tauri::{AppHandle, Emitter, Manager};
 use tokio::time::{sleep, Duration};
 
 const DEFAULT_GITHUB_POLL_INTERVAL_SECS: u64 = 60;
+const MIN_GITHUB_POLL_INTERVAL_SECS: u64 = 15;
+const MAX_GITHUB_POLL_INTERVAL_SECS: u64 = 300;
 
 // ============================================================================
 // PollResult
@@ -74,6 +76,7 @@ pub struct PollResult {
 
 fn parse_poll_interval_seconds(raw: Option<String>) -> u64 {
     raw.and_then(|value| value.parse::<u64>().ok())
+        .map(|value| value.clamp(MIN_GITHUB_POLL_INTERVAL_SECS, MAX_GITHUB_POLL_INTERVAL_SECS))
         .unwrap_or(DEFAULT_GITHUB_POLL_INTERVAL_SECS)
 }
 
@@ -1841,5 +1844,20 @@ mod tests {
     #[test]
     fn test_parse_poll_interval_seconds_uses_configured_value_when_valid() {
         assert_eq!(parse_poll_interval_seconds(Some("45".to_string())), 45);
+    }
+
+    #[test]
+    fn test_parse_poll_interval_seconds_clamps_zero_to_minimum_supported_value() {
+        assert_eq!(parse_poll_interval_seconds(Some("0".to_string())), 15);
+    }
+
+    #[test]
+    fn test_parse_poll_interval_seconds_clamps_below_minimum_supported_value() {
+        assert_eq!(parse_poll_interval_seconds(Some("10".to_string())), 15);
+    }
+
+    #[test]
+    fn test_parse_poll_interval_seconds_clamps_above_maximum_supported_value() {
+        assert_eq!(parse_poll_interval_seconds(Some("301".to_string())), 300);
     }
 }
