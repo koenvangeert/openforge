@@ -88,6 +88,29 @@ pub async fn get_enabled_plugins(
 }
 
 #[tauri::command]
+pub async fn get_plugin_storage(
+    db: State<'_, Arc<Mutex<db::Database>>>,
+    plugin_id: String,
+    key: String,
+) -> Result<Option<String>, String> {
+    let db = crate::db::acquire_db(&db);
+    db.get_plugin_storage(&plugin_id, &key)
+        .map_err(|e| format!("Failed to get plugin storage: {}", e))
+}
+
+#[tauri::command]
+pub async fn set_plugin_storage(
+    db: State<'_, Arc<Mutex<db::Database>>>,
+    plugin_id: String,
+    key: String,
+    value: String,
+) -> Result<(), String> {
+    let db = crate::db::acquire_db(&db);
+    db.set_plugin_storage(&plugin_id, &key, &value)
+        .map_err(|e| format!("Failed to set plugin storage: {}", e))
+}
+
+#[tauri::command]
 pub async fn plugin_invoke(
     plugin_id: String,
     command: String,

@@ -838,6 +838,8 @@ fn main() {
             commands::plugins::list_plugins,
             commands::plugins::set_plugin_enabled,
             commands::plugins::get_enabled_plugins,
+            commands::plugins::get_plugin_storage,
+            commands::plugins::set_plugin_storage,
             commands::plugins::plugin_invoke,
         ])
         .register_uri_scheme_protocol("plugin", |app, request| {

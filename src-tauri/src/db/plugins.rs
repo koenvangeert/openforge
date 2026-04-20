@@ -141,6 +141,30 @@ impl super::Database {
             .unwrap_or(false);
         Ok(enabled)
     }
+
+    pub fn get_plugin_storage(&self, plugin_id: &str, key: &str) -> Result<Option<String>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT value FROM plugin_storage WHERE plugin_id = ?1 AND key = ?2",
+        )?;
+        let mut rows = stmt.query(rusqlite::params![plugin_id, key])?;
+
+        match rows.next()? {
+            Some(row) => Ok(Some(row.get(0)?)),
+            None => Ok(None),
+        }
+    }
+
+    pub fn set_plugin_storage(&self, plugin_id: &str, key: &str, value: &str) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO plugin_storage (plugin_id, key, value)
+             VALUES (?1, ?2, ?3)
+             ON CONFLICT(plugin_id, key) DO UPDATE SET value = excluded.value",
+            rusqlite::params![plugin_id, key, value],
+        )?;
+        Ok(())
+    }
 }
 
 fn row_to_plugin(row: &rusqlite::Row<'_>) -> rusqlite::Result<PluginRow> {
@@ -234,5 +258,28 @@ mod tests {
         db.set_plugin_enabled("proj1", "q", true).unwrap();
         db.set_plugin_enabled("proj1", "q", false).unwrap();
         assert!(!db.is_plugin_enabled("proj1", "q").unwrap());
+    }
+
+    #[test]
+    fn plugin_storage_round_trip() {
+        let (db, _tmp) = make_test_db("plugins_storage_round_trip");
+        db.install_plugin(&sample_plugin("plugin-a")).unwrap();
+
+        assert!(db
+            .get_plugin_storage("plugin-a", "theme")
+            .unwrap()
+            .is_none());
+
+        db.set_plugin_storage("plugin-a", "theme", "dark").unwrap();
+        assert_eq!(
+            db.get_plugin_storage("plugin-a", "theme").unwrap(),
+            Some("dark".to_string())
+        );
+
+        db.set_plugin_storage("plugin-a", "theme", "light").unwrap();
+        assert_eq!(
+            db.get_plugin_storage("plugin-a", "theme").unwrap(),
+            Some("light".to_string())
+        );
     }
 }
