@@ -96,6 +96,129 @@ importers:
         specifier: ^4.1.0
         version: 4.1.0(@types/node@20.19.33)(jsdom@28.1.0)(vite@8.0.1(@types/node@20.19.33)(esbuild@0.27.3)(jiti@2.6.1))
 
+  packages/plugin-sdk:
+    dependencies:
+      svelte:
+        specifier: ^5.0.0
+        version: 5.51.3
+    devDependencies:
+      typescript:
+        specifier: ^5.3.3
+        version: 5.9.3
+      vitest:
+        specifier: ^4.1.0
+        version: 4.1.0(@types/node@20.19.33)(jsdom@28.1.0)(vite@8.0.1(@types/node@20.19.33)(esbuild@0.27.3)(jiti@2.6.1))
+
+  plugins/demo-hello-world:
+    dependencies:
+      '@openforge/plugin-sdk':
+        specifier: workspace:*
+        version: link:../../packages/plugin-sdk
+    devDependencies:
+      '@sveltejs/vite-plugin-svelte':
+        specifier: ^7.0.0
+        version: 7.0.0(svelte@5.51.3)(vite@8.0.1(@types/node@20.19.33)(esbuild@0.27.3)(jiti@2.6.1))
+      svelte:
+        specifier: ^5.0.0
+        version: 5.51.3
+      typescript:
+        specifier: ^5.3.3
+        version: 5.9.3
+      vite:
+        specifier: ^8.0.0
+        version: 8.0.1(@types/node@20.19.33)(esbuild@0.27.3)(jiti@2.6.1)
+      vitest:
+        specifier: ^4.1.0
+        version: 4.1.0(@types/node@20.19.33)(jsdom@28.1.0)(vite@8.0.1(@types/node@20.19.33)(esbuild@0.27.3)(jiti@2.6.1))
+
+  plugins/file-viewer:
+    dependencies:
+      '@openforge/plugin-sdk':
+        specifier: workspace:*
+        version: link:../../packages/plugin-sdk
+    devDependencies:
+      '@sveltejs/vite-plugin-svelte':
+        specifier: ^7.0.0
+        version: 7.0.0(svelte@5.51.3)(vite@8.0.1(@types/node@20.19.33)(esbuild@0.27.3)(jiti@2.6.1))
+      svelte:
+        specifier: ^5.0.0
+        version: 5.51.3
+      typescript:
+        specifier: ^5.3.3
+        version: 5.9.3
+      vite:
+        specifier: ^8.0.0
+        version: 8.0.1(@types/node@20.19.33)(esbuild@0.27.3)(jiti@2.6.1)
+      vitest:
+        specifier: ^4.1.0
+        version: 4.1.0(@types/node@20.19.33)(jsdom@28.1.0)(vite@8.0.1(@types/node@20.19.33)(esbuild@0.27.3)(jiti@2.6.1))
+
+  plugins/github-sync:
+    dependencies:
+      '@openforge/plugin-sdk':
+        specifier: workspace:*
+        version: link:../../packages/plugin-sdk
+    devDependencies:
+      '@sveltejs/vite-plugin-svelte':
+        specifier: ^7.0.0
+        version: 7.0.0(svelte@5.51.3)(vite@8.0.1(@types/node@20.19.33)(esbuild@0.27.3)(jiti@2.6.1))
+      svelte:
+        specifier: ^5.0.0
+        version: 5.51.3
+      typescript:
+        specifier: ^5.3.3
+        version: 5.9.3
+      vite:
+        specifier: ^8.0.0
+        version: 8.0.1(@types/node@20.19.33)(esbuild@0.27.3)(jiti@2.6.1)
+      vitest:
+        specifier: ^4.1.0
+        version: 4.1.0(@types/node@20.19.33)(jsdom@28.1.0)(vite@8.0.1(@types/node@20.19.33)(esbuild@0.27.3)(jiti@2.6.1))
+
+  plugins/skills-viewer:
+    dependencies:
+      '@openforge/plugin-sdk':
+        specifier: workspace:*
+        version: link:../../packages/plugin-sdk
+    devDependencies:
+      '@sveltejs/vite-plugin-svelte':
+        specifier: ^7.0.0
+        version: 7.0.0(svelte@5.51.3)(vite@8.0.1(@types/node@20.19.33)(esbuild@0.27.3)(jiti@2.6.1))
+      svelte:
+        specifier: ^5.0.0
+        version: 5.51.3
+      typescript:
+        specifier: ^5.3.3
+        version: 5.9.3
+      vite:
+        specifier: ^8.0.0
+        version: 8.0.1(@types/node@20.19.33)(esbuild@0.27.3)(jiti@2.6.1)
+      vitest:
+        specifier: ^4.1.0
+        version: 4.1.0(@types/node@20.19.33)(jsdom@28.1.0)(vite@8.0.1(@types/node@20.19.33)(esbuild@0.27.3)(jiti@2.6.1))
+
+  plugins/terminal:
+    dependencies:
+      '@openforge/plugin-sdk':
+        specifier: workspace:*
+        version: link:../../packages/plugin-sdk
+    devDependencies:
+      '@sveltejs/vite-plugin-svelte':
+        specifier: ^7.0.0
+        version: 7.0.0(svelte@5.51.3)(vite@8.0.1(@types/node@20.19.33)(esbuild@0.27.3)(jiti@2.6.1))
+      svelte:
+        specifier: ^5.0.0
+        version: 5.51.3
+      typescript:
+        specifier: ^5.3.3
+        version: 5.9.3
+      vite:
+        specifier: ^8.0.0
+        version: 8.0.1(@types/node@20.19.33)(esbuild@0.27.3)(jiti@2.6.1)
+      vitest:
+        specifier: ^4.1.0
+        version: 4.1.0(@types/node@20.19.33)(jsdom@28.1.0)(vite@8.0.1(@types/node@20.19.33)(esbuild@0.27.3)(jiti@2.6.1))
+
 packages:
 
   '@acemir/cssom@0.9.31':

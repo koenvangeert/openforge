@@ -1,2 +1,5 @@
 patchedDependencies:
   '@git-diff-view/svelte@0.0.13': patches/@git-diff-view__svelte@0.0.13.patch
+packages:
+  - packages/*
+  - plugins/*

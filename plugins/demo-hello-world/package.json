@@ -6,6 +6,9 @@
     "build": "vite build",
     "test": "vitest run"
   },
+  "dependencies": {
+    "@openforge/plugin-sdk": "workspace:*"
+  },
   "peerDependencies": {
     "svelte": "^5.0.0"
   },

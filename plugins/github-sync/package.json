@@ -6,6 +6,9 @@
     "build": "vite build --config vitest.config.ts",
     "test": "vitest run --config vitest.config.ts"
   },
+  "dependencies": {
+    "@openforge/plugin-sdk": "workspace:*"
+  },
   "peerDependencies": {
     "svelte": "^5.0.0"
   },
