@@ -15,7 +15,7 @@ export default defineConfig({
         'svelte/internal',
         'svelte/store',
         '../../../src/components/FilesView.svelte',
-        '../../../src/lib/plugin/types',
+        '@openforge/plugin-sdk',
       ],
     },
   },

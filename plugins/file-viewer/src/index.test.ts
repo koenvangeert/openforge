@@ -9,7 +9,7 @@ vi.mock('../../../src/components/FilesView.svelte', () => ({
 }))
 
 import manifest from '../manifest.json'
-import { validatePluginManifest } from '../../../src/lib/plugin/manifest'
+import { validatePluginManifest } from '@openforge/plugin-sdk'
 
 describe('file-viewer plugin', () => {
   it('has a valid manifest', () => {
@@ -21,6 +21,7 @@ describe('file-viewer plugin', () => {
     const { activate, FilesViewComponent } = await import('./index')
 
     const result = await activate({
+      pluginId: 'test-plugin',
       invokeHost: async () => null,
       invokeBackend: async () => null,
       onEvent: () => () => {},
