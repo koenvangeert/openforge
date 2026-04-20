@@ -1,5 +1,7 @@
 import type { PluginManifest } from './types'
 import { MAX_SUPPORTED_API_VERSION } from './types'
+import { isPluginViewKey } from './types'
+import { makePluginViewKey } from './types'
 import {
   fsReadFile,
   getEnabledPlugins,
@@ -18,7 +20,15 @@ import {
   isPluginLoaded,
 } from './pluginLoader'
 import type { PluginContext } from './types'
+import { registerViewComponent } from './componentRegistry'
 import { activeProjectId, currentView, selectedTaskId } from '../stores'
+import type { AppView } from '../types'
+
+const STATIC_APP_VIEWS = new Set<AppView>(['board', 'settings', 'workqueue', 'global_settings', 'files'])
+
+function isAppView(value: unknown): value is AppView {
+  return typeof value === 'string' && (STATIC_APP_VIEWS.has(value as AppView) || isPluginViewKey(value))
+}
 
 type PluginHostEventName = 'context-changed' | 'navigation-changed' | 'selection-changed'
 
@@ -126,7 +136,7 @@ async function invokePluginHostCommand(command: string, payload: unknown): Promi
       return { projectId }
     }
     case 'navigate': {
-      if (typeof commandPayload?.currentView === 'string') {
+      if (isAppView(commandPayload?.currentView)) {
         currentView.set(commandPayload.currentView)
       }
 
@@ -203,7 +213,15 @@ export async function activatePlugin(pluginId: string): Promise<boolean> {
 
   const context = makePluginContextForPlugin(pluginId)
   const result = await activatePluginLoader(pluginId, context)
-  return result !== null
+  if (result === null) return false
+
+  for (const view of result.contributions.views ?? []) {
+    if (view.component) {
+      registerViewComponent(makePluginViewKey(pluginId, view.id), view.component)
+    }
+  }
+
+  return true
 }
 
 function makePluginContextForPlugin(pluginId: string): PluginContext {
@@ -211,12 +229,12 @@ function makePluginContextForPlugin(pluginId: string): PluginContext {
 
   return {
     pluginId,
-    invokeHost: async (command, payload) => invokePluginHostCommand(command, payload),
-    invokeBackend: async (method, payload) => pluginInvoke(pluginId, method, payload ?? null),
-    onEvent: (event, handler) => subscribeToPluginHostEvent(event, handler),
+    invokeHost: async (command: string, payload?: unknown) => invokePluginHostCommand(command, payload),
+    invokeBackend: async (method: string, payload?: unknown) => pluginInvoke(pluginId, method, payload ?? null),
+    onEvent: (event: string, handler: (payload: unknown) => void) => subscribeToPluginHostEvent(event, handler),
     storage: {
-      get: async key => getPluginStorage(pluginId, key),
-      set: async (key, value) => setPluginStorage(pluginId, key, value),
+      get: async (key: string) => getPluginStorage(pluginId, key),
+      set: async (key: string, value: string) => setPluginStorage(pluginId, key, value),
     },
   }
 }

@@ -34,6 +34,7 @@ function seedPlugin(pluginId: string): void {
 
 function makeContext(): PluginContext {
   return {
+    pluginId: 'test-plugin',
     invokeHost: vi.fn(async () => null),
     invokeBackend: vi.fn(async () => null),
     onEvent: vi.fn(() => () => {}),

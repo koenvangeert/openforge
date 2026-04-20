@@ -186,27 +186,27 @@ describe('pluginRegistry', () => {
     installedPlugins.set(new Map([['test-plugin', { manifest, state: 'installed', error: null }]]))
     loadPluginFrontendMock.mockResolvedValue({ pluginId: 'test-plugin', module: {}, activationResult: null })
 
-    let capturedContext: {
-      invokeHost(command: string, payload?: Record<string, unknown>): Promise<unknown>
-      onEvent(event: string, handler: (payload: unknown) => void): () => void
-    } | null = null
-
-    activatePluginLoaderMock.mockImplementation(async (_pluginId, context) => {
-      capturedContext = context
+    activatePluginLoaderMock.mockImplementation(async (_pluginId, _context) => {
       return { contributions: {} }
     })
 
     await activatePlugin('test-plugin')
 
-    expect(capturedContext).not.toBeNull()
-    await expect(capturedContext?.invokeHost('getContext')).resolves.toEqual({
+    const activationCall = activatePluginLoaderMock.mock.calls[0]
+    expect(activationCall).toBeDefined()
+    const context = activationCall?.[1]
+    if (context === undefined) {
+      throw new Error('Expected plugin context to be passed to activatePluginLoader')
+    }
+
+    await expect(context.invokeHost('getContext')).resolves.toEqual({
       activeProjectId: null,
       currentView: 'board',
       selectedTaskId: null,
     })
 
     const handler = vi.fn()
-    const unsubscribe = capturedContext?.onEvent('selection-changed', handler)
+    const unsubscribe = context.onEvent('selection-changed', handler)
     emitPluginHostEvent('selection-changed', { selectedTaskId: 'T-123' })
     expect(handler).toHaveBeenCalledWith({ selectedTaskId: 'T-123' })
 
