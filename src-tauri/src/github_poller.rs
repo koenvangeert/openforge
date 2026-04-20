@@ -272,6 +272,7 @@ pub async fn poll_github_once(app: &AppHandle, github_client: &GitHubClient) -> 
         "review PRs",
         poll_review_prs(github_client, &db, app, &github_token).await,
         &mut total_errors,
+        &mut rate_limit_count,
     );
     debug!(
         "[GitHub Poller] Review PR polling took {:.1}s",
@@ -283,6 +284,7 @@ pub async fn poll_github_once(app: &AppHandle, github_client: &GitHubClient) -> 
         "authored PRs",
         poll_authored_prs(github_client, &db, app, &github_token).await,
         &mut total_errors,
+        &mut rate_limit_count,
     );
     debug!(
         "[GitHub Poller] Authored PR polling took {:.1}s",
@@ -434,6 +436,30 @@ fn get_open_prs_for_project(db: &Mutex<Database>, project_id: &str) -> Result<Ve
 
 fn should_fetch_comments_for_pr(pr_id: i64, changed_pr_numbers: &HashSet<i64>) -> bool {
     changed_pr_numbers.is_empty() || changed_pr_numbers.contains(&pr_id)
+}
+
+#[derive(Debug)]
+enum PollPhaseError {
+    GitHub(crate::github_client::GitHubError),
+    Db(String),
+}
+
+impl PollPhaseError {
+    fn should_increment_rate_limit_count(&self) -> bool {
+        matches!(
+            self,
+            Self::GitHub(crate::github_client::GitHubError::ApiError { status: 429, .. })
+        )
+    }
+}
+
+impl fmt::Display for PollPhaseError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::GitHub(error) => write!(f, "{}", error),
+            Self::Db(message) => f.write_str(message),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -1213,10 +1239,18 @@ async fn poll_prs_for_project(
     )
 }
 
-fn count_poll_phase_error(phase: &str, result: Result<(), String>, total_errors: &mut usize) {
+fn count_poll_phase_error(
+    phase: &str,
+    result: Result<(), PollPhaseError>,
+    total_errors: &mut usize,
+    rate_limit_count: &mut usize,
+) {
     if let Err(e) = result {
         error!("[GitHub Poller] Failed to poll {}: {}", phase, e);
         *total_errors += 1;
+        if e.should_increment_rate_limit_count() {
+            *rate_limit_count += 1;
+        }
     }
 }
 
@@ -1225,12 +1259,12 @@ async fn poll_review_prs(
     db: &Mutex<Database>,
     app: &AppHandle,
     github_token: &str,
-) -> Result<(), String> {
+) -> Result<(), PollPhaseError> {
     let username = {
         let db_lock = db.lock().unwrap();
         db_lock
             .get_config("github_username")
-            .map_err(|e| e.to_string())?
+            .map_err(|e| PollPhaseError::Db(e.to_string()))?
     };
 
     let Some(username) = username else {
@@ -1240,7 +1274,7 @@ async fn poll_review_prs(
     let (prs, all_search_ids) = github_client
         .search_review_requested_prs(&username, github_token)
         .await
-        .map_err(|e| format!("Failed to search review PRs: {}", e))?;
+        .map_err(PollPhaseError::GitHub)?;
 
     {
         let db_lock = db.lock().unwrap();
@@ -1298,12 +1332,12 @@ async fn poll_authored_prs(
     db: &Mutex<Database>,
     app: &AppHandle,
     github_token: &str,
-) -> Result<(), String> {
+) -> Result<(), PollPhaseError> {
     let username = {
         let db_lock = db.lock().unwrap();
         db_lock
             .get_config("github_username")
-            .map_err(|e| e.to_string())?
+            .map_err(|e| PollPhaseError::Db(e.to_string()))?
     };
 
     let Some(username) = username else {
@@ -1313,7 +1347,7 @@ async fn poll_authored_prs(
     let (prs, all_search_ids) = github_client
         .search_authored_prs(&username, github_token)
         .await
-        .map_err(|e| format!("Failed to search authored PRs: {}", e))?;
+        .map_err(PollPhaseError::GitHub)?;
 
     type EnrichedPrData = (
         i64,
@@ -1861,22 +1895,64 @@ mod tests {
     }
 
     #[test]
-    fn test_count_poll_phase_error_increments_total_errors_on_failure() {
-        let mut total_errors = 0;
+    fn test_poll_phase_error_rate_limit_detection_uses_typed_github_error() {
+        let rate_limited = PollPhaseError::GitHub(crate::github_client::GitHubError::ApiError {
+            status: 429,
+            message: "Too Many Requests".to_string(),
+        });
+        assert!(rate_limited.should_increment_rate_limit_count());
 
-        count_poll_phase_error("review PRs", Err("boom".to_string()), &mut total_errors);
-        count_poll_phase_error("authored PRs", Err("boom".to_string()), &mut total_errors);
+        let forbidden = PollPhaseError::GitHub(crate::github_client::GitHubError::ApiError {
+            status: 403,
+            message: "Forbidden".to_string(),
+        });
+        assert!(!forbidden.should_increment_rate_limit_count());
 
-        assert_eq!(total_errors, 2);
+        let non_rate_limited = PollPhaseError::Db("boom".to_string());
+        assert!(!non_rate_limited.should_increment_rate_limit_count());
     }
 
     #[test]
-    fn test_count_poll_phase_error_leaves_total_errors_unchanged_on_success() {
-        let mut total_errors = 3;
+    fn test_count_poll_phase_error_increments_total_errors_and_rate_limit_count_on_failure() {
+        let mut total_errors = 0;
+        let mut rate_limit_count = 0;
 
-        count_poll_phase_error("review PRs", Ok(()), &mut total_errors);
+        count_poll_phase_error(
+            "review PRs",
+            Err(PollPhaseError::GitHub(
+                crate::github_client::GitHubError::ApiError {
+                    status: 429,
+                    message: "Too Many Requests".to_string(),
+                },
+            )),
+            &mut total_errors,
+            &mut rate_limit_count,
+        );
+        count_poll_phase_error(
+            "authored PRs",
+            Err(PollPhaseError::Db("boom".to_string())),
+            &mut total_errors,
+            &mut rate_limit_count,
+        );
+
+        assert_eq!(total_errors, 2);
+        assert_eq!(rate_limit_count, 1);
+    }
+
+    #[test]
+    fn test_count_poll_phase_error_leaves_counters_unchanged_on_success() {
+        let mut total_errors = 3;
+        let mut rate_limit_count = 2;
+
+        count_poll_phase_error(
+            "review PRs",
+            Ok(()),
+            &mut total_errors,
+            &mut rate_limit_count,
+        );
 
         assert_eq!(total_errors, 3);
+        assert_eq!(rate_limit_count, 2);
     }
 
     #[test]
