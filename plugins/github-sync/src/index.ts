@@ -1,4 +1,4 @@
-import type { PluginActivationResult, PluginContext } from '../../../src/lib/plugin/types'
+import type { PluginActivationResult, PluginContext } from '@openforge/plugin-sdk'
 import PrReviewView from '../../../src/components/review/pr/PrReviewView.svelte'
 
 interface ActivatedViewContribution {
@@ -6,11 +6,7 @@ interface ActivatedViewContribution {
   component: typeof PrReviewView
 }
 
-interface GithubSyncActivationResult {
-  contributions: Omit<PluginActivationResult['contributions'], 'views'> & {
-    views: ActivatedViewContribution[]
-  }
-}
+type GithubSyncActivationResult = PluginActivationResult
 
 export const PrReviewViewComponent = PrReviewView
 
