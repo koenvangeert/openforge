@@ -1,15 +1,11 @@
 <script lang="ts">
-  import { Blocks, Plus, Trash2, AlertCircle } from 'lucide-svelte'
+  import { Blocks, AlertCircle } from 'lucide-svelte'
   import {
     installedPlugins,
     enabledPluginIds,
     enablePlugin,
     disablePlugin
   } from '../../lib/plugin/pluginStore'
-  import {
-    installFromLocal,
-    uninstallPlugin
-  } from '../../lib/plugin/pluginRegistry'
 
   interface Props {
     projectId: string
@@ -21,37 +17,13 @@
     disabled = false
   }: Props = $props()
 
-  let installPath = $state('')
-  let isInstalling = $state(false)
-  let installError = $state<string | null>(null)
-
   let pluginsList = $derived(Array.from($installedPlugins.values()))
-
-  async function handleInstall() {
-    if (!installPath.trim()) return
-    isInstalling = true
-    installError = null
-    try {
-      await installFromLocal(installPath.trim(), projectId)
-      installPath = ''
-    } catch (e) {
-      installError = e instanceof Error ? e.message : String(e)
-    } finally {
-      isInstalling = false
-    }
-  }
 
   async function handleToggle(pluginId: string, isCurrentlyEnabled: boolean) {
     if (isCurrentlyEnabled) {
       await disablePlugin(projectId, pluginId)
     } else {
       await enablePlugin(projectId, pluginId)
-    }
-  }
-
-  async function handleUninstall(pluginId: string) {
-    if (confirm('Are you sure you want to uninstall this plugin?')) {
-      await uninstallPlugin(pluginId)
     }
   }
 </script>
@@ -63,33 +35,6 @@
   </div>
 
   <div class="p-5 flex flex-col gap-6">
-    <!-- Install Section -->
-    <div class="flex flex-col gap-2">
-      <span class="text-[0.7rem] text-base-content/50 uppercase tracking-wider">Install Local Plugin</span>
-      <div class="flex gap-2">
-        <input
-          type="text"
-          bind:value={installPath}
-          placeholder="Enter absolute path to plugin directory..."
-          class="input input-bordered input-sm flex-1"
-        />
-        <button
-          class="btn btn-primary btn-sm"
-          onclick={handleInstall}
-          disabled={isInstalling || !installPath.trim()}
-        >
-          <Plus size={14} />
-          Install
-        </button>
-      </div>
-      {#if installError}
-        <div class="text-xs text-error flex items-center gap-1 mt-1">
-          <AlertCircle size={12} />
-          {installError}
-        </div>
-      {/if}
-    </div>
-
     <!-- Installed Plugins List -->
     <div class="flex flex-col gap-4">
       <span class="text-[0.7rem] text-base-content/50 uppercase tracking-wider">Installed Plugins</span>
@@ -144,15 +89,6 @@
                       onchange={() => handleToggle(plugin.manifest.id, isEnabled)}
                     />
                   </label>
-
-                  <button
-                    class="btn btn-ghost btn-xs text-error hover:bg-error/10"
-                    onclick={() => handleUninstall(plugin.manifest.id)}
-                    title="Uninstall Plugin"
-                  >
-                    <Trash2 size={14} />
-                    Uninstall
-                  </button>
                 </div>
               </div>
 

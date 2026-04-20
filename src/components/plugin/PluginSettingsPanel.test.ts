@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, cleanup } from '@testing-library/svelte'
 import PluginSettingsPanel from './PluginSettingsPanel.svelte'
 import { installedPlugins, enabledPluginIds, enablePlugin, disablePlugin } from '../../lib/plugin/pluginStore'
-import { installFromLocal, uninstallPlugin } from '../../lib/plugin/pluginRegistry'
 import type { PluginEntry } from '../../lib/plugin/types'
 
 // Mock the dependencies
@@ -15,11 +14,6 @@ vi.mock('../../lib/plugin/pluginStore', () => {
     disablePlugin: vi.fn(),
   }
 })
-
-vi.mock('../../lib/plugin/pluginRegistry', () => ({
-  installFromLocal: vi.fn(),
-  uninstallPlugin: vi.fn(),
-}))
 
 const mockPlugin: PluginEntry = {
   manifest: {
@@ -45,9 +39,6 @@ describe('PluginSettingsPanel', () => {
     // Reset stores
     installedPlugins.set(new Map())
     enabledPluginIds.set(new Set())
-    
-    // Mock confirm dialog
-    global.confirm = vi.fn(() => true)
   })
 
   it('renders empty state when no plugins installed', () => {
@@ -84,27 +75,16 @@ describe('PluginSettingsPanel', () => {
     expect(disablePlugin).toHaveBeenCalledWith('proj-1', 'test-plugin')
   })
 
-  it('installs plugin from local path', async () => {
-    render(PluginSettingsPanel, { projectId: 'proj-1' })
-    
-    const input = screen.getByPlaceholderText('Enter absolute path to plugin directory...')
-    const button = screen.getByRole('button', { name: 'Install' })
-    
-    await fireEvent.input(input, { target: { value: '/path/to/plugin' } })
-    await fireEvent.click(button)
-    
-    expect(installFromLocal).toHaveBeenCalledWith('/path/to/plugin', 'proj-1')
-  })
-
-  it('uninstalls plugin with confirmation', async () => {
+  it('does not render install and uninstall controls', () => {
     installedPlugins.set(new Map([['test-plugin', mockPlugin]]))
-    
     render(PluginSettingsPanel, { projectId: 'proj-1' })
     
-    const uninstallButton = screen.getByTitle('Uninstall Plugin')
-    await fireEvent.click(uninstallButton)
+    // Assert install controls are absent
+    expect(screen.queryByPlaceholderText(/Enter absolute path/)).toBeNull()
+    expect(screen.queryByRole('button', { name: /Install/i })).toBeNull()
     
-    expect(global.confirm).toHaveBeenCalled()
-    expect(uninstallPlugin).toHaveBeenCalledWith('test-plugin')
+    // Assert uninstall controls are absent
+    expect(screen.queryByTitle(/Uninstall Plugin/i)).toBeNull()
+    expect(screen.queryByRole('button', { name: /Uninstall/i })).toBeNull()
   })
 })
