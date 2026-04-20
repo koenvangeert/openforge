@@ -14,7 +14,7 @@ export default defineConfig({
         'svelte',
         'svelte/internal',
         'svelte/store',
-        '../../../src/lib/plugin/types',
+        '@openforge/plugin-sdk',
       ],
     },
   },

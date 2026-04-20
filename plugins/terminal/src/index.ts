@@ -1,4 +1,4 @@
-import type { PluginActivationResult, PluginContext } from '../../../src/lib/plugin/types'
+import type { PluginActivationResult, PluginContext } from '@openforge/plugin-sdk'
 
 export async function activate(_context: PluginContext): Promise<PluginActivationResult> {
   return {

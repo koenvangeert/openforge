@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { validatePluginManifest } from '../../../src/lib/plugin/manifest'
+import { validatePluginManifest } from '@openforge/plugin-sdk'
 import manifest from '../manifest.json'
 
 describe('terminal plugin', () => {
@@ -11,6 +11,7 @@ describe('terminal plugin', () => {
   it('activates without error', async () => {
     const { activate } = await import('./index')
     const result = await activate({
+      pluginId: 'test-plugin',
       invokeHost: async () => null,
       invokeBackend: async () => null,
       onEvent: () => () => {},
