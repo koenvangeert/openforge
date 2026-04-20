@@ -1,11 +1,6 @@
 import type { PluginActivationResult, PluginContext } from '@openforge/plugin-sdk'
 import SkillsView from '../../../src/components/SkillsView.svelte'
 
-interface ActivatedViewContribution {
-  id: string
-  component: typeof SkillsView
-}
-
 type SkillsViewerActivationResult = PluginActivationResult
 
 export const SkillsViewComponent = SkillsView
