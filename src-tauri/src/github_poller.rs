@@ -37,6 +37,7 @@ use futures::future::join_all;
 use log::{debug, error, info, warn};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
+use std::fmt;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use tauri::{AppHandle, Emitter, Manager};
@@ -201,7 +202,7 @@ pub async fn poll_github_once(app: &AppHandle, github_client: &GitHubClient) -> 
                 project.id, e
             );
             total_errors += 1;
-            if e.contains("status 403)") || e.contains("status 429)") {
+            if e.should_increment_rate_limit_count() {
                 rate_limit_count += 1;
             }
             continue;
@@ -435,29 +436,56 @@ fn should_fetch_comments_for_pr(pr_id: i64, changed_pr_numbers: &HashSet<i64>) -
     changed_pr_numbers.is_empty() || changed_pr_numbers.contains(&pr_id)
 }
 
+#[derive(Debug)]
+enum SyncOpenPrsError {
+    InvalidRepoFormat(String),
+    GitHub(crate::github_client::GitHubError),
+    Db(String),
+}
+
+impl SyncOpenPrsError {
+    fn should_increment_rate_limit_count(&self) -> bool {
+        matches!(
+            self,
+            Self::GitHub(crate::github_client::GitHubError::ApiError { status: 429, .. })
+        )
+    }
+}
+
+impl fmt::Display for SyncOpenPrsError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::InvalidRepoFormat(message) | Self::Db(message) => f.write_str(message),
+            Self::GitHub(error) => write!(f, "{}", error),
+        }
+    }
+}
+
 async fn sync_open_prs(
     github_client: &GitHubClient,
     db: &Mutex<Database>,
     _app: &AppHandle,
     config: &PollerConfig,
     github_token: &str,
-) -> Result<usize, String> {
+) -> Result<usize, SyncOpenPrsError> {
     let parts: Vec<&str> = config.github_default_repo.split('/').collect();
     if parts.len() != 2 {
-        return Err("github_default_repo must be in format 'owner/repo'".to_string());
+        return Err(SyncOpenPrsError::InvalidRepoFormat(
+            "github_default_repo must be in format 'owner/repo'".to_string(),
+        ));
     }
     let (repo_owner, repo_name) = (parts[0], parts[1]);
 
     let github_prs = github_client
         .list_open_prs(repo_owner, repo_name, github_token)
         .await
-        .map_err(|e| format!("Failed to list open PRs: {}", e))?;
+        .map_err(SyncOpenPrsError::GitHub)?;
 
     let task_ids: Vec<String> = {
         let db_lock = db.lock().unwrap();
         db_lock
             .get_tasks_for_project(&config.project_id)
-            .map_err(|e| format!("Failed to get task data: {}", e))?
+            .map_err(|e| SyncOpenPrsError::Db(format!("Failed to get task data: {}", e)))?
             .into_iter()
             .map(|task| task.id)
             .collect()
@@ -467,7 +495,9 @@ async fn sync_open_prs(
 
     let closed_prs = {
         let db_lock = db.lock().unwrap();
-        let all_open_prs = db_lock.get_open_prs().map_err(|e| e.to_string())?;
+        let all_open_prs = db_lock
+            .get_open_prs()
+            .map_err(|e| SyncOpenPrsError::Db(e.to_string()))?;
 
         all_open_prs
             .into_iter()
@@ -542,7 +572,7 @@ async fn sync_open_prs(
         let db_lock = db.lock().unwrap();
         db_lock
             .close_stale_open_prs(repo_owner, repo_name, &dont_close_ids)
-            .map_err(|e| format!("Failed to close stale PRs: {}", e))?;
+            .map_err(|e| SyncOpenPrsError::Db(format!("Failed to close stale PRs: {}", e)))?;
     }
 
     let now = std::time::SystemTime::now()
@@ -1574,6 +1604,24 @@ mod tests {
     }
 
     #[test]
+    fn test_sync_open_prs_error_rate_limit_detection_uses_typed_github_error() {
+        let rate_limited = SyncOpenPrsError::GitHub(crate::github_client::GitHubError::ApiError {
+            status: 429,
+            message: "Too Many Requests".to_string(),
+        });
+        assert!(rate_limited.should_increment_rate_limit_count());
+
+        let forbidden = SyncOpenPrsError::GitHub(crate::github_client::GitHubError::ApiError {
+            status: 403,
+            message: "Forbidden".to_string(),
+        });
+        assert!(!forbidden.should_increment_rate_limit_count());
+
+        let non_rate_limited = SyncOpenPrsError::Db("boom".to_string());
+        assert!(!non_rate_limited.should_increment_rate_limit_count());
+    }
+
+    #[test]
     fn test_find_matching_task_ids_direct_match_in_title() {
         let pr_title = "Fix bug T-42";
         let pr_branch = "main";
@@ -1838,7 +1886,10 @@ mod tests {
 
     #[test]
     fn test_parse_poll_interval_seconds_defaults_to_seed_value_when_invalid() {
-        assert_eq!(parse_poll_interval_seconds(Some("not-a-number".to_string())), 60);
+        assert_eq!(
+            parse_poll_interval_seconds(Some("not-a-number".to_string())),
+            60
+        );
     }
 
     #[test]

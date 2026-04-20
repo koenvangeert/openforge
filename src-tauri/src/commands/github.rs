@@ -116,8 +116,8 @@ pub async fn merge_pull_request(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tauri::Manager;
     use tauri::test::{mock_builder, mock_context, noop_assets};
+    use tauri::Manager;
 
     #[test]
     fn test_valid_http_url() {
