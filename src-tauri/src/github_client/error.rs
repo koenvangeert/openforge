@@ -28,7 +28,6 @@ impl fmt::Display for GitHubError {
 impl StdError for GitHubError {}
 
 impl GitHubError {
-    #[cfg(test)]
     pub fn is_rate_limited(&self) -> bool {
         matches!(self, GitHubError::ApiError { status, .. } if *status == 403 || *status == 429)
     }
