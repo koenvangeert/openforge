@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import manifest from '../manifest.json'
-import { validatePluginManifest } from '../../../src/lib/plugin/manifest'
+import { validatePluginManifest } from '@openforge/plugin-sdk'
 
 describe('demo-hello-world plugin', () => {
   it('has a valid manifest', () => {
