@@ -461,6 +461,16 @@ export async function installPlugin(plugin: {
   });
 }
 
+export async function installPluginFromLocal(sourcePath: string): Promise<NormalizedPluginRow> {
+  const raw = await invoke<PluginRowSnake>("install_plugin_from_local", { sourcePath })
+  return normalizePluginRow(raw)
+}
+
+export async function installPluginFromNpm(packageName: string): Promise<NormalizedPluginRow> {
+  const raw = await invoke<PluginRowSnake>("install_plugin_from_npm", { packageName })
+  return normalizePluginRow(raw)
+}
+
 export async function uninstallPlugin(pluginId: string): Promise<void> {
   return invoke("uninstall_plugin", { pluginId });
 }

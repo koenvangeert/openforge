@@ -3,10 +3,11 @@ import { MAX_SUPPORTED_API_VERSION } from './types'
 import { isPluginViewKey } from './types'
 import { makePluginViewKey } from './types'
 import {
-  fsReadFile,
   getEnabledPlugins,
   getPluginStorage,
   installPlugin,
+  installPluginFromLocal as installPluginFromLocalIpc,
+  installPluginFromNpm as installPluginFromNpmIpc,
   pluginInvoke,
   setPluginStorage,
   uninstallPlugin as uninstallPluginIpc,
@@ -21,6 +22,7 @@ import {
 } from './pluginLoader'
 import type { PluginContext } from './types'
 import { registerViewComponent } from './componentRegistry'
+import { unregisterViewComponentsForPlugin } from './componentRegistry'
 import { activeProjectId, currentView, selectedTaskId } from '../stores'
 import type { AppView } from '../types'
 
@@ -42,6 +44,7 @@ type PluginHostListener = (payload: unknown) => void
 
 const pluginHostListeners = new Map<PluginHostEventName, Set<PluginHostListener>>()
 const pluginHostUnsubscribers = new Map<string, Set<() => void>>()
+const activationPromises = new Map<string, Promise<boolean>>()
 
 function subscribeToPluginHostEvent(pluginId: string, event: string, handler: PluginHostListener): () => void {
   const typedEvent = event as PluginHostEventName
@@ -181,8 +184,47 @@ async function invokePluginHostCommand(command: string, payload: unknown): Promi
   }
 }
 
-export async function installPluginFromNpm(_packageName: string): Promise<void> {
-  throw new Error('Not implemented: NPM install')
+function upsertInstalledPlugin(row: {
+  id: string
+  name: string
+  version: string
+  apiVersion: number
+  description: string
+  permissions: string
+  contributes: string
+  frontendEntry: string
+  backendEntry: string | null
+  installPath: string
+  isBuiltin: boolean
+}): void {
+  const manifest: PluginManifest = {
+    id: row.id,
+    name: row.name,
+    version: row.version,
+    apiVersion: row.apiVersion,
+    description: row.description,
+    permissions: JSON.parse(row.permissions),
+    contributes: JSON.parse(row.contributes),
+    frontend: row.frontendEntry,
+    backend: row.backendEntry,
+  }
+
+  installedPlugins.update(map => {
+    const next = new Map(map)
+    next.set(row.id, {
+      manifest,
+      state: 'installed',
+      error: null,
+      installPath: row.installPath,
+      isBuiltin: row.isBuiltin,
+    })
+    return next
+  })
+}
+
+export async function installPluginFromNpm(packageName: string): Promise<void> {
+  const row = await installPluginFromNpmIpc(packageName)
+  upsertInstalledPlugin(row)
 }
 
 export async function installPluginFromManifest(manifest: PluginManifest, installPath: string): Promise<void> {
@@ -216,6 +258,7 @@ export async function uninstallPlugin(pluginId: string): Promise<void> {
   if (isPluginLoaded(pluginId)) {
     await deactivatePluginLoader(pluginId)
   }
+  unregisterViewComponentsForPlugin(pluginId)
   clearPluginHostSubscriptions(pluginId)
   await uninstallPluginIpc(pluginId)
   installedPlugins.update(map => {
@@ -231,24 +274,42 @@ export async function loadEnabledForProject(projectId: string): Promise<void> {
 }
 
 export async function activatePlugin(pluginId: string): Promise<boolean> {
+  if (activationPromises.has(pluginId)) {
+    return activationPromises.get(pluginId) as Promise<boolean>
+  }
+
   const map = get(installedPlugins)
   const entry = map.get(pluginId)
   if (!entry) return false
 
-  const loaded = await loadPluginFrontend(pluginId, `plugin://${pluginId}/${entry.manifest.frontend}`)
-  if (!loaded) return false
-
-  const context = makePluginContextForPlugin(pluginId)
-  const result = await activatePluginLoader(pluginId, context)
-  if (result === null) return false
-
-  for (const view of result.contributions.views ?? []) {
-    if (view.component) {
-      registerViewComponent(makePluginViewKey(pluginId, view.id), view.component)
-    }
+  if (entry.state === 'active' && isPluginLoaded(pluginId)) {
+    return true
   }
 
-  return true
+  const activation = (async () => {
+    const loaded = await loadPluginFrontend(pluginId, `plugin://${pluginId}/${entry.manifest.frontend}`)
+    if (!loaded) return false
+
+    const context = makePluginContextForPlugin(pluginId)
+    const result = await activatePluginLoader(pluginId, context)
+    if (result === null) return false
+
+    for (const view of result.contributions.views ?? []) {
+      if (view.component) {
+        registerViewComponent(makePluginViewKey(pluginId, view.id), view.component)
+      }
+    }
+
+    return true
+  })()
+
+  activationPromises.set(pluginId, activation)
+
+  try {
+    return await activation
+  } finally {
+    activationPromises.delete(pluginId)
+  }
 }
 
 function makePluginContextForPlugin(pluginId: string): PluginContext {
@@ -268,24 +329,33 @@ function makePluginContextForPlugin(pluginId: string): PluginContext {
 
 export async function deactivatePluginById(pluginId: string): Promise<void> {
   await deactivatePluginLoader(pluginId)
+  unregisterViewComponentsForPlugin(pluginId)
   clearPluginHostSubscriptions(pluginId)
 }
 
-export async function installFromLocal(pluginPath: string, projectId: string): Promise<void> {
-  const file = await fsReadFile(projectId, `${pluginPath}/manifest.json`)
-  const data: unknown = JSON.parse(file.content)
-  if (
-    data === null ||
-    typeof data !== 'object' ||
-    !('id' in data) ||
-    !('name' in data) ||
-    !('version' in data) ||
-    !('apiVersion' in data) ||
-    !('description' in data) ||
-    !('frontend' in data)
-  ) {
-    throw new Error('Invalid plugin manifest: missing required fields')
-  }
-  const manifest = data as PluginManifest
-  await installPluginFromManifest(manifest, pluginPath)
+export async function installFromLocal(pluginPath: string, _projectId: string): Promise<void> {
+  const row = await installPluginFromLocalIpc(pluginPath)
+  upsertInstalledPlugin(row)
 }
+
+async function reconcileLoadedPlugins(): Promise<void> {
+  const enabled = get(enabledPluginIds)
+  const installed = get(installedPlugins)
+  const loadedPluginIds = Array.from(installed.entries())
+    .filter(([, entry]) => entry.state === 'active')
+    .map(([pluginId]) => pluginId)
+
+  for (const pluginId of loadedPluginIds) {
+    if (!enabled.has(pluginId) || !installed.has(pluginId)) {
+      await deactivatePluginById(pluginId)
+    }
+  }
+}
+
+enabledPluginIds.subscribe(() => {
+  void reconcileLoadedPlugins()
+})
+
+installedPlugins.subscribe(() => {
+  void reconcileLoadedPlugins()
+})

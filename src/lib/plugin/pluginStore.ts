@@ -1,6 +1,7 @@
 import { writable, get } from 'svelte/store'
 import type { PluginEntry } from './types'
 import * as ipc from '../ipc'
+import { resolveContributions } from './contributionResolver'
 
 function getOptionalIpcMethod<T>(resolve: () => T): T | undefined {
   try {
@@ -85,8 +86,13 @@ export function isPluginEnabled(pluginId: string): boolean {
   return get(enabledPluginIds).has(pluginId)
 }
 
-export function getContributions(_contributionType: string): unknown[] {
-  return []
+export function getContributions(contributionType: string): unknown[] {
+  const manifests = Array.from(get(enabledPluginIds))
+    .map(id => get(installedPlugins).get(id)?.manifest)
+    .filter((manifest): manifest is PluginEntry['manifest'] => manifest !== undefined)
+  const resolved = resolveContributions(manifests)
+  const bucket = resolved[contributionType as keyof typeof resolved]
+  return Array.isArray(bucket) ? bucket : []
 }
 
 export async function loadEnabledForProject(projectId: string): Promise<void> {

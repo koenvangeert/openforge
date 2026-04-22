@@ -11,6 +11,15 @@ export function getRegisteredComponent(key: PluginViewKey): Component<PluginView
   return registry.get(key)
 }
 
+export function unregisterViewComponentsForPlugin(pluginId: string): void {
+  const prefix = `plugin:${pluginId}:`
+  for (const key of Array.from(registry.keys())) {
+    if (key.startsWith(prefix)) {
+      registry.delete(key)
+    }
+  }
+}
+
 export function clearComponentRegistry(): void {
   registry.clear()
 }

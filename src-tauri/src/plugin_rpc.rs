@@ -37,6 +37,12 @@ pub enum RpcResult {
 }
 
 #[derive(Debug)]
+pub struct ParsedResponse {
+    pub id: u64,
+    pub result: RpcResult,
+}
+
+#[derive(Debug)]
 pub struct RpcError(pub String);
 
 pub fn format_request(plugin_id: &str, method: &str, params: Value) -> (u64, String) {
@@ -55,6 +61,10 @@ pub fn format_request(plugin_id: &str, method: &str, params: Value) -> (u64, Str
 }
 
 pub fn parse_response(raw: &str) -> Result<RpcResult, RpcError> {
+    Ok(parse_response_message(raw)?.result)
+}
+
+pub fn parse_response_message(raw: &str) -> Result<ParsedResponse, RpcError> {
     let response: JsonRpcResponse = serde_json::from_str(raw)
         .map_err(|error| RpcError(format!("failed to parse JSON-RPC response: {error}")))?;
 
@@ -76,11 +86,17 @@ pub fn parse_response(raw: &str) -> Result<RpcResult, RpcError> {
     }
 
     if let Some(result) = response.result {
-        return Ok(RpcResult::Success(result));
+        return Ok(ParsedResponse {
+            id: response_id,
+            result: RpcResult::Success(result),
+        });
     }
 
     if let Some(error) = response.error {
-        return Ok(RpcResult::Error(error.code, error.message));
+        return Ok(ParsedResponse {
+            id: response_id,
+            result: RpcResult::Error(error.code, error.message),
+        });
     }
 
     Err(RpcError(format!(
@@ -136,6 +152,19 @@ mod tests {
             RpcResult::Error(code, msg) => {
                 assert_eq!(code, -32601);
                 assert_eq!(msg, "Method not found");
+            }
+        }
+    }
+
+    #[test]
+    fn parse_response_message_preserves_id() {
+        let raw = r#"{"jsonrpc":"2.0","id":41,"result":{"ok":true}}"#;
+        let parsed = parse_response_message(raw).expect("response should parse");
+        assert_eq!(parsed.id, 41);
+        match parsed.result {
+            RpcResult::Success(value) => assert_eq!(value["ok"], true),
+            RpcResult::Error(code, message) => {
+                panic!("Expected success, got error {}: {}", code, message)
             }
         }
     }

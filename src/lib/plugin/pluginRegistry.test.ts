@@ -3,17 +3,19 @@ import { get } from 'svelte/store'
 
 const {
   installPluginMock,
+  installPluginFromLocalIpcMock,
+  installPluginFromNpmIpcMock,
   uninstallPluginIpcMock,
   getEnabledPluginsMock,
-  fsReadFileMock,
   pluginInvokeMock,
   getPluginStorageMock,
   setPluginStorageMock,
 } = vi.hoisted(() => ({
   installPluginMock: vi.fn(),
+  installPluginFromLocalIpcMock: vi.fn(),
+  installPluginFromNpmIpcMock: vi.fn(),
   uninstallPluginIpcMock: vi.fn(),
   getEnabledPluginsMock: vi.fn(),
-  fsReadFileMock: vi.fn(),
   pluginInvokeMock: vi.fn(),
   getPluginStorageMock: vi.fn(),
   setPluginStorageMock: vi.fn(),
@@ -25,7 +27,8 @@ vi.mock('../ipc', () => ({
   getEnabledPlugins: getEnabledPluginsMock,
   listPlugins: vi.fn().mockResolvedValue([]),
   setPluginEnabled: vi.fn(),
-  fsReadFile: fsReadFileMock,
+  installPluginFromLocal: installPluginFromLocalIpcMock,
+  installPluginFromNpm: installPluginFromNpmIpcMock,
   pluginInvoke: pluginInvokeMock,
   getPluginStorage: getPluginStorageMock,
   setPluginStorage: setPluginStorageMock,
@@ -63,6 +66,7 @@ import {
 import { installedPlugins, enabledPluginIds } from './pluginStore'
 import type { PluginManifest } from './types'
 import type { NormalizedPluginRow } from '../ipc'
+import { clearComponentRegistry, getRegisteredComponent } from './componentRegistry'
 
 function makeManifest(overrides: Partial<PluginManifest> = {}): PluginManifest {
   return {
@@ -99,9 +103,10 @@ function makeNormalized(id: string): NormalizedPluginRow {
 describe('pluginRegistry', () => {
   beforeEach(() => {
     installPluginMock.mockReset()
+    installPluginFromLocalIpcMock.mockReset()
+    installPluginFromNpmIpcMock.mockReset()
     uninstallPluginIpcMock.mockReset()
     getEnabledPluginsMock.mockReset()
-    fsReadFileMock.mockReset()
     pluginInvokeMock.mockReset()
     getPluginStorageMock.mockReset()
     setPluginStorageMock.mockReset()
@@ -111,6 +116,7 @@ describe('pluginRegistry', () => {
     isPluginLoadedMock.mockReset()
     installedPlugins.set(new Map())
     enabledPluginIds.set(new Set())
+    clearComponentRegistry()
   })
 
   it('installPluginFromManifest validates and installs', async () => {
@@ -142,8 +148,13 @@ describe('pluginRegistry', () => {
     expect(get(installedPlugins).has('test-plugin')).toBe(false)
   })
 
-  it('installPluginFromNpm throws not implemented', async () => {
-    await expect(installPluginFromNpm('some-package')).rejects.toThrow('Not implemented: NPM install')
+  it('installPluginFromNpm installs through IPC and updates the store', async () => {
+    installPluginFromNpmIpcMock.mockResolvedValue(makeNormalized('npm-plugin'))
+
+    await installPluginFromNpm('some-package')
+
+    expect(installPluginFromNpmIpcMock).toHaveBeenCalledWith('some-package')
+    expect(get(installedPlugins).get('npm-plugin')?.installPath).toBe('/tmp/plugin')
   })
 
   it('loadEnabledForProject populates enabled set', async () => {
@@ -216,14 +227,15 @@ describe('pluginRegistry', () => {
     expect(handler).toHaveBeenCalledTimes(1)
   })
 
-  it('deactivatePluginById clears host event subscriptions for the plugin', async () => {
+  it('deactivatePluginById clears host event subscriptions and unregisters view components for the plugin', async () => {
     const manifest = makeManifest()
+    const Component = {} as never
     installedPlugins.set(new Map([['test-plugin', { manifest, state: 'installed', error: null }]]))
     loadPluginFrontendMock.mockResolvedValue({ pluginId: 'test-plugin', module: {}, activationResult: null })
     deactivatePluginLoaderMock.mockResolvedValue(undefined)
 
     activatePluginLoaderMock.mockImplementation(async (_pluginId, _context) => {
-      return { contributions: {} }
+      return { contributions: { views: [{ id: 'main', component: Component }] } }
     })
 
     await activatePlugin('test-plugin')
@@ -237,21 +249,23 @@ describe('pluginRegistry', () => {
     context.onEvent('selection-changed', handler)
     emitPluginHostEvent('selection-changed', { selectedTaskId: 'T-123' })
     expect(handler).toHaveBeenCalledTimes(1)
+    expect(getRegisteredComponent('plugin:test-plugin:main')).toBe(Component)
 
     await deactivatePluginById('test-plugin')
     emitPluginHostEvent('selection-changed', { selectedTaskId: 'T-456' })
 
     expect(deactivatePluginLoaderMock).toHaveBeenCalledWith('test-plugin')
     expect(handler).toHaveBeenCalledTimes(1)
+    expect(getRegisteredComponent('plugin:test-plugin:main')).toBeUndefined()
   })
 
   it('uninstallPlugin clears host event subscriptions for loaded plugins', async () => {
     const manifest = makeManifest()
-    installedPlugins.set(new Map([['test-plugin', { manifest, state: 'active', error: null }]]))
+    installedPlugins.set(new Map([['test-plugin', { manifest, state: 'installed', error: null }]]))
     loadPluginFrontendMock.mockResolvedValue({ pluginId: 'test-plugin', module: {}, activationResult: null })
     deactivatePluginLoaderMock.mockResolvedValue(undefined)
     uninstallPluginIpcMock.mockResolvedValue(undefined)
-    isPluginLoadedMock.mockReturnValue(true)
+    isPluginLoadedMock.mockReturnValueOnce(false).mockReturnValue(true)
 
     activatePluginLoaderMock.mockImplementation(async (_pluginId, _context) => {
       return { contributions: {} }
@@ -304,14 +318,51 @@ describe('pluginRegistry', () => {
   })
 
   it('installFromLocal reads manifest via IPC and installs', async () => {
-    installPluginMock.mockResolvedValue(undefined)
-    const manifest = makeManifest()
-    fsReadFileMock.mockResolvedValue({ content: JSON.stringify(manifest), path: '/plugins/test/manifest.json' })
+    installPluginFromLocalIpcMock.mockResolvedValue(makeNormalized('local-plugin'))
 
     await installFromLocal('/plugins/test', 'project-1')
 
-    expect(fsReadFileMock).toHaveBeenCalledWith('project-1', '/plugins/test/manifest.json')
-    expect(installPluginMock).toHaveBeenCalledOnce()
-    expect(get(installedPlugins).has('test-plugin')).toBe(true)
+    expect(installPluginFromLocalIpcMock).toHaveBeenCalledWith('/plugins/test')
+    expect(get(installedPlugins).has('local-plugin')).toBe(true)
+  })
+
+  it('activatePlugin dedupes concurrent activation for the same plugin', async () => {
+    const manifest = makeManifest()
+    installedPlugins.set(new Map([['test-plugin', { manifest, state: 'installed', error: null }]]))
+    loadPluginFrontendMock.mockResolvedValue({ pluginId: 'test-plugin', module: {}, activationResult: null })
+    let resolveActivation: (() => void) | undefined
+    activatePluginLoaderMock.mockImplementation(() => new Promise(resolve => {
+      resolveActivation = () => resolve({ contributions: {} })
+    }))
+
+    const first = activatePlugin('test-plugin')
+    const second = activatePlugin('test-plugin')
+    await Promise.resolve()
+    resolveActivation?.()
+
+    await expect(first).resolves.toBe(true)
+    await expect(second).resolves.toBe(true)
+    expect(activatePluginLoaderMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('disabling a plugin reconciles active lifecycle state and unregisters its views', async () => {
+    const manifest = makeManifest()
+    const Component = {} as never
+    installedPlugins.set(new Map([['test-plugin', { manifest, state: 'installed', error: null }]]))
+    enabledPluginIds.set(new Set(['test-plugin']))
+    loadPluginFrontendMock.mockResolvedValue({ pluginId: 'test-plugin', module: {}, activationResult: null })
+    activatePluginLoaderMock.mockResolvedValue({ contributions: { views: [{ id: 'main', component: Component }] } })
+    deactivatePluginLoaderMock.mockResolvedValue(undefined)
+
+    await expect(activatePlugin('test-plugin')).resolves.toBe(true)
+    installedPlugins.set(new Map([['test-plugin', { manifest, state: 'active', error: null }]]))
+    expect(getRegisteredComponent('plugin:test-plugin:main')).toBe(Component)
+
+    enabledPluginIds.set(new Set())
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(deactivatePluginLoaderMock).toHaveBeenCalledWith('test-plugin')
+    expect(getRegisteredComponent('plugin:test-plugin:main')).toBeUndefined()
   })
 })

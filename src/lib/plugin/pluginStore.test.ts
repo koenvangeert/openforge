@@ -87,8 +87,32 @@ describe('pluginStore', () => {
   })
 
   it('getContributions returns empty array (stub)', () => {
-    const result = getContributions('views')
-    expect(result).toEqual([])
+    installedPlugins.set(new Map([[
+      'p1',
+      {
+        manifest: {
+          id: 'p1',
+          name: 'Plugin p1',
+          version: '1.0.0',
+          apiVersion: 1,
+          description: 'Test plugin',
+          permissions: [],
+          contributes: {
+            views: [{ id: 'main', title: 'Main', icon: 'sparkles' }],
+          },
+          frontend: 'index.js',
+          backend: null,
+        },
+        state: 'installed',
+        error: null,
+      },
+    ]]))
+    enabledPluginIds.set(new Set(['p1']))
+
+    const result = getContributions('views') as Array<{ pluginId: string, contributionId: string }>
+
+    expect(result).toHaveLength(1)
+    expect(result[0]).toMatchObject({ pluginId: 'p1', contributionId: 'main' })
   })
 
   it('sets loading state during load', async () => {

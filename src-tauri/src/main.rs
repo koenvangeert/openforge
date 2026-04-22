@@ -13,6 +13,7 @@ mod http_server;
 mod mcp_installer;
 mod migration;
 mod opencode_client;
+mod plugin_installation;
 mod plugin_host;
 mod plugin_rpc;
 pub mod providers;
@@ -114,13 +115,42 @@ const HOST_RUNTIME_INDEX_HTML: &str = r#"<!doctype html>
 
 const HOST_RUNTIME_RUNTIME_JS: &str =
     "globalThis.__OPENFORGE_PLUGIN_RUNTIME__ = true; export const runtimeReady = true;";
+const HOST_RUNTIME_PLUGIN_SDK_INDEX_JS: &str = include_str!("../plugin-host/plugin-sdk/index.js");
 
-fn host_runtime_asset(rel_path: &str) -> Option<(&'static [u8], &'static str)> {
+fn host_runtime_asset(rel_path: &str) -> Option<(Vec<u8>, &'static str)> {
     match rel_path {
-        "index.html" => Some((HOST_RUNTIME_INDEX_HTML.as_bytes(), "text/html; charset=utf-8")),
-        "runtime.js" => Some((HOST_RUNTIME_RUNTIME_JS.as_bytes(), "application/javascript")),
-        _ => None,
+        "index.html" => Some((HOST_RUNTIME_INDEX_HTML.as_bytes().to_vec(), "text/html; charset=utf-8")),
+        "runtime.js" => Some((HOST_RUNTIME_RUNTIME_JS.as_bytes().to_vec(), "application/javascript")),
+        "plugin-sdk/index.js" => Some((
+            HOST_RUNTIME_PLUGIN_SDK_INDEX_JS.as_bytes().to_vec(),
+            "application/javascript",
+        )),
+        "svelte/index.js" | "svelte/internal.js" | "svelte/store.js" => {
+            resolve_host_runtime_passthrough_asset(rel_path)
+        }
+        _ => resolve_host_runtime_passthrough_asset(rel_path),
     }
+}
+
+fn resolve_host_runtime_passthrough_asset(rel_path: &str) -> Option<(Vec<u8>, &'static str)> {
+    let workspace_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..");
+    resolve_host_runtime_passthrough_asset_from_root(&workspace_root, rel_path)
+}
+
+fn resolve_host_runtime_passthrough_asset_from_root(
+    workspace_root: &Path,
+    rel_path: &str,
+) -> Option<(Vec<u8>, &'static str)> {
+    let svelte_src_root = workspace_root.join("node_modules").join("svelte").join("src");
+
+    let rel = rel_path.strip_prefix("svelte/")?;
+    if rel.contains("..") {
+        return None;
+    }
+
+    let candidate = svelte_src_root.join(rel);
+    let content = std::fs::read(candidate).ok()?;
+    Some((content, "application/javascript"))
 }
 
 fn builtin_plugin_dir_name(plugin_id: &str) -> Result<&'static str, String> {
@@ -902,6 +932,8 @@ fn main() {
             commands::files::fs_read_file,
             commands::files::fs_search_files,
             commands::plugins::install_plugin,
+            commands::plugins::install_plugin_from_local,
+            commands::plugins::install_plugin_from_npm,
             commands::plugins::uninstall_plugin,
             commands::plugins::get_plugin,
             commands::plugins::list_plugins,
@@ -929,7 +961,8 @@ fn main() {
                     Some((content, mime_type)) => tauri::http::Response::builder()
                         .status(200)
                         .header("Content-Type", mime_type)
-                        .body(content.to_vec())
+                        .header("Access-Control-Allow-Origin", "*")
+                        .body(content)
                         .unwrap(),
                     None => tauri::http::Response::builder()
                         .status(404)
@@ -1031,6 +1064,7 @@ fn main() {
 mod tests {
     use super::{
         host_runtime_asset, load_resume_targets, opencode_resume_persistence,
+        resolve_host_runtime_passthrough_asset_from_root,
         resolve_plugin_asset_path, resolve_plugin_install_base_dir,
         restore_resumed_session_state, should_start_project_root_server,
         ResumeSessionPersistence, ResumeTarget,
@@ -1332,6 +1366,39 @@ mod tests {
             .expect("runtime.js should be served by host runtime");
 
         assert_eq!(mime_type, "application/javascript");
-        assert!(String::from_utf8_lossy(content).contains("runtimeReady"));
+        assert!(String::from_utf8_lossy(&content).contains("runtimeReady"));
+    }
+
+    #[test]
+    fn host_runtime_asset_serves_plugin_sdk_runtime_js() {
+        let (content, mime_type) = host_runtime_asset("plugin-sdk/index.js")
+            .expect("plugin-sdk runtime should be served by host runtime");
+
+        assert_eq!(mime_type, "application/javascript");
+        let source = String::from_utf8_lossy(&content);
+        assert!(source.contains("PluginContextImpl"));
+        assert!(source.contains("validatePluginManifest"));
+    }
+
+    #[test]
+    fn host_runtime_asset_serves_svelte_entrypoints() {
+        let temp = tempfile::tempdir().expect("tempdir should create");
+        let svelte_root = temp
+            .path()
+            .join("node_modules")
+            .join("svelte")
+            .join("src");
+        std::fs::create_dir_all(&svelte_root).expect("svelte src root should create");
+        std::fs::write(svelte_root.join("index.js"), "export * from './internal.js';")
+            .expect("svelte entrypoint should write");
+
+        let (content, mime_type) = resolve_host_runtime_passthrough_asset_from_root(
+            temp.path(),
+            "svelte/index.js",
+        )
+        .expect("svelte index should be served by host runtime");
+
+        assert_eq!(mime_type, "application/javascript");
+        assert!(String::from_utf8_lossy(&content).contains("./internal"));
     }
 }
