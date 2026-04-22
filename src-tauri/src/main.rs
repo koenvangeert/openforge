@@ -115,13 +115,43 @@ const HOST_RUNTIME_INDEX_HTML: &str = r#"<!doctype html>
 
 const HOST_RUNTIME_RUNTIME_JS: &str =
     "globalThis.__OPENFORGE_PLUGIN_RUNTIME__ = true; export const runtimeReady = true;";
+const HOST_RUNTIME_PLUGIN_SDK_INDEX_JS: &str = include_str!("../plugin-host/plugin-sdk/index.js");
+const HOST_RUNTIME_SVELTE_INDEX_JS: &[u8] =
+    include_bytes!("../../node_modules/svelte/src/index-client.js");
+const HOST_RUNTIME_SVELTE_INTERNAL_JS: &[u8] =
+    include_bytes!("../../node_modules/svelte/src/internal/index.js");
+const HOST_RUNTIME_SVELTE_STORE_JS: &[u8] =
+    include_bytes!("../../node_modules/svelte/src/store/index-client.js");
 
-fn host_runtime_asset(rel_path: &str) -> Option<(&'static [u8], &'static str)> {
+fn host_runtime_asset(rel_path: &str) -> Option<(Vec<u8>, &'static str)> {
     match rel_path {
-        "index.html" => Some((HOST_RUNTIME_INDEX_HTML.as_bytes(), "text/html; charset=utf-8")),
-        "runtime.js" => Some((HOST_RUNTIME_RUNTIME_JS.as_bytes(), "application/javascript")),
-        _ => None,
+        "index.html" => Some((HOST_RUNTIME_INDEX_HTML.as_bytes().to_vec(), "text/html; charset=utf-8")),
+        "runtime.js" => Some((HOST_RUNTIME_RUNTIME_JS.as_bytes().to_vec(), "application/javascript")),
+        "plugin-sdk/index.js" => Some((
+            HOST_RUNTIME_PLUGIN_SDK_INDEX_JS.as_bytes().to_vec(),
+            "application/javascript",
+        )),
+        "svelte/index.js" => Some((HOST_RUNTIME_SVELTE_INDEX_JS.to_vec(), "application/javascript")),
+        "svelte/internal.js" => {
+            Some((HOST_RUNTIME_SVELTE_INTERNAL_JS.to_vec(), "application/javascript"))
+        }
+        "svelte/store.js" => Some((HOST_RUNTIME_SVELTE_STORE_JS.to_vec(), "application/javascript")),
+        _ => resolve_host_runtime_passthrough_asset(rel_path),
     }
+}
+
+fn resolve_host_runtime_passthrough_asset(rel_path: &str) -> Option<(Vec<u8>, &'static str)> {
+    let workspace_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..");
+    let svelte_src_root = workspace_root.join("node_modules").join("svelte").join("src");
+
+    let rel = rel_path.strip_prefix("svelte/")?;
+    if rel.contains("..") {
+        return None;
+    }
+
+    let candidate = svelte_src_root.join(rel);
+    let content = std::fs::read(candidate).ok()?;
+    Some((content, "application/javascript"))
 }
 
 fn builtin_plugin_dir_name(plugin_id: &str) -> Result<&'static str, String> {
@@ -932,7 +962,8 @@ fn main() {
                     Some((content, mime_type)) => tauri::http::Response::builder()
                         .status(200)
                         .header("Content-Type", mime_type)
-                        .body(content.to_vec())
+                        .header("Access-Control-Allow-Origin", "*")
+                        .body(content)
                         .unwrap(),
                     None => tauri::http::Response::builder()
                         .status(404)
@@ -1335,6 +1366,26 @@ mod tests {
             .expect("runtime.js should be served by host runtime");
 
         assert_eq!(mime_type, "application/javascript");
-        assert!(String::from_utf8_lossy(content).contains("runtimeReady"));
+        assert!(String::from_utf8_lossy(&content).contains("runtimeReady"));
+    }
+
+    #[test]
+    fn host_runtime_asset_serves_plugin_sdk_runtime_js() {
+        let (content, mime_type) = host_runtime_asset("plugin-sdk/index.js")
+            .expect("plugin-sdk runtime should be served by host runtime");
+
+        assert_eq!(mime_type, "application/javascript");
+        let source = String::from_utf8_lossy(&content);
+        assert!(source.contains("PluginContextImpl"));
+        assert!(source.contains("validatePluginManifest"));
+    }
+
+    #[test]
+    fn host_runtime_asset_serves_svelte_entrypoints() {
+        let (content, mime_type) = host_runtime_asset("svelte/index.js")
+            .expect("svelte index should be served by host runtime");
+
+        assert_eq!(mime_type, "application/javascript");
+        assert!(String::from_utf8_lossy(&content).contains("./internal"));
     }
 }
