@@ -689,6 +689,63 @@ struct PollSinglePrResult {
     error: Option<String>,
 }
 
+#[derive(Debug, Default)]
+struct PersistCommentsResult {
+    new_comment_count: usize,
+    failed_insert_count: usize,
+}
+
+fn persist_polled_comments<R: tauri::Runtime>(
+    app: &impl Emitter<R>,
+    db: &Database,
+    result: &PollSinglePrResult,
+    existing_ids: &HashSet<i64>,
+    now: i64,
+) -> PersistCommentsResult {
+    let mut persist_result = PersistCommentsResult::default();
+
+    for comment in &result.comments {
+        if existing_ids.contains(&comment.id) {
+            continue;
+        }
+
+        let created_at = parse_github_timestamp(&comment.created_at).unwrap_or(now);
+
+        if let Err(e) = db.insert_pr_comment(
+            comment.id,
+            result.pr_id,
+            &comment.user.login,
+            &comment.body,
+            &comment.comment_type,
+            comment.path.as_deref(),
+            comment.line,
+            false,
+            created_at,
+        ) {
+            error!(
+                "[GitHub Poller] Failed to insert comment {}: {}",
+                comment.id, e
+            );
+            persist_result.failed_insert_count += 1;
+            continue;
+        }
+
+        if let Err(e) = app.emit(
+            "new-pr-comment",
+            serde_json::json!({
+                "ticket_id": result.ticket_id,
+                "comment_id": comment.id
+            }),
+        ) {
+            warn!("[GitHub Poller] Failed to emit new-pr-comment event: {}", e);
+        }
+
+        persist_result.new_comment_count += 1;
+    }
+
+    persist_result
+}
+
 #[allow(clippy::too_many_arguments)]
 async fn poll_single_pr(
     github_client: GitHubClient,
@@ -1025,91 +1082,8 @@ async fn poll_prs_for_project(
             }
         };
 
-        for comment in &result.comments {
-            if existing_ids.contains(&comment.id) {
-                continue;
-            }
-
-            let created_at = parse_github_timestamp(&comment.created_at).unwrap_or(now);
-
-            if let Err(e) = db_lock.insert_pr_comment(
-                comment.id,
-                result.pr_id,
-                &comment.user.login,
-                &comment.body,
-                &comment.comment_type,
-                comment.path.as_deref(),
-                comment.line,
-                false,
-                created_at,
-            ) {
-                error!(
-                    "[GitHub Poller] Failed to insert comment {}: {}",
-                    comment.id, e
-                );
-                continue;
-            }
-
-            if let Err(e) = app.emit(
-                "new-pr-comment",
-                serde_json::json!({
-                    "ticket_id": result.ticket_id,
-                    "comment_id": comment.id
-                }),
-            ) {
-                warn!("[GitHub Poller] Failed to emit new-pr-comment event: {}", e);
-            }
-
-            new_comment_count += 1;
-        }
-
-        if let Some(reviews) = &result.reviews {
-            for review in reviews {
-                let body = match &review.body {
-                    Some(b) if !b.is_empty() => b,
-                    _ => continue,
-                };
-                let comment_id = -review.id;
-                if existing_ids.contains(&comment_id) {
-                    continue;
-                }
-                let created_at = review
-                    .submitted_at
-                    .as_deref()
-                    .and_then(parse_github_timestamp)
-                    .unwrap_or(now);
-
-                if let Err(e) = db_lock.insert_pr_comment(
-                    comment_id,
-                    result.pr_id,
-                    &review.user.login,
-                    body,
-                    "review_body",
-                    None,
-                    None,
-                    false,
-                    created_at,
-                ) {
-                    error!(
-                        "[GitHub Poller] Failed to insert review body {}: {}",
-                        review.id, e
-                    );
-                    continue;
-                }
-
-                if let Err(e) = app.emit(
-                    "new-pr-comment",
-                    serde_json::json!({
-                        "ticket_id": result.ticket_id,
-                        "comment_id": comment_id
-                    }),
-                ) {
-                    warn!("[GitHub Poller] Failed to emit new-pr-comment event: {}", e);
-                }
-
-                new_comment_count += 1;
-            }
-        }
+        let persist_result = persist_polled_comments(app, &db_lock, &result, &existing_ids, now);
+        new_comment_count += persist_result.new_comment_count;
 
         if let (Some(check_runs), Some(combined_status)) =
             (&result.check_runs, &result.combined_status)
@@ -1501,6 +1475,7 @@ fn mergeability_after_pr_details(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::db::test_helpers::{insert_test_task, make_test_db};
     use crate::github_client::GitHubClient;
     use tauri::test::{mock_builder, mock_context, noop_assets};
 
@@ -1889,6 +1864,151 @@ mod tests {
 
         assert!(!result.rate_limited);
         assert_eq!(result.rate_limit_reset_at, None);
+    }
+
+    fn make_review_body_poll_result(pr_id: i64) -> PollSinglePrResult {
+        let review = PrReview {
+            id: 42,
+            user: crate::github_client::GitHubUser {
+                login: "reviewer".to_string(),
+                extra: serde_json::json!({}),
+            },
+            state: "COMMENTED".to_string(),
+            body: Some("Looks good overall".to_string()),
+            submitted_at: Some("2024-01-01T00:00:00Z".to_string()),
+            extra: serde_json::json!({}),
+        };
+
+        PollSinglePrResult {
+            pr_id,
+            ticket_id: "T-100".to_string(),
+            pr_title: "Review body test".to_string(),
+            head_sha: "abc123".to_string(),
+            old_ci_status: None,
+            old_review_status: None,
+            comments: vec![PrComment {
+                id: -review.id,
+                body: review.body.clone().expect("review body should exist"),
+                user: review.user.clone(),
+                path: None,
+                line: None,
+                comment_type: "review_body".to_string(),
+                created_at: review
+                    .submitted_at
+                    .clone()
+                    .expect("submitted_at should exist"),
+            }],
+            check_runs: None,
+            combined_status: None,
+            reviews: Some(vec![review]),
+            has_requested_reviewers: false,
+            mergeable: None,
+            mergeable_state: None,
+            is_queued: false,
+            required_check_names: vec![],
+            required_approving_count: None,
+            error: None,
+        }
+    }
+
+    #[test]
+    fn test_persist_polled_comments_does_not_fail_when_review_body_exists_in_both_sources() {
+        let (db, path) = make_test_db("persist_polled_comments_review_body_once");
+        insert_test_task(&db);
+        db.insert_pull_request(
+            42,
+            "T-100",
+            "acme",
+            "repo",
+            "Review body test",
+            "https://example.com/pr/42",
+            "open",
+            1000,
+            1000,
+            false,
+        )
+        .expect("insert pr failed");
+
+        let result = make_review_body_poll_result(42);
+        let existing_ids = db
+            .get_existing_comment_ids(42)
+            .expect("get existing ids failed");
+        let app = mock_builder()
+            .build(mock_context(noop_assets()))
+            .expect("mock app should build");
+        let app_handle = app.handle().clone();
+
+        let persist_result =
+            persist_polled_comments(&app_handle, &db, &result, &existing_ids, 1000);
+        let comments = db.get_comments_for_pr(42).expect("get comments failed");
+
+        assert_eq!(persist_result.failed_insert_count, 0);
+        assert_eq!(persist_result.new_comment_count, 1);
+        assert_eq!(comments.len(), 1);
+        assert_eq!(comments[0].id, -42);
+        assert_eq!(comments[0].comment_type, "review_body");
+
+        drop(db);
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_persist_polled_comments_is_idempotent_across_poll_cycles_for_review_bodies() {
+        let (db, path) = make_test_db("persist_polled_comments_review_body_idempotent");
+        insert_test_task(&db);
+        db.insert_pull_request(
+            84,
+            "T-100",
+            "acme",
+            "repo",
+            "Review body test",
+            "https://example.com/pr/84",
+            "open",
+            1000,
+            1000,
+            false,
+        )
+        .expect("insert pr failed");
+
+        let result = make_review_body_poll_result(84);
+        let app = mock_builder()
+            .build(mock_context(noop_assets()))
+            .expect("mock app should build");
+        let app_handle = app.handle().clone();
+
+        let first_existing_ids = db
+            .get_existing_comment_ids(84)
+            .expect("get initial existing ids failed");
+        let first_persist = persist_polled_comments(
+            &app_handle,
+            &db,
+            &result,
+            &first_existing_ids,
+            1000,
+        );
+
+        let second_existing_ids = db
+            .get_existing_comment_ids(84)
+            .expect("get second existing ids failed");
+        let second_persist = persist_polled_comments(
+            &app_handle,
+            &db,
+            &result,
+            &second_existing_ids,
+            1000,
+        );
+
+        let comments = db.get_comments_for_pr(84).expect("get comments failed");
+
+        assert_eq!(first_persist.failed_insert_count, 0);
+        assert_eq!(first_persist.new_comment_count, 1);
+        assert_eq!(second_persist.failed_insert_count, 0);
+        assert_eq!(second_persist.new_comment_count, 0);
+        assert_eq!(comments.len(), 1);
+        assert_eq!(comments[0].id, -42);
+
+        drop(db);
+        let _ = std::fs::remove_file(&path);
     }
 
     #[test]
