@@ -3,7 +3,7 @@
   import { listen } from '@tauri-apps/api/event'
   import type { UnlistenFn, Event } from '@tauri-apps/api/event'
   import { tasks, pendingTask, selectedTaskId, activeSessions, checkpointNotification, ciFailureNotification, ticketPrs, error, isLoading, projects, activeProjectId, currentView, reviewRequestCount, authoredPrCount, projectAttention, taskSpawned, startingTasks, codeCleanupTasksEnabled, rateLimitNotification, taskRuntimeInfo, focusBoardFilters } from './lib/stores'
-  import { getProjects, getTasksForProject, getPullRequests, startImplementation, getSessionStatus, getLatestSession, getLatestSessions, forceGithubSync, deleteTask, getProjectAttention, getAppMode, finalizeClaudeSession, getConfig, getProjectConfig, getReviewPrs, getAuthoredPrs, getTaskDetail, mergePullRequest } from './lib/ipc'
+  import { getProjects, getTasksForProject, getPullRequests, startImplementation, getSessionStatus, getLatestSession, getLatestSessions, forceGithubSync, deleteTask, getProjectAttention, getAppMode, finalizeClaudeSession, getConfig, getProjectConfig, getReviewPrs, getAuthoredPrs, getTaskDetail, installPlugin, mergePullRequest } from './lib/ipc'
   import { writePtyWithSubmit } from './lib/ptySubmit'
   import { applyProjectOrder } from './lib/projectOrder'
   import { hasMergeConflicts, preservePullRequestState, isQueuedForMerge, isReadyToMerge } from './lib/types'
@@ -97,16 +97,20 @@
   let activeView = $derived($currentView === 'board' ? null : resolvedViews[$currentView])
   let pluginViewActive = $derived(isPluginViewKey($currentView) && !activeView)
 
-  function ensureBuiltinPluginInstalled(manifest: PluginManifest) {
-    installedPlugins.update((map) => {
-      const existing = map.get(manifest.id)
-      const next = new Map(map)
-      next.set(manifest.id, {
-        manifest,
-        state: existing?.state ?? 'installed',
-        error: existing?.error ?? null,
-      })
-      return next
+  async function ensureBuiltinPluginInstalled(manifest: PluginManifest): Promise<void> {
+    await installPlugin({
+      id: manifest.id,
+      name: manifest.name,
+      version: manifest.version,
+      apiVersion: manifest.apiVersion,
+      description: manifest.description,
+      permissions: JSON.stringify(manifest.permissions),
+      contributes: JSON.stringify(manifest.contributes),
+      frontendEntry: manifest.frontend,
+      backendEntry: manifest.backend,
+      installPath: `builtin:${manifest.id}`,
+      installedAt: Date.now(),
+      isBuiltin: true,
     })
   }
 
@@ -951,10 +955,13 @@
 
     // Phase 2: Load data
     await loadInstalledPlugins()
-    ensureBuiltinPluginInstalled(FILE_VIEWER_PLUGIN_MANIFEST)
-    ensureBuiltinPluginInstalled(GITHUB_SYNC_PLUGIN_MANIFEST)
-    ensureBuiltinPluginInstalled(SKILLS_VIEWER_PLUGIN_MANIFEST)
-    ensureBuiltinPluginInstalled(TERMINAL_PLUGIN_MANIFEST)
+    await Promise.all([
+      ensureBuiltinPluginInstalled(FILE_VIEWER_PLUGIN_MANIFEST),
+      ensureBuiltinPluginInstalled(GITHUB_SYNC_PLUGIN_MANIFEST),
+      ensureBuiltinPluginInstalled(SKILLS_VIEWER_PLUGIN_MANIFEST),
+      ensureBuiltinPluginInstalled(TERMINAL_PLUGIN_MANIFEST),
+    ])
+    await loadInstalledPlugins()
     ensureBuiltinPluginEnabled(FILE_VIEWER_PLUGIN_ID)
     ensureBuiltinPluginEnabled(GITHUB_SYNC_PLUGIN_ID)
     ensureBuiltinPluginEnabled(SKILLS_VIEWER_PLUGIN_ID)
