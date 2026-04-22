@@ -2,12 +2,34 @@ import type { ITerminalOptions } from '@xterm/xterm'
 import type { ThemeMode } from './theme'
 import { getTerminalTheme } from './theme'
 
+const TERMINAL_FONT_SIZE = 13
+const TERMINAL_FONT_PRELOAD_TIMEOUT_MS = 3000
+
+export const TERMINAL_WEB_FONT_FAMILIES = ['JetBrains Mono', 'NerdFontsSymbols Nerd Font']
+
 /**
  * Shared font family stack for all xterm terminals in the application.
- * Prioritizes JetBrains Mono with Nerd Font symbol support, with fallbacks
- * to monospace fonts available on most systems.
+ * Prioritizes JetBrains Mono with bundled Nerd Font symbol support, then
+ * falls back to system-installed symbol and monospace fonts.
  */
-export const TERMINAL_FONT_FAMILY = "'JetBrains Mono', 'Symbols Nerd Font', 'Symbols Nerd Font Mono', 'SF Mono', 'Fira Code', 'Consolas', monospace"
+export const TERMINAL_FONT_FAMILY = "'JetBrains Mono', 'NerdFontsSymbols Nerd Font', 'Symbols Nerd Font', 'Symbols Nerd Font Mono', 'SF Mono', 'Fira Code', 'Consolas', monospace"
+
+/**
+ * Preloads the bundled terminal fonts so xterm measures glyph widths against
+ * the correct font faces before opening into the DOM.
+ */
+export async function preloadTerminalFonts(): Promise<void> {
+  if (typeof document === 'undefined' || !document.fonts) {
+    return
+  }
+
+  const fontLoads = TERMINAL_WEB_FONT_FAMILIES.map(fontFamily => document.fonts.load(`${TERMINAL_FONT_SIZE}px "${fontFamily}"`))
+
+  await Promise.race([
+    Promise.allSettled(fontLoads).then(() => undefined),
+    new Promise<void>(resolve => setTimeout(resolve, TERMINAL_FONT_PRELOAD_TIMEOUT_MS)),
+  ])
+}
 
 /**
  * Returns the default xterm terminal options.
@@ -20,7 +42,7 @@ export const TERMINAL_FONT_FAMILY = "'JetBrains Mono', 'Symbols Nerd Font', 'Sym
 export function getTerminalOptions(themeMode: ThemeMode): ITerminalOptions {
   return {
     fontFamily: TERMINAL_FONT_FAMILY,
-    fontSize: 13,
+    fontSize: TERMINAL_FONT_SIZE,
     lineHeight: 1.4,
     cursorBlink: true,
     cursorStyle: 'block',

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { getTerminalOptions, TERMINAL_FONT_FAMILY } from './terminalOptions'
+import { getTerminalOptions, TERMINAL_FONT_FAMILY, TERMINAL_WEB_FONT_FAMILIES } from './terminalOptions'
 import { getTerminalTheme } from './theme'
 
 vi.mock('./theme', () => ({
@@ -11,7 +11,11 @@ vi.mock('./theme', () => ({
 
 describe('terminalOptions', () => {
   it('exports TERMINAL_FONT_FAMILY constant', () => {
-    expect(TERMINAL_FONT_FAMILY).toBe("'JetBrains Mono', 'Symbols Nerd Font', 'Symbols Nerd Font Mono', 'SF Mono', 'Fira Code', 'Consolas', monospace")
+    expect(TERMINAL_FONT_FAMILY).toBe("'JetBrains Mono', 'NerdFontsSymbols Nerd Font', 'Symbols Nerd Font', 'Symbols Nerd Font Mono', 'SF Mono', 'Fira Code', 'Consolas', monospace")
+  })
+
+  it('exports the web fonts that must be preloaded before terminals open', () => {
+    expect(TERMINAL_WEB_FONT_FAMILIES).toEqual(['JetBrains Mono', 'NerdFontsSymbols Nerd Font'])
   })
 
   it('getTerminalOptions returns default options with correct properties', () => {
