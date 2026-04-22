@@ -14,11 +14,11 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@openforge/plugin-sdk": "workspace:*",
     "@fontsource/inter": "^5.2.8",
     "@fontsource/jetbrains-mono": "^5.2.8",
     "@git-diff-view/core": "^0.0.39",
     "@git-diff-view/svelte": "^0.0.13",
+    "@openforge/plugin-sdk": "workspace:*",
     "@tailwindcss/vite": "^4.2.2",
     "@tanstack/virtual-core": "^3.13.21",
     "@xterm/addon-fit": "^0.11.0",
@@ -29,6 +29,7 @@
     "dompurify": "^3.3.2",
     "lucide-svelte": "^0.576.0",
     "marked": "^17.0.3",
+    "nerdfonts-web": "^1.0.1",
     "svelte": "^5.0.0",
     "tailwindcss": "^4.2.0"
   },

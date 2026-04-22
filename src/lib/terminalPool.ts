@@ -5,7 +5,7 @@ import { WebglAddon } from '@xterm/addon-webgl'
 import { Terminal } from '@xterm/xterm'
 import { get } from 'svelte/store'
 import { getPtyBuffer, openUrl, resizePty, writePty } from './ipc'
-import { getTerminalOptions } from './terminalOptions'
+import { getTerminalOptions, preloadTerminalFonts } from './terminalOptions'
 import { getTerminalTheme, themeMode } from './theme'
 import type { PtyEvent } from './types'
 
@@ -142,13 +142,7 @@ export async function acquire(taskId: string): Promise<PoolEntry> {
 
   const hostDiv = createHostDiv()
 
-  // Wait for fonts before opening terminal (document.fonts may be unavailable in test envs)
-  if (typeof document !== 'undefined' && document.fonts?.ready) {
-    await Promise.race([
-      document.fonts.ready,
-      new Promise<void>(resolve => setTimeout(resolve, 3000)),
-    ])
-  }
+  await preloadTerminalFonts()
 
   // NOTE: terminal.open() is deferred to the first attach() call so that
   // xterm.js measures character dimensions against a DOM-attached container

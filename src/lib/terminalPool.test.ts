@@ -41,6 +41,8 @@ const listenCallbacks = new Map<string, ListenCallback>();
 const unlistenFns: UnlistenMock[] = [];
 let webLinksHandler: ((event: MouseEvent, uri: string) => void) | null = null;
 let webglContextLossHandler: (() => void) | null = null;
+let fontLoadMock: Mock;
+const originalDocumentFonts = document.fonts;
 
 interface TerminalMockOptions {
 	fontFamily?: string;
@@ -249,10 +251,22 @@ describe("terminalPool", () => {
 		unlistenFns.length = 0;
 		webLinksHandler = null;
 		webglContextLossHandler = null;
+		fontLoadMock = vi.fn().mockResolvedValue([]);
+		Object.defineProperty(document, "fonts", {
+			configurable: true,
+			value: {
+				ready: Promise.resolve(),
+				load: fontLoadMock,
+			},
+		});
 		vi.clearAllMocks();
 	});
 
 	afterEach(() => {
+		Object.defineProperty(document, "fonts", {
+			configurable: true,
+			value: originalDocumentFonts,
+		});
 		releaseAll();
 	});
 
@@ -270,6 +284,15 @@ describe("terminalPool", () => {
 	it("initializes terminal with the correct font family stack including JetBrains Mono and Nerd Font fallback", async () => {
 		const entry = await acquire("task-font-check");
 		expect(getTerminalFontFamily(entry.terminal)).toBe(TERMINAL_FONT_FAMILY);
+	});
+
+	it("acquire preloads the bundled terminal web fonts before open", async () => {
+		await acquire("task-font-preload");
+
+		expect(fontLoadMock).toHaveBeenCalledWith('13px "JetBrains Mono"');
+		expect(fontLoadMock).toHaveBeenCalledWith(
+			'13px "NerdFontsSymbols Nerd Font"',
+		);
 	});
 
 	it("acquire returns existing entry on second call", async () => {
