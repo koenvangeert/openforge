@@ -87,7 +87,9 @@ pub async fn install_npm_plugin_bundle(
         return Err(format!("npm install failed: {details}"));
     }
 
-    let package_dir = install_root.join("node_modules").join(package_name);
+    let package_dir = install_root
+        .join("node_modules")
+        .join(resolve_requested_package_dir_name(package_name)?);
     let manifest = load_manifest_from_dir(&package_dir)?;
     let destination = managed_plugin_dir(managed_base_dir, &manifest.id);
     let copy_result = replace_directory(&package_dir, &destination);
@@ -107,10 +109,7 @@ pub fn uninstall_managed_plugin(
     let managed_root = managed_plugins_dir(managed_base_dir);
     let install_path = PathBuf::from(&plugin.install_path);
     if !install_path.starts_with(&managed_root) {
-        return Err(format!(
-            "refusing to delete plugin outside managed directory: {}",
-            install_path.display()
-        ));
+        return Ok(());
     }
 
     if install_path.exists() {
@@ -280,6 +279,38 @@ fn unique_staging_dir(managed_base_dir: &Path) -> Result<PathBuf, String> {
     Ok(path)
 }
 
+fn resolve_requested_package_dir_name(package_spec: &str) -> Result<String, String> {
+    let package_spec = package_spec.trim();
+    if package_spec.is_empty() {
+        return Err("package name cannot be empty".to_string());
+    }
+
+    if let Some((alias, _)) = package_spec.split_once("@npm:") {
+        return if alias.is_empty() {
+            Err(format!("invalid npm alias package spec: {package_spec}"))
+        } else {
+            Ok(alias.to_string())
+        };
+    }
+
+    if let Some(stripped) = package_spec.strip_prefix('@') {
+        let slash_index = stripped
+            .find('/')
+            .ok_or_else(|| format!("invalid scoped package spec: {package_spec}"))?;
+        let after_scope = &stripped[slash_index + 1..];
+        if let Some(version_sep) = after_scope.find('@') {
+            return Ok(format!("@{}/{}", &stripped[..slash_index], &after_scope[..version_sep]));
+        }
+
+        return Ok(package_spec.to_string());
+    }
+
+    match package_spec.find('@') {
+        Some(index) => Ok(package_spec[..index].to_string()),
+        None => Ok(package_spec.to_string()),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -381,6 +412,57 @@ mod tests {
         assert!(!plugin_dir.exists());
     }
 
+    #[test]
+    fn uninstall_managed_plugin_is_noop_for_unmanaged_paths() {
+        let managed = tempdir().expect("managed tempdir should create");
+        let external = tempdir().expect("external tempdir should create");
+        let external_manifest = external.path().join("manifest.json");
+        fs::write(&external_manifest, "{}").expect("manifest should write");
+
+        let row = db::PluginRow {
+            id: "com.example.legacy".to_string(),
+            name: "Legacy Plugin".to_string(),
+            version: "1.0.0".to_string(),
+            api_version: 1,
+            description: "plugin".to_string(),
+            permissions: "[]".to_string(),
+            contributes: "{}".to_string(),
+            frontend_entry: "dist/index.js".to_string(),
+            backend_entry: None,
+            install_path: external.path().to_string_lossy().into_owned(),
+            installed_at: 0,
+            is_builtin: false,
+        };
+
+        uninstall_managed_plugin(&row, managed.path()).expect("unmanaged uninstall should succeed");
+
+        assert!(external_manifest.exists());
+    }
+
+    #[test]
+    fn resolve_requested_package_dir_name_handles_version_and_alias_specs() {
+        assert_eq!(
+            resolve_requested_package_dir_name("example-plugin@1.2.3")
+                .expect("version spec should resolve"),
+            "example-plugin"
+        );
+        assert_eq!(
+            resolve_requested_package_dir_name("example-plugin@latest")
+                .expect("tag spec should resolve"),
+            "example-plugin"
+        );
+        assert_eq!(
+            resolve_requested_package_dir_name("@openforge/example-plugin@1.2.3")
+                .expect("scoped version spec should resolve"),
+            "@openforge/example-plugin"
+        );
+        assert_eq!(
+            resolve_requested_package_dir_name("plugin-alias@npm:@openforge/example-plugin@1.2.3")
+                .expect("alias spec should resolve"),
+            "plugin-alias"
+        );
+    }
+
     #[tokio::test]
     async fn install_npm_plugin_bundle_uses_staging_install_and_copies_package_root() {
         let managed = tempdir().expect("managed tempdir should create");
@@ -438,6 +520,60 @@ echo "export const ok = true;" > "$prefix/node_modules/$package/dist/index.js"
         let install_path = PathBuf::from(&row.install_path);
         assert_eq!(row.id, "com.example.npm");
         assert!(install_path.starts_with(managed_plugins_dir(managed.path())));
+        assert!(install_path.join("manifest.json").exists());
+        assert!(install_path.join("dist/index.js").exists());
+    }
+
+    #[tokio::test]
+    async fn install_npm_plugin_bundle_resolves_versioned_package_specs() {
+        let managed = tempdir().expect("managed tempdir should create");
+        let fake_npm_dir = tempdir().expect("fake npm dir should create");
+        let fake_npm = fake_npm_dir.path().join("npm");
+        let script = r#"#!/bin/sh
+prefix=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --prefix)
+      shift
+      prefix="$1"
+      ;;
+  esac
+  shift
+done
+mkdir -p "$prefix/node_modules/example-plugin/dist"
+cat > "$prefix/node_modules/example-plugin/manifest.json" <<'EOF'
+{
+  "id": "com.example.versioned",
+  "name": "Versioned Plugin",
+  "version": "1.2.3",
+  "apiVersion": 1,
+  "description": "Installed from npm",
+  "permissions": [],
+  "contributes": {},
+  "frontend": "dist/index.js",
+  "backend": null
+}
+EOF
+echo "export const ok = true;" > "$prefix/node_modules/example-plugin/dist/index.js"
+"#;
+        fs::write(&fake_npm, script).expect("fake npm should write");
+        #[cfg(unix)]
+        {
+            let mut permissions = fs::metadata(&fake_npm)
+                .expect("metadata should read")
+                .permissions();
+            permissions.set_mode(0o755);
+            fs::set_permissions(&fake_npm, permissions).expect("permissions should set");
+        }
+
+        std::env::set_var(NPM_PATH_ENV, &fake_npm);
+        let row = install_npm_plugin_bundle("example-plugin@1.2.3", managed.path())
+            .await
+            .expect("versioned npm install should succeed");
+        std::env::remove_var(NPM_PATH_ENV);
+
+        let install_path = PathBuf::from(&row.install_path);
+        assert_eq!(row.id, "com.example.versioned");
         assert!(install_path.join("manifest.json").exists());
         assert!(install_path.join("dist/index.js").exists());
     }
