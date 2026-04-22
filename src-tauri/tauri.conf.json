@@ -20,7 +20,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https: data:; font-src 'self' data:; connect-src ipc: http://ipc.localhost https://api.github.com https://*.atlassian.net"
+      "csp": "default-src 'self'; script-src 'self' plugin:; style-src 'self' 'unsafe-inline'; img-src 'self' https: data:; font-src 'self' data:; connect-src ipc: http://ipc.localhost https://api.github.com https://*.atlassian.net"
     }
   },
   "bundle": {

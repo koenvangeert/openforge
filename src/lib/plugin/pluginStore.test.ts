@@ -62,6 +62,7 @@ describe('pluginStore', () => {
     expect(map.size).toBe(2)
     expect(map.has('p1')).toBe(true)
     expect(map.has('p2')).toBe(true)
+    expect(map.get('p1')?.installPath).toBe('/tmp/plugin')
   })
 
   it('enables plugin for project', async () => {

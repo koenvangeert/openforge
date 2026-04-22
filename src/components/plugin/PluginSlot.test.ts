@@ -1,20 +1,50 @@
-import { render } from '@testing-library/svelte'
+import { render, screen, waitFor } from '@testing-library/svelte'
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import PluginSlot from './PluginSlot.svelte'
+import PluginSlotTestView from './PluginSlotTestView.svelte'
+import PluginSlotCrashingView from './PluginSlotCrashingView.svelte'
 import { installedPlugins, enabledPluginIds } from '../../lib/plugin/pluginStore'
 import type { PluginEntry, PluginManifest } from '../../lib/plugin/types'
+import { clearComponentRegistry, registerViewComponent } from '../../lib/plugin/componentRegistry'
+import { makePluginViewKey } from '../../lib/plugin/types'
 
-vi.mock('../../lib/plugin/pluginLoader', () => ({
-  mountPluginComponent: vi.fn(),
-  unmountPluginComponent: vi.fn(),
-  getLoadedPlugin: vi.fn()
+const { activatePluginMock } = vi.hoisted(() => ({
+  activatePluginMock: vi.fn(async () => true),
 }))
+
+vi.mock('../../lib/plugin/pluginRegistry', () => ({
+  activatePlugin: activatePluginMock,
+}))
+
+function makeViewManifest(pluginId: string = 'test-plugin'): PluginManifest {
+  return {
+    id: pluginId,
+    name: 'Test',
+    version: '1.0.0',
+    apiVersion: 1,
+    description: 'Test plugin',
+    permissions: [],
+    contributes: {
+      views: [
+        {
+          id: 'main',
+          title: 'Main',
+          icon: 'plug',
+          showInRail: true,
+        },
+      ],
+    },
+    frontend: 'index.js',
+    backend: null,
+  }
+}
 
 describe('PluginSlot', () => {
   beforeEach(() => {
     installedPlugins.set(new Map())
     enabledPluginIds.set(new Set())
     vi.clearAllMocks()
+    clearComponentRegistry()
   })
 
   it('renders nothing for empty slot', () => {
@@ -34,15 +64,8 @@ describe('PluginSlot', () => {
 
   it('handles slot with no contributions', async () => {
     const manifest: PluginManifest = {
-      id: 'test-plugin',
-      name: 'Test',
-      version: '1.0.0',
-      apiVersion: 1,
-      description: 'Test plugin',
-      permissions: [],
+      ...makeViewManifest(),
       contributes: {},
-      frontend: 'index.js',
-      backend: null,
     }
 
     const entry: PluginEntry = {
@@ -58,5 +81,85 @@ describe('PluginSlot', () => {
     await new Promise(r => setTimeout(r, 10))
     const div = container.querySelector('div')
     expect(div?.children.length).toBe(0)
+  })
+
+  it('renders a registered plugin view component through the slot', async () => {
+    const manifest = makeViewManifest()
+    const entry: PluginEntry = {
+      manifest,
+      state: 'active',
+      error: null,
+    }
+
+    registerViewComponent(makePluginViewKey('test-plugin', 'main'), PluginSlotTestView)
+    installedPlugins.set(new Map([['test-plugin', entry]]))
+    enabledPluginIds.set(new Set(['test-plugin']))
+
+    render(PluginSlot, {
+      props: {
+        slotType: 'views',
+        slotId: 'plugin:test-plugin:main',
+        projectName: 'Project Alpha',
+      },
+    })
+
+    await waitFor(() => {
+      expect(screen.getByTestId('plugin-slot-view').textContent).toContain('Project Alpha')
+    })
+    expect(activatePluginMock).not.toHaveBeenCalled()
+  })
+
+  it('activates a plugin when a view component is not registered yet', async () => {
+    const manifest = makeViewManifest()
+    const entry: PluginEntry = {
+      manifest,
+      state: 'installed',
+      error: null,
+    }
+
+    activatePluginMock.mockImplementationOnce(async () => {
+      registerViewComponent(makePluginViewKey('test-plugin', 'main'), PluginSlotTestView)
+      return true
+    })
+
+    installedPlugins.set(new Map([['test-plugin', entry]]))
+    enabledPluginIds.set(new Set(['test-plugin']))
+
+    render(PluginSlot, {
+      props: {
+        slotType: 'views',
+        slotId: 'plugin:test-plugin:main',
+        projectName: 'Project Beta',
+      },
+    })
+
+    await waitFor(() => {
+      expect(activatePluginMock).toHaveBeenCalledWith('test-plugin')
+      expect(screen.getByTestId('plugin-slot-view').textContent).toContain('Project Beta')
+    })
+  })
+
+  it('shows plugin fallback UI when the rendered plugin view throws', async () => {
+    const manifest = makeViewManifest()
+    const entry: PluginEntry = {
+      manifest,
+      state: 'active',
+      error: null,
+    }
+
+    registerViewComponent(makePluginViewKey('test-plugin', 'main'), PluginSlotCrashingView)
+    installedPlugins.set(new Map([['test-plugin', entry]]))
+    enabledPluginIds.set(new Set(['test-plugin']))
+
+    render(PluginSlot, {
+      props: {
+        slotType: 'views',
+        slotId: 'plugin:test-plugin:main',
+      },
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert').textContent).toContain('plugin render failed')
+    })
   })
 })

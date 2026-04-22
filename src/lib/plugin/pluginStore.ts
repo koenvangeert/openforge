@@ -42,6 +42,8 @@ export async function loadInstalledPlugins(): Promise<void> {
         },
         state: 'installed' as const,
         error: null,
+        installPath: row.installPath,
+        isBuiltin: row.isBuiltin,
       },
     ])))
   } catch (e) {

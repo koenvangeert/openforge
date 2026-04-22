@@ -100,8 +100,60 @@ fn validate_plugin_id(plugin_id: &str) -> Result<(), String> {
     }
 }
 
+const HOST_RUNTIME_INDEX_HTML: &str = r#"<!doctype html>
+<html lang=\"en\">
+  <head>
+    <meta charset=\"utf-8\" />
+    <title>Open Forge Plugin Runtime</title>
+  </head>
+  <body>
+    <script type=\"module\" src=\"plugin://host-runtime/runtime.js\"></script>
+  </body>
+</html>
+"#;
+
+const HOST_RUNTIME_RUNTIME_JS: &str =
+    "globalThis.__OPENFORGE_PLUGIN_RUNTIME__ = true; export const runtimeReady = true;";
+
+fn host_runtime_asset(rel_path: &str) -> Option<(&'static [u8], &'static str)> {
+    match rel_path {
+        "index.html" => Some((HOST_RUNTIME_INDEX_HTML.as_bytes(), "text/html; charset=utf-8")),
+        "runtime.js" => Some((HOST_RUNTIME_RUNTIME_JS.as_bytes(), "application/javascript")),
+        _ => None,
+    }
+}
+
+fn builtin_plugin_dir_name(plugin_id: &str) -> Result<&'static str, String> {
+    match plugin_id {
+        "com.openforge.file-viewer" => Ok("file-viewer"),
+        "com.openforge.github-sync" => Ok("github-sync"),
+        "com.openforge.skills-viewer" => Ok("skills-viewer"),
+        "com.openforge.terminal" => Ok("terminal"),
+        _ => Err(format!("Unknown builtin plugin: {}", plugin_id)),
+    }
+}
+
+fn resolve_builtin_plugin_install_path(plugin_id: &str) -> Result<PathBuf, String> {
+    Ok(PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
+        .join("plugins")
+        .join(builtin_plugin_dir_name(plugin_id)?))
+}
+
+fn resolve_plugin_install_base_dir(
+    install_path: &str,
+    plugin_id: &str,
+    is_builtin: bool,
+) -> Result<PathBuf, String> {
+    if is_builtin && install_path.starts_with("builtin:") {
+        return resolve_builtin_plugin_install_path(plugin_id);
+    }
+
+    Ok(PathBuf::from(install_path))
+}
+
 fn resolve_plugin_asset_path(
-    app_data_dir: &Path,
+    install_base_dir: &Path,
     plugin_id: &str,
     rel_path: &str,
 ) -> Result<PathBuf, String> {
@@ -111,7 +163,24 @@ fn resolve_plugin_asset_path(
         return Err("Forbidden".to_string());
     }
 
-    Ok(app_data_dir.join("plugins").join(plugin_id).join(rel_path))
+    Ok(install_base_dir.join(rel_path))
+}
+
+fn resolve_plugin_asset_path_for_request<R: tauri::Runtime>(
+    app_handle: &tauri::AppHandle<R>,
+    plugin_id: &str,
+    rel_path: &str,
+) -> Result<PathBuf, String> {
+    let db = app_handle.state::<Arc<Mutex<db::Database>>>();
+    let db_lock = db.lock().map_err(|_| "Failed to lock database".to_string())?;
+    let plugin = db_lock
+        .get_plugin(plugin_id)
+        .map_err(|error| format!("Failed to read plugin metadata: {}", error))?
+        .ok_or_else(|| format!("Unknown plugin: {}", plugin_id))?;
+    let install_base_dir =
+        resolve_plugin_install_base_dir(&plugin.install_path, &plugin.id, plugin.is_builtin)?;
+
+    resolve_plugin_asset_path(&install_base_dir, plugin_id, rel_path)
 }
 
 async fn resolve_resume_session_persistence(
@@ -847,28 +916,33 @@ fn main() {
             let path = uri.strip_prefix("plugin://").unwrap_or(&uri);
 
             if path.starts_with("host-runtime/") {
-                return tauri::http::Response::builder()
-                    .status(404)
-                    .header("Content-Type", "application/javascript")
-                    .body(b"// host-runtime not implemented yet".to_vec())
-                    .unwrap();
+                let rel_path = path.trim_start_matches("host-runtime/");
+
+                if rel_path.contains("..") {
+                    return tauri::http::Response::builder()
+                        .status(403)
+                        .body(b"Forbidden".to_vec())
+                        .unwrap();
+                }
+
+                return match host_runtime_asset(rel_path) {
+                    Some((content, mime_type)) => tauri::http::Response::builder()
+                        .status(200)
+                        .header("Content-Type", mime_type)
+                        .body(content.to_vec())
+                        .unwrap(),
+                    None => tauri::http::Response::builder()
+                        .status(404)
+                        .body(b"File not found".to_vec())
+                        .unwrap(),
+                };
             }
 
             let mut parts = path.splitn(2, '/');
             let plugin_id = parts.next().unwrap_or("");
             let rel_path = parts.next().unwrap_or("");
 
-            let app_data_dir = match app.app_handle().path().app_data_dir() {
-                Ok(dir) => dir,
-                Err(_) => {
-                    return tauri::http::Response::builder()
-                        .status(500)
-                        .body(b"Failed to get app_data_dir".to_vec())
-                        .unwrap()
-                }
-            };
-
-            let file_path = match resolve_plugin_asset_path(&app_data_dir, plugin_id, rel_path) {
+            let file_path = match resolve_plugin_asset_path_for_request(&app.app_handle(), plugin_id, rel_path) {
                 Ok(path) => path,
                 Err(error) if error == "Forbidden" => {
                     return tauri::http::Response::builder()
@@ -956,7 +1030,8 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::{
-        load_resume_targets, opencode_resume_persistence, resolve_plugin_asset_path,
+        host_runtime_asset, load_resume_targets, opencode_resume_persistence,
+        resolve_plugin_asset_path, resolve_plugin_install_base_dir,
         restore_resumed_session_state, should_start_project_root_server,
         ResumeSessionPersistence, ResumeTarget,
     };
@@ -1220,22 +1295,43 @@ mod tests {
 
     #[test]
     fn resolve_plugin_asset_path_rejects_invalid_plugin_ids() {
-        let app_data_dir = Path::new("/tmp/app-data");
+        let install_base_dir = Path::new("/tmp/plugin");
 
         for plugin_id in ["", "..", "foo/bar", "foo\\bar"] {
-            let err = resolve_plugin_asset_path(app_data_dir, plugin_id, "assets/index.js")
+            let err = resolve_plugin_asset_path(install_base_dir, plugin_id, "assets/index.js")
                 .expect_err("invalid plugin id should be rejected");
             assert!(err.contains("plugin id"), "unexpected error: {err}");
         }
     }
 
     #[test]
-    fn resolve_plugin_asset_path_allows_valid_plugin_id() {
-        let app_data_dir = Path::new("/tmp/app-data");
+    fn resolve_plugin_asset_path_uses_install_base_dir() {
+        let install_base_dir = Path::new("/tmp/plugin");
 
-        let path = resolve_plugin_asset_path(app_data_dir, "my-plugin", "assets/index.js")
+        let path = resolve_plugin_asset_path(install_base_dir, "my-plugin", "assets/index.js")
             .expect("valid plugin id should be accepted");
 
-        assert_eq!(path, Path::new("/tmp/app-data/plugins/my-plugin/assets/index.js"));
+        assert_eq!(path, Path::new("/tmp/plugin/assets/index.js"));
+    }
+
+    #[test]
+    fn resolve_plugin_install_base_dir_maps_builtin_sentinel() {
+        let path = resolve_plugin_install_base_dir(
+            "builtin:com.openforge.file-viewer",
+            "com.openforge.file-viewer",
+            true,
+        )
+        .expect("builtin plugin path should resolve");
+
+        assert!(path.ends_with("plugins/file-viewer"));
+    }
+
+    #[test]
+    fn host_runtime_asset_serves_runtime_js() {
+        let (content, mime_type) = host_runtime_asset("runtime.js")
+            .expect("runtime.js should be served by host runtime");
+
+        assert_eq!(mime_type, "application/javascript");
+        assert!(String::from_utf8_lossy(content).contains("runtimeReady"));
     }
 }

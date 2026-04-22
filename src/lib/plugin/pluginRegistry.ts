@@ -207,7 +207,7 @@ export async function installPluginFromManifest(manifest: PluginManifest, instal
 
   installedPlugins.update(map => {
     const next = new Map(map)
-    next.set(manifest.id, { manifest, state: 'installed', error: null })
+    next.set(manifest.id, { manifest, state: 'installed', error: null, installPath, isBuiltin: false })
     return next
   })
 }
@@ -235,7 +235,7 @@ export async function activatePlugin(pluginId: string): Promise<boolean> {
   const entry = map.get(pluginId)
   if (!entry) return false
 
-  const loaded = await loadPluginFrontend(pluginId, entry.manifest.frontend)
+  const loaded = await loadPluginFrontend(pluginId, `plugin://${pluginId}/${entry.manifest.frontend}`)
   if (!loaded) return false
 
   const context = makePluginContextForPlugin(pluginId)

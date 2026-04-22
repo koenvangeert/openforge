@@ -5,6 +5,20 @@ import type { Task, AgentSession, Project, ProjectAttention, PullRequestInfo, Ch
 import { requireDefined } from './test-utils/dom'
 
 const callOrder: string[] = []
+const installedPluginRows: Array<{
+  id: string
+  name: string
+  version: string
+  apiVersion: number
+  description: string
+  permissions: string
+  contributes: string
+  frontendEntry: string
+  backendEntry: string | null
+  installPath: string
+  installedAt: number
+  isBuiltin: boolean
+}> = []
 
 const eventListeners = new Map<string, Function>()
 const mockSelectedTaskIdStore = writable<string | null>(null)
@@ -59,6 +73,30 @@ vi.mock('./lib/stores', () => ({
 }))
 
 vi.mock('./lib/ipc', () => ({
+  installPlugin: vi.fn(async (plugin) => {
+    const nextRow = {
+      id: plugin.id,
+      name: plugin.name,
+      version: plugin.version,
+      apiVersion: plugin.apiVersion,
+      description: plugin.description,
+      permissions: plugin.permissions,
+      contributes: plugin.contributes,
+      frontendEntry: plugin.frontendEntry,
+      backendEntry: plugin.backendEntry,
+      installPath: plugin.installPath,
+      installedAt: plugin.installedAt,
+      isBuiltin: plugin.isBuiltin,
+    }
+
+    const existingIndex = installedPluginRows.findIndex((row) => row.id === plugin.id)
+    if (existingIndex >= 0) {
+      installedPluginRows.splice(existingIndex, 1, nextRow)
+    } else {
+      installedPluginRows.push(nextRow)
+    }
+  }),
+  listPlugins: vi.fn(async () => installedPluginRows.map((row) => ({ ...row }))),
   getSessions: vi.fn(),
   getProjects: vi.fn(async () => {
     callOrder.push('getProjects')
@@ -246,6 +284,7 @@ vi.mock('lucide-svelte', () => {
 describe('App onMount initialization order', () => {
   beforeEach(() => {
     callOrder.length = 0
+    installedPluginRows.length = 0
     vi.clearAllMocks()
   })
 

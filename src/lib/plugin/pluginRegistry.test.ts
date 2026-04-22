@@ -166,7 +166,7 @@ describe('pluginRegistry', () => {
     const result = await activatePlugin('test-plugin')
 
     expect(result).toBe(true)
-    expect(loadPluginFrontendMock).toHaveBeenCalledWith('test-plugin', 'index.js')
+    expect(loadPluginFrontendMock).toHaveBeenCalledWith('test-plugin', 'plugin://test-plugin/index.js')
     expect(activatePluginLoaderMock).toHaveBeenCalledOnce()
     const [calledId, calledCtx] = activatePluginLoaderMock.mock.calls[0]
     expect(calledId).toBe('test-plugin')

@@ -4,27 +4,15 @@
   interface Props {
     pluginId: string
     pluginName: string
-    children: Snippet
+    children?: Snippet
     onDisable?: () => void
+    errorMessage?: string | null
   }
 
-  let { pluginId, pluginName, children, onDisable }: Props = $props()
-
-  let hasError = $state(false)
-  let errorMessage = $state('')
-
-  export function setError(message: string): void {
-    hasError = true
-    errorMessage = message
-  }
-
-  export function clearError(): void {
-    hasError = false
-    errorMessage = ''
-  }
+  let { pluginId, pluginName, children, onDisable, errorMessage = null }: Props = $props()
 </script>
 
-{#if hasError}
+{#if errorMessage}
   <div class="rounded-lg border border-error/20 bg-error/10 p-4" role="alert" data-plugin-id={pluginId}>
     <p class="text-sm font-medium text-error">Plugin Error: {pluginName}</p>
     <p class="mt-1 text-xs text-error/70">{errorMessage}</p>
@@ -34,6 +22,6 @@
       </button>
     {/if}
   </div>
-{:else}
+{:else if children}
   {@render children()}
 {/if}

@@ -116,6 +116,8 @@ export interface PluginEntry {
   manifest: PluginManifest
   state: PluginState
   error: string | null
+  installPath?: string
+  isBuiltin?: boolean
 }
 
 export const MAX_SUPPORTED_API_VERSION = 1

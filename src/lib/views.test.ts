@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import PluginSlot from '../components/plugin/PluginSlot.svelte'
 import type { PluginManifest } from './plugin/types'
 import { ICON_RAIL_HIDDEN_VIEWS, TASK_CLEARING_VIEWS, VIEWS, getPluginViewEntries, getViews } from './views'
 
@@ -123,6 +124,7 @@ describe('views registry', () => {
 
     expect(pluginViews['plugin:com.openforge.file-viewer:files']).toBeDefined()
     expect('files' in pluginViews).toBe(false)
+    expect(pluginViews['plugin:com.openforge.file-viewer:files']?.component).toBe(PluginSlot)
   })
 
   it('resolves the skills viewer view through plugin entries', () => {
@@ -146,6 +148,7 @@ describe('views registry', () => {
 
     expect(pluginViews['plugin:com.openforge.skills-viewer:skills']).toBeDefined()
     expect('skills' in pluginViews).toBe(false)
+    expect(pluginViews['plugin:com.openforge.skills-viewer:skills']?.component).toBe(PluginSlot)
   })
 
   it('resolves the github sync PR review view through plugin entries', () => {
@@ -169,5 +172,37 @@ describe('views registry', () => {
 
     expect(pluginViews['plugin:com.openforge.github-sync:pr_review']).toBeDefined()
     expect('pr_review' in pluginViews).toBe(false)
+    expect(pluginViews['plugin:com.openforge.github-sync:pr_review']?.component).toBe(PluginSlot)
+  })
+
+  it('passes plugin slot props for builtin fullpage views', () => {
+    const pluginViews = getViews([
+      makeManifest({
+        id: 'com.openforge.file-viewer',
+        contributes: {
+          views: [
+            {
+              id: 'files',
+              title: 'Files',
+              icon: 'folder-open',
+              showInRail: true,
+            },
+          ],
+        },
+      }),
+    ])
+
+    const props = pluginViews['plugin:com.openforge.file-viewer:files']?.getProps({
+      projectName: 'Project Alpha',
+      onCloseSettings: vi.fn(),
+      onProjectDeleted: vi.fn(),
+      onRunAction: vi.fn(),
+    })
+
+    expect(props).toEqual({
+      slotType: 'views',
+      slotId: 'plugin:com.openforge.file-viewer:files',
+      projectName: 'Project Alpha',
+    })
   })
 })
