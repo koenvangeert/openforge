@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte'
+  import { commandHeld } from '../../lib/stores'
   import { killPty } from '../../lib/ipc'
   import { release, focusTerminal, getTaskTerminalTabsSession, updateTaskTerminalTabsSession, type TerminalTab, type TaskTerminalTabsSession } from '../../lib/terminalPool'
   import TaskTerminal from './TaskTerminal.svelte'
@@ -134,7 +135,7 @@
               focusTerminal(tab.key)
             }}
          >
-           {tab.label}
+           {tab.label}{#if $commandHeld && tab.index < 9}<kbd class="kbd kbd-xs opacity-50">⌘⇧{tab.index + 1}</kbd>{/if}
          </button>
         <button
           class="pr-2 text-xs leading-none opacity-60 hover:opacity-100"

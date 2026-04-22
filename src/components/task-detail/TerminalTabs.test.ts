@@ -141,6 +141,7 @@ vi.mock('./TaskTerminal.svelte', () => ({
 }))
 
 import TerminalTabs from './TerminalTabs.svelte'
+import { commandHeld } from '../../lib/stores'
 
 describe('TerminalTabs', () => {
   it('closeActiveTab closes the active tab and focuses the adjacent tab', async () => {
@@ -266,6 +267,7 @@ describe('TerminalTabs', () => {
     releaseMock.mockReturnValue(undefined)
     taskTabSessions.clear()
     lastTaskTerminalProps.onExit = null
+    commandHeld.set(false)
   })
 
   it('renders with 1 tab "Shell 1" on mount', async () => {
@@ -633,6 +635,76 @@ describe('TerminalTabs', () => {
 
     await vi.waitFor(() => {
       expect(screen.getByText('Shell 2')).toBeTruthy()
+    })
+  })
+
+  it('shows ⌘⇧1, ⌘⇧2 shortcut hints when commandHeld is true', async () => {
+    commandHeld.set(true)
+    
+    render(TerminalTabs, {
+      props: {
+        taskId: 'T-1',
+        workspacePath: '/path/to/worktree',
+        onTabChange: null,
+        onTabCountChange: null,
+      },
+    })
+
+    await vi.waitFor(() => {
+      expect(screen.getByText('⌘⇧1')).toBeTruthy()
+    })
+
+    const addButton = screen.getByRole('button', { name: '+' })
+    await fireEvent.click(addButton)
+
+    await vi.waitFor(() => {
+      expect(screen.getByText('⌘⇧2')).toBeTruthy()
+    })
+  })
+
+  it('hides shortcut hints when commandHeld is false', async () => {
+    commandHeld.set(false)
+    
+    render(TerminalTabs, {
+      props: {
+        taskId: 'T-1',
+        workspacePath: '/path/to/worktree',
+        onTabChange: null,
+        onTabCountChange: null,
+      },
+    })
+
+    await vi.waitFor(() => {
+      expect(screen.getByText('Shell 1')).toBeTruthy()
+      expect(screen.queryByText('⌘⇧1')).toBeNull()
+    })
+  })
+
+  it('updates shortcut hints when commandHeld changes after mount', async () => {
+    render(TerminalTabs, {
+      props: {
+        taskId: 'T-1',
+        workspacePath: '/path/to/worktree',
+        onTabChange: null,
+        onTabCountChange: null,
+      },
+    })
+
+    await vi.waitFor(() => {
+      expect(screen.getByText('Shell 1')).toBeTruthy()
+      expect(screen.queryByText('⌘⇧1')).toBeNull()
+    })
+
+    commandHeld.set(true)
+
+    await vi.waitFor(() => {
+      expect(screen.getByText('⌘⇧1')).toBeTruthy()
+    })
+
+    commandHeld.set(false)
+
+    await vi.waitFor(() => {
+      expect(screen.queryByText('⌘⇧1')).toBeNull()
     })
   })
 })

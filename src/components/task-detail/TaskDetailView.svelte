@@ -164,7 +164,17 @@
       return
     }
 
+    if (activeView === 'terminal' && e.metaKey && e.shiftKey && !e.ctrlKey && !e.altKey) {
+      const match = e.code.match(/^Digit([1-9])$/)
+      if (match) {
+        e.preventDefault()
+        terminalTabsRef?.switchToTab(Number(match[1]) - 1)
+        return
+      }
+    }
+
     if (isInputFocused()) return
+
     if (e.metaKey || e.ctrlKey || e.altKey) return
 
     if (e.key === 'Escape' || e.key === 'q') {
