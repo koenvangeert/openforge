@@ -99,6 +99,10 @@
           focusTerminal(`${task.id}-shell-0`)
         }
       })
+      taskShortcuts.register('⌘w', () => {
+        if (activeView !== 'terminal' || !terminalTabsRef) return
+        void terminalTabsRef.closeActiveTab()
+      })
     }
 
     return () => {
@@ -107,6 +111,7 @@
       taskShortcuts.unregister('⌘3')
       taskShortcuts.unregister('⌘t')
       taskShortcuts.unregister('⌘e')
+      taskShortcuts.unregister('⌘w')
     }
   })
 
