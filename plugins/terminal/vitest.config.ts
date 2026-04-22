@@ -9,14 +9,6 @@ export default defineConfig({
       formats: ['es'],
       fileName: () => 'index.js',
     },
-    rollupOptions: {
-      external: [
-        'svelte',
-        'svelte/internal',
-        'svelte/store',
-        '@openforge/plugin-sdk',
-      ],
-    },
   },
   test: {
     environment: 'jsdom',
