@@ -746,9 +746,10 @@ fn persist_polled_comments<R: tauri::Runtime>(
     now: i64,
 ) -> PersistCommentsResult {
     let mut persist_result = PersistCommentsResult::default();
+    let mut inserted_this_batch: HashSet<i64> = HashSet::new();
 
     for comment in &result.comments {
-        if existing_ids.contains(&comment.id) {
+        if existing_ids.contains(&comment.id) || inserted_this_batch.contains(&comment.id) {
             continue;
         }
 
@@ -784,6 +785,7 @@ fn persist_polled_comments<R: tauri::Runtime>(
         }
 
         persist_result.new_comment_count += 1;
+        inserted_this_batch.insert(comment.id);
     }
 
     persist_result
@@ -2074,6 +2076,54 @@ mod tests {
         assert_eq!(first_persist.new_comment_count, 1);
         assert_eq!(second_persist.failed_insert_count, 0);
         assert_eq!(second_persist.new_comment_count, 0);
+        assert_eq!(comments.len(), 1);
+        assert_eq!(comments[0].id, -42);
+
+        drop(db);
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_persist_polled_comments_deduplicates_repeated_ids_within_batch() {
+        let (db, path) = make_test_db("persist_polled_comments_batch_dedup");
+        insert_test_task(&db);
+        db.insert_pull_request(
+            126,
+            "T-100",
+            "acme",
+            "repo",
+            "Review body test",
+            "https://example.com/pr/126",
+            "open",
+            1000,
+            1000,
+            false,
+        )
+        .expect("insert pr failed");
+
+        let mut result = make_review_body_poll_result(126);
+        result.comments.push(
+            result
+                .comments
+                .first()
+                .expect("review body comment should exist")
+                .clone(),
+        );
+
+        let existing_ids = db
+            .get_existing_comment_ids(126)
+            .expect("get existing ids failed");
+        let app = mock_builder()
+            .build(mock_context(noop_assets()))
+            .expect("mock app should build");
+        let app_handle = app.handle().clone();
+
+        let persist_result =
+            persist_polled_comments(&app_handle, &db, &result, &existing_ids, 1000);
+        let comments = db.get_comments_for_pr(126).expect("get comments failed");
+
+        assert_eq!(persist_result.failed_insert_count, 0);
+        assert_eq!(persist_result.new_comment_count, 1);
         assert_eq!(comments.len(), 1);
         assert_eq!(comments[0].id, -42);
 
