@@ -78,6 +78,13 @@
     if (activeTab) focusTerminal(activeTab.key)
   }
 
+  export async function closeActiveTab() {
+    const activeTab = tabs.find(tab => tab.index === activeTabIndex)
+    if (!activeTab) return
+
+    await closeTab(activeTab)
+  }
+
   async function closeTab(tab: TerminalTab, options: CloseTabOptions = {}) {
       const { allowClosingLastTab = false } = options
       if (tabs.length <= 1 && !allowClosingLastTab) return

@@ -143,6 +143,65 @@ vi.mock('./TaskTerminal.svelte', () => ({
 import TerminalTabs from './TerminalTabs.svelte'
 
 describe('TerminalTabs', () => {
+  it('closeActiveTab closes the active tab and focuses the adjacent tab', async () => {
+    const { component } = render(TerminalTabs, {
+      props: {
+        taskId: 'T-1',
+        workspacePath: '/path/to/worktree',
+        onTabChange: null,
+        onTabCountChange: null,
+      },
+    })
+
+    await vi.waitFor(() => {
+      expect(screen.getByText('Shell 1')).toBeTruthy()
+    })
+
+    const addButton = screen.getByRole('button', { name: '+' })
+    await fireEvent.click(addButton)
+
+    await vi.waitFor(() => {
+      expect(screen.getByText('Shell 2')).toBeTruthy()
+    })
+
+    killPtyMock.mockClear()
+    releaseMock.mockClear()
+
+    component.closeActiveTab()
+
+    await vi.waitFor(() => {
+      expect(screen.queryByText('Shell 2')).toBeNull()
+      expect(screen.getByText('Shell 1')).toBeTruthy()
+    })
+
+    expect(killPtyMock).toHaveBeenCalledWith('T-1-shell-1')
+    expect(releaseMock).toHaveBeenCalledWith('T-1-shell-1')
+  })
+
+  it('closeActiveTab is a no-op when only one tab remains', async () => {
+    const { component } = render(TerminalTabs, {
+      props: {
+        taskId: 'T-1',
+        workspacePath: '/path/to/worktree',
+        onTabChange: null,
+        onTabCountChange: null,
+      },
+    })
+
+    await vi.waitFor(() => {
+      expect(screen.getByText('Shell 1')).toBeTruthy()
+    })
+
+    killPtyMock.mockClear()
+    releaseMock.mockClear()
+
+    component.closeActiveTab()
+
+    expect(killPtyMock).not.toHaveBeenCalled()
+    expect(releaseMock).not.toHaveBeenCalled()
+    expect(screen.getByText('Shell 1')).toBeTruthy()
+  })
+
   it('closes the only tab automatically when onExit is called', async () => {
     render(TerminalTabs, {
       props: {

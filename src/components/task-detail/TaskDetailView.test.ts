@@ -289,6 +289,7 @@ describe('TaskDetailView', () => {
   beforeEach(() => {
     taskActiveView.set(new Map())
     commandHeld.set(false)
+    taskTabSessions.clear()
   })
 
   it('renders back button with "back" text', () => {
@@ -563,6 +564,70 @@ describe('TaskDetailView', () => {
       expect(screen.getByText('Shell 2')).toBeTruthy()
     })
 
+    vi.mocked(getTaskWorkspace).mockResolvedValue(null)
+  })
+
+  it('⌘W closes the active terminal tab when terminal view is active', async () => {
+    const { getTaskWorkspace, killPty } = await import('../../lib/ipc')
+    const { focusTerminal } = await import('../../lib/terminalPool')
+    vi.mocked(getTaskWorkspace).mockResolvedValue(createTaskWorkspaceInfo({ workspace_path: '/path/to/worktree', repo_path: '/repo', branch_name: 'branch' }))
+    vi.mocked(killPty).mockClear()
+    vi.mocked(focusTerminal).mockClear()
+
+    taskActiveView.set(new Map([['T-42', 'terminal']]))
+    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+
+    await waitFor(() => expect(screen.getByText('Shell 1')).toBeTruthy())
+
+    const addButton = screen.getByRole('button', { name: '+' })
+    await fireEvent.click(addButton)
+
+    await waitFor(() => expect(screen.getByText('Shell 2')).toBeTruthy())
+
+    await fireEvent.keyDown(window, { key: 'w', metaKey: true })
+
+    await waitFor(() => {
+      expect(screen.queryByText('Shell 2')).toBeNull()
+      expect(screen.getByText('Shell 1')).toBeTruthy()
+    })
+
+    expect(vi.mocked(killPty)).toHaveBeenCalledWith('T-42-shell-1')
+    expect(vi.mocked(focusTerminal)).toHaveBeenCalledWith('T-42-shell-0')
+    vi.mocked(getTaskWorkspace).mockResolvedValue(null)
+  })
+
+  it('⌘W is a no-op outside terminal view', async () => {
+    const { getTaskWorkspace, killPty } = await import('../../lib/ipc')
+    vi.mocked(getTaskWorkspace).mockResolvedValue(createTaskWorkspaceInfo({ workspace_path: '/path/to/worktree', repo_path: '/repo', branch_name: 'branch' }))
+    vi.mocked(killPty).mockClear()
+
+    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+    await waitFor(() => expect(screen.getByText('code_view')).toBeTruthy())
+
+    await fireEvent.keyDown(window, { key: 'w', metaKey: true })
+
+    expect(screen.getByText('code_view')).toBeTruthy()
+    expect(vi.mocked(killPty)).not.toHaveBeenCalled()
+    vi.mocked(getTaskWorkspace).mockResolvedValue(null)
+  })
+
+  it('⌘W is a no-op when only one terminal tab remains', async () => {
+    const { getTaskWorkspace, killPty } = await import('../../lib/ipc')
+    const { focusTerminal } = await import('../../lib/terminalPool')
+    vi.mocked(getTaskWorkspace).mockResolvedValue(createTaskWorkspaceInfo({ workspace_path: '/path/to/worktree', repo_path: '/repo', branch_name: 'branch' }))
+    vi.mocked(killPty).mockClear()
+    vi.mocked(focusTerminal).mockClear()
+
+    taskActiveView.set(new Map([['T-42', 'terminal']]))
+    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+
+    await waitFor(() => expect(screen.getByText('Shell 1')).toBeTruthy())
+
+    await fireEvent.keyDown(window, { key: 'w', metaKey: true })
+
+    expect(screen.getByText('Shell 1')).toBeTruthy()
+    expect(vi.mocked(killPty)).not.toHaveBeenCalled()
+    expect(vi.mocked(focusTerminal)).not.toHaveBeenCalled()
     vi.mocked(getTaskWorkspace).mockResolvedValue(null)
   })
 
