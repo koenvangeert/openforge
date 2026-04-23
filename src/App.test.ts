@@ -1,4 +1,4 @@
-import { render, fireEvent, screen } from '@testing-library/svelte'
+import { render, fireEvent, screen, cleanup } from '@testing-library/svelte'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { get, writable } from 'svelte/store'
 import type { Task, AgentSession, Project, ProjectAttention, PullRequestInfo, CheckpointNotification, CiFailureNotification, RateLimitNotification, AuthoredPullRequest } from './lib/types'
@@ -309,6 +309,7 @@ describe('App onMount initialization order', () => {
   })
 
   afterEach(() => {
+    cleanup()
     vi.clearAllMocks()
   })
 
@@ -632,10 +633,6 @@ describe('App onMount initialization order', () => {
   describe('keyboard shortcuts', () => {
     beforeEach(() => {
       vi.clearAllMocks()
-    })
-
-    afterEach(() => {
-      document.body.innerHTML = ''
     })
 
     it('CMD+H resets to board view and clears selectedTaskId', async () => {
@@ -1598,13 +1595,15 @@ describe('App onMount initialization order', () => {
       const App = (await import('./App.svelte')).default
       render(App)
 
-      // Dispatch ? key and check if preventDefault was called
-      const event = new KeyboardEvent('keydown', { key: '?', shiftKey: true, bubbles: true })
-      const preventDefaultSpy = vi.spyOn(event, 'preventDefault')
-      window.dispatchEvent(event)
+      // Ensure no stray input holds focus from a previous test
+      if (document.activeElement instanceof HTMLElement) {
+        document.activeElement.blur()
+      }
 
-      // preventDefault should be called (handler should run)
-      expect(preventDefaultSpy).toHaveBeenCalled()
+      await fireEvent.keyDown(window, { key: '?', shiftKey: true, bubbles: true })
+
+      expect(screen.getByRole('dialog')).toBeTruthy()
+      expect(screen.getByText('Keyboard Shortcuts')).toBeTruthy()
     })
 
   })
