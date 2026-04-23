@@ -1182,6 +1182,84 @@ describe('TaskDetailView', () => {
       vi.mocked(getTaskWorkspace).mockResolvedValue(null)
     })
 
+    it('Cmd+Shift+1 stays in terminal view when the key event reports 1', async () => {
+      const { getTaskWorkspace } = await import('../../lib/ipc')
+      const { focusTerminal } = await import('../../lib/terminalPool')
+      vi.mocked(getTaskWorkspace).mockResolvedValue(createTaskWorkspaceInfo({ workspace_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' }))
+      vi.mocked(focusTerminal).mockClear()
+
+      render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+      await waitFor(() => {
+        expect(screen.getByText('review_view')).toBeTruthy()
+      })
+
+      await fireEvent.keyDown(window, { key: '3', code: 'Digit3', metaKey: true })
+      await waitFor(() => {
+        expect(screen.getByText('$ cd board').closest('div')?.textContent).toContain('terminal')
+      })
+
+      await fireEvent.keyDown(window, { key: 't', code: 'KeyT', metaKey: true })
+      await fireEvent.keyDown(window, { key: 't', code: 'KeyT', metaKey: true })
+
+      await waitFor(() => {
+        expect(screen.getByText('Shell 3')).toBeTruthy()
+        expect(taskTabSessions.get('T-42')?.activeTabIndex).toBe(2)
+      })
+
+      vi.mocked(focusTerminal).mockClear()
+
+      await fireEvent.keyDown(window, { key: '1', code: 'Digit1', metaKey: true, shiftKey: true })
+
+      await waitFor(() => {
+        expect(focusTerminal).toHaveBeenCalledWith('T-42-shell-0')
+        expect(taskTabSessions.get('T-42')?.activeTabIndex).toBe(0)
+        expect(screen.getByText('$ cd board').closest('div')?.textContent).toContain('terminal')
+      })
+
+      expect(screen.getByText('$ cd board').closest('div')?.textContent).not.toContain('code')
+
+      vi.mocked(getTaskWorkspace).mockResolvedValue(null)
+    })
+
+    it('Cmd+Shift+2 stays in terminal view when the key event reports 2', async () => {
+      const { getTaskWorkspace } = await import('../../lib/ipc')
+      const { focusTerminal } = await import('../../lib/terminalPool')
+      vi.mocked(getTaskWorkspace).mockResolvedValue(createTaskWorkspaceInfo({ workspace_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' }))
+      vi.mocked(focusTerminal).mockClear()
+
+      render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+      await waitFor(() => {
+        expect(screen.getByText('review_view')).toBeTruthy()
+      })
+
+      await fireEvent.keyDown(window, { key: '3', code: 'Digit3', metaKey: true })
+      await waitFor(() => {
+        expect(screen.getByText('$ cd board').closest('div')?.textContent).toContain('terminal')
+      })
+
+      await fireEvent.keyDown(window, { key: 't', code: 'KeyT', metaKey: true })
+      await fireEvent.keyDown(window, { key: 't', code: 'KeyT', metaKey: true })
+
+      await waitFor(() => {
+        expect(screen.getByText('Shell 3')).toBeTruthy()
+        expect(taskTabSessions.get('T-42')?.activeTabIndex).toBe(2)
+      })
+
+      vi.mocked(focusTerminal).mockClear()
+
+      await fireEvent.keyDown(window, { key: '2', code: 'Digit2', metaKey: true, shiftKey: true })
+
+      await waitFor(() => {
+        expect(focusTerminal).toHaveBeenCalledWith('T-42-shell-1')
+        expect(taskTabSessions.get('T-42')?.activeTabIndex).toBe(1)
+        expect(screen.getByText('$ cd board').closest('div')?.textContent).toContain('terminal')
+      })
+
+      expect(screen.getByText('$ cd board').closest('div')?.textContent).not.toContain('review')
+
+      vi.mocked(getTaskWorkspace).mockResolvedValue(null)
+    })
+
     it('shows shortcut hints on view toggle buttons when CMD is held', async () => {
       const { getTaskWorkspace } = await import('../../lib/ipc')
       vi.mocked(getTaskWorkspace).mockResolvedValue(createTaskWorkspaceInfo({ workspace_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' }))

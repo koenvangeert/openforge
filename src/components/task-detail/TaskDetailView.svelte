@@ -159,11 +159,6 @@
   }
 
   function handleTaskDetailKeydown(e: KeyboardEvent) {
-    taskShortcuts.handleKeydown(e)
-    if (e.defaultPrevented) {
-      return
-    }
-
     if (activeView === 'terminal' && e.metaKey && e.shiftKey && !e.ctrlKey && !e.altKey) {
       const match = e.code.match(/^Digit([1-9])$/)
       if (match) {
@@ -171,6 +166,11 @@
         terminalTabsRef?.switchToTab(Number(match[1]) - 1)
         return
       }
+    }
+
+    taskShortcuts.handleKeydown(e)
+    if (e.defaultPrevented) {
+      return
     }
 
     if (isInputFocused()) return
