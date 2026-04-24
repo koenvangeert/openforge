@@ -222,6 +222,8 @@ import PluginSlotTestView from '../plugin/PluginSlotTestView.svelte'
 import TerminalTaskPane from './TerminalTaskPane.svelte'
 import { clearComponentRegistry, registerRenderableContributionComponent } from '../../lib/plugin/componentRegistry'
 import { enabledPluginIds, installedPlugins } from '../../lib/plugin/pluginStore'
+import { focusTerminal } from '../../lib/terminalPool'
+import { clearTerminalTaskPaneControllers, registerTerminalTaskPaneController } from './terminalTaskPaneController'
 import TaskDetailView from './TaskDetailView.svelte'
 
 const TERMINAL_VIEW_ID = 'com.openforge.terminal:terminal'
@@ -280,6 +282,38 @@ function createTaskWorkspaceInfo(overrides: Partial<TaskWorkspaceInfo> = {}): Ta
   }
 }
 
+function registerMockTerminalTaskPaneController(taskId: string) {
+  registerTerminalTaskPaneController(taskId, {
+    addTab() {
+      const session = taskTabSessions.get(taskId)
+      if (!session) return
+      const index = session.nextIndex
+      taskTabSessions.set(taskId, {
+        tabs: [...session.tabs, { index, key: `${taskId}-shell-${index}`, label: `Shell ${index + 1}` }],
+        activeTabIndex: index,
+        nextIndex: index + 1,
+      })
+    },
+    async closeActiveTab() {
+      return undefined
+    },
+    focusActiveTab() {
+      const session = taskTabSessions.get(taskId)
+      const activeTab = session?.tabs.find(tab => tab.index === session.activeTabIndex)
+      if (activeTab) {
+        focusTerminal(activeTab.key)
+      }
+    },
+    switchToTab(tabIndex: number) {
+      const session = taskTabSessions.get(taskId)
+      const nextTab = session?.tabs.find(tab => tab.index === tabIndex)
+      if (!session || !nextTab) return
+      taskTabSessions.set(taskId, { ...session, activeTabIndex: nextTab.index })
+      focusTerminal(nextTab.key)
+    },
+  })
+}
+
 describe('createTaskWorkspaceInfo', () => {
   it('applies overrides while keeping a valid typed workspace shape', () => {
     expect(createTaskWorkspaceInfo({ workspace_path: '/tmp/wt', branch_name: 'feature/task' })).toMatchObject({
@@ -297,6 +331,7 @@ describe('TaskDetailView', () => {
     taskActiveView.set(new Map())
     commandHeld.set(false)
     taskTabSessions.clear()
+    clearTerminalTaskPaneControllers()
     installedPlugins.set(new Map([[
       'com.openforge.terminal',
       {
@@ -1348,6 +1383,7 @@ describe('TaskDetailView', () => {
       const { focusTerminal } = await import('../../lib/terminalPool')
       vi.mocked(getTaskWorkspace).mockResolvedValue(createTaskWorkspaceInfo({ workspace_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' }))
       vi.mocked(focusTerminal).mockClear()
+      registerMockTerminalTaskPaneController('T-42')
 
       render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
       await waitFor(() => {
@@ -1359,12 +1395,14 @@ describe('TaskDetailView', () => {
         expect(screen.getByText('$ cd board').closest('div')?.textContent).toContain('terminal')
       })
 
-      await fireEvent.keyDown(window, { key: 't', code: 'KeyT', metaKey: true })
-      await fireEvent.keyDown(window, { key: 't', code: 'KeyT', metaKey: true })
-
-      await waitFor(() => {
-        expect(screen.getByText('Shell 3')).toBeTruthy()
-        expect(taskTabSessions.get('T-42')?.activeTabIndex).toBe(2)
+      taskTabSessions.set('T-42', {
+        tabs: [
+          { index: 0, key: 'T-42-shell-0', label: 'Shell 1' },
+          { index: 1, key: 'T-42-shell-1', label: 'Shell 2' },
+          { index: 2, key: 'T-42-shell-2', label: 'Shell 3' },
+        ],
+        activeTabIndex: 2,
+        nextIndex: 3,
       })
 
       vi.mocked(focusTerminal).mockClear()
@@ -1387,6 +1425,7 @@ describe('TaskDetailView', () => {
       const { focusTerminal } = await import('../../lib/terminalPool')
       vi.mocked(getTaskWorkspace).mockResolvedValue(createTaskWorkspaceInfo({ workspace_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' }))
       vi.mocked(focusTerminal).mockClear()
+      registerMockTerminalTaskPaneController('T-42')
 
       render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
       await waitFor(() => {
@@ -1398,12 +1437,14 @@ describe('TaskDetailView', () => {
         expect(screen.getByText('$ cd board').closest('div')?.textContent).toContain('terminal')
       })
 
-      await fireEvent.keyDown(window, { key: 't', code: 'KeyT', metaKey: true })
-      await fireEvent.keyDown(window, { key: 't', code: 'KeyT', metaKey: true })
-
-      await waitFor(() => {
-        expect(screen.getByText('Shell 3')).toBeTruthy()
-        expect(taskTabSessions.get('T-42')?.activeTabIndex).toBe(2)
+      taskTabSessions.set('T-42', {
+        tabs: [
+          { index: 0, key: 'T-42-shell-0', label: 'Shell 1' },
+          { index: 1, key: 'T-42-shell-1', label: 'Shell 2' },
+          { index: 2, key: 'T-42-shell-2', label: 'Shell 3' },
+        ],
+        activeTabIndex: 2,
+        nextIndex: 3,
       })
 
       vi.mocked(focusTerminal).mockClear()

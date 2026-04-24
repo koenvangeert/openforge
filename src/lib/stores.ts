@@ -54,8 +54,8 @@ export const startingTasks = writable<Set<string>>(new Set());
 
 export const codeCleanupTasksEnabled = writable<boolean>(false);
 
-/** Per-task active view — 'code', 'review', or 'terminal' — preserved across navigation */
-export const taskActiveView = writable<Map<string, 'code' | 'review' | 'terminal'>>(new Map());
+/** Per-task active view identifier preserved across navigation. */
+export const taskActiveView = writable<Map<string, string>>(new Map());
 
 /** Per-task draft note text — preserved across navigation */
 export const taskDraftNotes = writable<Map<string, string>>(new Map());

@@ -20,3 +20,7 @@ export function unregisterTerminalTaskPaneController(taskId: string, controller:
 export function getTerminalTaskPaneController(taskId: string): TerminalTaskPaneController | undefined {
   return controllers.get(taskId)
 }
+
+export function clearTerminalTaskPaneControllers(): void {
+  controllers.clear()
+}
