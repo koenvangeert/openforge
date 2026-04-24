@@ -253,6 +253,7 @@ const baseSession: AgentSession = {
   updated_at: 2000,
   provider: 'opencode',
   claude_session_id: null,
+    pi_session_id: null,
 }
 
 function createTaskWorkspaceInfo(overrides: Partial<TaskWorkspaceInfo> = {}): TaskWorkspaceInfo {

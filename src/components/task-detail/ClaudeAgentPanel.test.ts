@@ -96,6 +96,7 @@ const baseSession: AgentSession = {
   updated_at: 2000,
   provider: 'claude-code',
   claude_session_id: 'claude-sess-abc123',
+  pi_session_id: null,
 }
 
 describe('ClaudeAgentPanel', () => {

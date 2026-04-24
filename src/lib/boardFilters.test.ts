@@ -34,6 +34,7 @@ function makeSession(overrides: Partial<AgentSession> & { id: string }): AgentSe
     updated_at: 1000,
     provider: 'claude-code',
     claude_session_id: null,
+    pi_session_id: null,
     ...overrides,
   }
 }

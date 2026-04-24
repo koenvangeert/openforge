@@ -58,6 +58,7 @@ describe('TaskCard', () => {
       updated_at: 2000,
       provider: 'opencode',
       claude_session_id: null,
+    pi_session_id: null,
     }
     render(TaskCard, { props: { task: baseTask, session } })
     expect(screen.getByText('Running')).toBeTruthy()
@@ -76,6 +77,7 @@ describe('TaskCard', () => {
       updated_at: 2000,
       provider: 'opencode',
       claude_session_id: null,
+    pi_session_id: null,
     }
     render(TaskCard, { props: { task: baseTask, session } })
     expect(screen.getByText('Done')).toBeTruthy()
@@ -94,6 +96,7 @@ describe('TaskCard', () => {
       updated_at: 2000,
       provider: 'opencode',
       claude_session_id: null,
+    pi_session_id: null,
     }
     render(TaskCard, { props: { task: baseTask, session } })
     expect(screen.getByText('Paused')).toBeTruthy()
@@ -112,6 +115,7 @@ describe('TaskCard', () => {
       updated_at: 2000,
       provider: 'opencode',
       claude_session_id: null,
+    pi_session_id: null,
     }
     render(TaskCard, { props: { task: baseTask, session } })
     expect(screen.getByText('Error')).toBeTruthy()
@@ -130,6 +134,7 @@ describe('TaskCard', () => {
       updated_at: 2000,
       provider: 'opencode',
       claude_session_id: null,
+    pi_session_id: null,
     }
     render(TaskCard, { props: { task: baseTask, session } })
     expect(screen.getByText('Stopped')).toBeTruthy()
@@ -148,6 +153,7 @@ describe('TaskCard', () => {
       updated_at: 2000,
       provider: 'opencode',
       claude_session_id: null,
+    pi_session_id: null,
     }
     render(TaskCard, { props: { task: baseTask, session } })
     expect(screen.getByText('Needs Input')).toBeTruthy()
@@ -166,6 +172,7 @@ describe('TaskCard', () => {
       updated_at: 2000,
       provider: 'opencode',
       claude_session_id: null,
+    pi_session_id: null,
     }
     render(TaskCard, { props: { task: baseTask, session } })
     expect(screen.queryByText('Needs Input')).toBeNull()
@@ -184,6 +191,7 @@ describe('TaskCard', () => {
       updated_at: 2000,
       provider: 'opencode',
       claude_session_id: null,
+    pi_session_id: null,
     }
     render(TaskCard, { props: { task: baseTask, session } })
     expect(screen.queryByText('Needs Input')).toBeNull()

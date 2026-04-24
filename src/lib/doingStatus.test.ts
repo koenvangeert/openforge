@@ -27,6 +27,7 @@ const makeSession = (ticketId: string, status: string, checkpointData: string | 
   updated_at: 2000,
   provider: 'opencode',
   claude_session_id: null,
+    pi_session_id: null,
 })
 
 describe('computeDoingStatus', () => {

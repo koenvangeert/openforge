@@ -176,6 +176,7 @@ describe('AgentPanel (router)', () => {
       updated_at: 2000,
       provider: 'opencode',
       claude_session_id: null,
+    pi_session_id: null,
     }
 
     const sessions = new Map<string, AgentSession>()
@@ -200,6 +201,7 @@ describe('AgentPanel (router)', () => {
       updated_at: 2000,
       provider: 'claude-code',
       claude_session_id: 'claude-sess-1',
+      pi_session_id: null,
     }
 
     const sessions = new Map<string, AgentSession>()
@@ -225,6 +227,7 @@ describe('AgentPanel (router)', () => {
       updated_at: 2000,
       provider: 'pi',
       claude_session_id: null,
+    pi_session_id: null,
     }
 
     const sessions = new Map<string, AgentSession>()
@@ -280,6 +283,7 @@ describe('AgentPanel starting animation', () => {
       updated_at: 2000,
       provider: 'opencode',
       claude_session_id: null,
+    pi_session_id: null,
     }
 
     const sessions = new Map<string, AgentSession>()
@@ -317,6 +321,7 @@ describe('OpenCodeAgentPanel (via router)', () => {
       updated_at: 2000,
       provider: 'opencode',
       claude_session_id: null,
+    pi_session_id: null,
     }
 
     const sessions = new Map<string, AgentSession>()
@@ -343,6 +348,7 @@ describe('OpenCodeAgentPanel (via router)', () => {
       updated_at: 2000,
       provider: 'opencode',
       claude_session_id: null,
+    pi_session_id: null,
     }
 
     activeSessions.set(new Map([['T-1', session]]))
@@ -367,6 +373,7 @@ describe('OpenCodeAgentPanel (via router)', () => {
       updated_at: 2000,
       provider: 'opencode',
       claude_session_id: null,
+    pi_session_id: null,
     }
 
     const sessions = new Map<string, AgentSession>()
@@ -390,6 +397,7 @@ describe('OpenCodeAgentPanel (via router)', () => {
       updated_at: 2000,
       provider: 'opencode',
       claude_session_id: null,
+    pi_session_id: null,
     }
 
     const sessions = new Map<string, AgentSession>()
@@ -415,6 +423,7 @@ describe('OpenCodeAgentPanel (via router)', () => {
       updated_at: 2000,
       provider: 'opencode',
       claude_session_id: null,
+    pi_session_id: null,
     }
 
     activeSessions.set(new Map([['T-1', session]]))
@@ -441,6 +450,7 @@ describe('OpenCodeAgentPanel (via router)', () => {
       updated_at: 2000,
       provider: 'opencode',
       claude_session_id: null,
+    pi_session_id: null,
     }
 
     activeSessions.set(new Map([['T-1', session]]))
@@ -467,6 +477,7 @@ describe('OpenCodeAgentPanel (via router)', () => {
       updated_at: 2000,
       provider: 'opencode',
       claude_session_id: null,
+    pi_session_id: null,
     }
 
     activeSessions.set(new Map([['T-1', session]]))
@@ -495,6 +506,7 @@ describe('OpenCodeAgentPanel (via router)', () => {
       updated_at: 2000,
       provider: 'opencode',
       claude_session_id: null,
+    pi_session_id: null,
     }
 
     activeSessions.set(new Map([['T-1', session]]))
@@ -523,6 +535,7 @@ describe('OpenCodeAgentPanel (via router)', () => {
       updated_at: 2000,
       provider: 'opencode',
       claude_session_id: null,
+    pi_session_id: null,
     }
 
     activeSessions.set(new Map([['T-1', session]]))
@@ -557,6 +570,7 @@ describe('OpenCodeAgentPanel (via router)', () => {
       updated_at: 2000,
       provider: 'opencode',
       claude_session_id: null,
+    pi_session_id: null,
     }
 
     activeSessions.set(new Map([['T-1', session]]))
@@ -587,6 +601,7 @@ describe('OpenCodeAgentPanel (via router)', () => {
       updated_at: 2000,
       provider: 'opencode',
       claude_session_id: null,
+    pi_session_id: null,
     }
 
     const sessions = new Map<string, AgentSession>()
@@ -610,6 +625,7 @@ describe('OpenCodeAgentPanel (via router)', () => {
       updated_at: 2000,
       provider: 'opencode',
       claude_session_id: null,
+    pi_session_id: null,
     }
 
     const sessions = new Map<string, AgentSession>()
@@ -633,6 +649,7 @@ describe('OpenCodeAgentPanel (via router)', () => {
       updated_at: 2000,
       provider: 'opencode',
       claude_session_id: null,
+    pi_session_id: null,
     }
 
     const sessions = new Map<string, AgentSession>()
@@ -670,6 +687,7 @@ describe('OpenCodeAgentPanel (via router)', () => {
       updated_at: 2000,
       provider: 'opencode',
       claude_session_id: null,
+    pi_session_id: null,
     }
 
     const sessions = new Map<string, AgentSession>()
