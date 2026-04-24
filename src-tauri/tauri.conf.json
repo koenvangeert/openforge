@@ -3,9 +3,9 @@
   "version": "0.0.1",
   "identifier": "com.opencode.openforge",
   "build": {
-    "beforeDevCommand": "pnpm dev",
+    "beforeDevCommand": "pnpm build:plugins && pnpm dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "pnpm build",
+    "beforeBuildCommand": "pnpm build:plugins && pnpm build",
     "frontendDist": "../dist"
   },
   "app": {
