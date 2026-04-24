@@ -323,6 +323,7 @@ describe('App onMount initialization order', () => {
   beforeEach(() => {
     callOrder.length = 0
     installedPluginRows.length = 0
+    eventListeners.clear()
     closeRequestedHandler = null
     vi.clearAllMocks()
     vi.mocked(installPlugin).mockImplementation(async (plugin) => {
@@ -1724,6 +1725,10 @@ describe('App onMount initialization order', () => {
       vi.mocked(ipc.getPullRequests).mockResolvedValue([transientPrA, transientPrB])
 
       render(App)
+
+      await vi.waitFor(() => {
+        expect(eventListeners.has('github-sync-complete')).toBe(true)
+      })
 
       const syncCallback = requireDefined(
         eventListeners.get('github-sync-complete'),
