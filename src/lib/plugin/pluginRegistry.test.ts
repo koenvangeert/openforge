@@ -42,11 +42,13 @@ const {
   activatePluginLoaderMock,
   deactivatePluginLoaderMock,
   isPluginLoadedMock,
+  getBuiltinPluginModuleMock,
 } = vi.hoisted(() => ({
   loadPluginFrontendMock: vi.fn(),
   activatePluginLoaderMock: vi.fn(),
   deactivatePluginLoaderMock: vi.fn(),
   isPluginLoadedMock: vi.fn(),
+  getBuiltinPluginModuleMock: vi.fn(),
 }))
 
 vi.mock('./pluginLoader', () => ({
@@ -54,6 +56,10 @@ vi.mock('./pluginLoader', () => ({
   activatePlugin: activatePluginLoaderMock,
   deactivatePlugin: deactivatePluginLoaderMock,
   isPluginLoaded: isPluginLoadedMock,
+}))
+
+vi.mock('./builtinPluginModules', () => ({
+  getBuiltinPluginModule: getBuiltinPluginModuleMock,
 }))
 
 import {
@@ -120,6 +126,7 @@ describe('pluginRegistry', () => {
     activatePluginLoaderMock.mockReset()
     deactivatePluginLoaderMock.mockReset()
     isPluginLoadedMock.mockReset()
+    getBuiltinPluginModuleMock.mockReset()
     installedPlugins.set(new Map())
     enabledPluginIds.set(new Set())
     clearComponentRegistry()
@@ -197,6 +204,33 @@ describe('pluginRegistry', () => {
 
     await calledCtx.storage.set('plugin-key', 'plugin-value')
     expect(setPluginStorageMock).toHaveBeenCalledWith('test-plugin', 'plugin-key', 'plugin-value')
+  })
+
+  it('activates builtin plugin modules inside the host bundle instead of loading plugin:// frontend bundles', async () => {
+    const Component = {} as never
+    const deactivateBuiltin = vi.fn(async () => undefined)
+    const manifest = makeManifest({ id: 'builtin-plugin' })
+    installedPlugins.set(new Map([['builtin-plugin', { manifest, state: 'installed', error: null, isBuiltin: true }]]))
+    enabledPluginIds.set(new Set(['builtin-plugin']))
+    getBuiltinPluginModuleMock.mockReturnValue({
+      activate: vi.fn(async () => ({ contributions: { views: [{ id: 'main', component: Component }] } })),
+      deactivate: deactivateBuiltin,
+    })
+
+    await expect(activatePlugin('builtin-plugin')).resolves.toBe(true)
+
+    expect(getBuiltinPluginModuleMock).toHaveBeenCalledWith('builtin-plugin')
+    expect(loadPluginFrontendMock).not.toHaveBeenCalled()
+    expect(activatePluginLoaderMock).not.toHaveBeenCalled()
+    expect(getRegisteredComponent('plugin:builtin-plugin:main')).toBe(Component)
+    expect(get(installedPlugins).get('builtin-plugin')?.state).toBe('active')
+
+    await deactivatePluginById('builtin-plugin')
+
+    expect(deactivateBuiltin).toHaveBeenCalledOnce()
+    expect(deactivatePluginLoaderMock).not.toHaveBeenCalled()
+    expect(getRegisteredComponent('plugin:builtin-plugin:main')).toBeUndefined()
+    expect(get(installedPlugins).get('builtin-plugin')?.state).toBe('installed')
   })
 
   it('activates runtime implementations for every supported contribution type', async () => {

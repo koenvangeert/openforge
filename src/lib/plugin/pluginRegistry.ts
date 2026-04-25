@@ -25,9 +25,11 @@ import {
   deactivatePlugin as deactivatePluginLoader,
   isPluginLoaded,
 } from './pluginLoader'
+import type { PluginESM } from './pluginLoader'
 import type { PluginContext } from './types'
 import type {
   PluginActivatedBackgroundService,
+  PluginActivationResult,
   PluginActivatedCommandContribution,
   PluginActivatedSettingsSectionContribution,
   PluginActivatedSidebarPanelContribution,
@@ -61,12 +63,13 @@ const pluginHostUnsubscribers = new Map<string, Set<() => void>>()
 const activationPromises = new Map<string, Promise<boolean>>()
 const pluginCommandHandlers = new Map<string, PluginActivatedCommandContribution['execute']>()
 const backgroundServiceStops = new Map<string, () => Promise<void>>()
+const activeBuiltinPluginModules = new Map<string, PluginESM>()
 
 function normalizeErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-function setPluginRuntimeError(pluginId: string, error: unknown): void {
+function setPluginRuntimeState(pluginId: string, state: 'installed' | 'active' | 'error', error: string | null): void {
   installedPlugins.update(map => {
     const entry = map.get(pluginId)
     if (!entry) {
@@ -74,13 +77,13 @@ function setPluginRuntimeError(pluginId: string, error: unknown): void {
     }
 
     const next = new Map(map)
-    next.set(pluginId, {
-      ...entry,
-      state: 'error',
-      error: normalizeErrorMessage(error),
-    })
+    next.set(pluginId, { ...entry, state, error })
     return next
   })
+}
+
+function setPluginRuntimeError(pluginId: string, error: unknown): void {
+  setPluginRuntimeState(pluginId, 'error', normalizeErrorMessage(error))
 }
 
 function toNamespacedContributionId(pluginId: string, contributionId: string): string {
@@ -131,6 +134,54 @@ async function startBackgroundServices(pluginId: string, contributions: PluginAc
       }
     )
   }
+}
+
+async function activateBuiltinPluginModule(pluginId: string, context: PluginContext): Promise<PluginActivationResult | null> {
+  try {
+    const { getBuiltinPluginModule } = await import('./builtinPluginModules')
+    const builtinModule = getBuiltinPluginModule(pluginId)
+    if (!builtinModule) {
+      throw new Error(`Unknown builtin plugin: ${pluginId}`)
+    }
+
+    const activationResult = await builtinModule.activate(context)
+    activeBuiltinPluginModules.set(pluginId, builtinModule)
+    setPluginRuntimeState(pluginId, 'active', null)
+    return activationResult
+  } catch (error) {
+    activeBuiltinPluginModules.delete(pluginId)
+    setPluginRuntimeError(pluginId, error)
+    return null
+  }
+}
+
+async function activateExternalPluginModule(pluginId: string, frontendEntry: string, context: PluginContext): Promise<PluginActivationResult | null> {
+  const loaded = await loadPluginFrontend(pluginId, `plugin://${pluginId}/${frontendEntry}`)
+  if (!loaded) return null
+  return activatePluginLoader(pluginId, context)
+}
+
+async function deactivateBuiltinPluginModule(pluginId: string): Promise<void> {
+  const builtinModule = activeBuiltinPluginModules.get(pluginId)
+  if (!builtinModule) return
+
+  try {
+    await builtinModule.deactivate?.()
+  } catch (error) {
+    console.error(`[pluginRegistry] Failed to deactivate builtin plugin ${pluginId}:`, error)
+  } finally {
+    activeBuiltinPluginModules.delete(pluginId)
+    setPluginRuntimeState(pluginId, 'installed', null)
+  }
+}
+
+async function deactivateLoadedPluginModule(pluginId: string): Promise<void> {
+  if (activeBuiltinPluginModules.has(pluginId)) {
+    await deactivateBuiltinPluginModule(pluginId)
+    return
+  }
+
+  await deactivatePluginLoader(pluginId)
 }
 
 function subscribeToPluginHostEvent(pluginId: string, event: string, handler: PluginHostListener): () => void {
@@ -389,16 +440,15 @@ export async function activatePlugin(pluginId: string): Promise<boolean> {
   const entry = map.get(pluginId)
   if (!entry) return false
 
-  if (entry.state === 'active' && isPluginLoaded(pluginId)) {
+  if (entry.state === 'active' && (isPluginLoaded(pluginId) || activeBuiltinPluginModules.has(pluginId))) {
     return true
   }
 
   const activation = (async () => {
-    const loaded = await loadPluginFrontend(pluginId, `plugin://${pluginId}/${entry.manifest.frontend}`)
-    if (!loaded) return false
-
     const context = makePluginContextForPlugin(pluginId)
-    const result = await activatePluginLoader(pluginId, context)
+    const result = entry.isBuiltin
+      ? await activateBuiltinPluginModule(pluginId, context)
+      : await activateExternalPluginModule(pluginId, entry.manifest.frontend, context)
     if (result === null) return false
 
     try {
@@ -421,7 +471,7 @@ export async function activatePlugin(pluginId: string): Promise<boolean> {
     } catch (error) {
       clearPluginRuntimeContributions(pluginId)
       await stopPluginBackgroundServices(pluginId)
-      await deactivatePluginLoader(pluginId)
+      await deactivateLoadedPluginModule(pluginId)
       setPluginRuntimeError(pluginId, error)
       return false
     }
@@ -471,7 +521,7 @@ function makePluginContextForPlugin(pluginId: string): PluginContext {
 }
 
 export async function deactivatePluginById(pluginId: string): Promise<void> {
-  await deactivatePluginLoader(pluginId)
+  await deactivateLoadedPluginModule(pluginId)
   clearPluginRuntimeContributions(pluginId)
   await stopPluginBackgroundServices(pluginId)
   clearPluginHostSubscriptions(pluginId)
