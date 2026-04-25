@@ -506,13 +506,17 @@ export async function executePluginCommand(pluginId: string, commandId: string, 
 }
 
 function makePluginContextForPlugin(pluginId: string): PluginContext {
-  ensurePluginHostStoreSubscriptions()
-
   return {
     pluginId,
-    invokeHost: async (command: string, payload?: unknown) => invokePluginHostCommand(command, payload),
+    invokeHost: async (command: string, payload?: unknown) => {
+      ensurePluginHostStoreSubscriptions()
+      return invokePluginHostCommand(command, payload)
+    },
     invokeBackend: async (method: string, payload?: unknown) => pluginInvoke(pluginId, method, payload ?? null),
-    onEvent: (event: string, handler: (payload: unknown) => void) => subscribeToPluginHostEvent(pluginId, event, handler),
+    onEvent: (event: string, handler: (payload: unknown) => void) => {
+      ensurePluginHostStoreSubscriptions()
+      return subscribeToPluginHostEvent(pluginId, event, handler)
+    },
     storage: {
       get: async (key: string) => getPluginStorage(pluginId, key),
       set: async (key: string, value: string) => setPluginStorage(pluginId, key, value),
