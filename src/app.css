@@ -141,29 +141,30 @@
   --chip-starting-text: #A5A0ED;
 }
 
+/* Light terminal palette: Catppuccin Latte, a popular Ghostty-compatible theme. */
 :root, [data-theme="openforge"] {
-  --term-background: #FAF8F5;
-  --term-foreground: #2D2D3F;
-  --term-cursor: #2D2D3F;
-  --term-cursor-accent: #FAF8F5;
-  --term-selection-background: #E8E4DF;
-  --term-selection-foreground: #2D2D3F;
-  --term-black: #2D2D3F;
-  --term-red: #DC2626;
-  --term-green: #66BB6A;
-  --term-yellow: #E8A820;
-  --term-blue: #3B329A;
-  --term-magenta: #9333ea;
-  --term-cyan: #0891b2;
-  --term-white: #F0EDE6;
-  --term-bright-black: #8A8AA0;
-  --term-bright-red: #ef4444;
-  --term-bright-green: #81C784;
-  --term-bright-yellow: #eab308;
-  --term-bright-blue: #5C52C7;
-  --term-bright-magenta: #a855f7;
-  --term-bright-cyan: #06b6d4;
-  --term-bright-white: #FAF8F5;
+  --term-background: #EFF1F5;
+  --term-foreground: #4C4F69;
+  --term-cursor: #DC8A78;
+  --term-cursor-accent: #EFF1F5;
+  --term-selection-background: #ACB0BE;
+  --term-selection-foreground: #4C4F69;
+  --term-black: #5C5F77;
+  --term-red: #D20F39;
+  --term-green: #40A02B;
+  --term-yellow: #DF8E1D;
+  --term-blue: #1E66F5;
+  --term-magenta: #EA76CB;
+  --term-cyan: #179299;
+  --term-white: #ACB0BE;
+  --term-bright-black: #6C6F85;
+  --term-bright-red: #D20F39;
+  --term-bright-green: #40A02B;
+  --term-bright-yellow: #DF8E1D;
+  --term-bright-blue: #1E66F5;
+  --term-bright-magenta: #EA76CB;
+  --term-bright-cyan: #179299;
+  --term-bright-white: #BCC0CC;
 }
 
 [data-theme="openforge-dark"] {
