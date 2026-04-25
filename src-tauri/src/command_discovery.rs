@@ -114,6 +114,67 @@ pub fn scan_skills_directory(
     skills
 }
 
+fn first_non_empty_body_line(content: &str) -> Option<String> {
+    let body = if content.trim_start().starts_with("---") {
+        let trimmed = content.trim_start();
+        let after_first = &trimmed[3..];
+        match after_first.find("\n---") {
+            Some(end_idx) => &after_first[end_idx + 4..],
+            None => content,
+        }
+    } else {
+        content
+    };
+
+    body.lines()
+        .map(str::trim)
+        .find(|line| !line.is_empty())
+        .map(|line| line.trim_start_matches('#').trim().to_string())
+        .filter(|line| !line.is_empty())
+}
+
+/// Scan a prompt templates directory (e.g. `.pi/prompts/`) for `.md` files.
+/// Each `.md` file is a Pi prompt template and expands from `/{filename}`.
+/// Returns a Vec of CommandInfo with source="prompt".
+pub fn scan_prompt_templates_directory(dir: &Path) -> Vec<crate::opencode_client::CommandInfo> {
+    let mut commands = Vec::new();
+    let entries = match std::fs::read_dir(dir) {
+        Ok(e) => e,
+        Err(_) => return commands,
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+        let ext = path
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or_default();
+        if ext != "md" {
+            continue;
+        }
+        let content = match std::fs::read_to_string(&path) {
+            Ok(c) => c,
+            Err(_) => continue,
+        };
+        let file_stem = match path.file_stem().and_then(|n| n.to_str()) {
+            Some(n) => n.to_string(),
+            None => continue,
+        };
+        let (_, fm_desc) = parse_skill_frontmatter(&content);
+        let description = fm_desc.or_else(|| first_non_empty_body_line(&content));
+        commands.push(crate::opencode_client::CommandInfo {
+            name: file_stem,
+            description,
+            source: Some("prompt".to_string()),
+            agent: None,
+            extra: serde_json::Map::new(),
+        });
+    }
+    commands
+}
+
 /// Scan a commands directory (e.g. `.claude/commands/`) for `.md` files.
 /// Each `.md` file is a Claude Code custom command.
 /// Returns a Vec of CommandInfo with source="command".
@@ -286,6 +347,48 @@ pub fn resolve_active_plugins(home_dir: &Path) -> Vec<ActivePlugin> {
     }
 
     result
+}
+
+/// Returns a static curated list of built-in Pi slash commands.
+pub fn builtin_pi_commands() -> Vec<crate::opencode_client::CommandInfo> {
+    let commands = [
+        ("login", "OAuth authentication"),
+        ("logout", "Log out of the current provider"),
+        ("model", "Switch models"),
+        (
+            "scoped-models",
+            "Enable or disable models for model cycling",
+        ),
+        ("settings", "Open Pi settings"),
+        ("resume", "Pick from previous sessions"),
+        ("new", "Start a new session"),
+        ("name", "Set session display name"),
+        ("session", "Show session info"),
+        ("tree", "Navigate the session tree"),
+        ("fork", "Fork from a previous user message"),
+        ("clone", "Duplicate the current branch into a new session"),
+        ("compact", "Manually compact context"),
+        ("copy", "Copy last assistant message"),
+        ("export", "Export session to HTML"),
+        ("share", "Upload a private share link"),
+        (
+            "reload",
+            "Reload keybindings, extensions, skills, prompts, and context files",
+        ),
+        ("hotkeys", "Show keyboard shortcuts"),
+        ("changelog", "Display version history"),
+        ("quit", "Quit Pi"),
+    ];
+    commands
+        .iter()
+        .map(|(name, desc)| crate::opencode_client::CommandInfo {
+            name: name.to_string(),
+            description: Some(desc.to_string()),
+            source: Some("builtin".to_string()),
+            agent: None,
+            extra: serde_json::Map::new(),
+        })
+        .collect()
 }
 
 /// Returns a static curated list of built-in Claude Code slash commands.
@@ -592,6 +695,44 @@ mod tests {
 
         let active = resolve_active_plugins(home);
         assert!(active.is_empty());
+    }
+
+    // ── scan_prompt_templates_directory ──────────────────────────────────────
+
+    #[test]
+    fn test_scan_prompt_templates_directory_uses_frontmatter_description() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("review.md"),
+            "---\ndescription: Review changes\n---\nBody",
+        )
+        .unwrap();
+
+        let commands = scan_prompt_templates_directory(dir.path());
+
+        assert_eq!(commands.len(), 1);
+        assert_eq!(commands[0].name, "review");
+        assert_eq!(commands[0].description.as_deref(), Some("Review changes"));
+        assert_eq!(commands[0].source.as_deref(), Some("prompt"));
+    }
+
+    #[test]
+    fn test_scan_prompt_templates_directory_falls_back_to_first_body_line() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("component.md"),
+            "\n\n# Build a component\nMore details",
+        )
+        .unwrap();
+
+        let commands = scan_prompt_templates_directory(dir.path());
+
+        assert_eq!(commands.len(), 1);
+        assert_eq!(commands[0].name, "component");
+        assert_eq!(
+            commands[0].description.as_deref(),
+            Some("Build a component")
+        );
     }
 
     // ── scan_commands_directory ──────────────────────────────────────────────

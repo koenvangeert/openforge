@@ -27,7 +27,16 @@ impl PiProvider {
         app: &AppHandle,
     ) -> Result<ProviderSessionResult, String> {
         self.pty_mgr
-            .spawn_pi_pty(task_id, worktree_path, prompt, None, false, 80, 24, app.clone())
+            .spawn_pi_pty(
+                task_id,
+                worktree_path,
+                prompt,
+                None,
+                false,
+                80,
+                24,
+                app.clone(),
+            )
             .await
             .map_err(|e| e.to_string())?;
 
@@ -99,9 +108,74 @@ impl PiProvider {
 
     pub fn list_commands(
         &self,
-        _project_path: Option<&str>,
+        project_path: Option<&str>,
     ) -> Vec<crate::opencode_client::CommandInfo> {
-        vec![]
+        use crate::command_discovery::{
+            builtin_pi_commands, scan_prompt_templates_directory, scan_skills_directory,
+        };
+        use std::collections::HashMap;
+
+        let mut commands_map = HashMap::<String, crate::opencode_client::CommandInfo>::new();
+
+        for cmd in builtin_pi_commands() {
+            commands_map.insert(cmd.name.clone(), cmd);
+        }
+
+        // User-level prompt templates and skills.
+        if let Some(home) = dirs::home_dir() {
+            for cmd in
+                scan_prompt_templates_directory(&home.join(".pi").join("agent").join("prompts"))
+            {
+                commands_map.insert(cmd.name.clone(), cmd);
+            }
+
+            for (dir, source) in &[
+                (home.join(".pi").join("agent").join("skills"), ".pi"),
+                (home.join(".agents").join("skills"), ".agents"),
+            ] {
+                for skill in scan_skills_directory(dir, "user", source) {
+                    commands_map
+                        .entry(format!("skill:{}", skill.name))
+                        .or_insert(crate::opencode_client::CommandInfo {
+                            name: format!("skill:{}", skill.name),
+                            description: skill.description,
+                            source: Some("skill".to_string()),
+                            agent: skill.agent,
+                            extra: serde_json::Map::new(),
+                        });
+                }
+            }
+        }
+
+        // Project-level prompt templates and skills.
+        if let Some(proj_path) = project_path {
+            let proj = std::path::Path::new(proj_path);
+            for cmd in scan_prompt_templates_directory(&proj.join(".pi").join("prompts")) {
+                commands_map.insert(cmd.name.clone(), cmd);
+            }
+
+            for (dir, source) in &[
+                (proj.join(".pi").join("skills"), ".pi"),
+                (proj.join(".agents").join("skills"), ".agents"),
+            ] {
+                for skill in scan_skills_directory(dir, "project", source) {
+                    commands_map.insert(
+                        format!("skill:{}", skill.name),
+                        crate::opencode_client::CommandInfo {
+                            name: format!("skill:{}", skill.name),
+                            description: skill.description,
+                            source: Some("skill".to_string()),
+                            agent: skill.agent,
+                            extra: serde_json::Map::new(),
+                        },
+                    );
+                }
+            }
+        }
+
+        let mut commands: Vec<_> = commands_map.into_values().collect();
+        commands.sort_by(|a, b| a.name.cmp(&b.name));
+        commands
     }
 
     pub fn list_agents(
@@ -138,7 +212,10 @@ mod tests {
         let provider = PiProvider::new(PtyManager::new());
         let session = make_session(Some("session-123"));
 
-        assert_eq!(provider.provider_session_id(&session), Some("session-123".to_string()));
+        assert_eq!(
+            provider.provider_session_id(&session),
+            Some("session-123".to_string())
+        );
     }
 
     #[test]
@@ -147,5 +224,53 @@ mod tests {
         let session = make_session(None);
 
         assert_eq!(provider.provider_session_id(&session), None);
+    }
+
+    #[test]
+    fn list_commands_includes_builtin_pi_commands() {
+        let provider = PiProvider::new(PtyManager::new());
+
+        let commands = provider.list_commands(None);
+
+        assert!(commands.iter().any(|cmd| {
+            cmd.name == "model"
+                && cmd.description.as_deref() == Some("Switch models")
+                && cmd.source.as_deref() == Some("builtin")
+        }));
+        assert!(commands.iter().any(|cmd| cmd.name == "reload"));
+    }
+
+    #[test]
+    fn list_commands_discovers_project_prompt_templates_and_skills() {
+        let dir = tempfile::tempdir().unwrap();
+        let project = dir.path();
+        let prompts = project.join(".pi").join("prompts");
+        let skill = project.join(".pi").join("skills").join("release-notes");
+        std::fs::create_dir_all(&prompts).unwrap();
+        std::fs::create_dir_all(&skill).unwrap();
+        std::fs::write(
+            prompts.join("review.md"),
+            "---\ndescription: Review current changes\n---\nReview the code.",
+        )
+        .unwrap();
+        std::fs::write(
+            skill.join("SKILL.md"),
+            "---\nname: release-notes\ndescription: Draft release notes\n---\n# Release notes",
+        )
+        .unwrap();
+
+        let provider = PiProvider::new(PtyManager::new());
+        let commands = provider.list_commands(project.to_str());
+
+        assert!(commands.iter().any(|cmd| {
+            cmd.name == "review"
+                && cmd.description.as_deref() == Some("Review current changes")
+                && cmd.source.as_deref() == Some("prompt")
+        }));
+        assert!(commands.iter().any(|cmd| {
+            cmd.name == "skill:release-notes"
+                && cmd.description.as_deref() == Some("Draft release notes")
+                && cmd.source.as_deref() == Some("skill")
+        }));
     }
 }

@@ -95,8 +95,14 @@ pub async fn list_opencode_commands(
         db.resolve_ai_provider(&project_id)
     };
 
-    if provider == "claude-code" {
+    if provider == "claude-code" || provider == "pi" {
         let (_, project_path) = load_project_context(&db, &project_id)?;
+
+        if provider == "pi" {
+            let provider =
+                crate::providers::pi::PiProvider::new(crate::pty_manager::PtyManager::new());
+            return Ok(provider.list_commands(project_path.as_deref()));
+        }
 
         let provider = crate::providers::claude_code::ClaudeCodeProvider::new(
             crate::pty_manager::PtyManager::new(),
@@ -129,7 +135,7 @@ pub async fn search_opencode_files(
         db.resolve_ai_provider(&project_id)
     };
 
-    if provider == "claude-code" {
+    if provider == "claude-code" || provider == "pi" {
         let (_, project_path) = load_project_context(&db, &project_id)?;
 
         if let Some(path) = project_path {
@@ -162,8 +168,14 @@ pub async fn list_opencode_agents(
         db.resolve_ai_provider(&project_id)
     };
 
-    if provider == "claude-code" {
+    if provider == "claude-code" || provider == "pi" {
         let (_, project_path) = load_project_context(&db, &project_id)?;
+
+        if provider == "pi" {
+            let provider =
+                crate::providers::pi::PiProvider::new(crate::pty_manager::PtyManager::new());
+            return Ok(provider.list_agents(project_path.as_deref()));
+        }
 
         let provider = crate::providers::claude_code::ClaudeCodeProvider::new(
             crate::pty_manager::PtyManager::new(),
