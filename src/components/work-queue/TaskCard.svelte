@@ -1,7 +1,6 @@
 <script lang="ts">
   import { Pin } from 'lucide-svelte'
   import type { Task, AgentSession, PullRequestInfo } from '../../lib/types'
-  import { hasMergeConflicts, isReadyToMerge, isQueuedForMerge } from '../../lib/types'
   import { computeTaskState, taskStateToBorderClass } from '../../lib/taskState'
   import { getTaskReasonText } from '../../lib/taskStatePresentation'
   import { openUrl } from '../../lib/ipc'

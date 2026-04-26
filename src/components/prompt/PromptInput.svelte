@@ -6,9 +6,7 @@
   import ModelDownloadProgress from '../shared/input/ModelDownloadProgress.svelte'
   import ActionDropdown from '../shared/ui/ActionDropdown.svelte'
   import { useAutocomplete } from '../../lib/useAutocomplete.svelte'
-  import { getProjectConfig } from '../../lib/ipc'
   import { useListNavigation } from '../../lib/useListNavigation.svelte'
-  import { onMount } from 'svelte'
 
   interface Props {
     value?: string

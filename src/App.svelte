@@ -40,11 +40,10 @@
   import { themeMode } from './lib/theme'
   import type { Action } from './lib/types'
   import { release as releaseTerminal, isPtyActive, focusTerminal } from './lib/terminalPool'
-  import { isInputFocused } from './lib/domUtils'
   import { useCommandHeld } from './lib/useCommandHeld.svelte'
   import { getOpenCodeSessionUpdate } from './lib/opencodeSessionEvents'
   import { useShortcutRegistry } from './lib/shortcuts.svelte'
-  import { ICON_RAIL_HIDDEN_VIEWS, VIEWS, getViews } from './lib/views'
+  import { ICON_RAIL_HIDDEN_VIEWS, getViews } from './lib/views'
   
   let unlisteners: UnlistenFn[] = []
   let showAddDialog = $state(false)

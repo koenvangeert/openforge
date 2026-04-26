@@ -37,6 +37,13 @@ jobs:
           pnpm exec tsc --noEmit 2>&1 | tee /tmp/typecheck.log
           echo "exit_code=$?" >> "$GITHUB_OUTPUT"
 
+      - name: Lint
+        id: lint
+        run: |
+          set +e -o pipefail
+          pnpm lint 2>&1 | tee /tmp/lint.log
+          echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+
       - name: Run tests
         id: tests
         run: |
@@ -51,6 +58,7 @@ jobs:
           name: frontend-logs
           path: |
             /tmp/typecheck.log
+            /tmp/lint.log
             /tmp/tests.log
           retention-days: 1
           if-no-files-found: ignore
@@ -60,6 +68,7 @@ jobs:
         run: |
           mkdir -p /tmp/ci-results
           echo "${{ steps.typecheck.outputs.exit_code }}" > /tmp/ci-results/typecheck-exit-code
+          echo "${{ steps.lint.outputs.exit_code }}" > /tmp/ci-results/lint-exit-code
           echo "${{ steps.tests.outputs.exit_code }}" > /tmp/ci-results/tests-exit-code
 
       - name: Upload results
@@ -71,7 +80,7 @@ jobs:
           retention-days: 1
 
       - name: Fail if checks failed
-        if: steps.typecheck.outputs.exit_code != '0' || steps.tests.outputs.exit_code != '0'
+        if: steps.typecheck.outputs.exit_code != '0' || steps.lint.outputs.exit_code != '0' || steps.tests.outputs.exit_code != '0'
         run: exit 1
 
   rust:

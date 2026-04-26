@@ -8,7 +8,7 @@
   import type { WorkQueueEntry } from '../../lib/types'
   import type { AgentSession } from '../../lib/types'
   import { getWorkQueueTasks, getConfig, setConfig } from '../../lib/ipc'
-  import { activeProjectId, currentView, selectedTaskId, activeSessions, ticketPrs, startingTasks } from '../../lib/stores'
+  import { activeProjectId, selectedTaskId, activeSessions, ticketPrs, startingTasks } from '../../lib/stores'
   import { useAppRouter } from '../../lib/router.svelte'
   import { getHTMLElementAt, isInputFocused } from '../../lib/domUtils'
   import { useVimNavigation } from '../../lib/useVimNavigation.svelte'
