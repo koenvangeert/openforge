@@ -77,15 +77,29 @@ jobs:
             const prNumber = parseInt('${{ steps.pr.outputs.number }}');
             const marker = '<!-- ci-frontend-failures -->';
 
-            // Read exit codes
-            let typecheckFailed = false;
-            let testsFailed = false;
-            try {
-              typecheckFailed = fs.readFileSync('/tmp/frontend-results/typecheck-exit-code', 'utf8').trim() !== '0';
-            } catch {}
-            try {
-              testsFailed = fs.readFileSync('/tmp/frontend-results/tests-exit-code', 'utf8').trim() !== '0';
-            } catch {}
+            function describeError(error) {
+              return error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+            }
+
+            function isMissingFile(error) {
+              return error && typeof error === 'object' && error.code === 'ENOENT';
+            }
+
+            function readExitCodeFile(path, label) {
+              try {
+                return fs.readFileSync(path, 'utf8').trim() !== '0';
+              } catch (error) {
+                if (isMissingFile(error)) {
+                  core.info(`${label} exit code file was not found at ${path}; assuming that check did not fail.`);
+                } else {
+                  core.warning(`Unable to read ${label} exit code file at ${path}; assuming that check did not fail. ${describeError(error)}`);
+                }
+                return false;
+              }
+            }
+
+            const typecheckFailed = readExitCodeFile('/tmp/frontend-results/typecheck-exit-code', 'frontend typecheck');
+            const testsFailed = readExitCodeFile('/tmp/frontend-results/tests-exit-code', 'frontend tests');
 
             const { data: comments } = await github.rest.issues.listComments({
               owner: context.repo.owner,
@@ -112,7 +126,8 @@ jobs:
                 const log = fs.readFileSync('/tmp/frontend-logs/typecheck.log', 'utf8');
                 const errors = log.split('\n').filter(l => l.includes('error TS')).join('\n');
                 body += '### Type Check\n\n```\n' + (errors || log).slice(0, 30000) + '\n```\n\n';
-              } catch {
+              } catch (error) {
+                core.warning(`Unable to read frontend typecheck log: ${describeError(error)}`);
                 body += '### Type Check\n\n_Failed (logs unavailable)_\n\n';
               }
             }
@@ -123,7 +138,8 @@ jobs:
                 const lines = log.split('\n');
                 const tail = lines.slice(Math.max(0, lines.length - 200)).join('\n');
                 body += '### Tests\n\n```\n' + tail.slice(0, 30000) + '\n```\n\n';
-              } catch {
+              } catch (error) {
+                core.warning(`Unable to read frontend test log: ${describeError(error)}`);
                 body += '### Tests\n\n_Failed (logs unavailable)_\n\n';
               }
             }
@@ -155,10 +171,24 @@ jobs:
             const prNumber = parseInt('${{ steps.pr.outputs.number }}');
             const marker = '<!-- ci-rust-failures -->';
 
+            function describeError(error) {
+              return error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+            }
+
+            function isMissingFile(error) {
+              return error && typeof error === 'object' && error.code === 'ENOENT';
+            }
+
             let testsFailed = false;
             try {
               testsFailed = fs.readFileSync('/tmp/rust-results/tests-exit-code', 'utf8').trim() !== '0';
-            } catch {}
+            } catch (error) {
+              if (isMissingFile(error)) {
+                core.info('Rust test exit code file was not found at /tmp/rust-results/tests-exit-code; assuming that check did not fail.');
+              } else {
+                core.warning(`Unable to read rust test exit code file at /tmp/rust-results/tests-exit-code; assuming that check did not fail. ${describeError(error)}`);
+              }
+            }
 
             const { data: comments } = await github.rest.issues.listComments({
               owner: context.repo.owner,
@@ -189,7 +219,8 @@ jobs:
               const tail = lines.slice(Math.max(0, lines.length - 100)).join('\n');
               const errors = errorLines.length > 0 ? errorLines.join('\n') + '\n\n---\n\n' + tail : tail;
               body += '```\n' + errors.slice(0, 30000) + '\n```\n';
-            } catch {
+            } catch (error) {
+              core.warning(`Unable to read rust test log: ${describeError(error)}`);
               body += '_Failed (logs unavailable)_\n';
             }
 
