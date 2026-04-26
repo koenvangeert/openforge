@@ -4,11 +4,11 @@ const HTTP_PORT = process.env.OPENFORGE_HTTP_PORT ?? '17422';
 const BASE_URL = `http://127.0.0.1:${HTTP_PORT}`;
 
 const COMMANDS = new Set([
-  'mcp',
   'create-task',
   'update-task',
   'get-task',
   'list-tasks',
+  'list-projects',
   'work-queue',
 ]);
 
@@ -16,12 +16,12 @@ function printHelp() {
   console.log(`OpenForge CLI
 
 Usage:
-  node cli.js mcp
-  node cli.js create-task --initial-prompt <text> [--project-id <id>] [--worktree <path>]
-  node cli.js update-task --task-id <id> [--initial-prompt <text>] [--summary <text>]
-  node cli.js get-task --task-id <id>
-  node cli.js list-tasks --project-id <id> [--state backlog|doing|done]
-  node cli.js work-queue --project-id <id>
+  openforge create-task --initial-prompt <text> [--project-id <id>] [--worktree <path>]
+  openforge update-task --task-id <id> [--initial-prompt <text>] [--summary <text>]
+  openforge get-task --task-id <id>
+  openforge list-tasks --project-id <id> [--state backlog|doing|done]
+  openforge list-projects
+  openforge work-queue --project-id <id>
 
 Environment:
   OPENFORGE_HTTP_PORT  OpenForge HTTP bridge port (default: 17422)
@@ -102,9 +102,6 @@ async function main(argv) {
   }
 
   switch (command) {
-    case 'mcp':
-      await import('./index.js');
-      return;
     case 'create-task': {
       const payload = {
         initial_prompt: requireFlag(flags, 'initialPrompt'),
@@ -135,6 +132,10 @@ async function main(argv) {
       const params = new URLSearchParams({ project_id: requireFlag(flags, 'projectId') });
       if (typeof flags.state === 'string') params.set('state', flags.state);
       printJson(await requestJson(`/tasks?${params.toString()}`));
+      return;
+    }
+    case 'list-projects': {
+      printJson(await requestJson('/projects'));
       return;
     }
     case 'work-queue': {

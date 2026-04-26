@@ -245,6 +245,20 @@ pub async fn get_task_info_handler(
     }
 }
 
+pub async fn get_projects_handler(
+    State(state): State<AppState>,
+) -> Result<Json<Vec<db::ProjectRow>>, (StatusCode, String)> {
+    let db = state.db.lock().unwrap();
+    let projects = db.get_all_projects().map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to get projects: {e}"),
+        )
+    })?;
+
+    Ok(Json(projects))
+}
+
 pub async fn get_tasks_handler(
     State(state): State<AppState>,
     Query(query): Query<TasksQuery>,
@@ -531,6 +545,7 @@ pub fn create_router(state: AppState) -> Router {
         .route("/create_task", post(create_task_handler))
         .route("/update_task", post(update_task_handler))
         .route("/task/:id", get(get_task_info_handler))
+        .route("/projects", get(get_projects_handler))
         .route("/tasks", get(get_tasks_handler))
         .route("/project/:id/attention", get(get_project_attention_handler))
         .route("/work_queue", get(get_work_queue_handler))
@@ -732,6 +747,47 @@ mod tests {
             .expect("get session")
             .expect("session exists");
         assert_eq!(session.status, "running");
+
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[tokio::test]
+    async fn test_get_projects_handler_returns_all_projects() {
+        let (state, path) = test_state("http_get_projects_handler_returns_projects");
+        {
+            let db = state.db.lock().expect("lock db");
+            db.create_project("Project A", "/tmp/project-a")
+                .expect("create project a");
+            db.create_project("Project B", "/tmp/project-b")
+                .expect("create project b");
+        }
+
+        let router = create_router(state);
+        let response = router
+            .oneshot(
+                Request::builder()
+                    .uri("/projects")
+                    .method("GET")
+                    .body(Body::empty())
+                    .expect("build request"),
+            )
+            .await
+            .expect("request should succeed");
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let json = response_body_json(response).await;
+        let projects = json.as_array().expect("array response");
+        assert_eq!(projects.len(), 2);
+        assert!(projects.iter().any(|project| {
+            project["id"] == "P-1"
+                && project["name"] == "Project A"
+                && project["path"] == "/tmp/project-a"
+        }));
+        assert!(projects.iter().any(|project| {
+            project["id"] == "P-2"
+                && project["name"] == "Project B"
+                && project["path"] == "/tmp/project-b"
+        }));
 
         let _ = std::fs::remove_file(path);
     }

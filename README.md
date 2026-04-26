@@ -52,11 +52,12 @@ The installer creates an `openforge` CLI launcher at `~/.openforge/bin/openforge
 
 ```bash
 openforge --help
+openforge list-projects
 openforge get-task --task-id T-123
 openforge update-task --task-id T-123 --summary "Done"
 ```
 
-The CLI talks to the local Open Forge HTTP bridge and is also used by the auto-installed provider skills/MCP config.
+The CLI talks to the local Open Forge HTTP bridge and is used by the auto-installed provider skills.
 
 ## What it does
 

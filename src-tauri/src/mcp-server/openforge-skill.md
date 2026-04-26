@@ -18,11 +18,12 @@ If OpenForge is listening on a non-default HTTP bridge port, set `OPENFORGE_HTTP
 ## Commands
 
 ```bash
-node "$OPENFORGE_CLI" create-task --initial-prompt "Describe the follow-up work" --project-id P-1
-node "$OPENFORGE_CLI" update-task --task-id T-123 --summary "What changed and what needs attention"
-node "$OPENFORGE_CLI" get-task --task-id T-123
-node "$OPENFORGE_CLI" list-tasks --project-id P-1 --state doing
-node "$OPENFORGE_CLI" work-queue --project-id P-1
+openforge create-task --initial-prompt "Describe the follow-up work" --project-id P-1
+openforge update-task --task-id T-123 --summary "What changed and what needs attention"
+openforge get-task --task-id T-123
+openforge list-tasks --project-id P-1 --state doing
+openforge list-projects
+openforge work-queue --project-id P-1
 ```
 
 Use `--worktree "$PWD"` with `create-task` when the project can be inferred from the current worktree and no project id is known.

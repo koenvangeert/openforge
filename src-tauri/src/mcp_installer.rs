@@ -37,7 +37,7 @@ fn build_mcp_entry(port: &str, install_path: &str) -> Value {
     serde_json::json!({
         "type": "stdio",
         "command": "node",
-        "args": [format!("{}/cli.js", install_path), "mcp"],
+        "args": [format!("{}/index.js", install_path)],
         "env": {
             "OPENFORGE_HTTP_PORT": port
         }
@@ -306,10 +306,7 @@ mod tests {
         let openforge = &result["mcpServers"]["openforge"];
         assert_eq!(openforge["type"], "stdio");
         assert_eq!(openforge["command"], "node");
-        assert_eq!(
-            openforge["args"],
-            json!(["/opt/openforge/mcp-server/cli.js", "mcp"])
-        );
+        assert_eq!(openforge["args"], json!(["/opt/openforge/mcp-server/index.js"]));
         assert_eq!(openforge["env"]["OPENFORGE_HTTP_PORT"], "17422");
     }
 
@@ -355,10 +352,7 @@ mod tests {
         let result = merge_mcp_config(Some(existing), "17422", "/new/path/mcp-server");
 
         let openforge = &result["mcpServers"]["openforge"];
-        assert_eq!(
-            openforge["args"],
-            json!(["/new/path/mcp-server/cli.js", "mcp"])
-        );
+        assert_eq!(openforge["args"], json!(["/new/path/mcp-server/index.js"]));
         assert_eq!(openforge["env"]["OPENFORGE_HTTP_PORT"], "17422");
     }
 
@@ -408,7 +402,7 @@ mod tests {
 
         let cli_content = std::fs::read_to_string(&cli_js).unwrap();
         assert!(cli_content.contains("create-task"));
-        assert!(cli_content.contains("mcp"));
+        assert!(!cli_content.contains("'mcp'"));
 
         let skill_content = std::fs::read_to_string(&skill_md).unwrap();
         assert!(skill_content.contains("openforge"));
