@@ -900,7 +900,7 @@ describe('TaskDetailView', () => {
   })
 
 
-  it('terminal tab button shows active styling when selected', async () => {
+  it('selecting the terminal tab activates the terminal pane', async () => {
     const { getTaskWorkspace } = await import('../../lib/ipc')
     vi.mocked(getTaskWorkspace).mockResolvedValue(createTaskWorkspaceInfo({ workspace_path: '/path/to/worktree', repo_path: '/repo', branch_name: 'branch' }))
 
@@ -910,9 +910,8 @@ describe('TaskDetailView', () => {
     await fireEvent.click(screen.getByRole('button', { name: /^terminal\b/i }))
 
     await waitFor(() => {
-      const terminalButton = screen.getByRole('button', { name: /^terminal\b/i })
-      expect(terminalButton?.className).toContain('text-primary')
-      expect(terminalButton?.className).toContain('border-primary')
+      expect(screen.getByRole('button', { name: /shell 1/i })).toBeTruthy()
+      expect(get(taskActiveView).get(baseTask.id)).toBe(TERMINAL_VIEW_ID)
     })
 
     vi.mocked(getTaskWorkspace).mockResolvedValue(null)
