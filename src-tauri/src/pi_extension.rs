@@ -21,11 +21,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn pi_extension_reports_agent_end_to_openforge_hook() {
+    fn pi_extension_reports_agent_lifecycle_to_openforge_hooks() {
+        assert!(PI_EXTENSION_SOURCE.contains("agent_start"));
         assert!(PI_EXTENSION_SOURCE.contains("agent_end"));
         assert!(PI_EXTENSION_SOURCE.contains("OPENFORGE_TASK_ID"));
         assert!(PI_EXTENSION_SOURCE.contains("OPENFORGE_PTY_INSTANCE_ID"));
         assert!(PI_EXTENSION_SOURCE.contains("pty_instance_id"));
+        assert!(PI_EXTENSION_SOURCE.contains("/hooks/pi-agent-start"));
         assert!(PI_EXTENSION_SOURCE.contains("/hooks/pi-agent-end"));
     }
 
