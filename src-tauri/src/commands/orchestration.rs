@@ -577,7 +577,10 @@ mod tests {
             .get_agent_session(&session_id)
             .expect("get session")
             .expect("session exists");
-        assert_eq!(session.checkpoint_data, Some(r#"{"pty_instance_id":42}"#.to_string()));
+        assert_eq!(
+            session.checkpoint_data,
+            Some(r#"{"pty_instance_id":42}"#.to_string())
+        );
 
         drop(db_arc);
         let _ = std::fs::remove_file(&path);

@@ -43,10 +43,7 @@ pub async fn pty_resize(
 }
 
 #[tauri::command]
-pub async fn pty_kill(
-    pty_mgr: State<'_, PtyManager>,
-    task_id: String,
-) -> Result<(), String> {
+pub async fn pty_kill(pty_mgr: State<'_, PtyManager>, task_id: String) -> Result<(), String> {
     pty_mgr
         .kill_pty(&task_id)
         .await

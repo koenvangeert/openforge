@@ -46,9 +46,15 @@ async fn finalize_agent_pty_exit(
 
     let _ = std::fs::remove_file(pid_file);
 
-    tokio::task::spawn_blocking(move || session.child.wait().map(|status| status.success()).unwrap_or(false))
-        .await
-        .unwrap_or(false)
+    tokio::task::spawn_blocking(move || {
+        session
+            .child
+            .wait()
+            .map(|status| status.success())
+            .unwrap_or(false)
+    })
+    .await
+    .unwrap_or(false)
 }
 
 // ============================================================================
@@ -2189,7 +2195,10 @@ mod tests {
             .expect("spawn command should succeed");
         drop(pair.slave);
 
-        let writer = pair.master.take_writer().expect("take writer should succeed");
+        let writer = pair
+            .master
+            .take_writer()
+            .expect("take writer should succeed");
 
         {
             let mut sessions = manager.sessions.lock().await;
@@ -2232,7 +2241,10 @@ mod tests {
         )
         .await;
 
-        assert!(!success, "stale cleanup should not report a successful exit");
+        assert!(
+            !success,
+            "stale cleanup should not report a successful exit"
+        );
         {
             let sessions = manager.sessions.lock().await;
             let session = sessions.get("task-1").expect("newer session should remain");
@@ -2240,13 +2252,22 @@ mod tests {
         }
         {
             let buffers = manager.output_buffers.lock().await;
-            assert!(buffers.contains_key("task-1"), "buffer should remain for active instance");
+            assert!(
+                buffers.contains_key("task-1"),
+                "buffer should remain for active instance"
+            );
         }
         {
             let times = manager.last_output.lock().await;
-            assert!(times.contains_key("task-1"), "last_output should remain for active instance");
+            assert!(
+                times.contains_key("task-1"),
+                "last_output should remain for active instance"
+            );
         }
-        assert!(pid_file.exists(), "stale cleanup must not remove the active pid file");
+        assert!(
+            pid_file.exists(),
+            "stale cleanup must not remove the active pid file"
+        );
     }
 
     #[test]

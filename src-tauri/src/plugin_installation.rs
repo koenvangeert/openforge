@@ -1,7 +1,7 @@
 use crate::db;
+use regex::Regex;
 use serde::Deserialize;
 use serde_json::Value;
-use regex::Regex;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -135,10 +135,18 @@ pub fn uninstall_managed_plugin(
 
 fn load_manifest_from_dir(dir: &Path) -> Result<PluginManifestFile, String> {
     let manifest_path = dir.join("manifest.json");
-    let raw = fs::read_to_string(&manifest_path)
-        .map_err(|error| format!("failed to read manifest {}: {error}", manifest_path.display()))?;
-    let manifest: PluginManifestFile = serde_json::from_str(&raw)
-        .map_err(|error| format!("failed to parse manifest {}: {error}", manifest_path.display()))?;
+    let raw = fs::read_to_string(&manifest_path).map_err(|error| {
+        format!(
+            "failed to read manifest {}: {error}",
+            manifest_path.display()
+        )
+    })?;
+    let manifest: PluginManifestFile = serde_json::from_str(&raw).map_err(|error| {
+        format!(
+            "failed to parse manifest {}: {error}",
+            manifest_path.display()
+        )
+    })?;
     validate_manifest(&manifest, dir)?;
     Ok(manifest)
 }
@@ -208,9 +216,12 @@ fn validate_relative_entry_path(dir: &Path, entry: &str, field_name: &str) -> Re
         ));
     }
 
-    let canonical_dir = dir
-        .canonicalize()
-        .map_err(|error| format!("failed to canonicalize plugin directory {}: {error}", dir.display()))?;
+    let canonical_dir = dir.canonicalize().map_err(|error| {
+        format!(
+            "failed to canonicalize plugin directory {}: {error}",
+            dir.display()
+        )
+    })?;
     let canonical_candidate = candidate.canonicalize().map_err(|error| {
         format!(
             "failed to canonicalize plugin {field_name} entry {}: {error}",
@@ -230,7 +241,10 @@ fn validate_relative_entry_path(dir: &Path, entry: &str, field_name: &str) -> Re
 fn validate_required_string_field(value: Option<&Value>, path: &str) -> Result<String, String> {
     match value.and_then(Value::as_str).map(str::trim) {
         Some(value) if !value.is_empty() => Ok(value.to_string()),
-        _ => Err(format!("plugin manifest {} must be a non-empty string", path)),
+        _ => Err(format!(
+            "plugin manifest {} must be a non-empty string",
+            path
+        )),
     }
 }
 
@@ -249,7 +263,10 @@ fn validate_optional_shortcut_field(value: Option<&Value>, path: &str) -> Result
             .as_str()
             .ok_or_else(|| format!("plugin manifest {} must be a string", path))?;
         if !shortcut_pattern().is_match(shortcut) {
-            return Err(format!("plugin manifest {} has invalid shortcut format", path));
+            return Err(format!(
+                "plugin manifest {} has invalid shortcut format",
+                path
+            ));
         }
     }
     Ok(())
@@ -280,57 +297,137 @@ fn validate_contributions(contributes: &Value) -> Result<(), String> {
         .ok_or_else(|| "plugin manifest contributes must be an object".to_string())?;
 
     if let Some(views) = contributes.get("views") {
-        for (index, view) in validate_array(Some(views), "contributes.views")?.into_iter().enumerate() {
-            validate_required_string_field(view.get("id"), &format!("contributes.views[{index}].id"))?;
-            validate_required_string_field(view.get("title"), &format!("contributes.views[{index}].title"))?;
-            validate_required_string_field(view.get("icon"), &format!("contributes.views[{index}].icon"))?;
-            validate_optional_number_field(view.get("railOrder"), &format!("contributes.views[{index}].railOrder"))?;
-            validate_optional_shortcut_field(view.get("shortcut"), &format!("contributes.views[{index}].shortcut"))?;
+        for (index, view) in validate_array(Some(views), "contributes.views")?
+            .into_iter()
+            .enumerate()
+        {
+            validate_required_string_field(
+                view.get("id"),
+                &format!("contributes.views[{index}].id"),
+            )?;
+            validate_required_string_field(
+                view.get("title"),
+                &format!("contributes.views[{index}].title"),
+            )?;
+            validate_required_string_field(
+                view.get("icon"),
+                &format!("contributes.views[{index}].icon"),
+            )?;
+            validate_optional_number_field(
+                view.get("railOrder"),
+                &format!("contributes.views[{index}].railOrder"),
+            )?;
+            validate_optional_shortcut_field(
+                view.get("shortcut"),
+                &format!("contributes.views[{index}].shortcut"),
+            )?;
         }
     }
 
     if let Some(task_pane_tabs) = contributes.get("taskPaneTabs") {
-        for (index, tab) in validate_array(Some(task_pane_tabs), "contributes.taskPaneTabs")?.into_iter().enumerate() {
-            validate_required_string_field(tab.get("id"), &format!("contributes.taskPaneTabs[{index}].id"))?;
-            validate_required_string_field(tab.get("title"), &format!("contributes.taskPaneTabs[{index}].title"))?;
+        for (index, tab) in validate_array(Some(task_pane_tabs), "contributes.taskPaneTabs")?
+            .into_iter()
+            .enumerate()
+        {
+            validate_required_string_field(
+                tab.get("id"),
+                &format!("contributes.taskPaneTabs[{index}].id"),
+            )?;
+            validate_required_string_field(
+                tab.get("title"),
+                &format!("contributes.taskPaneTabs[{index}].title"),
+            )?;
             if let Some(icon) = tab.get("icon") {
-                validate_required_string_field(Some(icon), &format!("contributes.taskPaneTabs[{index}].icon"))?;
+                validate_required_string_field(
+                    Some(icon),
+                    &format!("contributes.taskPaneTabs[{index}].icon"),
+                )?;
             }
-            validate_optional_number_field(tab.get("order"), &format!("contributes.taskPaneTabs[{index}].order"))?;
+            validate_optional_number_field(
+                tab.get("order"),
+                &format!("contributes.taskPaneTabs[{index}].order"),
+            )?;
         }
     }
 
     if let Some(sidebar_panels) = contributes.get("sidebarPanels") {
-        for (index, panel) in validate_array(Some(sidebar_panels), "contributes.sidebarPanels")?.into_iter().enumerate() {
-            validate_required_string_field(panel.get("id"), &format!("contributes.sidebarPanels[{index}].id"))?;
-            validate_required_string_field(panel.get("title"), &format!("contributes.sidebarPanels[{index}].title"))?;
-            let side = validate_required_string_field(panel.get("side"), &format!("contributes.sidebarPanels[{index}].side"))?;
+        for (index, panel) in validate_array(Some(sidebar_panels), "contributes.sidebarPanels")?
+            .into_iter()
+            .enumerate()
+        {
+            validate_required_string_field(
+                panel.get("id"),
+                &format!("contributes.sidebarPanels[{index}].id"),
+            )?;
+            validate_required_string_field(
+                panel.get("title"),
+                &format!("contributes.sidebarPanels[{index}].title"),
+            )?;
+            let side = validate_required_string_field(
+                panel.get("side"),
+                &format!("contributes.sidebarPanels[{index}].side"),
+            )?;
             if side != "left" && side != "right" {
                 return Err(format!("plugin manifest contributes.sidebarPanels[{index}].side must be 'left' or 'right'"));
             }
-            validate_optional_number_field(panel.get("order"), &format!("contributes.sidebarPanels[{index}].order"))?;
+            validate_optional_number_field(
+                panel.get("order"),
+                &format!("contributes.sidebarPanels[{index}].order"),
+            )?;
         }
     }
 
     if let Some(commands) = contributes.get("commands") {
-        for (index, command) in validate_array(Some(commands), "contributes.commands")?.into_iter().enumerate() {
-            validate_required_string_field(command.get("id"), &format!("contributes.commands[{index}].id"))?;
-            validate_required_string_field(command.get("title"), &format!("contributes.commands[{index}].title"))?;
-            validate_optional_shortcut_field(command.get("shortcut"), &format!("contributes.commands[{index}].shortcut"))?;
+        for (index, command) in validate_array(Some(commands), "contributes.commands")?
+            .into_iter()
+            .enumerate()
+        {
+            validate_required_string_field(
+                command.get("id"),
+                &format!("contributes.commands[{index}].id"),
+            )?;
+            validate_required_string_field(
+                command.get("title"),
+                &format!("contributes.commands[{index}].title"),
+            )?;
+            validate_optional_shortcut_field(
+                command.get("shortcut"),
+                &format!("contributes.commands[{index}].shortcut"),
+            )?;
         }
     }
 
     if let Some(settings_sections) = contributes.get("settingsSections") {
-        for (index, section) in validate_array(Some(settings_sections), "contributes.settingsSections")?.into_iter().enumerate() {
-            validate_required_string_field(section.get("id"), &format!("contributes.settingsSections[{index}].id"))?;
-            validate_required_string_field(section.get("title"), &format!("contributes.settingsSections[{index}].title"))?;
+        for (index, section) in
+            validate_array(Some(settings_sections), "contributes.settingsSections")?
+                .into_iter()
+                .enumerate()
+        {
+            validate_required_string_field(
+                section.get("id"),
+                &format!("contributes.settingsSections[{index}].id"),
+            )?;
+            validate_required_string_field(
+                section.get("title"),
+                &format!("contributes.settingsSections[{index}].title"),
+            )?;
         }
     }
 
     if let Some(background_services) = contributes.get("backgroundServices") {
-        for (index, service) in validate_array(Some(background_services), "contributes.backgroundServices")?.into_iter().enumerate() {
-            validate_required_string_field(service.get("id"), &format!("contributes.backgroundServices[{index}].id"))?;
-            validate_required_string_field(service.get("name"), &format!("contributes.backgroundServices[{index}].name"))?;
+        for (index, service) in
+            validate_array(Some(background_services), "contributes.backgroundServices")?
+                .into_iter()
+                .enumerate()
+        {
+            validate_required_string_field(
+                service.get("id"),
+                &format!("contributes.backgroundServices[{index}].id"),
+            )?;
+            validate_required_string_field(
+                service.get("name"),
+                &format!("contributes.backgroundServices[{index}].name"),
+            )?;
         }
     }
 
@@ -390,9 +487,12 @@ fn copy_directory_recursive(source: &Path, destination: &Path) -> Result<(), Str
         let entry = entry.map_err(|error| format!("failed to inspect directory entry: {error}"))?;
         let source_path = entry.path();
         let destination_path = destination.join(entry.file_name());
-        let file_type = entry
-            .file_type()
-            .map_err(|error| format!("failed to read file type {}: {error}", source_path.display()))?;
+        let file_type = entry.file_type().map_err(|error| {
+            format!(
+                "failed to read file type {}: {error}",
+                source_path.display()
+            )
+        })?;
 
         if file_type.is_dir() {
             copy_directory_recursive(&source_path, &destination_path)?;
@@ -426,9 +526,15 @@ fn unique_staging_dir(managed_base_dir: &Path) -> Result<PathBuf, String> {
         .duration_since(UNIX_EPOCH)
         .map_err(|error| format!("failed to create staging directory nonce: {error}"))?
         .as_nanos();
-    let path = managed_base_dir.join(".staging").join(format!("npm-{nonce}"));
-    fs::create_dir_all(&path)
-        .map_err(|error| format!("failed to create staging directory {}: {error}", path.display()))?;
+    let path = managed_base_dir
+        .join(".staging")
+        .join(format!("npm-{nonce}"));
+    fs::create_dir_all(&path).map_err(|error| {
+        format!(
+            "failed to create staging directory {}: {error}",
+            path.display()
+        )
+    })?;
     Ok(path)
 }
 
@@ -452,7 +558,11 @@ fn resolve_requested_package_dir_name(package_spec: &str) -> Result<String, Stri
             .ok_or_else(|| format!("invalid scoped package spec: {package_spec}"))?;
         let after_scope = &stripped[slash_index + 1..];
         if let Some(version_sep) = after_scope.find('@') {
-            return Ok(format!("@{}/{}", &stripped[..slash_index], &after_scope[..version_sep]));
+            return Ok(format!(
+                "@{}/{}",
+                &stripped[..slash_index],
+                &after_scope[..version_sep]
+            ));
         }
 
         return Ok(package_spec.to_string());
@@ -483,8 +593,11 @@ mod tests {
         fs::create_dir_all(source.path().join("dist")).expect("dist dir should create");
         fs::write(source.path().join("dist/index.js"), "export const x = 1;")
             .expect("frontend should write");
-        fs::write(source.path().join("backend.js"), "export async function ping() { return 'pong' }")
-            .expect("backend should write");
+        fs::write(
+            source.path().join("backend.js"),
+            "export async function ping() { return 'pong' }",
+        )
+        .expect("backend should write");
         write_manifest(
             source.path(),
             r#"{
@@ -605,8 +718,11 @@ mod tests {
         fs::create_dir_all(source.path().join("dist")).expect("dist dir should create");
         fs::write(source.path().join("dist/index.js"), "export const x = 1;")
             .expect("frontend should write");
-        fs::write(source.path().join("backend.js"), "export async function run() {}")
-            .expect("backend should write");
+        fs::write(
+            source.path().join("backend.js"),
+            "export async function run() {}",
+        )
+        .expect("backend should write");
         write_manifest(
             source.path(),
             r#"{

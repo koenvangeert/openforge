@@ -178,7 +178,9 @@ impl<R: Runtime + 'static> PluginHost<R> {
                 self.remove_pending_request(request_id);
                 format!("timed out waiting for plugin backend response: {plugin_id}.{command}")
             })?
-            .map_err(|_| format!("plugin backend transport closed while invoking {plugin_id}.{command}"))?;
+            .map_err(|_| {
+                format!("plugin backend transport closed while invoking {plugin_id}.{command}")
+            })?;
 
         response
     }
@@ -533,7 +535,9 @@ impl<R: Runtime + 'static> PluginHost<R> {
                 Ok(response) => {
                     let sender = match self.transport_lock() {
                         Ok(mut transport) => {
-                            if transport.session_id != session_id || transport.process_token != process_token {
+                            if transport.session_id != session_id
+                                || transport.process_token != process_token
+                            {
                                 None
                             } else {
                                 transport.pending.remove(&response.id)
@@ -556,7 +560,10 @@ impl<R: Runtime + 'static> PluginHost<R> {
                     }
                 }
                 Err(error) => {
-                    warn!("[plugin_host] failed to parse sidecar response: {}", error.0);
+                    warn!(
+                        "[plugin_host] failed to parse sidecar response: {}",
+                        error.0
+                    );
                 }
             }
         }
@@ -732,7 +739,11 @@ impl<R: Runtime + 'static> PluginHost<R> {
             }
 
             transport.writer = None;
-            pending = transport.pending.drain().map(|(_, sender)| sender).collect();
+            pending = transport
+                .pending
+                .drain()
+                .map(|(_, sender)| sender)
+                .collect();
         }
 
         for sender in pending {
@@ -880,8 +891,8 @@ mod tests {
     use super::*;
     use serde_json::json;
     use std::fs;
-    use tempfile::tempdir;
     use tauri::test::{mock_builder, mock_context, noop_assets};
+    use tempfile::tempdir;
 
     #[cfg(unix)]
     use std::os::unix::fs::PermissionsExt;
@@ -1105,7 +1116,13 @@ rl.on('close', () => process.exit(0));"#,
         std::env::remove_var(BUN_PATH_ENV);
         std::env::remove_var(ENTRYPOINT_ENV);
 
-        assert_eq!(first.expect("first invoke should succeed")["echoed"], "hello");
-        assert_eq!(second.expect("second invoke should succeed")["echoed"], "world");
+        assert_eq!(
+            first.expect("first invoke should succeed")["echoed"],
+            "hello"
+        );
+        assert_eq!(
+            second.expect("second invoke should succeed")["echoed"],
+            "world"
+        );
     }
 }
