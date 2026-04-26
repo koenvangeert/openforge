@@ -26,7 +26,8 @@ impl PiProvider {
         _model: Option<&crate::opencode_client::PromptModel>,
         app: &AppHandle,
     ) -> Result<ProviderSessionResult, String> {
-        self.pty_mgr
+        let pty_instance_id = self
+            .pty_mgr
             .spawn_pi_pty(
                 task_id,
                 worktree_path,
@@ -44,6 +45,7 @@ impl PiProvider {
             port: 0,
             opencode_session_id: None,
             pi_session_id: None,
+            pty_instance_id: Some(pty_instance_id),
         })
     }
 
@@ -63,7 +65,8 @@ impl PiProvider {
         let actual_prompt = prompt.unwrap_or("");
         let continue_session = resume_session_id.is_none();
 
-        self.pty_mgr
+        let pty_instance_id = self
+            .pty_mgr
             .spawn_pi_pty(
                 task_id,
                 worktree_path,
@@ -81,6 +84,7 @@ impl PiProvider {
             port: 0,
             opencode_session_id: None,
             pi_session_id: resume_session_id.map(str::to_string),
+            pty_instance_id: Some(pty_instance_id),
         })
     }
 

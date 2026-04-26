@@ -739,8 +739,17 @@ impl PtyManager {
             .openpty(size)
             .map_err(|e| PtyError::SpawnFailed(format!("Failed to create PTY pair: {}", e)))?;
 
+        let pi_extension_path = crate::pi_extension::ensure_pi_extension_installed()
+            .map_err(|e| PtyError::SpawnFailed(format!("Failed to install Pi extension: {}", e)))?;
+        let instance_id = NEXT_INSTANCE_ID.fetch_add(1, Ordering::Relaxed);
+
         let mut cmd = CommandBuilder::new("pi");
-        for arg in build_pi_args(prompt, resume_session_id, continue_session) {
+        for arg in build_pi_args(
+            prompt,
+            resume_session_id,
+            continue_session,
+            Some(pi_extension_path.as_path()),
+        ) {
             cmd.arg(arg);
         }
         cmd.cwd(cwd);
@@ -753,6 +762,12 @@ impl PtyManager {
         cmd.env("TERM", "xterm-256color");
         cmd.env("COLORTERM", "truecolor");
         cmd.env("TERM_PROGRAM", "vscode");
+        cmd.env("OPENFORGE_TASK_ID", task_id);
+        cmd.env("OPENFORGE_PTY_INSTANCE_ID", instance_id.to_string());
+        cmd.env(
+            "OPENFORGE_HTTP_PORT",
+            crate::claude_hooks::get_http_server_port().to_string(),
+        );
 
         let child = pair
             .slave
@@ -763,8 +778,6 @@ impl PtyManager {
 
         let pid = child.process_id().unwrap_or(0);
         info!("Pi PTY for task {} started (PID: {})", task_id, pid);
-
-        let instance_id = NEXT_INSTANCE_ID.fetch_add(1, Ordering::Relaxed);
 
         let reader = pair
             .master
@@ -1647,8 +1660,13 @@ pub(crate) fn build_pi_args(
     prompt: &str,
     resume_session_id: Option<&str>,
     continue_session: bool,
+    extension_path: Option<&Path>,
 ) -> Vec<String> {
     let mut args = Vec::new();
+    if let Some(path) = extension_path {
+        args.push("-e".to_string());
+        args.push(path.to_string_lossy().to_string());
+    }
     if let Some(session_id) = resume_session_id {
         args.push("--session".to_string());
         args.push(session_id.to_string());
@@ -2322,37 +2340,51 @@ mod tests {
 
     #[test]
     fn test_build_pi_args_new_session_with_prompt() {
-        let args = build_pi_args("implement the feature", None, false);
+        let args = build_pi_args("implement the feature", None, false, None);
         assert_eq!(args, vec!["implement the feature"]);
     }
 
     #[test]
+    fn test_build_pi_args_includes_openforge_extension_before_prompt() {
+        let extension = Path::new("/tmp/openforge-pi-extension.ts");
+        let args = build_pi_args("implement the feature", None, false, Some(extension));
+        assert_eq!(
+            args,
+            vec![
+                "-e",
+                "/tmp/openforge-pi-extension.ts",
+                "implement the feature",
+            ]
+        );
+    }
+
+    #[test]
     fn test_build_pi_args_resume_session_with_prompt() {
-        let args = build_pi_args("continue work", Some("sess-abc-123"), false);
+        let args = build_pi_args("continue work", Some("sess-abc-123"), false, None);
         assert_eq!(args, vec!["--session", "sess-abc-123", "continue work"]);
     }
 
     #[test]
     fn test_build_pi_args_resume_session_without_prompt() {
-        let args = build_pi_args("", Some("sess-abc-123"), false);
+        let args = build_pi_args("", Some("sess-abc-123"), false, None);
         assert_eq!(args, vec!["--session", "sess-abc-123"]);
     }
 
     #[test]
     fn test_build_pi_args_continue_session() {
-        let args = build_pi_args("", None, true);
+        let args = build_pi_args("", None, true, None);
         assert_eq!(args, vec!["--continue"]);
     }
 
     #[test]
     fn test_build_pi_args_continue_with_prompt() {
-        let args = build_pi_args("what changed?", None, true);
+        let args = build_pi_args("what changed?", None, true, None);
         assert_eq!(args, vec!["--continue", "what changed?"]);
     }
 
     #[test]
     fn test_build_pi_args_resume_takes_precedence_over_continue() {
-        let args = build_pi_args("", Some("sess-123"), true);
+        let args = build_pi_args("", Some("sess-123"), true, None);
         assert!(args.contains(&"--session".to_string()));
         assert!(!args.contains(&"--continue".to_string()));
     }

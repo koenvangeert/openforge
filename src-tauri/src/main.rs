@@ -13,8 +13,8 @@ mod http_server;
 mod mcp_installer;
 mod migration;
 mod opencode_client;
+mod pi_extension;
 mod plugin_installation;
-mod pi_manager;
 mod plugin_host;
 mod plugin_rpc;
 pub mod providers;
@@ -387,7 +387,6 @@ async fn resume_task_servers(
             app.state::<PtyManager>().inner().clone(),
             app.state::<server_manager::ServerManager>().inner().clone(),
             app.state::<sse_bridge::SseBridgeManager>().inner().clone(),
-            app.state::<pi_manager::PiManager>().inner().clone(),
         ) {
             Ok(p) => p,
             Err(e) => {
@@ -445,6 +444,7 @@ async fn resume_task_servers(
                         &target,
                         provider_name,
                         result.port,
+                        result.pty_instance_id,
                         resume_persistence,
                     );
                 }
@@ -563,6 +563,7 @@ fn restore_resumed_session_state(
     target: &ResumeTarget,
     provider_name: &str,
     port: u16,
+    pty_instance_id: Option<u64>,
     resume_persistence: ResumeSessionPersistence,
 ) {
     if let Err(e) = db.upsert_task_workspace_record(
@@ -609,8 +610,17 @@ fn restore_resumed_session_state(
         };
 
         if let Some(status) = persisted_status {
+            let pty_checkpoint_data;
             let checkpoint_data = if status == "running" {
-                session.checkpoint_data.as_deref()
+                if let Some(pty_instance_id) = pty_instance_id {
+                    pty_checkpoint_data = serde_json::json!({
+                        "pty_instance_id": pty_instance_id,
+                    })
+                    .to_string();
+                    Some(pty_checkpoint_data.as_str())
+                } else {
+                    session.checkpoint_data.as_deref()
+                }
             } else {
                 None
             };
@@ -789,7 +799,6 @@ fn main() {
             let server_manager = server_manager::ServerManager::new();
             let sse_bridge_manager = sse_bridge::SseBridgeManager::new();
             let pty_manager = PtyManager::new();
-            let pi_manager = crate::pi_manager::PiManager::new();
             let plugin_host = plugin_host::PluginHost::new(app.handle().clone());
             let plugin_host_startup = plugin_host.clone();
             let whisper_manager = WhisperManager::with_active_model(whisper_model_pref);
@@ -799,7 +808,6 @@ fn main() {
             app.manage(server_manager);
             app.manage(sse_bridge_manager);
             app.manage(pty_manager);
-            app.manage(pi_manager);
             app.manage(plugin_host);
             app.manage(whisper_manager);
             app.manage(Arc::new(tokio::sync::Notify::new()));
@@ -1068,18 +1076,12 @@ fn main() {
             let sse_mgr = app_handle.state::<sse_bridge::SseBridgeManager>();
             let server_mgr = app_handle.state::<server_manager::ServerManager>();
             let pty_mgr = app_handle.state::<pty_manager::PtyManager>();
-            let pi_mgr = app_handle.state::<crate::pi_manager::PiManager>();
             let plugin_host = app_handle.state::<plugin_host::PluginHost>();
 
             tauri::async_runtime::block_on(async {
                 info!("[shutdown] Killing all PTY sessions...");
 
                 pty_mgr.kill_all().await;
-
-                info!("[shutdown] Killing all Pi processes...");
-                if let Err(e) = pi_mgr.kill_all().await {
-                    error!("[shutdown] Error killing Pi processes: {}", e);
-                }
 
                 info!("[shutdown] Stopping all SSE bridges...");
                 sse_mgr.stop_all().await;
@@ -1250,6 +1252,7 @@ mod tests {
             &target,
             "opencode",
             4312,
+            None,
             ResumeSessionPersistence::LeaveExisting,
         );
 

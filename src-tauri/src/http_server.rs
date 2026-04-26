@@ -78,6 +78,22 @@ pub struct ClaudeHookPayload {
     pub claude_task_id: Option<String>,
 }
 
+/// Payload from the OpenForge Pi extension when a PTY-backed Pi agent finishes a run.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PiAgentEndPayload {
+    pub task_id: String,
+    pub pty_instance_id: u64,
+}
+
+fn pi_session_matches_pty_instance(session: &db::AgentSessionRow, pty_instance_id: u64) -> bool {
+    session
+        .checkpoint_data
+        .as_deref()
+        .and_then(|data| serde_json::from_str::<serde_json::Value>(data).ok())
+        .and_then(|value| value.get("pty_instance_id").and_then(|id| id.as_u64()))
+        == Some(pty_instance_id)
+}
+
 /// Resolve project_id from request parameters, failing if no project can be determined.
 ///
 /// Priority: explicit project_id > worktree deduction.
@@ -421,6 +437,52 @@ async fn handle_hook(
     Ok(Json(serde_json::json!({ "status": "ok" })))
 }
 
+pub async fn pi_agent_end_handler(
+    State(state): State<AppState>,
+    Json(payload): Json<PiAgentEndPayload>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    let status_update: Option<String> = {
+        let db = state.db.lock().unwrap();
+        if let Ok(Some(session)) = db.get_latest_session_for_ticket(&payload.task_id) {
+            if session.provider == "pi"
+                && matches!(session.status.as_str(), "running" | "paused")
+                && pi_session_matches_pty_instance(&session, payload.pty_instance_id)
+            {
+                if let Err(e) =
+                    db.update_agent_session(&session.id, &session.stage, "completed", None, None)
+                {
+                    error!(
+                        "[http_server] Failed to complete Pi session for task {}: {}",
+                        payload.task_id, e
+                    );
+                    None
+                } else {
+                    Some("completed".to_string())
+                }
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    };
+
+    if let Some(new_status) = status_update {
+        if let Some(app) = &state.app {
+            let _ = app.emit(
+                "agent-status-changed",
+                serde_json::json!({
+                    "task_id": payload.task_id,
+                    "status": new_status,
+                    "provider": "pi"
+                }),
+            );
+        }
+    }
+
+    Ok(Json(serde_json::json!({ "status": "ok" })))
+}
+
 pub async fn hook_stop_handler(
     State(state): State<AppState>,
     Json(payload): Json<ClaudeHookPayload>,
@@ -472,6 +534,7 @@ pub fn create_router(state: AppState) -> Router {
         .route("/tasks", get(get_tasks_handler))
         .route("/project/:id/attention", get(get_project_attention_handler))
         .route("/work_queue", get(get_work_queue_handler))
+        .route("/hooks/pi-agent-end", post(pi_agent_end_handler))
         .route("/hooks/stop", post(hook_stop_handler))
         .route("/hooks/pre-tool-use", post(hook_pre_tool_use_handler))
         .route("/hooks/post-tool-use", post(hook_post_tool_use_handler))
@@ -550,6 +613,127 @@ mod tests {
         let json = r#"{"initial_prompt": "Test", "description": "old field still sent"}"#;
         let req: CreateTaskRequest = serde_json::from_str(json).unwrap();
         assert_eq!(req.initial_prompt, "Test");
+    }
+
+    #[tokio::test]
+    async fn test_pi_agent_end_hook_marks_running_pi_session_completed() {
+        let (state, path) = test_state("http_pi_agent_end_completed");
+        let task_id = {
+            let db = state.db.lock().expect("lock db");
+            let project = db
+                .create_project("Project", "/tmp/project")
+                .expect("create project");
+            let task = db
+                .create_task("Task A", "doing", Some(&project.id), None, None, None)
+                .expect("create task");
+            db.create_agent_session(
+                "ses-pi-running",
+                &task.id,
+                None,
+                "implementing",
+                "running",
+                "pi",
+            )
+            .expect("create pi session");
+            db.update_agent_session(
+                "ses-pi-running",
+                "implementing",
+                "running",
+                Some(r#"{"pty_instance_id":42}"#),
+                None,
+            )
+            .expect("store pty instance");
+            task.id
+        };
+
+        let router = create_router(state.clone());
+        let response = router
+            .oneshot(
+                Request::builder()
+                    .uri("/hooks/pi-agent-end")
+                    .method("POST")
+                    .header("content-type", "application/json")
+                    .body(Body::from(format!(
+                        r#"{{"task_id":"{}","pty_instance_id":42}}"#,
+                        task_id
+                    )))
+                    .expect("build request"),
+            )
+            .await
+            .expect("request should succeed");
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let session = state
+            .db
+            .lock()
+            .expect("lock db")
+            .get_agent_session("ses-pi-running")
+            .expect("get session")
+            .expect("session exists");
+        assert_eq!(session.status, "completed");
+        assert!(session.error_message.is_none());
+
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[tokio::test]
+    async fn test_pi_agent_end_hook_ignores_stale_pty_instance() {
+        let (state, path) = test_state("http_pi_agent_end_stale_instance");
+        let task_id = {
+            let db = state.db.lock().expect("lock db");
+            let project = db
+                .create_project("Project", "/tmp/project")
+                .expect("create project");
+            let task = db
+                .create_task("Task A", "doing", Some(&project.id), None, None, None)
+                .expect("create task");
+            db.create_agent_session(
+                "ses-pi-running",
+                &task.id,
+                None,
+                "implementing",
+                "running",
+                "pi",
+            )
+            .expect("create pi session");
+            db.update_agent_session(
+                "ses-pi-running",
+                "implementing",
+                "running",
+                Some(r#"{"pty_instance_id":99}"#),
+                None,
+            )
+            .expect("store pty instance");
+            task.id
+        };
+
+        let router = create_router(state.clone());
+        let response = router
+            .oneshot(
+                Request::builder()
+                    .uri("/hooks/pi-agent-end")
+                    .method("POST")
+                    .header("content-type", "application/json")
+                    .body(Body::from(format!(
+                        r#"{{"task_id":"{}","pty_instance_id":42}}"#,
+                        task_id
+                    )))
+                    .expect("build request"),
+            )
+            .await
+            .expect("request should succeed");
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let session = state
+            .db
+            .lock()
+            .expect("lock db")
+            .get_agent_session("ses-pi-running")
+            .expect("get session")
+            .expect("session exists");
+        assert_eq!(session.status, "running");
+
+        let _ = std::fs::remove_file(path);
     }
 
     #[tokio::test]

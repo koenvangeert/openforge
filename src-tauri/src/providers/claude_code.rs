@@ -54,6 +54,7 @@ impl ClaudeCodeProvider {
             port: 0,
             opencode_session_id: None,
             pi_session_id: None,
+            pty_instance_id: None,
         })
     }
 
@@ -103,6 +104,7 @@ impl ClaudeCodeProvider {
             port: 0,
             opencode_session_id: None,
             pi_session_id: None,
+            pty_instance_id: None,
         })
     }
 

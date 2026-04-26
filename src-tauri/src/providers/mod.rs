@@ -21,6 +21,7 @@ pub struct ProviderSessionResult {
     pub port: u16,
     pub opencode_session_id: Option<String>,
     pub pi_session_id: Option<String>,
+    pub pty_instance_id: Option<u64>,
 }
 
 // ============================================================================
@@ -43,7 +44,6 @@ impl Provider {
         pty_mgr: crate::pty_manager::PtyManager,
         server_mgr: crate::server_manager::ServerManager,
         sse_mgr: crate::sse_bridge::SseBridgeManager,
-        _pi_mgr: crate::pi_manager::PiManager,
     ) -> Result<Self, String> {
         match name {
             "claude-code" => Ok(Provider::ClaudeCode(ClaudeCodeProvider::new(pty_mgr))),
@@ -266,6 +266,7 @@ mod tests {
             port: 0,
             opencode_session_id: None,
             pi_session_id: Some("pi-session-123".to_string()),
+            pty_instance_id: None,
         };
 
         assert_eq!(result.pi_session_id, Some("pi-session-123".to_string()));
@@ -417,7 +418,6 @@ mod tests {
             crate::pty_manager::PtyManager::new(),
             crate::server_manager::ServerManager::new(),
             crate::sse_bridge::SseBridgeManager::new(),
-            crate::pi_manager::PiManager::new(),
         );
         assert!(result.is_ok());
         assert_eq!(result.unwrap().provider_name(), "claude-code");
@@ -430,7 +430,6 @@ mod tests {
             crate::pty_manager::PtyManager::new(),
             crate::server_manager::ServerManager::new(),
             crate::sse_bridge::SseBridgeManager::new(),
-            crate::pi_manager::PiManager::new(),
         );
         assert!(result.is_ok());
         assert_eq!(result.unwrap().provider_name(), "opencode");
@@ -443,7 +442,6 @@ mod tests {
             crate::pty_manager::PtyManager::new(),
             crate::server_manager::ServerManager::new(),
             crate::sse_bridge::SseBridgeManager::new(),
-            crate::pi_manager::PiManager::new(),
         );
         assert!(result.is_ok());
         assert_eq!(result.unwrap().provider_name(), "pi");
@@ -456,7 +454,6 @@ mod tests {
             crate::pty_manager::PtyManager::new(),
             crate::server_manager::ServerManager::new(),
             crate::sse_bridge::SseBridgeManager::new(),
-            crate::pi_manager::PiManager::new(),
         );
         assert!(result.is_err());
         assert!(result.err().unwrap().contains("Unknown provider"));

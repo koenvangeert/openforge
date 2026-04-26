@@ -68,6 +68,7 @@ impl OpenCodeProvider {
             port,
             opencode_session_id: Some(opencode_session_id),
             pi_session_id: None,
+            pty_instance_id: None,
         })
     }
 
@@ -133,6 +134,7 @@ impl OpenCodeProvider {
                     port,
                     opencode_session_id: Some(opencode_session_id),
                     pi_session_id: None,
+                    pty_instance_id: None,
                 })
             }
             None => {
@@ -158,6 +160,7 @@ impl OpenCodeProvider {
                     port,
                     opencode_session_id: resume_bridge_session_id(session),
                     pi_session_id: None,
+                    pty_instance_id: None,
                 })
             }
         }
