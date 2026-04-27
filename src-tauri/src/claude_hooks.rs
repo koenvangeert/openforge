@@ -177,16 +177,60 @@ fn build_hooks_json(port: u16) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::ffi::{OsStr, OsString};
     use std::fs;
-    use std::sync::{LazyLock, Mutex};
+    use std::sync::{LazyLock, Mutex, MutexGuard};
+    use tempfile::tempdir;
 
-    static HOME_ENV_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
+    static ENV_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
 
-    fn restore_home(home_backup: Option<String>) {
-        if let Some(home) = home_backup {
-            std::env::set_var("HOME", home);
-        } else {
-            std::env::remove_var("HOME");
+    struct EnvVarGuard {
+        key: &'static str,
+        original: Option<OsString>,
+        _lock: MutexGuard<'static, ()>,
+    }
+
+    impl EnvVarGuard {
+        fn set_to(key: &'static str, value: impl AsRef<OsStr>) -> Self {
+            let lock = ENV_LOCK
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            let original = std::env::var_os(key);
+            std::env::set_var(key, value);
+
+            Self {
+                key,
+                original,
+                _lock: lock,
+            }
+        }
+
+        fn remove(key: &'static str) -> Self {
+            let lock = ENV_LOCK
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            let original = std::env::var_os(key);
+            std::env::remove_var(key);
+
+            Self {
+                key,
+                original,
+                _lock: lock,
+            }
+        }
+
+        fn set(&self, value: impl AsRef<OsStr>) {
+            std::env::set_var(self.key, value);
+        }
+    }
+
+    impl Drop for EnvVarGuard {
+        fn drop(&mut self) {
+            if let Some(value) = &self.original {
+                std::env::set_var(self.key, value);
+            } else {
+                std::env::remove_var(self.key);
+            }
         }
     }
 
@@ -246,20 +290,9 @@ mod tests {
 
     #[test]
     fn test_file_creation() {
-        let _home_lock = HOME_ENV_LOCK.lock().unwrap();
-        let temp_dir = std::env::temp_dir().join("claude_hooks_test");
-        let _ = fs::remove_dir_all(&temp_dir);
-        fs::create_dir_all(&temp_dir).unwrap();
+        let temp_dir = tempdir().unwrap();
 
-        let settings_dir = temp_dir.join(".openforge");
-        let _settings_path = settings_dir.join("claude-hooks-settings.json");
-
-        let home_backup = std::env::var("HOME").ok();
-        std::env::set_var("HOME", &temp_dir);
-
-        let result = generate_hooks_settings(17422);
-
-        restore_home(home_backup);
+        let result = generate_hooks_settings_for_home(temp_dir.path(), 17422);
 
         assert!(result.is_ok());
         let path = result.unwrap();
@@ -271,24 +304,14 @@ mod tests {
         let content = fs::read_to_string(&path).unwrap();
         assert!(content.contains("\"hooks\""));
         assert!(content.contains("PreToolUse"));
-
-        let _ = fs::remove_dir_all(&temp_dir);
     }
 
     #[test]
     fn test_file_overwrite() {
-        let _home_lock = HOME_ENV_LOCK.lock().unwrap();
-        let temp_dir = std::env::temp_dir().join("claude_hooks_overwrite_test");
-        let _ = fs::remove_dir_all(&temp_dir);
-        fs::create_dir_all(&temp_dir).unwrap();
+        let temp_dir = tempdir().unwrap();
 
-        let home_backup = std::env::var("HOME").ok();
-        std::env::set_var("HOME", &temp_dir);
-
-        let result1 = generate_hooks_settings(17422);
-        let result2 = generate_hooks_settings(9999);
-
-        restore_home(home_backup);
+        let result1 = generate_hooks_settings_for_home(temp_dir.path(), 17422);
+        let result2 = generate_hooks_settings_for_home(temp_dir.path(), 9999);
 
         assert!(result1.is_ok());
         assert!(result2.is_ok());
@@ -311,11 +334,9 @@ mod tests {
 
     #[test]
     fn test_get_http_server_port_variants() {
-        // Backup the original env var once
-        let backup = std::env::var("AI_COMMAND_CENTER_PORT").ok();
+        let env_guard = EnvVarGuard::remove("AI_COMMAND_CENTER_PORT");
 
         // Test 1: Default (env var not set)
-        std::env::remove_var("AI_COMMAND_CENTER_PORT");
         let port = get_http_server_port();
         assert_eq!(
             port, 17422,
@@ -323,24 +344,32 @@ mod tests {
         );
 
         // Test 2: Valid value from env
-        std::env::set_var("AI_COMMAND_CENTER_PORT", "9999");
+        env_guard.set("9999");
         let port = get_http_server_port();
         assert_eq!(port, 9999, "Should return 9999 when env var is set to 9999");
 
         // Test 3: Invalid value in env
-        std::env::set_var("AI_COMMAND_CENTER_PORT", "invalid");
+        env_guard.set("invalid");
         let port = get_http_server_port();
         assert_eq!(
             port, 17422,
             "Should return default 17422 when env var is invalid"
         );
+    }
 
-        // Restore the original env var
-        if let Some(val) = backup {
-            std::env::set_var("AI_COMMAND_CENTER_PORT", val);
-        } else {
-            std::env::remove_var("AI_COMMAND_CENTER_PORT");
-        }
+    #[test]
+    fn test_env_var_guard_restores_after_panic() {
+        const TEST_KEY: &str = "OPENFORGE_ENV_GUARD_PANIC_TEST";
+        let original = std::env::var_os(TEST_KEY);
+
+        let result = std::panic::catch_unwind(|| {
+            let _guard = EnvVarGuard::set_to(TEST_KEY, "temporary-value");
+            assert_eq!(std::env::var(TEST_KEY).unwrap(), "temporary-value");
+            panic!("force guard drop during unwind");
+        });
+
+        assert!(result.is_err());
+        assert_eq!(std::env::var_os(TEST_KEY), original);
     }
 
     #[test]
