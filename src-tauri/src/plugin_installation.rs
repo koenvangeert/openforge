@@ -103,12 +103,20 @@ pub async fn install_npm_plugin_bundle(
     package_name: &str,
     managed_base_dir: &Path,
 ) -> Result<db::PluginRow, String> {
+    let npm_path = resolve_npm_binary()?;
+    install_npm_plugin_bundle_with_npm(package_name, managed_base_dir, &npm_path).await
+}
+
+async fn install_npm_plugin_bundle_with_npm(
+    package_name: &str,
+    managed_base_dir: &Path,
+    npm_path: &Path,
+) -> Result<db::PluginRow, String> {
     let package_name = package_name.trim();
     if package_name.is_empty() {
         return Err("package name cannot be empty".to_string());
     }
 
-    let npm_path = resolve_npm_binary()?;
     let staging_root = unique_staging_dir(managed_base_dir)?;
     let install_root = staging_root.join("install-root");
     fs::create_dir_all(&install_root)
@@ -119,7 +127,7 @@ pub async fn install_npm_plugin_bundle(
     )
     .map_err(|error| format!("failed to create npm staging package.json: {error}"))?;
 
-    let output = Command::new(&npm_path)
+    let output = Command::new(npm_path)
         .arg("install")
         .arg("--prefix")
         .arg(&install_root)
@@ -961,11 +969,9 @@ echo "export const ok = true;" > "$prefix/node_modules/fake-package/dist/index.j
             fs::set_permissions(&fake_npm, permissions).expect("permissions should set");
         }
 
-        std::env::set_var(NPM_PATH_ENV, &fake_npm);
-        let row = install_npm_plugin_bundle("fake-package", managed.path())
+        let row = install_npm_plugin_bundle_with_npm("fake-package", managed.path(), &fake_npm)
             .await
             .expect("npm install should succeed");
-        std::env::remove_var(NPM_PATH_ENV);
 
         let install_path = PathBuf::from(&row.install_path);
         assert_eq!(row.id, "com.example.npm");
@@ -1016,11 +1022,10 @@ echo "export const ok = true;" > "$prefix/node_modules/example-plugin/dist/index
             fs::set_permissions(&fake_npm, permissions).expect("permissions should set");
         }
 
-        std::env::set_var(NPM_PATH_ENV, &fake_npm);
-        let row = install_npm_plugin_bundle("example-plugin@1.2.3", managed.path())
-            .await
-            .expect("versioned npm install should succeed");
-        std::env::remove_var(NPM_PATH_ENV);
+        let row =
+            install_npm_plugin_bundle_with_npm("example-plugin@1.2.3", managed.path(), &fake_npm)
+                .await
+                .expect("versioned npm install should succeed");
 
         let install_path = PathBuf::from(&row.install_path);
         assert_eq!(row.id, "com.example.versioned");
