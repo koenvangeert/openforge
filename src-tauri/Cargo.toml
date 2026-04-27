@@ -41,7 +41,7 @@ whisper-rs = { version = "0.15", features = ["metal"] }
 hound = "3.5"
 sha1 = "0.10"
 axum = "0.7"
-rand = "0.8"
+rand = "0.10"
 keyring = { version = "3", features = ["apple-native"] }
 
 [dev-dependencies]
