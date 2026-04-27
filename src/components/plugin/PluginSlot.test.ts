@@ -75,6 +75,12 @@ describe('PluginSlot', () => {
     expect(div?.getAttribute('data-slot-layout')).toBe('fill')
   })
 
+  it('marks view slots as fill-layout hosts', () => {
+    const { container } = render(PluginSlot, { props: { slotType: 'views', slotId: 'plugin:test-plugin:main' } })
+    const div = container.querySelector('div')
+    expect(div?.getAttribute('data-slot-layout')).toBe('fill')
+  })
+
   it('handles slot with no contributions', async () => {
     const manifest: PluginManifest = {
       ...makeViewManifest(),

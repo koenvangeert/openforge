@@ -24,7 +24,7 @@
   let renderErrors = $state(new Map<string, string>())
   let activationRunId = 0
 
-  let slotLayout = $derived(slotType === 'taskPaneTabs' ? 'fill' : null)
+  let slotLayout = $derived(slotType === 'views' || slotType === 'taskPaneTabs' ? 'fill' : null)
   let slotHostClass = $derived(slotLayout === 'fill' ? 'flex flex-col flex-1 min-h-0 overflow-hidden' : '')
 
   let enabledManifests = $derived(
