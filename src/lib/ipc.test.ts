@@ -13,6 +13,7 @@ import {
 	createTask,
 	fsSearchFiles,
 	getAllTasks,
+	installPlugin,
 	spawnShellPty,
 } from "./ipc";
 
@@ -91,6 +92,40 @@ describe("ipc spawnShellPty", () => {
 		await expect(
 			createTask("Created task", "doing", null, null, null),
 		).resolves.toEqual(expect.objectContaining({ id: "T-4", status: "doing" }));
+	});
+
+	it("sends installPlugin metadata as a single command argument", async () => {
+		await installPlugin({
+			id: "com.example.plugin",
+			name: "Example Plugin",
+			version: "1.2.3",
+			apiVersion: 1,
+			description: "Adds examples",
+			permissions: "[]",
+			contributes: "{}",
+			frontendEntry: "index.js",
+			backendEntry: null,
+			installPath: "/plugins/example",
+			installedAt: 1234,
+			isBuiltin: false,
+		});
+
+		expect(invokeMock).toHaveBeenCalledWith("install_plugin", {
+			plugin: {
+				id: "com.example.plugin",
+				name: "Example Plugin",
+				version: "1.2.3",
+				apiVersion: 1,
+				description: "Adds examples",
+				permissions: "[]",
+				contributes: "{}",
+				frontendEntry: "index.js",
+				backendEntry: null,
+				installPath: "/plugins/example",
+				installedAt: 1234,
+				isBuiltin: false,
+			},
+		});
 	});
 });
 

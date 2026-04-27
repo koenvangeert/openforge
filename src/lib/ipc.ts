@@ -443,18 +443,20 @@ export async function installPlugin(plugin: {
   isBuiltin: boolean;
 }): Promise<void> {
   return invoke("install_plugin", {
-    id: plugin.id,
-    name: plugin.name,
-    version: plugin.version,
-    apiVersion: plugin.apiVersion,
-    description: plugin.description,
-    permissions: plugin.permissions,
-    contributes: plugin.contributes,
-    frontendEntry: plugin.frontendEntry,
-    backendEntry: plugin.backendEntry,
-    installPath: plugin.installPath,
-    installedAt: plugin.installedAt,
-    isBuiltin: plugin.isBuiltin,
+    plugin: {
+      id: plugin.id,
+      name: plugin.name,
+      version: plugin.version,
+      apiVersion: plugin.apiVersion,
+      description: plugin.description,
+      permissions: plugin.permissions,
+      contributes: plugin.contributes,
+      frontendEntry: plugin.frontendEntry,
+      backendEntry: plugin.backendEntry,
+      installPath: plugin.installPath,
+      installedAt: plugin.installedAt,
+      isBuiltin: plugin.isBuiltin,
+    },
   });
 }
 

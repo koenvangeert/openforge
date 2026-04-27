@@ -1,4 +1,5 @@
 use crate::db;
+use serde::Deserialize;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Manager, State};
@@ -9,6 +10,46 @@ fn builtin_install_path(plugin_id: &str) -> String {
 
 fn is_known_builtin_plugin(plugin_id: &str) -> bool {
     crate::builtin_plugins::is_known(plugin_id)
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InstallPluginRequest {
+    id: String,
+    name: String,
+    version: String,
+    api_version: i64,
+    description: String,
+    permissions: String,
+    contributes: String,
+    frontend_entry: String,
+    backend_entry: Option<String>,
+    install_path: String,
+    installed_at: i64,
+    #[serde(rename = "isBuiltin")]
+    _is_builtin: bool,
+}
+
+impl InstallPluginRequest {
+    fn into_plugin_row(self) -> db::PluginRow {
+        let is_builtin = is_known_builtin_plugin(&self.id)
+            && crate::builtin_plugins::has_sentinel_install_path(&self.id, &self.install_path);
+
+        db::PluginRow {
+            id: self.id,
+            name: self.name,
+            version: self.version,
+            api_version: self.api_version,
+            description: self.description,
+            permissions: self.permissions,
+            contributes: self.contributes,
+            frontend_entry: self.frontend_entry,
+            backend_entry: self.backend_entry,
+            install_path: self.install_path,
+            installed_at: self.installed_at,
+            is_builtin,
+        }
+    }
 }
 
 fn resolve_backend_entry_path(
@@ -58,37 +99,12 @@ fn resolve_backend_entry_path(
 #[tauri::command]
 pub async fn install_plugin(
     db: State<'_, Arc<Mutex<db::Database>>>,
-    id: String,
-    name: String,
-    version: String,
-    api_version: i64,
-    description: String,
-    permissions: String,
-    contributes: String,
-    frontend_entry: String,
-    backend_entry: Option<String>,
-    install_path: String,
-    installed_at: i64,
-    _is_builtin: bool,
+    plugin: InstallPluginRequest,
 ) -> Result<(), String> {
-    let is_builtin = is_known_builtin_plugin(&id)
-        && crate::builtin_plugins::has_sentinel_install_path(&id, &install_path);
+    let plugin = plugin.into_plugin_row();
     let db = crate::db::acquire_db(&db);
-    db.install_plugin(&db::PluginRow {
-        id,
-        name,
-        version,
-        api_version,
-        description,
-        permissions,
-        contributes,
-        frontend_entry,
-        backend_entry,
-        install_path,
-        installed_at,
-        is_builtin,
-    })
-    .map_err(|e| format!("Failed to install plugin: {}", e))
+    db.install_plugin(&plugin)
+        .map_err(|e| format!("Failed to install plugin: {}", e))
 }
 
 #[tauri::command]
@@ -249,7 +265,10 @@ fn resolve_plugin_install_root(plugin: &db::PluginRow) -> Result<PathBuf, String
 
 #[cfg(test)]
 mod tests {
-    use super::{builtin_install_path, is_known_builtin_plugin, resolve_backend_entry_path};
+    use super::{
+        builtin_install_path, is_known_builtin_plugin, resolve_backend_entry_path,
+        InstallPluginRequest,
+    };
     use crate::builtin_plugins;
     use std::fs;
 
@@ -265,6 +284,30 @@ mod tests {
         );
         assert_eq!(plugin.directory_name, "github-sync");
         assert!(!is_known_builtin_plugin("com.example.custom"));
+    }
+
+    #[test]
+    fn install_plugin_request_derives_builtin_status_from_catalog_and_path() {
+        let plugin = builtin_plugins::find("com.openforge.github-sync")
+            .expect("github sync should be in builtin catalog");
+        let request = InstallPluginRequest {
+            id: plugin.id.to_string(),
+            name: "GitHub Sync".to_string(),
+            version: "1.0.0".to_string(),
+            api_version: 1,
+            description: "Sync GitHub pull requests".to_string(),
+            permissions: "[]".to_string(),
+            contributes: "{}".to_string(),
+            frontend_entry: String::new(),
+            backend_entry: None,
+            install_path: plugin.sentinel_install_path(),
+            installed_at: 1000,
+            _is_builtin: false,
+        };
+
+        let row = request.into_plugin_row();
+
+        assert!(row.is_builtin);
     }
 
     #[test]
