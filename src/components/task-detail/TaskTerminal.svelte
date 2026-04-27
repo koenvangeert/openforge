@@ -140,8 +140,8 @@
   <div class="flex-1 overflow-hidden min-h-0 relative">
     <div class="shell-terminal-wrapper w-full h-full p-3 bg-base-100" bind:this={terminalEl}></div>
     {#if lifecycle.shellExited}
-      <div class="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-neutral/90 z-[1]">
-        <span class="text-sm font-mono text-base-content/60">Shell exited</span>
+      <div class="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-base-100/90 z-[1]">
+        <span class="text-sm font-mono text-base-content/70">Shell exited</span>
         <button class="btn btn-sm btn-ghost text-primary font-mono" onclick={handleRestart}>
           Restart
         </button>

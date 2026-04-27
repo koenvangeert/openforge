@@ -509,6 +509,13 @@
   animation: gradient-shift 4s ease infinite;
 }
 
+.shell-terminal-wrapper .xterm,
+.shell-terminal-wrapper .xterm-viewport,
+.shell-terminal-wrapper .xterm-screen {
+  background-color: var(--term-background) !important;
+  color: var(--term-foreground);
+}
+
 .shell-terminal-wrapper .xterm-viewport::-webkit-scrollbar {
   width: 6px;
 }

@@ -27,9 +27,14 @@ describe('terminalOptions', () => {
       cursorBlink: true,
       cursorStyle: 'block',
       scrollback: 10000,
+      minimumContrastRatio: 4.5,
       theme: getTerminalTheme('light'),
       allowProposedApi: true,
     })
+  })
+
+  it('enforces WCAG AA contrast for ANSI colors that would otherwise be hard to read in light theme output', () => {
+    expect(getTerminalOptions('light').minimumContrastRatio).toBe(4.5)
   })
 
   it('getTerminalOptions uses theme from getTerminalTheme', () => {

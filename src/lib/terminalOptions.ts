@@ -47,6 +47,7 @@ export function getTerminalOptions(themeMode: ThemeMode): ITerminalOptions {
     cursorBlink: true,
     cursorStyle: 'block',
     scrollback: 10000,
+    minimumContrastRatio: 4.5,
     theme: getTerminalTheme(themeMode),
     allowProposedApi: true,
   }
