@@ -51,6 +51,15 @@ describe('ResizableBottomPanel', () => {
     expect(panel.style.height).toBe('250px')
   })
 
+  it('rejects partially numeric localStorage values', () => {
+    localStorage.setItem('resizable-panel:test-panel', '320px')
+    const { container } = render(ResizableBottomPanel, {
+      props: { storageKey: 'test-panel', defaultHeight: 250, minHeight: null, maxHeight: null, fillParent: false },
+    })
+    const panel = getPanel(container)
+    expect(panel.style.height).toBe('250px')
+  })
+
   it('clamps restored height to minHeight', () => {
     localStorage.setItem('resizable-panel:test-panel', '50')
     const { container } = render(ResizableBottomPanel, {

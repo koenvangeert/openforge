@@ -51,6 +51,15 @@ describe('ResizablePanel', () => {
     expect(panel.style.width).toBe('250px')
   })
 
+  it('rejects partially numeric localStorage values', () => {
+    localStorage.setItem('resizable-panel:test-panel', '320px')
+    const { container } = render(ResizablePanel, {
+      props: { storageKey: 'test-panel', defaultWidth: 250 },
+    })
+    const panel = getPanel(container)
+    expect(panel.style.width).toBe('250px')
+  })
+
   it('clamps restored width to minWidth', () => {
     localStorage.setItem('resizable-panel:test-panel', '50')
     const { container } = render(ResizablePanel, {

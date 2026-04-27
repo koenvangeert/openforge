@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { parseStrictFiniteNumber } from '../../../lib/numberParsing'
   import type { Snippet } from 'svelte'
 
   interface Props {
@@ -42,8 +43,8 @@
     try {
       const stored = localStorage.getItem(`resizable-panel:${storageKey}`)
       if (stored !== null) {
-        const parsed = parseFloat(stored)
-        if (!isNaN(parsed)) return clamp(parsed)
+        const parsed = parseStrictFiniteNumber(stored)
+        if (parsed !== null) return clamp(parsed)
       }
     } catch { /* localStorage unavailable */ }
     return defaultHeight

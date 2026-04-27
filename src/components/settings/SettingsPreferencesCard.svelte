@@ -1,9 +1,9 @@
 <script lang="ts">
 	import { Settings2 } from 'lucide-svelte'
 	import {
-		DEFAULT_GITHUB_POLL_INTERVAL_SECONDS,
 		MAX_GITHUB_POLL_INTERVAL_SECONDS,
 		MIN_GITHUB_POLL_INTERVAL_SECONDS,
+		parseGitHubPollIntervalSeconds,
 	} from '../../lib/settingsConfig'
 
 	interface Props {
@@ -27,15 +27,7 @@
 
 	function handlePollIntervalInput(e: Event) {
 		if (!(e.currentTarget instanceof HTMLInputElement)) return
-		const raw = parseInt(e.currentTarget.value, 10)
-		const clamped = Math.max(
-			MIN_GITHUB_POLL_INTERVAL_SECONDS,
-			Math.min(
-				MAX_GITHUB_POLL_INTERVAL_SECONDS,
-				isNaN(raw) ? DEFAULT_GITHUB_POLL_INTERVAL_SECONDS : raw,
-			),
-		)
-		onGithubPollIntervalChange(clamped)
+		onGithubPollIntervalChange(parseGitHubPollIntervalSeconds(e.currentTarget.value))
 	}
 
 	const isValid = $derived(

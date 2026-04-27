@@ -161,6 +161,18 @@ describe('SettingsPreferencesCard', () => {
 			expect(onGithubPollIntervalChange).toHaveBeenCalledWith(15)
 		})
 
+		it('uses the default interval for non-integer numeric input', async () => {
+			const onGithubPollIntervalChange = vi.fn()
+			render(SettingsPreferencesCard, {
+				props: defaultProps({ onGithubPollIntervalChange }),
+			})
+
+			const input = requireElement(screen.getByTestId('poll-interval-input'), HTMLInputElement)
+			await fireEvent.input(input, { target: { value: '90.5' } })
+
+			expect(onGithubPollIntervalChange).toHaveBeenCalledWith(60)
+		})
+
 		it('shows helper text with current interval', () => {
 			render(SettingsPreferencesCard, {
 				props: defaultProps({ githubPollInterval: 45 }),
