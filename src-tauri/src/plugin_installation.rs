@@ -2,18 +2,61 @@ use crate::db;
 use regex::Regex;
 use serde::Deserialize;
 use serde_json::Value;
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::process::Command;
 
 const NPM_PATH_ENV: &str = "OPENFORGE_NPM_PATH";
+const CONTRIBUTION_SCHEMA_JSON: &str =
+    include_str!("../../packages/plugin-sdk/src/manifestContributionSchema.json");
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ManifestContributionSchema {
+    allowed_icon_keys: Vec<String>,
+    shortcut_pattern: String,
+    contribution_points: BTreeMap<String, ContributionPointSpec>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ContributionPointSpec {
+    fields: BTreeMap<String, ContributionFieldSpec>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ContributionFieldSpec {
+    kind: ContributionFieldKind,
+    required: Option<bool>,
+    values: Option<Vec<String>>,
+}
+
+#[derive(Debug, Deserialize, Clone, Copy)]
+#[serde(rename_all = "camelCase")]
+enum ContributionFieldKind {
+    NonEmptyString,
+    Icon,
+    Number,
+    Shortcut,
+    Enum,
+}
+
+fn contribution_schema() -> &'static ManifestContributionSchema {
+    static CONTRIBUTION_SCHEMA: std::sync::OnceLock<ManifestContributionSchema> =
+        std::sync::OnceLock::new();
+    CONTRIBUTION_SCHEMA.get_or_init(|| {
+        serde_json::from_str(CONTRIBUTION_SCHEMA_JSON)
+            .expect("shared plugin contribution schema should parse")
+    })
+}
 
 fn shortcut_pattern() -> &'static Regex {
     static SHORTCUT_PATTERN: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
     SHORTCUT_PATTERN.get_or_init(|| {
-        Regex::new(r"^(?:(?:Cmd|Ctrl|Alt|Shift)\+)*(?:[a-zA-Z0-9]|F\d{1,2}|Space|Enter|Tab|Backspace|Escape)$")
-            .expect("shortcut regex should compile")
+        Regex::new(&contribution_schema().shortcut_pattern)
+            .expect("shared plugin contribution shortcut regex should compile")
     })
 }
 
@@ -238,37 +281,88 @@ fn validate_relative_entry_path(dir: &Path, entry: &str, field_name: &str) -> Re
     Ok(())
 }
 
-fn validate_required_string_field(value: Option<&Value>, path: &str) -> Result<String, String> {
-    match value.and_then(Value::as_str).map(str::trim) {
-        Some(value) if !value.is_empty() => Ok(value.to_string()),
-        _ => Err(format!(
-            "plugin manifest {} must be a non-empty string",
-            path
-        )),
+fn validate_string_field(
+    value: Option<&Value>,
+    path: &str,
+    required: bool,
+) -> Result<Option<String>, String> {
+    match value {
+        Some(value) => {
+            let value = value
+                .as_str()
+                .ok_or_else(|| format!("plugin manifest {path} must be a string"))?
+                .trim();
+            if value.is_empty() {
+                Err(format!("plugin manifest {path} must be a non-empty string"))
+            } else {
+                Ok(Some(value.to_string()))
+            }
+        }
+        None if required => Err(format!("plugin manifest {path} must be a non-empty string")),
+        None => Ok(None),
     }
 }
 
-fn validate_optional_number_field(value: Option<&Value>, path: &str) -> Result<(), String> {
-    if let Some(value) = value {
-        if !value.is_number() {
-            return Err(format!("plugin manifest {} must be a number", path));
-        }
+fn validate_number_field(value: Option<&Value>, path: &str, required: bool) -> Result<(), String> {
+    match value {
+        Some(value) if value.is_number() => Ok(()),
+        Some(_) => Err(format!("plugin manifest {path} must be a number")),
+        None if required => Err(format!("plugin manifest {path} must be a number")),
+        None => Ok(()),
     }
+}
+
+fn validate_shortcut_field(
+    value: Option<&Value>,
+    path: &str,
+    required: bool,
+) -> Result<(), String> {
+    let Some(shortcut) = validate_string_field(value, path, required)? else {
+        return Ok(());
+    };
+
+    if !shortcut_pattern().is_match(&shortcut) {
+        return Err(format!(
+            "plugin manifest {path} has invalid shortcut format"
+        ));
+    }
+
     Ok(())
 }
 
-fn validate_optional_shortcut_field(value: Option<&Value>, path: &str) -> Result<(), String> {
-    if let Some(value) = value {
-        let shortcut = value
-            .as_str()
-            .ok_or_else(|| format!("plugin manifest {} must be a string", path))?;
-        if !shortcut_pattern().is_match(shortcut) {
-            return Err(format!(
-                "plugin manifest {} has invalid shortcut format",
-                path
-            ));
-        }
+fn validate_icon_field(value: Option<&Value>, path: &str, required: bool) -> Result<(), String> {
+    let Some(icon) = validate_string_field(value, path, required)? else {
+        return Ok(());
+    };
+
+    if !contribution_schema().allowed_icon_keys.contains(&icon) {
+        return Err(format!(
+            "plugin manifest {path} icon key \"{icon}\" is not allowed"
+        ));
     }
+
+    Ok(())
+}
+
+fn validate_enum_field(
+    value: Option<&Value>,
+    path: &str,
+    required: bool,
+    values: Option<&[String]>,
+) -> Result<(), String> {
+    let Some(value) = validate_string_field(value, path, required)? else {
+        return Ok(());
+    };
+    let allowed_values =
+        values.ok_or_else(|| format!("plugin manifest {path} enum has no values"))?;
+
+    if !allowed_values.contains(&value) {
+        return Err(format!(
+            "plugin manifest {path} must be one of {}",
+            allowed_values.join(", ")
+        ));
+    }
+
     Ok(())
 }
 
@@ -277,18 +371,38 @@ fn validate_array<'a>(
     path: &'a str,
 ) -> Result<Vec<&'a serde_json::Map<String, Value>>, String> {
     let entries = value
-        .ok_or_else(|| format!("plugin manifest {} must be an array", path))?
+        .ok_or_else(|| format!("plugin manifest {path} must be an array"))?
         .as_array()
-        .ok_or_else(|| format!("plugin manifest {} must be an array", path))?;
+        .ok_or_else(|| format!("plugin manifest {path} must be an array"))?;
 
     entries
         .iter()
         .enumerate()
         .map(|(index, item)| {
             item.as_object()
-                .ok_or_else(|| format!("plugin manifest {}[{}] must be an object", path, index))
+                .ok_or_else(|| format!("plugin manifest {path}[{index}] must be an object"))
         })
         .collect()
+}
+
+fn validate_contribution_field(
+    value: Option<&Value>,
+    path: &str,
+    spec: &ContributionFieldSpec,
+) -> Result<(), String> {
+    let required = spec.required.unwrap_or(false);
+
+    match spec.kind {
+        ContributionFieldKind::NonEmptyString => {
+            validate_string_field(value, path, required).map(|_| ())
+        }
+        ContributionFieldKind::Icon => validate_icon_field(value, path, required),
+        ContributionFieldKind::Number => validate_number_field(value, path, required),
+        ContributionFieldKind::Shortcut => validate_shortcut_field(value, path, required),
+        ContributionFieldKind::Enum => {
+            validate_enum_field(value, path, required, spec.values.as_deref())
+        }
+    }
 }
 
 fn validate_contributions(contributes: &Value) -> Result<(), String> {
@@ -296,138 +410,23 @@ fn validate_contributions(contributes: &Value) -> Result<(), String> {
         .as_object()
         .ok_or_else(|| "plugin manifest contributes must be an object".to_string())?;
 
-    if let Some(views) = contributes.get("views") {
-        for (index, view) in validate_array(Some(views), "contributes.views")?
-            .into_iter()
-            .enumerate()
-        {
-            validate_required_string_field(
-                view.get("id"),
-                &format!("contributes.views[{index}].id"),
-            )?;
-            validate_required_string_field(
-                view.get("title"),
-                &format!("contributes.views[{index}].title"),
-            )?;
-            validate_required_string_field(
-                view.get("icon"),
-                &format!("contributes.views[{index}].icon"),
-            )?;
-            validate_optional_number_field(
-                view.get("railOrder"),
-                &format!("contributes.views[{index}].railOrder"),
-            )?;
-            validate_optional_shortcut_field(
-                view.get("shortcut"),
-                &format!("contributes.views[{index}].shortcut"),
-            )?;
-        }
-    }
+    for (contribution_name, contribution_spec) in &contribution_schema().contribution_points {
+        let Some(entries) = contributes.get(contribution_name) else {
+            continue;
+        };
+        let contribution_path = format!("contributes.{contribution_name}");
 
-    if let Some(task_pane_tabs) = contributes.get("taskPaneTabs") {
-        for (index, tab) in validate_array(Some(task_pane_tabs), "contributes.taskPaneTabs")?
+        for (index, entry) in validate_array(Some(entries), &contribution_path)?
             .into_iter()
             .enumerate()
         {
-            validate_required_string_field(
-                tab.get("id"),
-                &format!("contributes.taskPaneTabs[{index}].id"),
-            )?;
-            validate_required_string_field(
-                tab.get("title"),
-                &format!("contributes.taskPaneTabs[{index}].title"),
-            )?;
-            if let Some(icon) = tab.get("icon") {
-                validate_required_string_field(
-                    Some(icon),
-                    &format!("contributes.taskPaneTabs[{index}].icon"),
+            for (field_name, field_spec) in &contribution_spec.fields {
+                validate_contribution_field(
+                    entry.get(field_name),
+                    &format!("{contribution_path}[{index}].{field_name}"),
+                    field_spec,
                 )?;
             }
-            validate_optional_number_field(
-                tab.get("order"),
-                &format!("contributes.taskPaneTabs[{index}].order"),
-            )?;
-        }
-    }
-
-    if let Some(sidebar_panels) = contributes.get("sidebarPanels") {
-        for (index, panel) in validate_array(Some(sidebar_panels), "contributes.sidebarPanels")?
-            .into_iter()
-            .enumerate()
-        {
-            validate_required_string_field(
-                panel.get("id"),
-                &format!("contributes.sidebarPanels[{index}].id"),
-            )?;
-            validate_required_string_field(
-                panel.get("title"),
-                &format!("contributes.sidebarPanels[{index}].title"),
-            )?;
-            let side = validate_required_string_field(
-                panel.get("side"),
-                &format!("contributes.sidebarPanels[{index}].side"),
-            )?;
-            if side != "left" && side != "right" {
-                return Err(format!("plugin manifest contributes.sidebarPanels[{index}].side must be 'left' or 'right'"));
-            }
-            validate_optional_number_field(
-                panel.get("order"),
-                &format!("contributes.sidebarPanels[{index}].order"),
-            )?;
-        }
-    }
-
-    if let Some(commands) = contributes.get("commands") {
-        for (index, command) in validate_array(Some(commands), "contributes.commands")?
-            .into_iter()
-            .enumerate()
-        {
-            validate_required_string_field(
-                command.get("id"),
-                &format!("contributes.commands[{index}].id"),
-            )?;
-            validate_required_string_field(
-                command.get("title"),
-                &format!("contributes.commands[{index}].title"),
-            )?;
-            validate_optional_shortcut_field(
-                command.get("shortcut"),
-                &format!("contributes.commands[{index}].shortcut"),
-            )?;
-        }
-    }
-
-    if let Some(settings_sections) = contributes.get("settingsSections") {
-        for (index, section) in
-            validate_array(Some(settings_sections), "contributes.settingsSections")?
-                .into_iter()
-                .enumerate()
-        {
-            validate_required_string_field(
-                section.get("id"),
-                &format!("contributes.settingsSections[{index}].id"),
-            )?;
-            validate_required_string_field(
-                section.get("title"),
-                &format!("contributes.settingsSections[{index}].title"),
-            )?;
-        }
-    }
-
-    if let Some(background_services) = contributes.get("backgroundServices") {
-        for (index, service) in
-            validate_array(Some(background_services), "contributes.backgroundServices")?
-                .into_iter()
-                .enumerate()
-        {
-            validate_required_string_field(
-                service.get("id"),
-                &format!("contributes.backgroundServices[{index}].id"),
-            )?;
-            validate_required_string_field(
-                service.get("name"),
-                &format!("contributes.backgroundServices[{index}].name"),
-            )?;
         }
     }
 
@@ -776,6 +775,38 @@ mod tests {
         assert!(result
             .expect_err("install should fail")
             .contains("sidebarPanels[0].side"));
+    }
+
+    #[test]
+    fn install_local_plugin_bundle_rejects_invalid_task_pane_icon_key() {
+        let source = tempdir().expect("source tempdir should create");
+        let managed = tempdir().expect("managed tempdir should create");
+        fs::create_dir_all(source.path().join("dist")).expect("dist dir should create");
+        fs::write(source.path().join("dist/index.js"), "export const x = 1;")
+            .expect("frontend should write");
+        write_manifest(
+            source.path(),
+            r#"{
+                "id": "com.example.invalid-icon",
+                "name": "Broken Icon Plugin",
+                "version": "1.0.0",
+                "apiVersion": 1,
+                "description": "Broken plugin",
+                "permissions": [],
+                "contributes": {
+                    "taskPaneTabs": [{ "id": "terminal", "title": "Terminal", "icon": "bad-icon" }]
+                },
+                "frontend": "dist/index.js",
+                "backend": null
+            }"#,
+        );
+
+        let result = install_local_plugin_bundle(source.path(), managed.path());
+
+        assert!(result.is_err());
+        assert!(result
+            .expect_err("install should fail")
+            .contains("taskPaneTabs[0].icon"));
     }
 
     #[test]

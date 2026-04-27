@@ -1,3 +1,4 @@
+import contributionSchemaData from './manifestContributionSchema.json'
 import type { PluginManifest } from './types'
 import { MAX_SUPPORTED_API_VERSION } from './types'
 
@@ -6,24 +7,31 @@ export interface ValidationError {
   message: string
 }
 
-export const ALLOWED_ICON_KEYS: ReadonlySet<string> = new Set([
-  'layout-dashboard',
-  'folder-open',
-  'git-pull-request',
-  'sparkles',
-  'settings',
-  'terminal',
-  'code',
-  'file-text',
-  'plug',
-  'puzzle',
-  'boxes',
-  'wrench',
-])
+type ContributionFieldKind = 'nonEmptyString' | 'icon' | 'number' | 'shortcut' | 'enum'
+
+interface ContributionFieldSpec {
+  kind: ContributionFieldKind
+  required?: boolean
+  values?: string[]
+}
+
+interface ContributionPointSpec {
+  fields: Record<string, ContributionFieldSpec>
+}
+
+interface ManifestContributionSchema {
+  allowedIconKeys: string[]
+  shortcutPattern: string
+  contributionPoints: Record<string, ContributionPointSpec>
+}
+
+const contributionSchema = contributionSchemaData as ManifestContributionSchema
+const shortcutRegex = new RegExp(contributionSchema.shortcutPattern)
+
+export const ALLOWED_ICON_KEYS: ReadonlySet<string> = new Set(contributionSchema.allowedIconKeys)
 
 export function isValidShortcutFormat(shortcut: string): boolean {
-  const pattern = /^(?:(?:Cmd|Ctrl|Alt|Shift)\+)*(?:[a-zA-Z0-9]|F\d{1,2}|Space|Enter|Tab|Backspace|Escape)$/
-  return pattern.test(shortcut)
+  return shortcutRegex.test(shortcut)
 }
 
 export function normalizeShortcut(shortcut: string): string {
@@ -57,199 +65,110 @@ function isObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
 }
 
-function validateViewContributions(views: unknown): ValidationError[] {
-  const errors: ValidationError[] = []
-
-  if (!isArray(views)) {
-    errors.push({ path: 'contributes.views', message: 'Must be an array' })
-    return errors
-  }
-
-  views.forEach((view, index) => {
-    if (!isObject(view)) {
-      errors.push({ path: `contributes.views[${index}]`, message: 'Must be an object' })
-      return
-    }
-
-    if (!isString(view.id) || !view.id) {
-      errors.push({ path: `contributes.views[${index}].id`, message: 'Required string' })
-    }
-
-    if (!isString(view.title) || !view.title) {
-      errors.push({ path: `contributes.views[${index}].title`, message: 'Required string' })
-    }
-
-    if (!isString(view.icon) || !view.icon) {
-      errors.push({ path: `contributes.views[${index}].icon`, message: 'Required string' })
-    } else if (!ALLOWED_ICON_KEYS.has(view.icon)) {
-      errors.push({ path: `contributes.views[${index}].icon`, message: `Icon key "${view.icon}" not allowed` })
-    }
-
-    if (view.shortcut !== undefined) {
-      if (!isString(view.shortcut)) {
-        errors.push({ path: `contributes.views[${index}].shortcut`, message: 'Must be a string' })
-      } else if (!isValidShortcutFormat(view.shortcut)) {
-        errors.push({ path: `contributes.views[${index}].shortcut`, message: 'Invalid shortcut format' })
-      }
-    }
-  })
-
-  return errors
+function getRequiredStringError(path: string): ValidationError {
+  return { path, message: 'Required string' }
 }
 
-function validateTaskPaneTabContributions(taskPaneTabs: unknown): ValidationError[] {
-  const errors: ValidationError[] = []
-
-  if (!isArray(taskPaneTabs)) {
-    errors.push({ path: 'contributes.taskPaneTabs', message: 'Must be an array' })
-    return errors
+function validateNonEmptyString(value: unknown, path: string, required: boolean): ValidationError[] {
+  if (value === undefined) {
+    return required ? [getRequiredStringError(path)] : []
   }
 
-  taskPaneTabs.forEach((tab, index) => {
-    if (!isObject(tab)) {
-      errors.push({ path: `contributes.taskPaneTabs[${index}]`, message: 'Must be an object' })
-      return
-    }
+  if (!isString(value) || !value) {
+    return [required ? getRequiredStringError(path) : { path, message: 'Must be a string' }]
+  }
 
-    if (!isString(tab.id) || !tab.id) {
-      errors.push({ path: `contributes.taskPaneTabs[${index}].id`, message: 'Required string' })
-    }
-
-    if (!isString(tab.title) || !tab.title) {
-      errors.push({ path: `contributes.taskPaneTabs[${index}].title`, message: 'Required string' })
-    }
-
-    if (tab.icon !== undefined) {
-      if (!isString(tab.icon) || !tab.icon) {
-        errors.push({ path: `contributes.taskPaneTabs[${index}].icon`, message: 'Must be a string' })
-      } else if (!ALLOWED_ICON_KEYS.has(tab.icon)) {
-        errors.push({ path: `contributes.taskPaneTabs[${index}].icon`, message: `Icon key "${tab.icon}" not allowed` })
-      }
-    }
-
-    if (tab.order !== undefined && !isNumber(tab.order)) {
-      errors.push({ path: `contributes.taskPaneTabs[${index}].order`, message: 'Must be a number' })
-    }
-  })
-
-  return errors
+  return []
 }
 
-function validateBackgroundServices(backgroundServices: unknown): ValidationError[] {
-  const errors: ValidationError[] = []
-
-  if (!isArray(backgroundServices)) {
-    errors.push({ path: 'contributes.backgroundServices', message: 'Must be an array' })
+function validateIcon(value: unknown, path: string, required: boolean): ValidationError[] {
+  const errors = validateNonEmptyString(value, path, required)
+  if (errors.length > 0 || value === undefined) {
     return errors
   }
 
-  backgroundServices.forEach((service, index) => {
-    if (!isObject(service)) {
-      errors.push({ path: `contributes.backgroundServices[${index}]`, message: 'Must be an object' })
-      return
-    }
+  if (!ALLOWED_ICON_KEYS.has(value as string)) {
+    return [{ path, message: `Icon key "${value as string}" not allowed` }]
+  }
 
-    if (!isString(service.id) || !service.id) {
-      errors.push({ path: `contributes.backgroundServices[${index}].id`, message: 'Required string' })
-    }
-
-    if (!isString(service.name) || !service.name) {
-      errors.push({ path: `contributes.backgroundServices[${index}].name`, message: 'Required string' })
-    }
-  })
-
-  return errors
+  return []
 }
 
-function validateSidebarPanelContributions(sidebarPanels: unknown): ValidationError[] {
-  const errors: ValidationError[] = []
-
-  if (!isArray(sidebarPanels)) {
-    errors.push({ path: 'contributes.sidebarPanels', message: 'Must be an array' })
-    return errors
+function validateNumber(value: unknown, path: string, required: boolean): ValidationError[] {
+  if (value === undefined) {
+    return required ? [{ path, message: 'Required number' }] : []
   }
 
-  sidebarPanels.forEach((panel, index) => {
-    if (!isObject(panel)) {
-      errors.push({ path: `contributes.sidebarPanels[${index}]`, message: 'Must be an object' })
-      return
-    }
+  if (!isNumber(value)) {
+    return [{ path, message: 'Must be a number' }]
+  }
 
-    if (!isString(panel.id) || !panel.id) {
-      errors.push({ path: `contributes.sidebarPanels[${index}].id`, message: 'Required string' })
-    }
-
-    if (!isString(panel.title) || !panel.title) {
-      errors.push({ path: `contributes.sidebarPanels[${index}].title`, message: 'Required string' })
-    }
-
-    if (panel.side !== 'left' && panel.side !== 'right') {
-      errors.push({ path: `contributes.sidebarPanels[${index}].side`, message: 'Must be "left" or "right"' })
-    }
-
-    if (panel.order !== undefined && !isNumber(panel.order)) {
-      errors.push({ path: `contributes.sidebarPanels[${index}].order`, message: 'Must be a number' })
-    }
-  })
-
-  return errors
+  return []
 }
 
-function validateCommandContributions(commands: unknown): ValidationError[] {
-  const errors: ValidationError[] = []
-
-  if (!isArray(commands)) {
-    errors.push({ path: 'contributes.commands', message: 'Must be an array' })
-    return errors
+function validateShortcut(value: unknown, path: string, required: boolean): ValidationError[] {
+  if (value === undefined) {
+    return required ? [getRequiredStringError(path)] : []
   }
 
-  commands.forEach((command, index) => {
-    if (!isObject(command)) {
-      errors.push({ path: `contributes.commands[${index}]`, message: 'Must be an object' })
-      return
-    }
+  if (!isString(value)) {
+    return [{ path, message: 'Must be a string' }]
+  }
 
-    if (!isString(command.id) || !command.id) {
-      errors.push({ path: `contributes.commands[${index}].id`, message: 'Required string' })
-    }
+  if (!isValidShortcutFormat(value)) {
+    return [{ path, message: 'Invalid shortcut format' }]
+  }
 
-    if (!isString(command.title) || !command.title) {
-      errors.push({ path: `contributes.commands[${index}].title`, message: 'Required string' })
-    }
-
-    if (command.shortcut !== undefined) {
-      if (!isString(command.shortcut)) {
-        errors.push({ path: `contributes.commands[${index}].shortcut`, message: 'Must be a string' })
-      } else if (!isValidShortcutFormat(command.shortcut)) {
-        errors.push({ path: `contributes.commands[${index}].shortcut`, message: 'Invalid shortcut format' })
-      }
-    }
-  })
-
-  return errors
+  return []
 }
 
-function validateSettingsSectionContributions(settingsSections: unknown): ValidationError[] {
+function validateEnum(value: unknown, path: string, required: boolean, values: string[] | undefined): ValidationError[] {
+  if (value === undefined) {
+    return required ? [getRequiredStringError(path)] : []
+  }
+
+  if (!isString(value) || !values?.includes(value)) {
+    return [{ path, message: values === undefined ? 'Invalid value' : `Must be ${values.map((option) => `"${option}"`).join(' or ')}` }]
+  }
+
+  return []
+}
+
+function validateContributionField(value: unknown, path: string, spec: ContributionFieldSpec): ValidationError[] {
+  const required = spec.required === true
+
+  switch (spec.kind) {
+    case 'nonEmptyString':
+      return validateNonEmptyString(value, path, required)
+    case 'icon':
+      return validateIcon(value, path, required)
+    case 'number':
+      return validateNumber(value, path, required)
+    case 'shortcut':
+      return validateShortcut(value, path, required)
+    case 'enum':
+      return validateEnum(value, path, required, spec.values)
+  }
+}
+
+function validateContributionArray(value: unknown, path: string, spec: ContributionPointSpec): ValidationError[] {
   const errors: ValidationError[] = []
 
-  if (!isArray(settingsSections)) {
-    errors.push({ path: 'contributes.settingsSections', message: 'Must be an array' })
+  if (!isArray(value)) {
+    errors.push({ path, message: 'Must be an array' })
     return errors
   }
 
-  settingsSections.forEach((section, index) => {
-    if (!isObject(section)) {
-      errors.push({ path: `contributes.settingsSections[${index}]`, message: 'Must be an object' })
+  value.forEach((item, index) => {
+    const itemPath = `${path}[${index}]`
+    if (!isObject(item)) {
+      errors.push({ path: itemPath, message: 'Must be an object' })
       return
     }
 
-    if (!isString(section.id) || !section.id) {
-      errors.push({ path: `contributes.settingsSections[${index}].id`, message: 'Required string' })
-    }
-
-    if (!isString(section.title) || !section.title) {
-      errors.push({ path: `contributes.settingsSections[${index}].title`, message: 'Required string' })
-    }
+    Object.entries(spec.fields).forEach(([fieldName, fieldSpec]) => {
+      errors.push(...validateContributionField(item[fieldName], `${itemPath}.${fieldName}`, fieldSpec))
+    })
   })
 
   return errors
@@ -263,29 +182,12 @@ function validateContributionPoints(contributes: unknown): ValidationError[] {
     return errors
   }
 
-  if (contributes.views !== undefined) {
-    errors.push(...validateViewContributions(contributes.views))
-  }
-
-  if (contributes.taskPaneTabs !== undefined) {
-    errors.push(...validateTaskPaneTabContributions(contributes.taskPaneTabs))
-  }
-
-  if (contributes.sidebarPanels !== undefined) {
-    errors.push(...validateSidebarPanelContributions(contributes.sidebarPanels))
-  }
-
-  if (contributes.commands !== undefined) {
-    errors.push(...validateCommandContributions(contributes.commands))
-  }
-
-  if (contributes.settingsSections !== undefined) {
-    errors.push(...validateSettingsSectionContributions(contributes.settingsSections))
-  }
-
-  if (contributes.backgroundServices !== undefined) {
-    errors.push(...validateBackgroundServices(contributes.backgroundServices))
-  }
+  Object.entries(contributionSchema.contributionPoints).forEach(([contributionName, contributionSpec]) => {
+    const value = contributes[contributionName]
+    if (value !== undefined) {
+      errors.push(...validateContributionArray(value, `contributes.${contributionName}`, contributionSpec))
+    }
+  })
 
   return errors
 }

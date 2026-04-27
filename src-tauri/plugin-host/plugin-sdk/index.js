@@ -16,22 +16,104 @@ function parsePluginViewKey(key) {
 var MAX_SUPPORTED_API_VERSION = 1;
 //#endregion
 //#region packages/plugin-sdk/src/manifest.ts
-var ALLOWED_ICON_KEYS = new Set([
-	"layout-dashboard",
-	"folder-open",
-	"git-pull-request",
-	"sparkles",
-	"settings",
-	"terminal",
-	"code",
-	"file-text",
-	"plug",
-	"puzzle",
-	"boxes",
-	"wrench"
-]);
+var contributionSchema = {
+	allowedIconKeys: [
+		"layout-dashboard",
+		"folder-open",
+		"git-pull-request",
+		"sparkles",
+		"settings",
+		"terminal",
+		"code",
+		"file-text",
+		"plug",
+		"puzzle",
+		"boxes",
+		"wrench"
+	],
+	shortcutPattern: "^(?:(?:Cmd|Ctrl|Alt|Shift)\\+)*(?:[a-zA-Z0-9]|F\\d{1,2}|Space|Enter|Tab|Backspace|Escape)$",
+	contributionPoints: {
+		"views": { "fields": {
+			"id": {
+				"kind": "nonEmptyString",
+				"required": true
+			},
+			"title": {
+				"kind": "nonEmptyString",
+				"required": true
+			},
+			"icon": {
+				"kind": "icon",
+				"required": true
+			},
+			"shortcut": { "kind": "shortcut" },
+			"railOrder": { "kind": "number" }
+		} },
+		"taskPaneTabs": { "fields": {
+			"id": {
+				"kind": "nonEmptyString",
+				"required": true
+			},
+			"title": {
+				"kind": "nonEmptyString",
+				"required": true
+			},
+			"icon": { "kind": "icon" },
+			"order": { "kind": "number" }
+		} },
+		"sidebarPanels": { "fields": {
+			"id": {
+				"kind": "nonEmptyString",
+				"required": true
+			},
+			"title": {
+				"kind": "nonEmptyString",
+				"required": true
+			},
+			"side": {
+				"kind": "enum",
+				"required": true,
+				"values": ["left", "right"]
+			},
+			"order": { "kind": "number" }
+		} },
+		"commands": { "fields": {
+			"id": {
+				"kind": "nonEmptyString",
+				"required": true
+			},
+			"title": {
+				"kind": "nonEmptyString",
+				"required": true
+			},
+			"shortcut": { "kind": "shortcut" }
+		} },
+		"settingsSections": { "fields": {
+			"id": {
+				"kind": "nonEmptyString",
+				"required": true
+			},
+			"title": {
+				"kind": "nonEmptyString",
+				"required": true
+			}
+		} },
+		"backgroundServices": { "fields": {
+			"id": {
+				"kind": "nonEmptyString",
+				"required": true
+			},
+			"name": {
+				"kind": "nonEmptyString",
+				"required": true
+			}
+		} }
+	}
+};
+var shortcutRegex = new RegExp(contributionSchema.shortcutPattern);
+var ALLOWED_ICON_KEYS = new Set(contributionSchema.allowedIconKeys);
 function isValidShortcutFormat(shortcut) {
-	return /^(?:(?:Cmd|Ctrl|Alt|Shift)\+)*(?:[a-zA-Z0-9]|F\d{1,2}|Space|Enter|Tab|Backspace|Escape)$/.test(shortcut);
+	return shortcutRegex.test(shortcut);
 }
 function normalizeShortcut(shortcut) {
 	let result = "";
@@ -57,220 +139,90 @@ function isArray(value) {
 function isObject(value) {
 	return value !== null && typeof value === "object" && !Array.isArray(value);
 }
-function validateViewContributions(views) {
-	const errors = [];
-	if (!isArray(views)) {
-		errors.push({
-			path: "contributes.views",
-			message: "Must be an array"
-		});
-		return errors;
-	}
-	views.forEach((view, index) => {
-		if (!isObject(view)) {
-			errors.push({
-				path: `contributes.views[${index}]`,
-				message: "Must be an object"
-			});
-			return;
-		}
-		if (!isString(view.id) || !view.id) errors.push({
-			path: `contributes.views[${index}].id`,
-			message: "Required string"
-		});
-		if (!isString(view.title) || !view.title) errors.push({
-			path: `contributes.views[${index}].title`,
-			message: "Required string"
-		});
-		if (!isString(view.icon) || !view.icon) errors.push({
-			path: `contributes.views[${index}].icon`,
-			message: "Required string"
-		});
-		else if (!ALLOWED_ICON_KEYS.has(view.icon)) errors.push({
-			path: `contributes.views[${index}].icon`,
-			message: `Icon key "${view.icon}" not allowed`
-		});
-		if (view.shortcut !== void 0) {
-			if (!isString(view.shortcut)) errors.push({
-				path: `contributes.views[${index}].shortcut`,
-				message: "Must be a string"
-			});
-			else if (!isValidShortcutFormat(view.shortcut)) errors.push({
-				path: `contributes.views[${index}].shortcut`,
-				message: "Invalid shortcut format"
-			});
-		}
-	});
-	return errors;
+function getRequiredStringError(path) {
+	return {
+		path,
+		message: "Required string"
+	};
 }
-function validateTaskPaneTabContributions(taskPaneTabs) {
-	const errors = [];
-	if (!isArray(taskPaneTabs)) {
-		errors.push({
-			path: "contributes.taskPaneTabs",
-			message: "Must be an array"
-		});
-		return errors;
-	}
-	taskPaneTabs.forEach((tab, index) => {
-		if (!isObject(tab)) {
-			errors.push({
-				path: `contributes.taskPaneTabs[${index}]`,
-				message: "Must be an object"
-			});
-			return;
-		}
-		if (!isString(tab.id) || !tab.id) errors.push({
-			path: `contributes.taskPaneTabs[${index}].id`,
-			message: "Required string"
-		});
-		if (!isString(tab.title) || !tab.title) errors.push({
-			path: `contributes.taskPaneTabs[${index}].title`,
-			message: "Required string"
-		});
-		if (tab.icon !== void 0) {
-			if (!isString(tab.icon) || !tab.icon) errors.push({
-				path: `contributes.taskPaneTabs[${index}].icon`,
-				message: "Must be a string"
-			});
-			else if (!ALLOWED_ICON_KEYS.has(tab.icon)) errors.push({
-				path: `contributes.taskPaneTabs[${index}].icon`,
-				message: `Icon key "${tab.icon}" not allowed`
-			});
-		}
-		if (tab.order !== void 0 && !isNumber(tab.order)) errors.push({
-			path: `contributes.taskPaneTabs[${index}].order`,
-			message: "Must be a number"
-		});
-	});
-	return errors;
+function validateNonEmptyString(value, path, required) {
+	if (value === void 0) return required ? [getRequiredStringError(path)] : [];
+	if (!isString(value) || !value) return [required ? getRequiredStringError(path) : {
+		path,
+		message: "Must be a string"
+	}];
+	return [];
 }
-function validateBackgroundServices(backgroundServices) {
-	const errors = [];
-	if (!isArray(backgroundServices)) {
-		errors.push({
-			path: "contributes.backgroundServices",
-			message: "Must be an array"
-		});
-		return errors;
-	}
-	backgroundServices.forEach((service, index) => {
-		if (!isObject(service)) {
-			errors.push({
-				path: `contributes.backgroundServices[${index}]`,
-				message: "Must be an object"
-			});
-			return;
-		}
-		if (!isString(service.id) || !service.id) errors.push({
-			path: `contributes.backgroundServices[${index}].id`,
-			message: "Required string"
-		});
-		if (!isString(service.name) || !service.name) errors.push({
-			path: `contributes.backgroundServices[${index}].name`,
-			message: "Required string"
-		});
-	});
-	return errors;
+function validateIcon(value, path, required) {
+	const errors = validateNonEmptyString(value, path, required);
+	if (errors.length > 0 || value === void 0) return errors;
+	if (!ALLOWED_ICON_KEYS.has(value)) return [{
+		path,
+		message: `Icon key "${value}" not allowed`
+	}];
+	return [];
 }
-function validateSidebarPanelContributions(sidebarPanels) {
-	const errors = [];
-	if (!isArray(sidebarPanels)) {
-		errors.push({
-			path: "contributes.sidebarPanels",
-			message: "Must be an array"
-		});
-		return errors;
-	}
-	sidebarPanels.forEach((panel, index) => {
-		if (!isObject(panel)) {
-			errors.push({
-				path: `contributes.sidebarPanels[${index}]`,
-				message: "Must be an object"
-			});
-			return;
-		}
-		if (!isString(panel.id) || !panel.id) errors.push({
-			path: `contributes.sidebarPanels[${index}].id`,
-			message: "Required string"
-		});
-		if (!isString(panel.title) || !panel.title) errors.push({
-			path: `contributes.sidebarPanels[${index}].title`,
-			message: "Required string"
-		});
-		if (panel.side !== "left" && panel.side !== "right") errors.push({
-			path: `contributes.sidebarPanels[${index}].side`,
-			message: "Must be \"left\" or \"right\""
-		});
-		if (panel.order !== void 0 && !isNumber(panel.order)) errors.push({
-			path: `contributes.sidebarPanels[${index}].order`,
-			message: "Must be a number"
-		});
-	});
-	return errors;
+function validateNumber(value, path, required) {
+	if (value === void 0) return required ? [{
+		path,
+		message: "Required number"
+	}] : [];
+	if (!isNumber(value)) return [{
+		path,
+		message: "Must be a number"
+	}];
+	return [];
 }
-function validateCommandContributions(commands) {
-	const errors = [];
-	if (!isArray(commands)) {
-		errors.push({
-			path: "contributes.commands",
-			message: "Must be an array"
-		});
-		return errors;
-	}
-	commands.forEach((command, index) => {
-		if (!isObject(command)) {
-			errors.push({
-				path: `contributes.commands[${index}]`,
-				message: "Must be an object"
-			});
-			return;
-		}
-		if (!isString(command.id) || !command.id) errors.push({
-			path: `contributes.commands[${index}].id`,
-			message: "Required string"
-		});
-		if (!isString(command.title) || !command.title) errors.push({
-			path: `contributes.commands[${index}].title`,
-			message: "Required string"
-		});
-		if (command.shortcut !== void 0) {
-			if (!isString(command.shortcut)) errors.push({
-				path: `contributes.commands[${index}].shortcut`,
-				message: "Must be a string"
-			});
-			else if (!isValidShortcutFormat(command.shortcut)) errors.push({
-				path: `contributes.commands[${index}].shortcut`,
-				message: "Invalid shortcut format"
-			});
-		}
-	});
-	return errors;
+function validateShortcut(value, path, required) {
+	if (value === void 0) return required ? [getRequiredStringError(path)] : [];
+	if (!isString(value)) return [{
+		path,
+		message: "Must be a string"
+	}];
+	if (!isValidShortcutFormat(value)) return [{
+		path,
+		message: "Invalid shortcut format"
+	}];
+	return [];
 }
-function validateSettingsSectionContributions(settingsSections) {
+function validateEnum(value, path, required, values) {
+	if (value === void 0) return required ? [getRequiredStringError(path)] : [];
+	if (!isString(value) || !values?.includes(value)) return [{
+		path,
+		message: values === void 0 ? "Invalid value" : `Must be ${values.map((option) => `"${option}"`).join(" or ")}`
+	}];
+	return [];
+}
+function validateContributionField(value, path, spec) {
+	const required = spec.required === true;
+	switch (spec.kind) {
+		case "nonEmptyString": return validateNonEmptyString(value, path, required);
+		case "icon": return validateIcon(value, path, required);
+		case "number": return validateNumber(value, path, required);
+		case "shortcut": return validateShortcut(value, path, required);
+		case "enum": return validateEnum(value, path, required, spec.values);
+	}
+}
+function validateContributionArray(value, path, spec) {
 	const errors = [];
-	if (!isArray(settingsSections)) {
+	if (!isArray(value)) {
 		errors.push({
-			path: "contributes.settingsSections",
+			path,
 			message: "Must be an array"
 		});
 		return errors;
 	}
-	settingsSections.forEach((section, index) => {
-		if (!isObject(section)) {
+	value.forEach((item, index) => {
+		const itemPath = `${path}[${index}]`;
+		if (!isObject(item)) {
 			errors.push({
-				path: `contributes.settingsSections[${index}]`,
+				path: itemPath,
 				message: "Must be an object"
 			});
 			return;
 		}
-		if (!isString(section.id) || !section.id) errors.push({
-			path: `contributes.settingsSections[${index}].id`,
-			message: "Required string"
-		});
-		if (!isString(section.title) || !section.title) errors.push({
-			path: `contributes.settingsSections[${index}].title`,
-			message: "Required string"
+		Object.entries(spec.fields).forEach(([fieldName, fieldSpec]) => {
+			errors.push(...validateContributionField(item[fieldName], `${itemPath}.${fieldName}`, fieldSpec));
 		});
 	});
 	return errors;
@@ -284,12 +236,10 @@ function validateContributionPoints(contributes) {
 		});
 		return errors;
 	}
-	if (contributes.views !== void 0) errors.push(...validateViewContributions(contributes.views));
-	if (contributes.taskPaneTabs !== void 0) errors.push(...validateTaskPaneTabContributions(contributes.taskPaneTabs));
-	if (contributes.sidebarPanels !== void 0) errors.push(...validateSidebarPanelContributions(contributes.sidebarPanels));
-	if (contributes.commands !== void 0) errors.push(...validateCommandContributions(contributes.commands));
-	if (contributes.settingsSections !== void 0) errors.push(...validateSettingsSectionContributions(contributes.settingsSections));
-	if (contributes.backgroundServices !== void 0) errors.push(...validateBackgroundServices(contributes.backgroundServices));
+	Object.entries(contributionSchema.contributionPoints).forEach(([contributionName, contributionSpec]) => {
+		const value = contributes[contributionName];
+		if (value !== void 0) errors.push(...validateContributionArray(value, `contributes.${contributionName}`, contributionSpec));
+	});
 	return errors;
 }
 function validatePluginManifest(data) {
