@@ -123,13 +123,6 @@ impl super::Database {
         Ok(result)
     }
 
-    pub fn comment_exists(&self, id: i64) -> Result<bool> {
-        let conn = self.conn.lock().unwrap();
-        let mut stmt = conn.prepare("SELECT COUNT(*) FROM pr_comments WHERE id = ?1")?;
-        let count: i64 = stmt.query_row([id], |row| row.get(0))?;
-        Ok(count > 0)
-    }
-
     /// Insert a PR comment into the database
     #[allow(clippy::too_many_arguments)]
     pub fn insert_pr_comment(
@@ -555,7 +548,10 @@ mod tests {
         )
         .expect("insert pr failed");
 
-        assert!(!db.comment_exists(501).expect("check failed"));
+        let missing_comment = db
+            .get_pr_comments_by_ids(&[501])
+            .expect("check missing comment failed");
+        assert!(missing_comment.is_empty());
 
         db.insert_pr_comment(
             501,
@@ -582,7 +578,10 @@ mod tests {
         )
         .expect("insert comment 2 failed");
 
-        assert!(db.comment_exists(501).expect("check failed"));
+        let inserted_comment = db
+            .get_pr_comments_by_ids(&[501])
+            .expect("check inserted comment failed");
+        assert_eq!(inserted_comment.len(), 1);
 
         let comments = db.get_comments_for_pr(10).expect("get comments failed");
         assert_eq!(comments.len(), 2);
