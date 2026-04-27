@@ -11,8 +11,10 @@ pub fn get_http_server_port() -> u16 {
         .unwrap_or(17422)
 }
 
-pub fn generate_hooks_settings(port: u16) -> Result<PathBuf, Box<dyn std::error::Error>> {
-    let home = dirs::home_dir().ok_or("Could not determine home directory")?;
+pub(crate) fn generate_hooks_settings_for_home(
+    home: &Path,
+    port: u16,
+) -> Result<PathBuf, Box<dyn std::error::Error>> {
     let settings_dir = home.join(".openforge");
     let settings_path = settings_dir.join("claude-hooks-settings.json");
 
@@ -24,6 +26,11 @@ pub fn generate_hooks_settings(port: u16) -> Result<PathBuf, Box<dyn std::error:
     fs::write(&settings_path, json_string)?;
 
     Ok(settings_path)
+}
+
+pub fn generate_hooks_settings(port: u16) -> Result<PathBuf, Box<dyn std::error::Error>> {
+    let home = dirs::home_dir().ok_or("Could not determine home directory")?;
+    generate_hooks_settings_for_home(&home, port)
 }
 
 /// Pre-approve workspace trust for a directory in ~/.claude.json.

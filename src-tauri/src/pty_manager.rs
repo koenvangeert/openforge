@@ -1491,17 +1491,26 @@ pub(crate) fn build_pi_args(
     args
 }
 
-pub(crate) fn get_shell_path() -> String {
-    let shell = std::env::var("SHELL").unwrap_or_default();
-    if !shell.is_empty() {
-        return shell;
+fn resolve_shell_path<'a>(
+    shell: Option<&str>,
+    candidates: impl IntoIterator<Item = &'a str>,
+) -> String {
+    if let Some(shell) = shell.filter(|value| !value.is_empty()) {
+        return shell.to_string();
     }
-    for candidate in ["/bin/zsh", "/bin/bash", "/bin/sh"] {
+
+    for candidate in candidates {
         if std::path::Path::new(candidate).exists() {
             return candidate.to_string();
         }
     }
+
     "/bin/sh".to_string()
+}
+
+pub(crate) fn get_shell_path() -> String {
+    let shell = std::env::var("SHELL").ok();
+    resolve_shell_path(shell.as_deref(), ["/bin/zsh", "/bin/bash", "/bin/sh"])
 }
 
 #[cfg(test)]
@@ -1856,15 +1865,8 @@ mod tests {
         let _ = std::fs::remove_dir_all(&temp_dir);
         std::fs::create_dir_all(&temp_dir).unwrap();
 
-        let home_backup = std::env::var("HOME").ok();
-        std::env::set_var("HOME", &temp_dir);
-        let temp_path = crate::claude_hooks::generate_hooks_settings(17422)
+        let temp_path = crate::claude_hooks::generate_hooks_settings_for_home(&temp_dir, 17422)
             .expect("generate_hooks_settings should succeed");
-        if let Some(home) = home_backup {
-            std::env::set_var("HOME", home);
-        } else {
-            std::env::remove_var("HOME");
-        }
 
         let args_new = build_claude_args("fix the bug", None, false, &temp_path, None);
         assert_eq!(args_new[0], "fix the bug");
@@ -2182,6 +2184,33 @@ mod tests {
     }
 
     #[test]
+    fn test_get_shell_path_uses_env_without_mutating_process_env() {
+        let shell = resolve_shell_path(Some("/usr/bin/env"), ["/bin/zsh", "/bin/bash", "/bin/sh"]);
+        assert_eq!(
+            shell, "/usr/bin/env",
+            "should prefer the supplied SHELL value when set"
+        );
+    }
+
+    #[test]
+    fn test_get_shell_path_falls_back_to_existing_candidate() {
+        let temp_dir = tempfile::tempdir().expect("tempdir should succeed");
+        let missing_shell = temp_dir.path().join("missing-shell");
+        let existing_shell = temp_dir.path().join("existing-shell");
+        std::fs::write(&existing_shell, "#!/bin/sh\n").expect("shell fixture should write");
+
+        let shell = resolve_shell_path(
+            None,
+            [
+                missing_shell.to_string_lossy().as_ref(),
+                existing_shell.to_string_lossy().as_ref(),
+            ],
+        );
+
+        assert_eq!(shell, existing_shell.to_string_lossy());
+    }
+
+    #[test]
     fn test_build_shell_command() {
         let shell = get_shell_path();
         assert!(!shell.is_empty(), "shell path should not be empty");
@@ -2190,19 +2219,6 @@ mod tests {
             "shell path should be absolute: {}",
             shell
         );
-
-        let original = std::env::var("SHELL").ok();
-        std::env::set_var("SHELL", "/usr/bin/env");
-        let shell_with_env = get_shell_path();
-        assert_eq!(
-            shell_with_env, "/usr/bin/env",
-            "should use SHELL env var when set"
-        );
-
-        match original {
-            Some(s) => std::env::set_var("SHELL", s),
-            None => std::env::remove_var("SHELL"),
-        }
 
         let expected_term_vars: &[(&str, &str)] = &[
             ("TERM", "xterm-256color"),
