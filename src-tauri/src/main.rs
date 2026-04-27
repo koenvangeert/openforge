@@ -17,6 +17,7 @@ mod opencode_client;
 mod pi_extension;
 mod plugin_host;
 mod plugin_installation;
+mod plugin_protocol;
 mod plugin_rpc;
 pub mod providers;
 mod pty_manager;
@@ -31,7 +32,6 @@ use log::{debug, error, info, warn};
 use opencode_client::OpenCodeClient;
 use pty_manager::PtyManager;
 use std::collections::{HashMap, HashSet};
-use std::path::{Component, Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use tauri::{Emitter, Manager};
 use whisper_manager::{WhisperManager, WhisperModelSize};
@@ -85,163 +85,6 @@ fn opencode_resume_persistence(
         Some("idle") => ResumeSessionPersistence::Completed,
         _ => ResumeSessionPersistence::LeaveExisting,
     }
-}
-
-fn validate_plugin_id(plugin_id: &str) -> Result<(), String> {
-    if plugin_id.is_empty() {
-        return Err("Invalid plugin id: empty".to_string());
-    }
-
-    if plugin_id.contains('/') || plugin_id.contains('\\') {
-        return Err("Invalid plugin id: path separators are not allowed".to_string());
-    }
-
-    let mut components = Path::new(plugin_id).components();
-    match (components.next(), components.next()) {
-        (Some(Component::Normal(_)), None) => Ok(()),
-        _ => Err("Invalid plugin id".to_string()),
-    }
-}
-
-const HOST_RUNTIME_INDEX_HTML: &str = r#"<!doctype html>
-<html lang=\"en\">
-  <head>
-    <meta charset=\"utf-8\" />
-    <title>Open Forge Plugin Runtime</title>
-  </head>
-  <body>
-    <script type=\"module\" src=\"plugin://host-runtime/runtime.js\"></script>
-  </body>
-</html>
-"#;
-
-const HOST_RUNTIME_RUNTIME_JS: &str =
-    "globalThis.__OPENFORGE_PLUGIN_RUNTIME__ = true; export const runtimeReady = true;";
-const HOST_RUNTIME_PLUGIN_SDK_INDEX_JS: &str = include_str!("../plugin-host/plugin-sdk/index.js");
-
-const PLUGIN_PROTOCOL_CORS_HEADER: &str = "Access-Control-Allow-Origin";
-const PLUGIN_PROTOCOL_CORS_ALLOW_ORIGIN: &str = "*";
-
-fn plugin_protocol_response(
-    status: u16,
-    content_type: Option<&str>,
-    body: Vec<u8>,
-) -> tauri::http::Response<Vec<u8>> {
-    let mut builder = tauri::http::Response::builder().status(status).header(
-        PLUGIN_PROTOCOL_CORS_HEADER,
-        PLUGIN_PROTOCOL_CORS_ALLOW_ORIGIN,
-    );
-
-    if let Some(content_type) = content_type {
-        builder = builder.header("Content-Type", content_type);
-    }
-
-    builder
-        .body(body)
-        .expect("plugin protocol response uses valid static headers and status")
-}
-
-fn host_runtime_asset(rel_path: &str) -> Option<(Vec<u8>, &'static str)> {
-    match rel_path {
-        "index.html" => Some((
-            HOST_RUNTIME_INDEX_HTML.as_bytes().to_vec(),
-            "text/html; charset=utf-8",
-        )),
-        "runtime.js" => Some((
-            HOST_RUNTIME_RUNTIME_JS.as_bytes().to_vec(),
-            "application/javascript",
-        )),
-        "plugin-sdk/index.js" => Some((
-            HOST_RUNTIME_PLUGIN_SDK_INDEX_JS.as_bytes().to_vec(),
-            "application/javascript",
-        )),
-        "svelte/index.js" | "svelte/internal.js" | "svelte/store.js" => {
-            resolve_host_runtime_passthrough_asset(rel_path)
-        }
-        _ => resolve_host_runtime_passthrough_asset(rel_path),
-    }
-}
-
-fn resolve_host_runtime_passthrough_asset(rel_path: &str) -> Option<(Vec<u8>, &'static str)> {
-    let workspace_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..");
-    resolve_host_runtime_passthrough_asset_from_root(&workspace_root, rel_path)
-}
-
-fn resolve_host_runtime_passthrough_asset_from_root(
-    workspace_root: &Path,
-    rel_path: &str,
-) -> Option<(Vec<u8>, &'static str)> {
-    let svelte_src_root = workspace_root
-        .join("node_modules")
-        .join("svelte")
-        .join("src");
-
-    let rel = rel_path.strip_prefix("svelte/")?;
-    if rel.contains("..") {
-        return None;
-    }
-
-    let candidate = svelte_src_root.join(rel);
-    let content = std::fs::read(candidate).ok()?;
-    Some((content, "application/javascript"))
-}
-
-fn resolve_plugin_install_base_dir(
-    install_path: &str,
-    plugin_id: &str,
-    is_builtin: bool,
-) -> Result<PathBuf, String> {
-    if is_builtin && install_path.starts_with("builtin:") {
-        return builtin_plugins::install_path(plugin_id);
-    }
-
-    Ok(PathBuf::from(install_path))
-}
-
-fn resolve_plugin_asset_path(
-    install_base_dir: &Path,
-    plugin_id: &str,
-    rel_path: &str,
-) -> Result<PathBuf, String> {
-    validate_plugin_id(plugin_id)?;
-
-    let relative_path = Path::new(rel_path);
-    if relative_path.is_absolute() || rel_path.contains("..") {
-        return Err("Forbidden".to_string());
-    }
-
-    let candidate = install_base_dir.join(relative_path);
-    let canonical_install_base_dir = install_base_dir
-        .canonicalize()
-        .map_err(|_| "Forbidden".to_string())?;
-    let canonical_candidate = candidate
-        .canonicalize()
-        .map_err(|_| "Forbidden".to_string())?;
-
-    if !canonical_candidate.starts_with(&canonical_install_base_dir) {
-        return Err("Forbidden".to_string());
-    }
-
-    Ok(canonical_candidate)
-}
-
-fn resolve_plugin_asset_path_for_request<R: tauri::Runtime>(
-    app_handle: &tauri::AppHandle<R>,
-    plugin_id: &str,
-    rel_path: &str,
-) -> Result<PathBuf, String> {
-    let db = app_handle.state::<Arc<Mutex<db::Database>>>();
-    let db_lock = db
-        .lock()
-        .map_err(|_| "Failed to lock database".to_string())?;
-    let plugin = db_lock
-        .get_plugin(plugin_id)
-        .map_err(|error| format!("Failed to read plugin metadata: {}", error))?
-        .ok_or_else(|| format!("Unknown plugin: {}", plugin_id))?;
-    let install_base_dir =
-        resolve_plugin_install_base_dir(&plugin.install_path, &plugin.id, plugin.is_builtin)?;
-
-    resolve_plugin_asset_path(&install_base_dir, plugin_id, rel_path)
 }
 
 async fn resolve_resume_session_persistence(
@@ -1006,57 +849,7 @@ fn main() {
             commands::plugins::plugin_invoke,
         ])
         .register_uri_scheme_protocol("plugin", |app, request| {
-            let uri = request.uri().to_string();
-            let path = uri.strip_prefix("plugin://").unwrap_or(&uri);
-
-            if path.starts_with("host-runtime/") {
-                let rel_path = path.trim_start_matches("host-runtime/");
-
-                if rel_path.contains("..") {
-                    return plugin_protocol_response(403, None, b"Forbidden".to_vec());
-                }
-
-                return match host_runtime_asset(rel_path) {
-                    Some((content, mime_type)) => {
-                        plugin_protocol_response(200, Some(mime_type), content)
-                    }
-                    None => plugin_protocol_response(404, None, b"File not found".to_vec()),
-                };
-            }
-
-            let mut parts = path.splitn(2, '/');
-            let plugin_id = parts.next().unwrap_or("");
-            let rel_path = parts.next().unwrap_or("");
-
-            let file_path =
-                match resolve_plugin_asset_path_for_request(&app.app_handle(), plugin_id, rel_path)
-                {
-                    Ok(path) => path,
-                    Err(error) if error == "Forbidden" => {
-                        return plugin_protocol_response(403, None, b"Forbidden".to_vec());
-                    }
-                    Err(error) => {
-                        return plugin_protocol_response(403, None, error.into_bytes());
-                    }
-                };
-
-            match std::fs::read(&file_path) {
-                Ok(content) => {
-                    let ext = file_path
-                        .extension()
-                        .and_then(|e: &std::ffi::OsStr| e.to_str())
-                        .unwrap_or("");
-                    let mime_type = match ext {
-                        "js" | "mjs" => "application/javascript",
-                        "json" => "application/json",
-                        "css" => "text/css",
-                        "html" => "text/html",
-                        _ => "application/octet-stream",
-                    };
-                    plugin_protocol_response(200, Some(mime_type), content)
-                }
-                Err(_) => plugin_protocol_response(404, None, b"File not found".to_vec()),
-            }
+            plugin_protocol::handle_plugin_uri(&app.app_handle(), &request.uri().to_string())
         })
         .build(tauri_context())
         .expect("error while building tauri application");
@@ -1104,17 +897,13 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::{
-        host_runtime_asset, load_resume_targets, opencode_resume_persistence,
-        plugin_protocol_response, resolve_host_runtime_passthrough_asset_from_root,
-        resolve_plugin_asset_path, resolve_plugin_install_base_dir, restore_resumed_session_state,
+        load_resume_targets, opencode_resume_persistence, restore_resumed_session_state,
         should_start_project_root_server, ResumeSessionPersistence, ResumeTarget,
     };
-    use crate::builtin_plugins;
     use crate::db::test_helpers::make_test_db;
     use crate::opencode_client::SessionStatusInfo;
     use std::collections::HashMap;
     use std::fs;
-    use std::path::Path;
     use tauri::test::{mock_builder, mock_context, noop_assets};
 
     #[test]
@@ -1367,130 +1156,5 @@ mod tests {
 
         drop(db);
         let _ = fs::remove_file(path);
-    }
-
-    #[test]
-    fn resolve_plugin_asset_path_rejects_invalid_plugin_ids() {
-        let install_base_dir = Path::new("/tmp/plugin");
-
-        for plugin_id in ["", "..", "foo/bar", "foo\\bar"] {
-            let err = resolve_plugin_asset_path(install_base_dir, plugin_id, "assets/index.js")
-                .expect_err("invalid plugin id should be rejected");
-            assert!(err.contains("plugin id"), "unexpected error: {err}");
-        }
-    }
-
-    #[test]
-    fn resolve_plugin_asset_path_uses_install_base_dir() {
-        let temp = tempfile::tempdir().expect("tempdir should create");
-        let install_base_dir = temp.path();
-        fs::create_dir_all(install_base_dir.join("assets")).expect("assets dir should create");
-        fs::write(
-            install_base_dir.join("assets/index.js"),
-            "export const ok = true;",
-        )
-        .expect("asset file should write");
-
-        let path = resolve_plugin_asset_path(install_base_dir, "my-plugin", "assets/index.js")
-            .expect("valid plugin id should be accepted");
-
-        assert!(path.ends_with("assets/index.js"));
-    }
-
-    #[test]
-    fn resolve_plugin_asset_path_rejects_absolute_and_traversal_paths() {
-        let temp = tempfile::tempdir().expect("tempdir should create");
-        let install_base_dir = temp.path();
-        fs::create_dir_all(install_base_dir.join("assets")).expect("assets dir should create");
-        fs::write(
-            install_base_dir.join("assets/index.js"),
-            "export const ok = true;",
-        )
-        .expect("asset file should write");
-
-        for rel_path in ["/etc/passwd", "../outside.js"] {
-            let err = resolve_plugin_asset_path(install_base_dir, "my-plugin", rel_path)
-                .expect_err("invalid asset path should be rejected");
-            assert_eq!(err, "Forbidden");
-        }
-    }
-
-    #[test]
-    fn plugin_protocol_response_adds_cors_header_to_forbidden_errors() {
-        let response = plugin_protocol_response(403, None, b"Forbidden".to_vec());
-
-        assert_eq!(response.status(), 403);
-        assert_eq!(
-            response
-                .headers()
-                .get("Access-Control-Allow-Origin")
-                .and_then(|value| value.to_str().ok()),
-            Some("*")
-        );
-    }
-
-    #[test]
-    fn plugin_protocol_response_adds_cors_header_to_not_found_errors() {
-        let response = plugin_protocol_response(404, None, b"File not found".to_vec());
-
-        assert_eq!(response.status(), 404);
-        assert_eq!(
-            response
-                .headers()
-                .get("Access-Control-Allow-Origin")
-                .and_then(|value| value.to_str().ok()),
-            Some("*")
-        );
-    }
-
-    #[test]
-    fn resolve_plugin_install_base_dir_maps_builtin_sentinel_from_catalog() {
-        let plugin = builtin_plugins::find("com.openforge.file-viewer")
-            .expect("file viewer should be in builtin catalog");
-        let path =
-            resolve_plugin_install_base_dir(&plugin.sentinel_install_path(), plugin.id, true)
-                .expect("builtin plugin path should resolve");
-
-        assert_eq!(plugin.directory_name, "file-viewer");
-        assert!(path.ends_with("plugins/file-viewer"));
-    }
-
-    #[test]
-    fn host_runtime_asset_serves_runtime_js() {
-        let (content, mime_type) =
-            host_runtime_asset("runtime.js").expect("runtime.js should be served by host runtime");
-
-        assert_eq!(mime_type, "application/javascript");
-        assert!(String::from_utf8_lossy(&content).contains("runtimeReady"));
-    }
-
-    #[test]
-    fn host_runtime_asset_serves_plugin_sdk_runtime_js() {
-        let (content, mime_type) = host_runtime_asset("plugin-sdk/index.js")
-            .expect("plugin-sdk runtime should be served by host runtime");
-
-        assert_eq!(mime_type, "application/javascript");
-        let source = String::from_utf8_lossy(&content);
-        assert!(source.contains("PluginContextImpl"));
-        assert!(source.contains("validatePluginManifest"));
-    }
-
-    #[test]
-    fn host_runtime_asset_serves_svelte_entrypoints() {
-        let temp = tempfile::tempdir().expect("tempdir should create");
-        let svelte_root = temp.path().join("node_modules").join("svelte").join("src");
-        std::fs::create_dir_all(&svelte_root).expect("svelte src root should create");
-        std::fs::write(
-            svelte_root.join("index.js"),
-            "export * from './internal.js';",
-        )
-        .expect("svelte entrypoint should write");
-
-        let (content, mime_type) =
-            resolve_host_runtime_passthrough_asset_from_root(temp.path(), "svelte/index.js")
-                .expect("svelte index should be served by host runtime");
-
-        assert_eq!(mime_type, "application/javascript");
-        assert!(String::from_utf8_lossy(&content).contains("./internal"));
     }
 }
