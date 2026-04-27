@@ -3,7 +3,6 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "build": "vite build --config vitest.config.ts",
     "test": "vitest run --config vitest.config.ts"
   },
   "dependencies": {

@@ -38,7 +38,7 @@ export async function loadInstalledPlugins(): Promise<void> {
           description: row.description,
           permissions: JSON.parse(row.permissions),
           contributes: JSON.parse(row.contributes),
-          frontend: row.frontendEntry,
+          frontend: row.frontendEntry || null,
           backend: row.backendEntry,
         },
         state: 'installed' as const,

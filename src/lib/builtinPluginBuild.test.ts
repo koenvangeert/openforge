@@ -10,11 +10,12 @@ type RootPackageJson = {
   scripts?: Record<string, string>
 }
 
-describe('builtin plugin build orchestration', () => {
-  it('defines a root script to build builtin plugin bundles', () => {
+describe('plugin build orchestration', () => {
+  it('builds any plugin package that still defines a build script without requiring host-bundled built-ins to build', () => {
     const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf8')) as RootPackageJson
 
     expect(packageJson.scripts?.['build:plugins']).toBeDefined()
-    expect(packageJson.scripts?.['build:plugins']).toContain("pnpm -r --filter './plugins/*' build")
+    expect(packageJson.scripts?.['build:plugins']).toContain("--filter './plugins/*'")
+    expect(packageJson.scripts?.['build:plugins']).toContain('--if-present')
   })
 })

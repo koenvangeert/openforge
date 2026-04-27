@@ -14,10 +14,10 @@ type TauriConfig = {
 }
 
 describe('Tauri plugin build hooks', () => {
-  it('builds builtin plugin bundles before Tauri dev and production builds', () => {
+  it('does not build unused built-in plugin frontend bundles before Tauri dev and production builds', () => {
     const tauriConfig = JSON.parse(readFileSync(tauriConfigPath, 'utf8')) as TauriConfig
 
-    expect(tauriConfig.build?.beforeDevCommand).toContain('pnpm build:plugins &&')
-    expect(tauriConfig.build?.beforeBuildCommand).toContain('pnpm build:plugins &&')
+    expect(tauriConfig.build?.beforeDevCommand).not.toContain('pnpm build:plugins')
+    expect(tauriConfig.build?.beforeBuildCommand).not.toContain('pnpm build:plugins')
   })
 })

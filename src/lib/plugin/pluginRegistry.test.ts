@@ -152,6 +152,15 @@ describe('pluginRegistry', () => {
     expect(installPluginMock).not.toHaveBeenCalled()
   })
 
+  it('installPluginFromManifest rejects external plugins without a frontend entry', async () => {
+    const manifest = makeManifest({ frontend: null })
+
+    await expect(installPluginFromManifest(manifest, '/plugins/test')).rejects.toThrow(
+      'External plugins require a frontend entry'
+    )
+    expect(installPluginMock).not.toHaveBeenCalled()
+  })
+
   it('uninstallPlugin removes from store', async () => {
     uninstallPluginIpcMock.mockResolvedValue(undefined)
     isPluginLoadedMock.mockReturnValue(false)
@@ -502,12 +511,13 @@ describe('pluginRegistry', () => {
     expect(getRegisteredComponent('plugin:test-plugin:main')).toBeUndefined()
   })
 
-  it('initializePluginRuntime installs builtin manifests through the same registry path', async () => {
+  it('initializePluginRuntime installs builtin manifests without unused frontend bundle entries', async () => {
     installPluginMock.mockResolvedValue(undefined)
 
     await initializePluginRuntime()
 
     expect(installPluginMock).toHaveBeenCalled()
     expect(installPluginMock.mock.calls.every(([row]) => row.isBuiltin === true)).toBe(true)
+    expect(installPluginMock.mock.calls.every(([row]) => row.frontendEntry === '')).toBe(true)
   })
 })

@@ -21,6 +21,6 @@
       }
     ]
   },
-  "frontend": "dist/index.js",
+  "frontend": null,
   "backend": null
 }

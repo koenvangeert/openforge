@@ -13,7 +13,7 @@ export interface PluginManifest {
   description: string
   permissions: string[]
   contributes: PluginContributionPoints
-  frontend: string
+  frontend: string | null
   backend: string | null
 }
 

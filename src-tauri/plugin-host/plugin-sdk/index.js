@@ -182,7 +182,11 @@ export function validatePluginManifest(data) {
   if (!isString(data.description) || !data.description) errors.push({ path: 'description', message: 'Required string' });
   if (data.permissions !== undefined && !isArray(data.permissions)) errors.push({ path: 'permissions', message: 'Must be an array' });
   if (data.contributes !== undefined) errors.push(...validateContributionPoints(data.contributes));
-  if (!isString(data.frontend) || !data.frontend) errors.push({ path: 'frontend', message: 'Required string' });
+  if (data.frontend === undefined) {
+    errors.push({ path: 'frontend', message: 'Required string or null' });
+  } else if (data.frontend !== null && (!isString(data.frontend) || !data.frontend)) {
+    errors.push({ path: 'frontend', message: 'Must be a non-empty string or null' });
+  }
   if (data.backend !== undefined && data.backend !== null && !isString(data.backend)) {
     errors.push({ path: 'backend', message: 'Must be a string or null' });
   }
