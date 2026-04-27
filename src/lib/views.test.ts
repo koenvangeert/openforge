@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import PluginSlot from '../components/plugin/PluginSlot.svelte'
 import type { PluginManifest } from './plugin/types'
 import { ICON_RAIL_HIDDEN_VIEWS, TASK_CLEARING_VIEWS, VIEWS, getPluginViewEntries, getViews } from './views'
+import type { ViewContext } from './views'
 
 function makeManifest(overrides: Partial<PluginManifest> = {}): PluginManifest {
   return {
@@ -26,23 +27,17 @@ describe('views registry', () => {
     ])
   })
 
-  it('builds props for settings views correctly', () => {
+  it('builds props for settings views without task run callbacks', () => {
     const onCloseSettings = vi.fn()
     const onProjectDeleted = vi.fn()
-    const onRunAction = vi.fn()
+    const viewContext = {
+      projectName: 'Project Alpha',
+      onCloseSettings,
+      onProjectDeleted,
+    } satisfies ViewContext
 
-    const settingsProps = VIEWS.settings.getProps({
-      projectName: 'Project Alpha',
-      onCloseSettings,
-      onProjectDeleted,
-      onRunAction,
-    })
-    const globalSettingsProps = VIEWS.global_settings.getProps({
-      projectName: 'Project Alpha',
-      onCloseSettings,
-      onProjectDeleted,
-      onRunAction,
-    })
+    const settingsProps = VIEWS.settings.getProps(viewContext)
+    const globalSettingsProps = VIEWS.global_settings.getProps(viewContext)
 
     expect(settingsProps).toMatchObject({
       mode: 'project',
@@ -193,7 +188,6 @@ describe('views registry', () => {
       projectName: 'Project Alpha',
       onCloseSettings: vi.fn(),
       onProjectDeleted: vi.fn(),
-      onRunAction: vi.fn(),
     })
 
     expect(props).toEqual({

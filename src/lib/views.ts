@@ -6,13 +6,10 @@ import { makePluginViewKey } from './plugin/types'
 import type { PluginManifest, PluginViewKey } from './plugin/types'
 import type { AppView, CoreAppView } from './types'
 
-export type RunActionHandler = (data: { taskId: string; actionPrompt: string; agent: string | null }) => void | Promise<void>
-
 export interface ViewContext {
   projectName: string
   onCloseSettings: () => void
   onProjectDeleted: () => void
-  onRunAction: RunActionHandler
 }
 
 export interface ViewEntry {

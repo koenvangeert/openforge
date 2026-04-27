@@ -105,7 +105,6 @@
         projectName: activeProject?.name ?? '',
         onCloseSettings: () => { router.navigate('board') },
         onProjectDeleted: loadProjects,
-        onRunAction: handleRunAction,
       }),
     }
   })
