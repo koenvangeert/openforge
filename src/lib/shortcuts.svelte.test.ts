@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { beforeEach, describe, it, expect, vi } from 'vitest'
 import { useShortcutRegistry } from './shortcuts.svelte'
 
 // Mock isInputFocused
@@ -10,6 +10,11 @@ import { isInputFocused } from './domUtils'
 const mockIsInputFocused = vi.mocked(isInputFocused)
 
 describe('useShortcutRegistry', () => {
+  beforeEach(() => {
+    mockIsInputFocused.mockReset()
+    mockIsInputFocused.mockReturnValue(false)
+  })
+
   it('registers a handler that gets called when key matches', () => {
     const registry = useShortcutRegistry()
     const handler = vi.fn()
@@ -200,5 +205,119 @@ describe('useShortcutRegistry', () => {
 
     registry.handleKeydown(event)
     expect(handler).toHaveBeenCalledTimes(1)
+  })
+
+  it('matches Cmd+Shift+digit shortcuts by physical digit code when the layout reports a symbol key', () => {
+    const registry = useShortcutRegistry()
+    const handler = vi.fn()
+
+    registry.register('⌘⇧1', handler)
+
+    const event = new KeyboardEvent('keydown', {
+      key: '!',
+      code: 'Digit1',
+      metaKey: true,
+      shiftKey: true,
+    })
+
+    registry.handleKeydown(event)
+    expect(handler).toHaveBeenCalledTimes(1)
+  })
+
+  it('matches Cmd+digit shortcuts by physical digit code on layouts where the digit key emits punctuation', () => {
+    const registry = useShortcutRegistry()
+    const handler = vi.fn()
+
+    registry.register('⌘1', handler)
+
+    const event = new KeyboardEvent('keydown', {
+      key: '&',
+      code: 'Digit1',
+      metaKey: true,
+    })
+
+    registry.handleKeydown(event)
+    expect(handler).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not collapse shifted physical digit shortcuts onto unshifted digit registrations', () => {
+    const registry = useShortcutRegistry()
+    const handler = vi.fn()
+
+    registry.register('⌘1', handler)
+
+    const event = new KeyboardEvent('keydown', {
+      key: '1',
+      code: 'Digit1',
+      metaKey: true,
+      shiftKey: true,
+    })
+
+    registry.handleKeydown(event)
+    expect(handler).not.toHaveBeenCalled()
+  })
+
+  it('still skips plain physical digit shortcuts when an input is focused', () => {
+    const registry = useShortcutRegistry()
+    const handler = vi.fn()
+
+    registry.register('1', handler)
+    mockIsInputFocused.mockReturnValueOnce(true)
+
+    const event = new KeyboardEvent('keydown', {
+      key: '&',
+      code: 'Digit1',
+    })
+
+    registry.handleKeydown(event)
+    expect(handler).not.toHaveBeenCalled()
+  })
+
+  it('matches non-letter physical-key shortcuts such as Cmd+[ across keyboard layouts', () => {
+    const registry = useShortcutRegistry()
+    const handler = vi.fn()
+
+    registry.register('⌘[', handler)
+
+    const event = new KeyboardEvent('keydown', {
+      key: 'å',
+      code: 'BracketLeft',
+      metaKey: true,
+    })
+
+    registry.handleKeydown(event)
+    expect(handler).toHaveBeenCalledTimes(1)
+  })
+
+  it('matches shifted non-letter physical-key shortcuts such as Shift+Slash', () => {
+    const registry = useShortcutRegistry()
+    const handler = vi.fn()
+
+    registry.register('⇧/', handler)
+
+    const event = new KeyboardEvent('keydown', {
+      key: '?',
+      code: 'Slash',
+      shiftKey: true,
+    })
+
+    registry.handleKeydown(event)
+    expect(handler).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not match letter shortcuts by physical code', () => {
+    const registry = useShortcutRegistry()
+    const handler = vi.fn()
+
+    registry.register('⌘q', handler)
+
+    const event = new KeyboardEvent('keydown', {
+      key: 'a',
+      code: 'KeyQ',
+      metaKey: true,
+    })
+
+    registry.handleKeydown(event)
+    expect(handler).not.toHaveBeenCalled()
   })
 })

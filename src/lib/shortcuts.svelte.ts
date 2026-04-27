@@ -10,11 +10,41 @@ export interface ShortcutRegistry {
   handleKeydown(e: KeyboardEvent): void
 }
 
+interface ShortcutCandidate {
+  shortcutKey: string
+  key: string
+  hasModifier: boolean
+}
+
+const physicalShortcutKeysByCode = new Map<string, string>([
+  ['Digit0', '0'],
+  ['Digit1', '1'],
+  ['Digit2', '2'],
+  ['Digit3', '3'],
+  ['Digit4', '4'],
+  ['Digit5', '5'],
+  ['Digit6', '6'],
+  ['Digit7', '7'],
+  ['Digit8', '8'],
+  ['Digit9', '9'],
+  ['Backquote', '`'],
+  ['Minus', '-'],
+  ['Equal', '='],
+  ['BracketLeft', '['],
+  ['BracketRight', ']'],
+  ['Backslash', '\\'],
+  ['Semicolon', ';'],
+  ['Quote', "'"],
+  ['Comma', ','],
+  ['Period', '.'],
+  ['Slash', '/'],
+])
+
 export function useShortcutRegistry(): ShortcutRegistry {
   let shortcuts = $state<Map<string, ShortcutHandler>>(new Map())
 
   function hasImplicitShift(key: string): boolean {
-    return key.length === 1 && !/[a-z]/i.test(key)
+    return key.length === 1 && !/[a-z0-9]/i.test(key)
   }
 
   function isPlainKey(key: string): boolean {
@@ -31,40 +61,69 @@ export function useShortcutRegistry(): ShortcutRegistry {
     return key.toLowerCase()
   }
 
+  function buildShortcutCandidate(
+    key: string,
+    metaKey: boolean,
+    includeShift: boolean,
+    ctrlKey: boolean,
+    altKey: boolean
+  ): ShortcutCandidate {
+    const normalizedKey = normalizeShortcutKey(key)
+    let shortcutKey = ''
+    if (metaKey) shortcutKey += '⌘'
+    if (ctrlKey) shortcutKey += '⌃'
+    if (altKey) shortcutKey += '⌥'
+    if (includeShift) shortcutKey += '⇧'
+    shortcutKey += normalizedKey
+    return {
+      shortcutKey,
+      key: normalizedKey,
+      hasModifier: metaKey || ctrlKey || altKey || includeShift,
+    }
+  }
+
   function parseShortcut(
     key: string,
     metaKey: boolean,
     shiftKey: boolean,
     ctrlKey: boolean,
     altKey: boolean
-  ): string {
-    let shortcutKey = ''
-    if (metaKey) shortcutKey += '⌘'
-    if (ctrlKey) shortcutKey += '⌃'
-    if (altKey) shortcutKey += '⌥'
-    if (shiftKey && !hasImplicitShift(key)) shortcutKey += '⇧'
-    shortcutKey += normalizeShortcutKey(key)
-    return shortcutKey
+  ): ShortcutCandidate {
+    return buildShortcutCandidate(key, metaKey, shiftKey && !hasImplicitShift(key), ctrlKey, altKey)
+  }
+
+  function parsePhysicalShortcut(e: KeyboardEvent): ShortcutCandidate | null {
+    const key = physicalShortcutKeysByCode.get(e.code)
+    if (!key) return null
+
+    return buildShortcutCandidate(key, e.metaKey, e.shiftKey, e.ctrlKey, e.altKey)
+  }
+
+  function getShortcutCandidates(e: KeyboardEvent): ShortcutCandidate[] {
+    const candidates = [parseShortcut(e.key, e.metaKey, e.shiftKey, e.ctrlKey, e.altKey)]
+    const physicalCandidate = parsePhysicalShortcut(e)
+
+    if (physicalCandidate && !candidates.some(candidate => candidate.shortcutKey === physicalCandidate.shortcutKey)) {
+      candidates.push(physicalCandidate)
+    }
+
+    return candidates
   }
 
   function handleKeydown(e: KeyboardEvent): void {
-    const { key, metaKey, shiftKey, ctrlKey, altKey } = e
-    const hasExplicitShiftModifier = shiftKey && !hasImplicitShift(key)
+    const candidates = getShortcutCandidates(e)
+    const match = candidates
+      .map(candidate => ({ candidate, handler: shortcuts.get(candidate.shortcutKey) }))
+      .find((entry): entry is { candidate: ShortcutCandidate; handler: ShortcutHandler } => Boolean(entry.handler))
 
-    const hasModifier = metaKey || ctrlKey || altKey || hasExplicitShiftModifier
-    const isPlain = isPlainKey(key)
+    if (!match) return
 
-    if (isPlain && !hasModifier && isInputFocused()) {
+    if (isPlainKey(match.candidate.key) && !match.candidate.hasModifier && isInputFocused()) {
       return
     }
 
-    const shortcutKey = parseShortcut(key, metaKey, shiftKey, ctrlKey, altKey)
-    const handler = shortcuts.get(shortcutKey)
-
-    if (handler) {
-      e.preventDefault()
-      handler(e)
-    }
+    e.preventDefault()
+    match.handler(e)
   }
 
   function register(key: string, handler: ShortcutHandler): void {
