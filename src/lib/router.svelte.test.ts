@@ -42,16 +42,6 @@ describe('useAppRouter', () => {
     expect(get(currentView)).toBe('settings')
   })
 
-  it('navigate(workqueue) clears selectedTaskId synchronously', () => {
-    const router = useAppRouter()
-    selectedTaskId.set('task-1')
-
-    router.navigate('workqueue')
-
-    expect(get(selectedTaskId)).toBeNull()
-    expect(get(currentView)).toBe('workqueue')
-  })
-
   it('back returns false when history is empty', () => {
     const router = useAppRouter()
 
@@ -123,7 +113,7 @@ describe('useAppRouter', () => {
     pushNavState()
 
     activeProjectId.set('proj-B')
-    currentView.set('workqueue')
+    currentView.set('global_settings')
     pushNavState()
 
     activeProjectId.set('proj-C')

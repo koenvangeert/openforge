@@ -234,7 +234,7 @@ describe('navigateToTask', () => {
 
   it('sets currentView to board', () => {
     activeProjectId.set('P-1')
-    currentView.set('workqueue')
+    currentView.set('global_settings')
 
     navigateToTask(makeTask({ id: 'T-1', project_id: 'P-1' }))
 

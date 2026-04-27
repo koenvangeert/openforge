@@ -62,11 +62,6 @@ pub struct TasksQuery {
     pub state: Option<String>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
-pub struct WorkQueueQuery {
-    pub project_id: String,
-}
-
 /// Payload from Claude Code hooks
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClaudeHookPayload {
@@ -374,22 +369,6 @@ pub async fn get_project_attention_handler(
     Ok(Json(attention))
 }
 
-pub async fn get_work_queue_handler(
-    State(state): State<AppState>,
-    Query(query): Query<WorkQueueQuery>,
-) -> Result<Json<Vec<db::WorkQueueTaskRow>>, (StatusCode, String)> {
-    let db = state.db.lock().unwrap();
-    let rows = db
-        .get_work_queue_tasks_for_project(&query.project_id)
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to get work queue tasks: {e}"),
-            )
-        })?;
-    Ok(Json(rows))
-}
-
 pub(crate) fn map_hook_to_status(event_type: &str, current_status: &str) -> Option<String> {
     match event_type {
         "pre-tool-use" | "post-tool-use" => {
@@ -598,7 +577,6 @@ pub fn create_router(state: AppState) -> Router {
         .route("/projects", get(get_projects_handler))
         .route("/tasks", get(get_tasks_handler))
         .route("/project/:id/attention", get(get_project_attention_handler))
-        .route("/work_queue", get(get_work_queue_handler))
         .route("/hooks/pi-agent-start", post(pi_agent_start_handler))
         .route("/hooks/pi-agent-end", post(pi_agent_end_handler))
         .route("/hooks/stop", post(hook_stop_handler))
@@ -1126,58 +1104,6 @@ mod tests {
             .expect("request should succeed");
 
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
-
-        let _ = std::fs::remove_file(path);
-    }
-
-    #[tokio::test]
-    async fn test_get_work_queue_handler_filters_by_project() {
-        let (state, path) = test_state("http_get_work_queue_handler_filters_by_project");
-        {
-            let db = state.db.lock().expect("lock db");
-
-            let project1 = db
-                .create_project("Project 1", "/tmp/project1")
-                .expect("create project 1");
-            let project2 = db
-                .create_project("Project 2", "/tmp/project2")
-                .expect("create project 2");
-
-            let task1 = db
-                .create_task("Task P1", "doing", Some(&project1.id), None, None, None)
-                .expect("create task p1");
-            let _task2 = db
-                .create_task("Task P2", "doing", Some(&project2.id), None, None, None)
-                .expect("create task p2");
-
-            db.create_agent_session(
-                "ses-http-work-queue",
-                &task1.id,
-                None,
-                "implement",
-                "completed",
-                "opencode",
-            )
-            .expect("create agent session");
-        }
-
-        let router = create_router(state);
-        let response = router
-            .oneshot(
-                Request::builder()
-                    .uri("/work_queue?project_id=P-1")
-                    .method("GET")
-                    .body(Body::empty())
-                    .expect("build request"),
-            )
-            .await
-            .expect("request should succeed");
-
-        assert_eq!(response.status(), StatusCode::OK);
-        let json = response_body_json(response).await;
-        let tasks = json.as_array().expect("array response");
-        assert_eq!(tasks.len(), 1);
-        assert_eq!(tasks[0]["task"]["project_id"], "P-1");
 
         let _ = std::fs::remove_file(path);
     }

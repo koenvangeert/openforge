@@ -23,7 +23,6 @@ describe('views registry', () => {
     expect(Object.keys(VIEWS).sort()).toEqual([
       'global_settings',
       'settings',
-      'workqueue',
     ])
   })
 
@@ -62,12 +61,10 @@ describe('views registry', () => {
       'files',
       'global_settings',
       'settings',
-      'workqueue',
     ])
 
     expect([...ICON_RAIL_HIDDEN_VIEWS].sort()).toEqual([
       'global_settings',
-      'workqueue',
     ])
   })
 

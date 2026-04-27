@@ -3,7 +3,7 @@
   import { projects, activeProjectId, projectAttention } from '../../lib/stores'
   import { getProjectAttention, getGitBranch, setConfig } from '../../lib/ipc'
   import { useAppRouter } from '../../lib/router.svelte'
-  import { ChevronLeft, ChevronRight, ListChecks, Settings, Plus, ArrowUp, ArrowDown } from 'lucide-svelte'
+  import { ChevronLeft, ChevronRight, Settings, Plus, ArrowUp, ArrowDown } from 'lucide-svelte'
   import type { ProjectAttention, AppView } from '../../lib/types'
 
   interface Props {
@@ -98,8 +98,7 @@
     }
   }
 
-  const bottomNavItems: { view: AppView; Icon: typeof ListChecks; label: string }[] = [
-    { view: 'workqueue', Icon: ListChecks, label: 'Work Queue' },
+  const bottomNavItems: { view: AppView; Icon: typeof Settings; label: string }[] = [
     { view: 'global_settings', Icon: Settings, label: 'Settings' },
   ]
 </script>
@@ -149,7 +148,7 @@
   <div class="flex-1 overflow-y-auto">
     {#each $projects as project, index (project.id)}
       {@const status = getAttentionStatus(project.id)}
-      {@const isActive = project.id === $activeProjectId && currentView !== 'workqueue' && currentView !== 'global_settings'}
+      {@const isActive = project.id === $activeProjectId && currentView !== 'global_settings'}
 
       {#if collapsed}
         <button

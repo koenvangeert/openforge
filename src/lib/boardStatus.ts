@@ -1,4 +1,4 @@
-import type { BoardStatus, Task, WorkQueueEntry } from './types'
+import type { BoardStatus, Task } from './types'
 
 export const BOARD_STATUSES = ['backlog', 'doing', 'done'] as const satisfies readonly BoardStatus[]
 
@@ -26,18 +26,10 @@ export function parseBoardStatus(status: string): BoardStatus {
 }
 
 type RawTask = Omit<Task, 'status'> & { status: string }
-type RawWorkQueueEntry = Omit<WorkQueueEntry, 'task'> & { task: RawTask }
 
 export function normalizeTask(task: RawTask): Task {
   return {
     ...task,
     status: parseBoardStatus(task.status),
-  }
-}
-
-export function normalizeWorkQueueEntry(entry: RawWorkQueueEntry): WorkQueueEntry {
-  return {
-    ...entry,
-    task: normalizeTask(entry.task),
   }
 }

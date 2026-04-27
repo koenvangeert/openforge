@@ -38,7 +38,6 @@ vi.mock('lucide-svelte', () => {
   return {
     ChevronLeft: stub,
     ChevronRight: stub,
-    ListChecks: stub,
     Settings: stub,
     Plus: stub,
     ArrowUp: stub,
@@ -126,15 +125,6 @@ describe('AppSidebar', () => {
     expect(get(activeProjectId)).toBe('proj-2')
   })
 
-  it('clicking a project while on workqueue resets to board', async () => {
-    const { resetToBoard } = await import('../../lib/router.svelte')
-    vi.mocked(resetToBoard).mockClear()
-    renderSidebar({ currentView: 'workqueue' })
-
-    await fireEvent.click(screen.getByRole('button', { name: /^beta project$/i }))
-    expect(resetToBoard).toHaveBeenCalled()
-  })
-
   it('clicking a project while on global_settings resets to board', async () => {
     const { resetToBoard } = await import('../../lib/router.svelte')
     vi.mocked(resetToBoard).mockClear()
@@ -144,22 +134,14 @@ describe('AppSidebar', () => {
     expect(resetToBoard).toHaveBeenCalled()
   })
 
-  it('renders Work Queue nav button', () => {
+  it('does not render Work Queue nav button', () => {
     renderSidebar()
-    expect(screen.getByRole('button', { name: /work queue/i })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /work queue/i })).toBeNull()
   })
 
   it('renders Settings nav button (labeled "Settings")', () => {
     renderSidebar()
     expect(screen.getByRole('button', { name: /settings/i })).toBeTruthy()
-  })
-
-  it('clicking Work Queue calls onNavigate(\'workqueue\')', async () => {
-    const onNavigate = vi.fn()
-    renderSidebar({ onNavigate })
-
-    await fireEvent.click(screen.getByRole('button', { name: /work queue/i }))
-    expect(onNavigate).toHaveBeenCalledWith('workqueue')
   })
 
   it('clicking Settings calls onNavigate(\'global_settings\')', async () => {
@@ -204,13 +186,6 @@ describe('AppSidebar', () => {
     await vi.waitFor(() => {
       expect(getProjectAttention).toHaveBeenCalledOnce()
     })
-  })
-
-  it('project is NOT visually active (aria-current) when on workqueue view', () => {
-    renderSidebar({ currentView: 'workqueue' })
-
-    const activeProjectButton = screen.getByRole('button', { name: /^alpha project$/i })
-    expect(activeProjectButton.getAttribute('aria-current')).toBeNull()
   })
 
   it('project is NOT visually active (aria-current) when on global_settings view', () => {

@@ -9,7 +9,6 @@ const COMMANDS = new Set([
   'get-task',
   'list-tasks',
   'list-projects',
-  'work-queue',
 ]);
 
 function printHelp() {
@@ -21,7 +20,6 @@ Usage:
   openforge get-task --task-id <id>
   openforge list-tasks --project-id <id> [--state backlog|doing|done]
   openforge list-projects
-  openforge work-queue --project-id <id>
 
 Environment:
   OPENFORGE_HTTP_PORT  OpenForge HTTP bridge port (default: 17422)
@@ -136,11 +134,6 @@ async function main(argv) {
     }
     case 'list-projects': {
       printJson(await requestJson('/projects'));
-      return;
-    }
-    case 'work-queue': {
-      const params = new URLSearchParams({ project_id: requireFlag(flags, 'projectId') });
-      printJson(await requestJson(`/work-queue?${params.toString()}`));
       return;
     }
     default:

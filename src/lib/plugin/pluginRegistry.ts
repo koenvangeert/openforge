@@ -42,7 +42,7 @@ import { unregisterViewComponentsForPlugin } from './componentRegistry'
 import { activeProjectId, currentView, selectedTaskId } from '../stores'
 import type { AppView } from '../types'
 
-const STATIC_APP_VIEWS = new Set<AppView>(['board', 'settings', 'workqueue', 'global_settings', 'files'])
+const STATIC_APP_VIEWS = new Set<AppView>(['board', 'settings', 'global_settings', 'files'])
 
 function isAppView(value: unknown): value is AppView {
   return typeof value === 'string' && (STATIC_APP_VIEWS.has(value as AppView) || isPluginViewKey(value))

@@ -62,7 +62,6 @@
   let showFileQuickOpen = $state(false)
   let actionPaletteTask = $state<Task | null>(null)
   let actionPaletteActions = $state<Action[]>([])
-  let workQueueRefreshTrigger = $state(0)
   let router = useAppRouter()
   let registeredPluginShortcuts = new Set<string>()
   let previousPluginProjectId = $state<string | null>(null)
@@ -492,9 +491,6 @@
       case 'go-back':
         router.back()
         break
-      case 'open-workqueue':
-        router.navigate('workqueue')
-        break
       case 'search-tasks':
         showCommandPalette = true
         break
@@ -632,13 +628,6 @@
       showFileQuickOpen = !showFileQuickOpen
     })
 
-    shortcuts.register('⌘r', () => {
-      router.navigate('workqueue')
-    })
-    shortcuts.register('⌃r', () => {
-      router.navigate('workqueue')
-    })
-
     shortcuts.register('⌘h', () => {
       router.resetToBoard()
     })
@@ -696,7 +685,6 @@
         }
         loadTasks()
         loadProjectAttention()
-        workQueueRefreshTrigger++
       })
     )
 
@@ -1186,10 +1174,6 @@
           <div class="flex items-center justify-between">
             <span class="text-sm text-base-content">Show shortcuts</span>
             <kbd class="kbd kbd-sm">?</kbd>
-          </div>
-          <div class="flex items-center justify-between">
-            <span class="text-sm text-base-content">Work queue</span>
-            <kbd class="kbd kbd-sm">⌘R</kbd>
           </div>
         </div>
       </div>

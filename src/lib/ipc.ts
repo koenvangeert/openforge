@@ -1,9 +1,8 @@
 import { invoke } from "@tauri-apps/api/core";
-import { normalizeTask, normalizeWorkQueueEntry } from "./boardStatus"
-import type { AgentInfo, AgentReviewComment, AgentSession, AuthoredPullRequest, AutocompleteAgentInfo, BoardStatus, CommandInfo, CommitInfo, FileContent, FileEntry, ImplementationStatus, PollResult, PrComment, PrFileDiff, PrOverviewComment, Project, ProjectAttention, ProviderModelInfo, PullRequestInfo, ReviewComment, ReviewPullRequest, ReviewSubmissionComment, SelfReviewComment, SkillInfo, Task, TaskWorkspaceInfo, TranscriptionResult, WhisperModelSizeId, WhisperModelStatus, WorkQueueEntry, WorktreeInfo } from "./types";
+import { normalizeTask } from "./boardStatus"
+import type { AgentInfo, AgentReviewComment, AgentSession, AuthoredPullRequest, AutocompleteAgentInfo, BoardStatus, CommandInfo, CommitInfo, FileContent, FileEntry, ImplementationStatus, PollResult, PrComment, PrFileDiff, PrOverviewComment, Project, ProjectAttention, ProviderModelInfo, PullRequestInfo, ReviewComment, ReviewPullRequest, ReviewSubmissionComment, SelfReviewComment, SkillInfo, Task, TaskWorkspaceInfo, TranscriptionResult, WhisperModelSizeId, WhisperModelStatus, WorktreeInfo } from "./types";
 
 type RawTask = Omit<Task, 'status'> & { status: string }
-type RawWorkQueueEntry = Omit<WorkQueueEntry, 'task'> & { task: RawTask }
 
 export async function createTask(initialPrompt: string, status: BoardStatus, projectId: string | null, agent: string | null, permissionMode: string | null): Promise<Task> {
   const task = await invoke<RawTask>("create_task", { initialPrompt, status, projectId, agent, permissionMode });
@@ -29,12 +28,6 @@ export async function deleteTask(id: string): Promise<void> {
 export async function clearDoneTasks(projectId: string): Promise<number> {
   return invoke<number>("clear_done_tasks", { projectId });
 }
-
-export async function getWorkQueueTasks(): Promise<WorkQueueEntry[]> {
-  const entries = await invoke<RawWorkQueueEntry[]>("get_work_queue_tasks");
-  return entries.map(normalizeWorkQueueEntry)
-}
-
 
 export async function getAppMode(): Promise<string> {
   return invoke<string>("get_app_mode");

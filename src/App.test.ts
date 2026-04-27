@@ -73,7 +73,7 @@ const mockWindowOnCloseRequested = vi.fn(async (callback: (event: MockCloseReque
 const mockWindowDestroy = vi.fn(async () => undefined)
 
 const mockSelectedTaskIdStore = writable<string | null>(null)
-const mockCurrentViewStore = writable<'board' | 'files' | 'settings' | 'workqueue' | 'global_settings' | 'plugin:com.openforge.file-viewer:files' | 'plugin:com.openforge.github-sync:pr_review' | 'plugin:com.openforge.skills-viewer:skills'>('board')
+const mockCurrentViewStore = writable<'board' | 'files' | 'settings' | 'global_settings' | 'plugin:com.openforge.file-viewer:files' | 'plugin:com.openforge.github-sync:pr_review' | 'plugin:com.openforge.skills-viewer:skills'>('board')
 const mockSelectedReviewPrStore = writable(null)
 const {
   mockActivatePlugin,
@@ -253,7 +253,6 @@ vi.mock('./components/task-detail/TaskDetailView.svelte', () => ({ default: vi.f
 vi.mock('./components/review/pr/PrReviewView.svelte', () => ({ default: vi.fn() }))
 vi.mock('./components/SkillsView.svelte', () => ({ default: vi.fn() }))
 vi.mock('./components/settings/SettingsView.svelte', () => ({ default: vi.fn() }))
-vi.mock('./components/work-queue/WorkQueueView.svelte', () => ({ default: vi.fn() }))
 vi.mock('./components/task-detail/ClaudeAgentPanel.svelte', () => ({ default: vi.fn() }))
 vi.mock('./components/prompt/PromptInput.svelte', () => ({ default: vi.fn() }))
 vi.mock('./components/shared/ui/SearchableSelect.svelte', () => ({ default: vi.fn() }))
@@ -292,7 +291,7 @@ const mockRouterNavigate = vi.fn((view: string) => {
     return
   }
   mockCurrentViewStore.set(view as any)
-  if (new Set(['settings', 'workqueue', 'global_settings']).has(view) || view.startsWith('plugin:')) {
+  if (new Set(['settings', 'global_settings']).has(view) || view.startsWith('plugin:')) {
     mockSelectedTaskIdStore.set(null)
   }
 })
@@ -324,7 +323,6 @@ vi.mock('lucide-svelte', () => {
     RefreshCw: stub,
     ChevronLeft: stub,
     ChevronRight: stub,
-    ListChecks: stub,
     Settings: stub,
     Plus: stub,
     FolderOpen: stub,

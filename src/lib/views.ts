@@ -1,6 +1,5 @@
 import type { Component } from 'svelte'
 import SettingsView from '../components/settings/SettingsView.svelte'
-import WorkQueueView from '../components/work-queue/WorkQueueView.svelte'
 import PluginSlot from '../components/plugin/PluginSlot.svelte'
 import { resolveContributions } from './plugin/contributionResolver'
 import { makePluginViewKey } from './plugin/types'
@@ -26,18 +25,16 @@ export interface PluginViewEntry {
   entry: ViewEntry
 }
 
-export type StaticViewKey = Exclude<CoreAppView, 'board' | 'files' | 'skills'>
+export type StaticViewKey = Exclude<CoreAppView, 'board' | 'files'>
 export type ViewRegistry = Record<StaticViewKey, ViewEntry> & Partial<Record<PluginViewKey, ViewEntry>>
 
 export const TASK_CLEARING_VIEWS: ReadonlySet<AppView> = new Set([
   'settings',
-  'workqueue',
   'global_settings',
   'files',
 ])
 
 export const ICON_RAIL_HIDDEN_VIEWS: ReadonlySet<AppView> = new Set([
-  'workqueue',
   'global_settings',
 ])
 
@@ -57,10 +54,6 @@ export const VIEWS: Record<StaticViewKey, ViewEntry> = {
       onClose: onCloseSettings,
       onProjectDeleted,
     }),
-  },
-  workqueue: {
-    component: WorkQueueView,
-    getProps: ({ onRunAction }) => ({ onRunAction }),
   },
 }
 

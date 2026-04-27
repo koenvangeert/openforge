@@ -7,7 +7,7 @@ import type { PluginEntry } from '../../lib/plugin/types'
 const mockActiveSessions = writable<Map<string, AgentSession>>(new Map())
 const mockProjects = writable<Project[]>([])
 const mockActiveProjectId = writable<string | null>(null)
-const mockCurrentView = writable<'board' | 'settings' | 'workqueue' | 'plugin:com.openforge.github-sync:pr_review' | 'plugin:com.openforge.skills-viewer:skills'>('board')
+const mockCurrentView = writable<'board' | 'settings' | 'plugin:com.openforge.github-sync:pr_review' | 'plugin:com.openforge.skills-viewer:skills'>('board')
 const mockSelectedTaskId = writable<string | null>(null)
 const mockTasks = writable<Task[]>([])
 const mockInstalledPlugins = writable<Map<string, PluginEntry>>(new Map())

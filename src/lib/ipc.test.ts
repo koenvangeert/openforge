@@ -13,7 +13,6 @@ import {
 	createTask,
 	fsSearchFiles,
 	getAllTasks,
-	getWorkQueueTasks,
 	spawnShellPty,
 } from "./ipc";
 
@@ -73,35 +72,6 @@ describe("ipc spawnShellPty", () => {
 		]);
 
 		await expect(getAllTasks()).rejects.toThrow("Invalid board status: wat");
-	});
-
-	it("normalizes task status inside work queue responses", async () => {
-		invokeMock.mockResolvedValueOnce([
-			{
-				task: {
-					id: "T-3",
-					initial_prompt: "Queue task",
-					status: "in_progress",
-					prompt: null,
-					summary: null,
-					agent: null,
-					permission_mode: null,
-					project_id: null,
-					created_at: 1000,
-					updated_at: 1000,
-				},
-				project_name: "Test Project",
-				session_status: null,
-				session_checkpoint_data: null,
-				pull_requests: [],
-			},
-		]);
-
-		await expect(getWorkQueueTasks()).resolves.toEqual([
-			expect.objectContaining({
-				task: expect.objectContaining({ id: "T-3", status: "doing" }),
-			}),
-		]);
 	});
 
 	it("normalizes createTask responses before returning to the UI", async () => {

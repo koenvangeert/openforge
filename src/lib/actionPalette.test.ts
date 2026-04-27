@@ -119,16 +119,16 @@ describe('getTaskActions', () => {
 })
 
 describe('getGlobalActions', () => {
-  it('returns 6 global actions', () => {
+  it('returns global actions without Work Queue navigation', () => {
     const actions = getGlobalActions()
-    expect(actions).toHaveLength(6)
+    expect(actions).toHaveLength(5)
     const ids = actions.map(a => a.id)
     expect(ids).toContain('go-back')
     expect(ids).toContain('search-tasks')
     expect(ids).toContain('new-task')
     expect(ids).toContain('switch-project')
-    expect(ids).toContain('open-workqueue')
     expect(ids).toContain('refresh-github')
+    expect(ids).not.toContain('open-workqueue')
   })
 
   it('uses CMD+SHIFT+F for Search Tasks', () => {

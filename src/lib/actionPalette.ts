@@ -95,13 +95,6 @@ export function getGlobalActions(): PaletteAction[] {
       keywords: ['project', 'switch', 'change'],
     },
     {
-      id: 'open-workqueue',
-      label: 'Work Queue',
-      shortcut: '⌘R',
-      category: 'navigation',
-      keywords: ['queue', 'work', 'workqueue'],
-    },
-    {
       id: 'refresh-github',
       label: 'Refresh GitHub',
       shortcut: '⌘⇧R',

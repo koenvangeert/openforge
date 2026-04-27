@@ -456,18 +456,10 @@ export interface AgentReviewComment {
 }
 
 /** App-level view for top-bar navigation */
-export type CoreAppView = 'board' | 'settings' | 'workqueue' | 'global_settings' | 'files'
+export type CoreAppView = 'board' | 'settings' | 'global_settings' | 'files'
 
 /** App-level view for top-bar navigation */
 export type AppView = CoreAppView | PluginViewKey
-
-export interface WorkQueueEntry {
-  task: Task;
-  project_name: string;
-  session_status: string | null;
-  session_checkpoint_data: string | null;
-  pull_requests: PullRequestInfo[];
-}
 
 export interface PtySpawnRequest {
   task_id: string;

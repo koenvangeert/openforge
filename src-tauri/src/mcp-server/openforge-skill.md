@@ -23,7 +23,6 @@ openforge update-task --task-id T-123 --summary "What changed and what needs att
 openforge get-task --task-id T-123
 openforge list-tasks --project-id P-1 --state doing
 openforge list-projects
-openforge work-queue --project-id P-1
 ```
 
 Use `--worktree "$PWD"` with `create-task` when the project can be inferred from the current worktree and no project id is known.

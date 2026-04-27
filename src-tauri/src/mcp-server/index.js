@@ -213,41 +213,6 @@ server.tool(
   },
 );
 
-server.tool(
-  'get_work_queue',
-  'Get work queue tasks for a project that need developer action/review.',
-  {
-    project_id: z.string().describe('Project ID to query (e.g. "P-1")'),
-  },
-  async ({ project_id }) => {
-    try {
-      const params = new URLSearchParams({ project_id });
-      const res = await fetch(`${BASE_URL}/work_queue?${params.toString()}`, {
-        method: 'GET',
-      });
-
-      if (!res.ok) {
-        const error = await res.text();
-        return { content: [{ type: 'text', text: `Failed to get work queue: HTTP ${res.status} — ${error}` }] };
-      }
-
-      const data = await res.json();
-      if (!Array.isArray(data) || data.length === 0) {
-        return { content: [{ type: 'text', text: `No work queue tasks found for project ${project_id}.` }] };
-      }
-
-      const lines = data.map(
-        (task) =>
-          `${task.id} [${task.status}] ${task.initial_prompt}${task.session_status ? ` (session: ${task.session_status})` : ''}`,
-      );
-      return { content: [{ type: 'text', text: lines.join('\n') }] };
-    } catch (e) {
-      const message = e instanceof Error ? e.message : String(e);
-      return { content: [{ type: 'text', text: `Error getting work queue: ${message}. Is Open Forge running?` }] };
-    }
-  },
-);
-
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
