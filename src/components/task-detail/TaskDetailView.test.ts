@@ -522,7 +522,7 @@ describe('TaskDetailView', () => {
     expect(get(taskActiveView).get('T-42')).toBe('plugin.b:activity')
   })
 
-  it('renders the terminal pane through the plugin task-pane slot path', async () => {
+  it('activates the terminal pane through view state when the terminal toggle is clicked', async () => {
     const { getTaskWorkspace } = await import('../../lib/ipc')
     vi.mocked(getTaskWorkspace).mockResolvedValue(createTaskWorkspaceInfo())
 
@@ -550,13 +550,17 @@ describe('TaskDetailView', () => {
     render(TaskDetailView, { props: { task: { ...baseTask, status: 'doing' }, onRunAction: mockOnRunAction } })
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /^terminal\b/i })).toBeTruthy()
+      expect(screen.getByRole('button', { name: /^terminal\b/i }).getAttribute('aria-pressed')).toBe('false')
+      expect(screen.getByRole('button', { name: /^code_view\b/i }).getAttribute('aria-pressed')).toBe('true')
     })
 
     await fireEvent.click(screen.getByRole('button', { name: /^terminal\b/i }))
 
     await waitFor(() => {
       const slotHost = document.querySelector('[data-slot-type="taskPaneTabs"]')
+      expect(get(taskActiveView).get('T-42')).toBe('com.openforge.terminal:terminal')
+      expect(screen.getByRole('button', { name: /^terminal\b/i }).getAttribute('aria-pressed')).toBe('true')
+      expect(screen.getByRole('button', { name: /^code_view\b/i }).getAttribute('aria-pressed')).toBe('false')
       expect(slotHost?.getAttribute('data-slot-id')).toBe('com.openforge.terminal:terminal')
       expect(screen.getByTestId('plugin-slot-view')).toBeTruthy()
     })

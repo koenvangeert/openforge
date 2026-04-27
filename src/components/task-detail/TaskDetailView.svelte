@@ -287,15 +287,18 @@
         <div class="flex items-center gap-1">
           <button
             class="btn btn-ghost btn-xs gap-1.5 {activeView === 'code' ? 'text-primary border border-primary' : 'text-base-content/50 border border-base-300'}"
+            aria-pressed={activeView === 'code'}
             onclick={() => setActiveView('code')}
           >code_view {#if $commandHeld}<kbd class="kbd kbd-xs opacity-50">⌘1</kbd>{/if}</button>
           <button
             class="btn btn-ghost btn-xs gap-1.5 {activeView === 'review' ? 'text-primary border border-primary' : 'text-base-content/50 border border-base-300'}"
+            aria-pressed={activeView === 'review'}
             onclick={() => setActiveView('review')}
           >review_view {#if $commandHeld}<kbd class="kbd kbd-xs opacity-50">⌘2</kbd>{/if}</button>
           {#each sortedTaskPaneTabs as tab (tab.namespacedId)}
             <button
               class="btn btn-ghost btn-xs gap-1.5 {activeView === tab.namespacedId ? 'text-primary border border-primary' : 'text-base-content/50 border border-base-300'}"
+              aria-pressed={activeView === tab.namespacedId}
               onclick={() => setActiveView(tab.namespacedId)}
             >{tab.title}{#if $commandHeld && terminalTaskPaneTab?.namespacedId === tab.namespacedId}<kbd class="kbd kbd-xs opacity-50">⌘3</kbd>{/if}</button>
           {/each}
