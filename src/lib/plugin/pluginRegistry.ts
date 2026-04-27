@@ -155,7 +155,12 @@ async function activateBuiltinPluginModule(pluginId: string, context: PluginCont
   }
 }
 
-async function activateExternalPluginModule(pluginId: string, frontendEntry: string, context: PluginContext): Promise<PluginActivationResult | null> {
+async function activateExternalPluginModule(pluginId: string, frontendEntry: string | null, context: PluginContext): Promise<PluginActivationResult | null> {
+  if (!frontendEntry) {
+    setPluginRuntimeError(pluginId, new Error(`Plugin ${pluginId} manifest is missing a frontend entry`))
+    return null
+  }
+
   const loaded = await loadPluginFrontend(pluginId, `plugin://${pluginId}/${frontendEntry}`)
   if (!loaded) return null
   return activatePluginLoader(pluginId, context)
@@ -345,7 +350,7 @@ function upsertInstalledPlugin(row: {
     description: row.description,
     permissions: JSON.parse(row.permissions),
     contributes: JSON.parse(row.contributes),
-    frontend: row.frontendEntry,
+    frontend: row.frontendEntry || null,
     backend: row.backendEntry,
   }
 
@@ -370,6 +375,10 @@ export async function installPluginFromNpm(packageName: string): Promise<void> {
 export async function installPluginFromManifest(manifest: PluginManifest, installPath: string): Promise<void> {
   if (manifest.apiVersion > MAX_SUPPORTED_API_VERSION) {
     throw new Error(`Unsupported API version: ${manifest.apiVersion}`)
+  }
+
+  if (!manifest.frontend) {
+    throw new Error('External plugins require a frontend entry')
   }
 
   await installPlugin({
@@ -406,7 +415,7 @@ export async function initializePluginRuntime(): Promise<void> {
       description: manifest.description,
       permissions: JSON.stringify(manifest.permissions),
       contributes: JSON.stringify(manifest.contributes),
-      frontendEntry: manifest.frontend,
+      frontendEntry: manifest.frontend ?? '',
       backendEntry: manifest.backend,
       installPath: `builtin:${manifest.id}`,
       installedAt: Date.now(),

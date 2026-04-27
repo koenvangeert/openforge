@@ -128,6 +128,11 @@ describe('validatePluginManifest', () => {
     expect(errors).toContainEqual(expect.objectContaining({ path: 'contributes.views[0].shortcut' }))
   })
 
+  it('accepts a null frontend entry for host-bundled built-in plugins', () => {
+    const errors = validatePluginManifest(createValidManifest({ frontend: null }))
+    expect(errors).toEqual([])
+  })
+
   it('rejects manifest without frontend entry', () => {
     const { frontend, ...noFrontend } = createValidManifest()
     const errors = validatePluginManifest(noFrontend)

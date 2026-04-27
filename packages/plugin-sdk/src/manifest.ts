@@ -328,8 +328,10 @@ export function validatePluginManifest(data: unknown): ValidationError[] {
     errors.push(...validateContributionPoints(data.contributes))
   }
 
-  if (!isString(data.frontend) || !data.frontend) {
-    errors.push({ path: 'frontend', message: 'Required string' })
+  if (data.frontend === undefined) {
+    errors.push({ path: 'frontend', message: 'Required string or null' })
+  } else if (data.frontend !== null && (!isString(data.frontend) || !data.frontend)) {
+    errors.push({ path: 'frontend', message: 'Must be a non-empty string or null' })
   }
 
   if (data.backend !== undefined && data.backend !== null && !isString(data.backend)) {
