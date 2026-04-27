@@ -128,7 +128,8 @@ pub async fn install_plugin_from_local(
         .app_data_dir()
         .map_err(|error| format!("Failed to resolve app data directory: {error}"))?;
     let source_path = PathBuf::from(source_path);
-    let plugin = crate::plugin_installation::install_local_plugin_bundle(&source_path, &app_data_dir)?;
+    let plugin =
+        crate::plugin_installation::install_local_plugin_bundle(&source_path, &app_data_dir)?;
     let db = crate::db::acquire_db(&db);
     db.install_plugin(&plugin)
         .map_err(|e| format!("Failed to install local plugin: {}", e))?;
@@ -145,7 +146,8 @@ pub async fn install_plugin_from_npm(
         .path()
         .app_data_dir()
         .map_err(|error| format!("Failed to resolve app data directory: {error}"))?;
-    let plugin = crate::plugin_installation::install_npm_plugin_bundle(&package_name, &app_data_dir).await?;
+    let plugin =
+        crate::plugin_installation::install_npm_plugin_bundle(&package_name, &app_data_dir).await?;
     let db = crate::db::acquire_db(&db);
     db.install_plugin(&plugin)
         .map_err(|e| format!("Failed to install npm plugin: {}", e))?;
@@ -261,9 +263,7 @@ fn resolve_plugin_install_root(plugin: &db::PluginRow) -> Result<PathBuf, String
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        builtin_install_path, is_known_builtin_plugin, resolve_backend_entry_path,
-    };
+    use super::{builtin_install_path, is_known_builtin_plugin, resolve_backend_entry_path};
     use std::fs;
 
     #[test]
@@ -280,8 +280,11 @@ mod tests {
     fn resolve_backend_entry_path_rejects_traversal() {
         let temp = tempfile::tempdir().expect("tempdir should create");
         let install_root = temp.path();
-        fs::write(install_root.join("backend.js"), "export async function run() {}")
-            .expect("backend file should write");
+        fs::write(
+            install_root.join("backend.js"),
+            "export async function run() {}",
+        )
+        .expect("backend file should write");
 
         let path = resolve_backend_entry_path(install_root, "backend.js")
             .expect("backend path should resolve");

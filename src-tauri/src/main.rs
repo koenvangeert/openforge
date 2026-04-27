@@ -14,8 +14,8 @@ mod mcp_installer;
 mod migration;
 mod opencode_client;
 mod pi_extension;
-mod plugin_installation;
 mod plugin_host;
+mod plugin_installation;
 mod plugin_rpc;
 pub mod providers;
 mod pty_manager;
@@ -120,8 +120,14 @@ const HOST_RUNTIME_PLUGIN_SDK_INDEX_JS: &str = include_str!("../plugin-host/plug
 
 fn host_runtime_asset(rel_path: &str) -> Option<(Vec<u8>, &'static str)> {
     match rel_path {
-        "index.html" => Some((HOST_RUNTIME_INDEX_HTML.as_bytes().to_vec(), "text/html; charset=utf-8")),
-        "runtime.js" => Some((HOST_RUNTIME_RUNTIME_JS.as_bytes().to_vec(), "application/javascript")),
+        "index.html" => Some((
+            HOST_RUNTIME_INDEX_HTML.as_bytes().to_vec(),
+            "text/html; charset=utf-8",
+        )),
+        "runtime.js" => Some((
+            HOST_RUNTIME_RUNTIME_JS.as_bytes().to_vec(),
+            "application/javascript",
+        )),
         "plugin-sdk/index.js" => Some((
             HOST_RUNTIME_PLUGIN_SDK_INDEX_JS.as_bytes().to_vec(),
             "application/javascript",
@@ -142,7 +148,10 @@ fn resolve_host_runtime_passthrough_asset_from_root(
     workspace_root: &Path,
     rel_path: &str,
 ) -> Option<(Vec<u8>, &'static str)> {
-    let svelte_src_root = workspace_root.join("node_modules").join("svelte").join("src");
+    let svelte_src_root = workspace_root
+        .join("node_modules")
+        .join("svelte")
+        .join("src");
 
     let rel = rel_path.strip_prefix("svelte/")?;
     if rel.contains("..") {
@@ -199,7 +208,9 @@ fn resolve_plugin_asset_path(
     let canonical_install_base_dir = install_base_dir
         .canonicalize()
         .map_err(|_| "Forbidden".to_string())?;
-    let canonical_candidate = candidate.canonicalize().map_err(|_| "Forbidden".to_string())?;
+    let canonical_candidate = candidate
+        .canonicalize()
+        .map_err(|_| "Forbidden".to_string())?;
 
     if !canonical_candidate.starts_with(&canonical_install_base_dir) {
         return Err("Forbidden".to_string());
@@ -214,7 +225,9 @@ fn resolve_plugin_asset_path_for_request<R: tauri::Runtime>(
     rel_path: &str,
 ) -> Result<PathBuf, String> {
     let db = app_handle.state::<Arc<Mutex<db::Database>>>();
-    let db_lock = db.lock().map_err(|_| "Failed to lock database".to_string())?;
+    let db_lock = db
+        .lock()
+        .map_err(|_| "Failed to lock database".to_string())?;
     let plugin = db_lock
         .get_plugin(plugin_id)
         .map_err(|error| format!("Failed to read plugin metadata: {}", error))?
@@ -428,7 +441,9 @@ async fn resume_task_servers(
                             (latest_session.as_ref(), result.pi_session_id.as_deref())
                         {
                             if session.pi_session_id.as_deref() != Some(pi_session_id) {
-                                if let Err(e) = db_lock.set_agent_session_pi_id(&session.id, pi_session_id) {
+                                if let Err(e) =
+                                    db_lock.set_agent_session_pi_id(&session.id, pi_session_id)
+                                {
                                     warn!(
                                         "[startup] Failed to persist resumed Pi session id for {}: {}",
                                         target.task_id, e
@@ -1017,21 +1032,23 @@ fn main() {
             let plugin_id = parts.next().unwrap_or("");
             let rel_path = parts.next().unwrap_or("");
 
-            let file_path = match resolve_plugin_asset_path_for_request(&app.app_handle(), plugin_id, rel_path) {
-                Ok(path) => path,
-                Err(error) if error == "Forbidden" => {
-                    return tauri::http::Response::builder()
-                        .status(403)
-                        .body(b"Forbidden".to_vec())
-                        .unwrap();
-                }
-                Err(error) => {
-                    return tauri::http::Response::builder()
-                        .status(403)
-                        .body(error.into_bytes())
-                        .unwrap();
-                }
-            };
+            let file_path =
+                match resolve_plugin_asset_path_for_request(&app.app_handle(), plugin_id, rel_path)
+                {
+                    Ok(path) => path,
+                    Err(error) if error == "Forbidden" => {
+                        return tauri::http::Response::builder()
+                            .status(403)
+                            .body(b"Forbidden".to_vec())
+                            .unwrap();
+                    }
+                    Err(error) => {
+                        return tauri::http::Response::builder()
+                            .status(403)
+                            .body(error.into_bytes())
+                            .unwrap();
+                    }
+                };
 
             match std::fs::read(&file_path) {
                 Ok(content) => {
@@ -1106,10 +1123,9 @@ fn main() {
 mod tests {
     use super::{
         host_runtime_asset, load_resume_targets, opencode_resume_persistence,
-        resolve_host_runtime_passthrough_asset_from_root,
-        resolve_plugin_asset_path, resolve_plugin_install_base_dir,
-        restore_resumed_session_state, should_start_project_root_server,
-        ResumeSessionPersistence, ResumeTarget,
+        resolve_host_runtime_passthrough_asset_from_root, resolve_plugin_asset_path,
+        resolve_plugin_install_base_dir, restore_resumed_session_state,
+        should_start_project_root_server, ResumeSessionPersistence, ResumeTarget,
     };
     use crate::db::test_helpers::make_test_db;
     use crate::opencode_client::SessionStatusInfo;
@@ -1386,8 +1402,11 @@ mod tests {
         let temp = tempfile::tempdir().expect("tempdir should create");
         let install_base_dir = temp.path();
         fs::create_dir_all(install_base_dir.join("assets")).expect("assets dir should create");
-        fs::write(install_base_dir.join("assets/index.js"), "export const ok = true;")
-            .expect("asset file should write");
+        fs::write(
+            install_base_dir.join("assets/index.js"),
+            "export const ok = true;",
+        )
+        .expect("asset file should write");
 
         let path = resolve_plugin_asset_path(install_base_dir, "my-plugin", "assets/index.js")
             .expect("valid plugin id should be accepted");
@@ -1400,8 +1419,11 @@ mod tests {
         let temp = tempfile::tempdir().expect("tempdir should create");
         let install_base_dir = temp.path();
         fs::create_dir_all(install_base_dir.join("assets")).expect("assets dir should create");
-        fs::write(install_base_dir.join("assets/index.js"), "export const ok = true;")
-            .expect("asset file should write");
+        fs::write(
+            install_base_dir.join("assets/index.js"),
+            "export const ok = true;",
+        )
+        .expect("asset file should write");
 
         for rel_path in ["/etc/passwd", "../outside.js"] {
             let err = resolve_plugin_asset_path(install_base_dir, "my-plugin", rel_path)
@@ -1424,8 +1446,8 @@ mod tests {
 
     #[test]
     fn host_runtime_asset_serves_runtime_js() {
-        let (content, mime_type) = host_runtime_asset("runtime.js")
-            .expect("runtime.js should be served by host runtime");
+        let (content, mime_type) =
+            host_runtime_asset("runtime.js").expect("runtime.js should be served by host runtime");
 
         assert_eq!(mime_type, "application/javascript");
         assert!(String::from_utf8_lossy(&content).contains("runtimeReady"));
@@ -1445,20 +1467,17 @@ mod tests {
     #[test]
     fn host_runtime_asset_serves_svelte_entrypoints() {
         let temp = tempfile::tempdir().expect("tempdir should create");
-        let svelte_root = temp
-            .path()
-            .join("node_modules")
-            .join("svelte")
-            .join("src");
+        let svelte_root = temp.path().join("node_modules").join("svelte").join("src");
         std::fs::create_dir_all(&svelte_root).expect("svelte src root should create");
-        std::fs::write(svelte_root.join("index.js"), "export * from './internal.js';")
-            .expect("svelte entrypoint should write");
-
-        let (content, mime_type) = resolve_host_runtime_passthrough_asset_from_root(
-            temp.path(),
-            "svelte/index.js",
+        std::fs::write(
+            svelte_root.join("index.js"),
+            "export * from './internal.js';",
         )
-        .expect("svelte index should be served by host runtime");
+        .expect("svelte entrypoint should write");
+
+        let (content, mime_type) =
+            resolve_host_runtime_passthrough_asset_from_root(temp.path(), "svelte/index.js")
+                .expect("svelte index should be served by host runtime");
 
         assert_eq!(mime_type, "application/javascript");
         assert!(String::from_utf8_lossy(&content).contains("./internal"));

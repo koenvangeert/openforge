@@ -306,7 +306,10 @@ mod tests {
         let openforge = &result["mcpServers"]["openforge"];
         assert_eq!(openforge["type"], "stdio");
         assert_eq!(openforge["command"], "node");
-        assert_eq!(openforge["args"], json!(["/opt/openforge/mcp-server/index.js"]));
+        assert_eq!(
+            openforge["args"],
+            json!(["/opt/openforge/mcp-server/index.js"])
+        );
         assert_eq!(openforge["env"]["OPENFORGE_HTTP_PORT"], "17422");
     }
 
