@@ -144,6 +144,13 @@ describe('getGlobalActions', () => {
 
     expect(newTask?.shortcut).toBe('⌘N')
   })
+
+  it('uses CMD+SHIFT+P for Switch Project', () => {
+    const actions = getGlobalActions()
+    const switchProject = actions.find(action => action.id === 'switch-project')
+
+    expect(switchProject?.shortcut).toBe('⌘⇧P')
+  })
 })
 
 describe('getAvailableActions', () => {

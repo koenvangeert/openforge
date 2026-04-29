@@ -598,7 +598,7 @@
 
     shortcuts.register('⌘k', openActionPalette)
 
-    shortcuts.register('⌘p', () => {
+    shortcuts.register('⌘⇧p', () => {
       showProjectSwitcher = !showProjectSwitcher
     })
 
@@ -1152,7 +1152,7 @@
         <div class="flex flex-col gap-2">
           <div class="flex items-center justify-between">
             <span class="text-sm text-base-content">Switch project</span>
-            <kbd class="kbd kbd-sm">⌘P</kbd>
+            <div class="flex gap-0.5"><kbd class="kbd kbd-sm">⌘</kbd><kbd class="kbd kbd-sm">⇧</kbd><kbd class="kbd kbd-sm">P</kbd></div>
           </div>
           <div class="flex items-center justify-between">
             <span class="text-sm text-base-content">New task</span>

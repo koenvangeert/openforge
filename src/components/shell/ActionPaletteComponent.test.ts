@@ -99,7 +99,7 @@ describe('ActionPalette component', () => {
 
     expect(screen.getByText('⌘K')).toBeTruthy()
     expect(screen.getByText('⌘⇧F')).toBeTruthy()
-    expect(screen.queryByText('⌘⇧P')).toBeNull()
+    expect(screen.getByText('⌘⇧P')).toBeTruthy()
   })
 
   it('shows Merge Pull Request when the selected task has a merge-ready PR', async () => {
