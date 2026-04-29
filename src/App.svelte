@@ -1,16 +1,14 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte'
-  import { listen } from '@tauri-apps/api/event'
-  import type { UnlistenFn, Event } from '@tauri-apps/api/event'
+  import type { UnlistenFn } from '@tauri-apps/api/event'
   import { getCurrentWindow } from '@tauri-apps/api/window'
-  import { tasks, pendingTask, selectedTaskId, activeSessions, checkpointNotification, ciFailureNotification, ticketPrs, error, isLoading, projects, activeProjectId, currentView, reviewRequestCount, authoredPrCount, projectAttention, taskSpawned, startingTasks, codeCleanupTasksEnabled, rateLimitNotification, taskRuntimeInfo, focusBoardFilters } from './lib/stores'
-  import { getProjects, getTasksForProject, getPullRequests, startImplementation, getSessionStatus, getLatestSession, getLatestSessions, forceGithubSync, deleteTask, getProjectAttention, getAppMode, finalizeClaudeSession, getConfig, getProjectConfig, getReviewPrs, getAuthoredPrs, getTaskDetail, mergePullRequest } from './lib/ipc'
+  import { tasks, pendingTask, selectedTaskId, activeSessions, ticketPrs, error, isLoading, projects, activeProjectId, currentView, reviewRequestCount, authoredPrCount, projectAttention, startingTasks, codeCleanupTasksEnabled, taskRuntimeInfo, focusBoardFilters } from './lib/stores'
+  import { getProjects, getTasksForProject, getPullRequests, startImplementation, getSessionStatus, getLatestSessions, forceGithubSync, deleteTask, getProjectAttention, getAppMode, getConfig, getProjectConfig, getReviewPrs, getAuthoredPrs, mergePullRequest } from './lib/ipc'
   import { writePtyWithSubmit } from './lib/ptySubmit'
   import { applyProjectOrder } from './lib/projectOrder'
   import { hasMergeConflicts, preservePullRequestState, isQueuedForMerge, isReadyToMerge } from './lib/types'
-  import type { Task, PullRequestInfo, AgentEvent, ProjectAttention, AppView, AgentSession } from './lib/types'
+  import type { Task, PullRequestInfo, ProjectAttention, AppView } from './lib/types'
   import { moveTaskToComplete } from './lib/moveToComplete'
-  import { getTaskPromptText } from './lib/taskPrompt'
   import FocusBoard from './components/focus-board/FocusBoard.svelte'
   import TaskDetailView from './components/task-detail/TaskDetailView.svelte'
   import AddTaskDialog from './components/AddTaskDialog.svelte'
@@ -39,11 +37,13 @@
   import { getProjectColor } from './lib/projectColors'
   import { themeMode } from './lib/theme'
   import type { Action } from './lib/types'
-  import { release as releaseTerminal, isPtyActive, focusTerminal } from './lib/terminalPool'
+  import { isPtyActive, focusTerminal } from './lib/terminalPool'
   import { useCommandHeld } from './lib/useCommandHeld.svelte'
-  import { getOpenCodeSessionUpdate } from './lib/opencodeSessionEvents'
   import { useShortcutRegistry } from './lib/shortcuts.svelte'
   import { ICON_RAIL_HIDDEN_VIEWS, getViews } from './lib/views'
+  import { registerAppShortcuts } from './lib/appShortcuts'
+  import { registerAppTauriEventListeners } from './lib/appTauriEventListeners'
+  import { loadAppStartupData } from './lib/appStartup'
   
   let unlisteners: UnlistenFn[] = []
   let showAddDialog = $state(false)
@@ -285,23 +285,6 @@
       $activeSessions = updated
     } catch (e) {
       console.error('Failed to load sessions:', e)
-    }
-  }
-
-  async function getOrLoadActiveSession(taskId: string): Promise<AgentSession | null> {
-    const existing = $activeSessions.get(taskId)
-    if (existing) return existing
-
-    try {
-      const fetched = await getLatestSession(taskId)
-      if (!fetched) return null
-
-      const updated = new Map($activeSessions)
-      updated.set(taskId, fetched)
-      $activeSessions = updated
-      return fetched
-    } catch {
-      return null
     }
   }
 
@@ -592,414 +575,50 @@
     window.addEventListener('keydown', handleKeydown)
     unlisteners.push(() => window.removeEventListener('keydown', handleKeydown))
 
-    shortcuts.register('?', () => {
-      showShortcutsDialog = true
-    })
-
-    shortcuts.register('⌘k', openActionPalette)
-
-    shortcuts.register('⌘⇧p', () => {
-      showProjectSwitcher = !showProjectSwitcher
-    })
-
-    shortcuts.register('⌘b', () => {
-      appSidebarCollapsed = !appSidebarCollapsed
-      localStorage.setItem('appSidebarCollapsed', String(appSidebarCollapsed))
-    })
-
-    shortcuts.register('⌘n', () => {
-      if (!showAddDialog) {
-        editingTask = null
-        showAddDialog = true
-      }
-    })
-
-    shortcuts.register('⌘[', () => { router.back() })
-    shortcuts.register('⌘arrowleft', () => { router.back() })
-    shortcuts.register('⌃[', () => { router.back() })
-    shortcuts.register('⌃arrowleft', () => { router.back() })
-
-    shortcuts.register('⌘d', () => {
-      window.dispatchEvent(new CustomEvent('toggle-voice-recording'))
-    })
-    shortcuts.register('⌃d', () => {
-      window.dispatchEvent(new CustomEvent('toggle-voice-recording'))
-    })
-
-    shortcuts.register('⌘⇧f', () => {
-      showCommandPalette = !showCommandPalette
-    })
-
-    shortcuts.register('⌘⇧o', () => {
-      if (showCommandPalette || showProjectSwitcher || showActionPalette || showShortcutsDialog) return
-      showFileQuickOpen = !showFileQuickOpen
-    })
-    shortcuts.register('⌃⇧o', () => {
-      if (showCommandPalette || showProjectSwitcher || showActionPalette || showShortcutsDialog) return
-      showFileQuickOpen = !showFileQuickOpen
-    })
-
-    shortcuts.register('⌘h', () => {
-      router.resetToBoard()
-    })
-
-    shortcuts.register('⌘,', () => {
-      handleNavigate('settings')
-    })
-
-    shortcuts.register('⌃n', () => {
-      cycleActiveProject('next', { boardOnly: true })
-    })
-
-    shortcuts.register('⌃p', () => {
-      cycleActiveProject('previous', { boardOnly: true })
-    })
-
-    shortcuts.register('1', () => {
-      cycleActiveProject('previous')
-    })
-
-    shortcuts.register('2', () => {
-      cycleActiveProject('next')
-    })
-
-    unlisteners.push(
-      await appWindow.onCloseRequested(handleCloseRequested)
-    )
-
-    // Phase 1: Register ALL event listeners
-
-    unlisteners.push(
-      await listen('github-sync-complete', () => {
-        loadPullRequests()
-        loadProjectAttention()
-      })
-    )
-
-    unlisteners.push(
-      await listen('review-status-changed', (event) => {
-        loadPullRequests()
-      })
-    )
-
-    unlisteners.push(
-      await listen<{ task_id: string }>('action-complete', async (event: Event<{ task_id: string }>) => {
-        const taskId = event.payload.task_id
-        const session = await getOrLoadActiveSession(taskId)
-        if (session && session.status !== 'completed') {
-          const updated = new Map($activeSessions)
-          updated.set(taskId, { ...session, status: 'completed', checkpoint_data: null })
-          $activeSessions = updated
+    registerAppShortcuts(shortcuts, {
+      showShortcuts: () => { showShortcutsDialog = true },
+      openActionPalette,
+      toggleProjectSwitcher: () => { showProjectSwitcher = !showProjectSwitcher },
+      toggleSidebar: () => {
+        appSidebarCollapsed = !appSidebarCollapsed
+        localStorage.setItem('appSidebarCollapsed', String(appSidebarCollapsed))
+      },
+      openNewTaskDialog: () => {
+        if (!showAddDialog) {
+          editingTask = null
+          showAddDialog = true
         }
-        if ($checkpointNotification?.ticketId === taskId) {
-          $checkpointNotification = null
-        }
-        loadTasks()
-        loadProjectAttention()
-      })
-    )
+      },
+      goBack: () => { router.back() },
+      toggleVoiceRecording: () => { window.dispatchEvent(new CustomEvent('toggle-voice-recording')) },
+      toggleCommandPalette: () => { showCommandPalette = !showCommandPalette },
+      toggleFileQuickOpen: () => { showFileQuickOpen = !showFileQuickOpen },
+      canToggleFileQuickOpen: () => !showCommandPalette && !showProjectSwitcher && !showActionPalette && !showShortcutsDialog,
+      resetToBoard: () => { router.resetToBoard() },
+      navigateToSettings: () => { handleNavigate('settings') },
+      cycleActiveProject,
+    })
 
-    unlisteners.push(
-      await listen<{ task_id: string; error: string }>('implementation-failed', (event: Event<{ task_id: string; error: string }>) => {
-        const taskId = event.payload.task_id
-        const session = $activeSessions.get(taskId)
-        if (session) {
-          // Guard: only update if status is not already 'failed'
-          if (session.status === 'failed') return
-          const updated = new Map($activeSessions)
-          updated.set(taskId, { ...session, status: 'failed', error_message: event.payload.error })
-          $activeSessions = updated
-        }
-        if ($checkpointNotification?.ticketId === taskId) {
-          $checkpointNotification = null
-        }
-        loadTasks()
-        loadProjectAttention()
-      })
-    )
+    unlisteners.push(...await registerAppTauriEventListeners({
+      appWindow,
+      onCloseRequested: handleCloseRequested,
+      loadTasks,
+      loadSessions,
+      loadPullRequests,
+      loadProjectAttention,
+      refreshPrCounts,
+    }))
 
-    unlisteners.push(
-      await listen<{ task_id: string; port: number; workspace_path: string }>('server-resumed', async (event: Event<{ task_id: string; port: number; workspace_path: string }>) => {
-        const taskId = event.payload.task_id
-        const updatedRuntimeInfo = new Map($taskRuntimeInfo)
-        updatedRuntimeInfo.set(taskId, {
-          workspacePath: event.payload.workspace_path,
-          opencodePort: event.payload.port || null,
-        })
-        $taskRuntimeInfo = updatedRuntimeInfo
-
-        try {
-          const session = await getLatestSession(taskId)
-          if (session) {
-            const updated = new Map($activeSessions)
-            updated.set(taskId, session)
-            $activeSessions = updated
-          }
-        } catch (e) {
-          console.error('[startup] Failed to load session after server resume for task:', taskId, e)
-        }
-      })
-    )
-
-    unlisteners.push(
-      await listen('startup-resume-complete', () => {
-        loadSessions()
-      })
-    )
-
-    unlisteners.push(
-      await listen('new-pr-comment', (event) => {
-        loadTasks()
-        loadPullRequests()
-        loadProjectAttention()
-      })
-    )
-
-    unlisteners.push(
-      await listen('comment-addressed', () => {
-        loadPullRequests()
-        loadProjectAttention()
-      })
-    )
-
-    unlisteners.push(
-      await listen<{ task_id: string, pr_id: number, pr_title: string, ci_status: string, timestamp: number }>('ci-status-changed', (event) => {
-        if (event.payload.ci_status === 'failure') {
-          const session = $activeSessions.get(event.payload.task_id)
-          if (!session || session.status !== 'running') {
-            $ciFailureNotification = {
-              task_id: event.payload.task_id,
-              pr_id: event.payload.pr_id,
-              pr_title: event.payload.pr_title,
-              ci_status: event.payload.ci_status,
-              timestamp: event.payload.timestamp,
-            }
-          }
-        }
-        loadPullRequests()
-        loadProjectAttention()
-      })
-    )
-
-    unlisteners.push(
-      await listen<AgentEvent>('agent-event', async (event: Event<AgentEvent>) => {
-        const { task_id: taskId, event_type: eventType } = event.payload
-        const session = await getOrLoadActiveSession(taskId)
-        if (!session) return
-
-        const sessionUpdate = getOpenCodeSessionUpdate(eventType, event.payload.data)
-        if (!sessionUpdate) {
-          loadProjectAttention()
-          return
-        }
-
-        if (sessionUpdate.status === 'paused') {
-          if (session.status === 'paused' && session.checkpoint_data === sessionUpdate.checkpoint_data) return
-
-          const updated = new Map($activeSessions)
-          updated.set(taskId, { ...session, ...sessionUpdate })
-          $activeSessions = updated
-
-          const task = $tasks.find(t => t.id === taskId)
-          $checkpointNotification = {
-            ticketId: taskId,
-            ticketKey: task?.id ?? null,
-            sessionId: session.id,
-            stage: session.stage,
-            message: 'Agent needs input',
-            timestamp: Date.now(),
-          }
-        } else {
-          if (
-            session.status === sessionUpdate.status &&
-            session.checkpoint_data === sessionUpdate.checkpoint_data &&
-            session.error_message === sessionUpdate.error_message
-          ) {
-            loadProjectAttention()
-            return
-          }
-
-          const updated = new Map($activeSessions)
-          updated.set(taskId, { ...session, ...sessionUpdate })
-          $activeSessions = updated
-
-          if ($checkpointNotification?.ticketId === taskId) {
-            $checkpointNotification = null
-          }
-        }
-
-        loadProjectAttention()
-      })
-    )
-
-    unlisteners.push(
-      await listen<{ ticket_id: string; session_id: string }>('session-aborted', (event: Event<{ ticket_id: string; session_id: string }>) => {
-        const updated = new Map($activeSessions)
-        updated.delete(event.payload.ticket_id)
-        $activeSessions = updated
-        releaseTerminal(event.payload.ticket_id)
-        if ($checkpointNotification?.ticketId === event.payload.ticket_id) {
-          $checkpointNotification = null
-        }
-        loadProjectAttention()
-      })
-    )
-
-    // Claude Code hooks → frontend status updates
-    unlisteners.push(
-      await listen<{ task_id: string; status: string }>('agent-status-changed', async (event: Event<{ task_id: string; status: string }>) => {
-        const { task_id: taskId, status } = event.payload
-        let session = $activeSessions.get(taskId)
-        if (!session) {
-          // Session not in store yet (e.g. resumed at startup before frontend loaded sessions)
-          try {
-            const fetched = await getLatestSession(taskId)
-            if (fetched) {
-              session = fetched
-              const updated = new Map($activeSessions)
-              updated.set(taskId, fetched)
-              $activeSessions = updated
-            } else {
-              return
-            }
-          } catch {
-            return
-          }
-        }
-
-        if (status === 'completed') {
-          if (session.status === 'completed') return
-          const updated = new Map($activeSessions)
-          updated.set(taskId, { ...session, status: 'completed' })
-          $activeSessions = updated
-          if ($checkpointNotification?.ticketId === taskId) {
-            $checkpointNotification = null
-          }
-          loadTasks()
-        } else if (status === 'running') {
-          if (session.status === 'running') return
-          const updated = new Map($activeSessions)
-          updated.set(taskId, { ...session, status: 'running', checkpoint_data: null })
-          $activeSessions = updated
-          if ($checkpointNotification?.ticketId === taskId) {
-            $checkpointNotification = null
-          }
-        } else if (status === 'paused') {
-          if (session.status === 'paused') return
-          const updated = new Map($activeSessions)
-          updated.set(taskId, { ...session, status: 'paused' })
-          $activeSessions = updated
-          const task = $tasks.find(t => t.id === taskId)
-          $checkpointNotification = {
-            ticketId: taskId,
-            ticketKey: task?.id ?? null,
-            sessionId: session.id,
-            stage: session.stage,
-            message: 'Agent needs permission',
-            timestamp: Date.now(),
-          }
-        } else if (status === 'interrupted') {
-          if (session.status === 'interrupted') return
-          const updated = new Map($activeSessions)
-          updated.set(taskId, { ...session, status: 'interrupted' })
-          $activeSessions = updated
-          if ($checkpointNotification?.ticketId === taskId) {
-            $checkpointNotification = null
-          }
-          loadTasks()
-        }
-        loadProjectAttention()
-      })
-    )
-
-    // PTY exit fallback for terminal-backed agents — if no status hook fired, mark session interrupted
-    unlisteners.push(
-      await listen<{ task_id: string; success: boolean }>('agent-pty-exited', (event: Event<{ task_id: string; success: boolean }>) => {
-        const taskId = event.payload.task_id
-        const success = event.payload.success
-        setTimeout(async () => {
-          try {
-            await finalizeClaudeSession(taskId, success)
-          } catch (e) {
-            console.error('[pty-exit] Failed to finalize session for task:', taskId, e)
-          }
-        }, 1500)
-      })
-    )
-
-    unlisteners.push(
-      await listen<number>('review-pr-count-changed', () => {
-        refreshPrCounts()
-      })
-    )
-
-    unlisteners.push(
-      await listen('authored-prs-updated', () => {
-        refreshPrCounts()
-      })
-    )
-
-    unlisteners.push(
-      await listen<{ reset_at: number | null }>('github-rate-limited', (event) => {
-        $rateLimitNotification = {
-          reset_at: event.payload.reset_at,
-          timestamp: Date.now(),
-        }
-      })
-    )
-
-    unlisteners.push(
-      await listen<{ action: string; task_id: string }>('task-changed', async (event) => {
-        if (event.payload.action === 'deleted') {
-          const taskId = event.payload.task_id
-          const updated = new Map($activeSessions)
-          updated.delete(taskId)
-          $activeSessions = updated
-          releaseTerminal(taskId)
-          if ($checkpointNotification?.ticketId === taskId) {
-            $checkpointNotification = null
-          }
-        } else if (event.payload.action === 'created') {
-          try {
-            const task = await getTaskDetail(event.payload.task_id)
-            $taskSpawned = { taskId: task.id, promptText: getTaskPromptText(task) }
-          } catch (e) {
-            console.error('Failed to load created task for toast:', e)
-          }
-        }
-        await loadTasks()
-      })
-    )
-
-    // Phase 2: Load data
-    try {
-      await initializePluginRuntime()
-    } catch (e) {
-      console.error('[App] Failed to initialize plugin runtime:', e)
-    }
-    await loadProjects()
-
-    try {
-      appMode = await getAppMode()
-    } catch (e) {
-      console.error('[App] Failed to get app mode:', e)
-      // Graceful degradation: no badge shown if call fails
-    }
-
-    try {
-      const codeCleanupVal = await getConfig('code_cleanup_tasks_enabled')
-      $codeCleanupTasksEnabled = codeCleanupVal === 'true'
-    } catch (e) {
-      console.error('[App] Failed to load code_cleanup_tasks_enabled config:', e)
-    }
-    loadProjectAttention()
-
-    // PR counts are initialized by the $effect that calls refreshPrCounts()
-    // when $activeProjectId is set — no separate unfiltered init needed.
-
-    // Phase 3: Safety net
-    await loadTasks()
-
+    await loadAppStartupData({
+      initializePluginRuntime,
+      loadProjects,
+      getAppMode,
+      getConfig,
+      setAppMode: (mode) => { appMode = mode },
+      setCodeCleanupTasksEnabled: (enabled) => { $codeCleanupTasksEnabled = enabled },
+      loadProjectAttention,
+      loadTasks,
+    })
   })
 
   onDestroy(() => {
