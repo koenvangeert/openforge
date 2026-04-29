@@ -11,4 +11,5 @@ bun.lock
 .a5c/creds.env.tmp.*
 .a5c/logs/
 .a5c/runs/
+.a5c/cache/
 # --- end babysitter managed ---

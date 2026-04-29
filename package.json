@@ -6,6 +6,7 @@
   "scripts": {
     "build:plugin-sdk-runtime": "node scripts/build-plugin-sdk-runtime.mjs",
     "build:plugins": "pnpm -r --filter './plugins/*' --if-present build",
+    "dev:plugin-artifacts": "node scripts/build-dev-plugin-artifacts.mjs",
     "dev": "vite",
     "build": "pnpm build:plugin-sdk-runtime && vite build",
     "lint": "node scripts/check-svelte-unused-imports.mjs",

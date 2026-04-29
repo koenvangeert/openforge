@@ -3,7 +3,7 @@
   "version": "0.0.1",
   "identifier": "com.opencode.openforge",
   "build": {
-    "beforeDevCommand": "pnpm build:plugin-sdk-runtime && pnpm build:plugins && pnpm dev",
+    "beforeDevCommand": "pnpm dev:plugin-artifacts && pnpm dev",
     "devUrl": "http://localhost:1420",
     "beforeBuildCommand": "pnpm build:plugins && pnpm build",
     "frontendDist": "../dist"

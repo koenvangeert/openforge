@@ -14,10 +14,10 @@ type TauriConfig = {
 }
 
 describe('Tauri plugin build hooks', () => {
-  it('builds plugin packages before Tauri dev and production builds', () => {
+  it('uses incremental plugin artifact builds for dev and full plugin builds for production', () => {
     const tauriConfig = JSON.parse(readFileSync(tauriConfigPath, 'utf8')) as TauriConfig
 
-    expect(tauriConfig.build?.beforeDevCommand).toContain('pnpm build:plugins &&')
+    expect(tauriConfig.build?.beforeDevCommand).toBe('pnpm dev:plugin-artifacts && pnpm dev')
     expect(tauriConfig.build?.beforeBuildCommand).toContain('pnpm build:plugins &&')
   })
 })

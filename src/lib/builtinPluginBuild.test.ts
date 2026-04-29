@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest'
 
 const currentDir = dirname(fileURLToPath(import.meta.url))
 const packageJsonPath = join(currentDir, '../../package.json')
+const tauriConfigPath = join(currentDir, '../../src-tauri/tauri.conf.json')
 const rootDir = join(currentDir, '../..')
 const builtinPluginDirs = ['file-viewer', 'skills-viewer', 'github-sync', 'terminal']
 
@@ -29,6 +30,12 @@ type RootPackageJson = {
   scripts?: Record<string, string>
 }
 
+type TauriConfig = {
+  build?: {
+    beforeDevCommand?: string
+  }
+}
+
 describe('plugin build orchestration', () => {
   it('builds any plugin package that still defines a build script without requiring host-bundled built-ins to build', () => {
     const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf8')) as RootPackageJson
@@ -36,6 +43,14 @@ describe('plugin build orchestration', () => {
     expect(packageJson.scripts?.['build:plugins']).toBeDefined()
     expect(packageJson.scripts?.['build:plugins']).toContain("--filter './plugins/*'")
     expect(packageJson.scripts?.['build:plugins']).toContain('--if-present')
+  })
+
+  it('uses the incremental plugin artifact builder during Tauri dev startup', () => {
+    const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf8')) as RootPackageJson
+    const tauriConfig = JSON.parse(readFileSync(tauriConfigPath, 'utf8')) as TauriConfig
+
+    expect(packageJson.scripts?.['dev:plugin-artifacts']).toBe('node scripts/build-dev-plugin-artifacts.mjs')
+    expect(tauriConfig.build?.beforeDevCommand).toBe('pnpm dev:plugin-artifacts && pnpm dev')
   })
 
   it('keeps builtin plugin feature code inside plugin packages instead of importing src internals', () => {
