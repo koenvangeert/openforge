@@ -1394,6 +1394,18 @@ describe('App onMount initialization order', () => {
       expect(screen.getByText('Keyboard Shortcuts')).toBeTruthy()
     })
 
+    it('shows the registered file quick-open shortcut in keyboard shortcuts help', async () => {
+      const App = (await import('./App.svelte')).default
+
+      render(App)
+
+      await fireEvent.keyDown(window, { key: '?', shiftKey: true, bubbles: true })
+
+      const filesRow = screen.getByText('Files').closest('div')
+
+      expect(filesRow?.textContent).toContain('⌘⇧O')
+    })
+
     it('prevents window close requests and shows a confirmation modal', async () => {
       const App = (await import('./App.svelte')).default
 

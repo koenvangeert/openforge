@@ -1172,7 +1172,7 @@
           </div>
           <div class="flex items-center justify-between">
             <span class="text-sm text-base-content">Files</span>
-            <kbd class="kbd kbd-sm">⌘O</kbd>
+            <div class="flex gap-0.5"><kbd class="kbd kbd-sm">⌘</kbd><kbd class="kbd kbd-sm">⇧</kbd><kbd class="kbd kbd-sm">O</kbd></div>
           </div>
           <div class="flex items-center justify-between">
             <span class="text-sm text-base-content">Search tasks</span>
