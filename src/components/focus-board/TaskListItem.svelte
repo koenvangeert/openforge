@@ -2,7 +2,7 @@
   import type { Task, AgentSession, PullRequestInfo } from '../../lib/types'
   import type { TaskState } from '../../lib/taskState'
   import { getStateDrivingPr } from '../../lib/taskState'
-  import { TASK_STATE_COMPACT_LABELS, getTaskStateBadgeClass } from '../../lib/taskStatePresentation'
+  import { getTaskListItemPresentation, getTaskStateBadgeClass } from '../../lib/taskStatePresentation'
   import { timeAgoFromSeconds } from '../../lib/timeAgo'
   import { getTaskTitle } from '../../lib/taskTitle'
 
@@ -14,18 +14,19 @@
     reasonText: string
     isSelected: boolean
     isFocused: boolean
+    isMerging: boolean
     onSelect: () => void
     onContextMenu: (e: MouseEvent) => void
   }
 
-  let { task, state, session, pullRequests, reasonText, isSelected, isFocused, onSelect, onContextMenu }: Props = $props()
+  let { task, state, session, pullRequests, reasonText, isSelected, isFocused, isMerging, onSelect, onContextMenu }: Props = $props()
 
   function truncate(text: string, max: number): string {
     return text.length > max ? text.slice(0, max) + '...' : text
   }
   let title = $derived(truncate(getTaskTitle(task), 80))
   let badgeClass = $derived(getTaskStateBadgeClass(state))
-  let stateLabel = $derived(TASK_STATE_COMPACT_LABELS[state] ?? state)
+  let presentation = $derived(getTaskListItemPresentation(state, reasonText, isMerging))
   let firstPr = $derived(getStateDrivingPr(pullRequests))
 </script>
 
@@ -51,7 +52,12 @@
 >
   <div class="flex items-center gap-1.5">
     <span class="font-mono text-xs font-semibold text-primary">{task.id}</span>
-    <span class="badge badge-xs {badgeClass}">{stateLabel}</span>
+    <span class="badge badge-xs {badgeClass}">
+      {#if isMerging}
+        <span class="loading loading-spinner loading-xs" aria-hidden="true"></span>
+      {/if}
+      {presentation.stateLabel}
+    </span>
     <span class="font-mono text-xs text-base-content/50 ml-auto">{timeAgoFromSeconds(task.updated_at)}</span>
   </div>
 
@@ -59,8 +65,8 @@
     {title}
   </div>
 
-  {#if reasonText}
-    <div class="text-xs text-base-content/60 truncate">{reasonText}</div>
+  {#if presentation.reasonText}
+    <div class="text-xs text-base-content/60 truncate">{presentation.reasonText}</div>
   {/if}
 
   {#if firstPr}

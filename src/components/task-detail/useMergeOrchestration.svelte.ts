@@ -1,5 +1,5 @@
 import { getPullRequests, mergePullRequest, forceGithubSync } from '../../lib/ipc'
-import { ticketPrs } from '../../lib/stores'
+import { setTaskMerging, ticketPrs } from '../../lib/stores'
 import { preservePullRequestState } from '../../lib/types'
 import type { PullRequestInfo } from '../../lib/types'
 
@@ -53,6 +53,7 @@ export function useMergeOrchestration() {
 
   async function handleMerge(taskId: string, pr: PullRequestInfo) {
     mergingPrId = pr.id
+    setTaskMerging(taskId, true)
     setMergeFeedback(pr.id, null)
 
     try {
@@ -95,6 +96,7 @@ export function useMergeOrchestration() {
       })
     } finally {
       mergingPrId = null
+      setTaskMerging(taskId, false)
     }
   }
 

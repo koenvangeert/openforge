@@ -19,6 +19,18 @@ export const ciFailureNotification = writable<CiFailureNotification | null>(null
 export const rateLimitNotification = writable<RateLimitNotification | null>(null);
 export const taskSpawned = writable<{ taskId: string; promptText: string } | null>(null);
 export const ticketPrs = writable<Map<string, PullRequestInfo[]>>(new Map());
+export const mergingTaskIds = writable<Set<string>>(new Set());
+export function setTaskMerging(taskId: string, isMerging: boolean): void {
+  mergingTaskIds.update((current) => {
+    const next = new Set(current);
+    if (isMerging) {
+      next.add(taskId);
+    } else {
+      next.delete(taskId);
+    }
+    return next;
+  });
+}
 export const isLoading = writable(false);
 export const error = writable<string | null>(null);
 export const projects = writable<Project[]>([]);

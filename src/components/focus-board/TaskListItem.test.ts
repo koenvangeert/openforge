@@ -51,6 +51,7 @@ const baseProps = {
   reasonText: 'Agent is running.',
   isSelected: false,
   isFocused: false,
+  isMerging: false,
   onSelect: vi.fn(),
   onContextMenu: vi.fn(),
 }

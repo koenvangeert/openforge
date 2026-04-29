@@ -1,6 +1,6 @@
 <script lang="ts">
   import { untrack } from 'svelte'
-  import { focusBoardFilters } from '../../lib/stores'
+  import { focusBoardFilters, mergingTaskIds } from '../../lib/stores'
   import { filterTasks, getFilterCounts, DEFAULT_FOCUS_STATES, loadFocusFilterStates } from '../../lib/boardFilters'
   import type { BoardFilter } from '../../lib/boardFilters'
   import { getTaskReasonText } from '../../lib/taskStatePresentation'
@@ -221,6 +221,7 @@
             reasonText={getTaskReasonText(state, pullRequests)}
             isSelected={selectedTaskIdLocal === task.id}
             isFocused={vim.focusedIndex === i}
+            isMerging={$mergingTaskIds.has(task.id)}
             onSelect={() => {
               if (selectedTaskIdLocal === task.id) {
                 onOpenTask(task.id)

@@ -4,11 +4,13 @@ import { writable } from 'svelte/store'
 import { requireElement } from '../../test-utils/dom'
 import TaskInfoPanel from './TaskInfoPanel.svelte'
 import type { Task, PullRequestInfo } from '../../lib/types'
-import { ticketPrs } from '../../lib/stores'
+import { mergingTaskIds, ticketPrs } from '../../lib/stores'
 import { forceGithubSync, getPullRequests, mergePullRequest } from '../../lib/ipc'
 
 vi.mock('../../lib/stores', () => ({
   ticketPrs: writable(new Map()),
+  mergingTaskIds: writable(new Set()),
+  setTaskMerging: vi.fn(),
 }))
 
 vi.mock('../../lib/ipc', () => ({
@@ -46,6 +48,7 @@ const baseTask: Task = {
 describe('TaskInfoPanel', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mergingTaskIds.set(new Set())
     ticketPrs.set(new Map())
     vi.mocked(getPullRequests).mockResolvedValue([])
   })
@@ -380,6 +383,23 @@ describe('TaskInfoPanel', () => {
     const mergeButton = requireElement(await screen.findByRole('button', { name: 'Merging...' }), HTMLButtonElement)
     expect(mergeButton.disabled).toBe(true)
     resolveMerge?.()
+  })
+
+  it('shows loading state when the task is merging from an external action', async () => {
+    const readyPr = createPullRequest({
+      ci_status: 'success',
+      review_status: 'approved',
+      mergeable: true,
+      mergeable_state: 'clean',
+    })
+
+    mergingTaskIds.set(new Set(['T-42']))
+    ticketPrs.set(new Map([['T-42', [readyPr]]]))
+
+    render(TaskInfoPanel, { props: { task: baseTask, workspacePath: null } })
+
+    const mergeButton = requireElement(await screen.findByRole('button', { name: 'Merging...' }), HTMLButtonElement)
+    expect(mergeButton.disabled).toBe(true)
   })
 
   it('disables other merge buttons while a merge is in progress for the same task', async () => {

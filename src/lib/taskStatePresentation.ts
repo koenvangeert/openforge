@@ -48,6 +48,29 @@ export const TASK_STATE_COMPACT_LABELS: Record<TaskState, string> = {
   'merge-conflict': 'Merge Conflict',
 }
 
+export interface TaskListItemPresentation {
+  stateLabel: string
+  reasonText: string
+}
+
+export function getTaskListItemPresentation(
+  state: TaskState,
+  reasonText: string,
+  isMerging: boolean,
+): TaskListItemPresentation {
+  if (isMerging) {
+    return {
+      stateLabel: 'Merging...',
+      reasonText: 'Pull request merge is in progress.',
+    }
+  }
+
+  return {
+    stateLabel: TASK_STATE_COMPACT_LABELS[state] ?? state,
+    reasonText,
+  }
+}
+
 export function getTaskStateBadgeClass(state: TaskState): string {
   switch (state) {
     case 'active': return 'badge-success'

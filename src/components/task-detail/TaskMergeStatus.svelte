@@ -2,6 +2,7 @@
   import type { Task, PullRequestInfo } from '../../lib/types'
   import { hasMergeConflicts, isReadyToMerge, isQueuedForMerge } from '../../lib/types'
   import { getPrStatusChips } from '../../lib/prStatusPresentation'
+  import { mergingTaskIds } from '../../lib/stores'
   import { useMergeOrchestration } from './useMergeOrchestration.svelte'
   import PrStatusChip from '../shared/ui/PrStatusChip.svelte'
 
@@ -80,10 +81,10 @@
           <div class="mt-1.5 flex items-center gap-2">
             <button
               class="btn btn-success btn-xs"
-              disabled={orchestration.mergingPrId !== null}
+              disabled={orchestration.mergingPrId !== null || $mergingTaskIds.has(task.id)}
               onclick={() => orchestration.handleMerge(task.id, pr)}
             >
-              {#if orchestration.mergingPrId === pr.id}
+              {#if orchestration.mergingPrId === pr.id || $mergingTaskIds.has(task.id)}
                 <span class="loading loading-spinner loading-xs"></span>
                 Merging...
               {:else}

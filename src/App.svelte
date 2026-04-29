@@ -2,7 +2,7 @@
   import { onMount, onDestroy } from 'svelte'
   import type { UnlistenFn } from '@tauri-apps/api/event'
   import { getCurrentWindow } from '@tauri-apps/api/window'
-  import { tasks, pendingTask, selectedTaskId, activeSessions, ticketPrs, error, isLoading, projects, activeProjectId, currentView, reviewRequestCount, authoredPrCount, projectAttention, startingTasks, codeCleanupTasksEnabled, taskRuntimeInfo, focusBoardFilters } from './lib/stores'
+  import { tasks, pendingTask, selectedTaskId, activeSessions, ticketPrs, error, isLoading, projects, activeProjectId, currentView, reviewRequestCount, authoredPrCount, projectAttention, startingTasks, codeCleanupTasksEnabled, taskRuntimeInfo, focusBoardFilters, setTaskMerging } from './lib/stores'
   import { getProjects, getTasksForProject, getPullRequests, startImplementation, getSessionStatus, getLatestSessions, forceGithubSync, deleteTask, getProjectAttention, getAppMode, getConfig, getProjectConfig, getReviewPrs, getAuthoredPrs, mergePullRequest } from './lib/ipc'
   import { writePtyWithSubmit } from './lib/ptySubmit'
   import { applyProjectOrder } from './lib/projectOrder'
@@ -454,6 +454,7 @@
         if (task && readyPrs.length === 1) {
           const pr = readyPrs[0]
           try {
+            setTaskMerging(task.id, true)
             await mergePullRequest(pr.repo_owner, pr.repo_name, pr.id)
             const nextMap = new Map($ticketPrs)
             const taskPrs = nextMap.get(task.id) || []
@@ -465,6 +466,8 @@
           } catch (e) {
             console.error('Failed to merge PR:', e)
             $error = String(e)
+          } finally {
+            setTaskMerging(task.id, false)
           }
         } else if (task && readyPrs.length > 1) {
           $error = 'Multiple pull requests are ready to merge. Open the task details to choose the correct PR.'

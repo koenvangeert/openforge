@@ -6,6 +6,8 @@ import type { Task, PullRequestInfo } from '../../lib/types'
 
 vi.mock('../../lib/stores', () => ({
   ticketPrs: writable(new Map()),
+  mergingTaskIds: writable(new Set()),
+  setTaskMerging: vi.fn(),
 }))
 
 const baseTask: Task = {

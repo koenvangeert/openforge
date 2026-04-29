@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import type { PullRequestInfo } from './types'
-import { getTaskReasonText, TASK_STATE_LABELS } from './taskStatePresentation'
+import { getTaskReasonText, TASK_STATE_LABELS, getTaskListItemPresentation } from './taskStatePresentation'
 
 function makePr(overrides: Partial<PullRequestInfo> & { id: number }): PullRequestInfo {
   return {
@@ -25,6 +25,22 @@ function makePr(overrides: Partial<PullRequestInfo> & { id: number }): PullReque
     ...overrides,
   }
 }
+
+describe('getTaskListItemPresentation', () => {
+  it('overrides the compact badge and reason while a merge is in progress', () => {
+    expect(getTaskListItemPresentation('ready-to-merge', 'Ready to merge — all checks passed.', true)).toEqual({
+      stateLabel: 'Merging...',
+      reasonText: 'Pull request merge is in progress.',
+    })
+  })
+
+  it('uses the task state compact label and reason when no merge is in progress', () => {
+    expect(getTaskListItemPresentation('ready-to-merge', 'Ready to merge — all checks passed.', false)).toEqual({
+      stateLabel: 'Ready to Merge',
+      reasonText: 'Ready to merge — all checks passed.',
+    })
+  })
+})
 
 describe('getTaskReasonText', () => {
   it('uses Backlog as the business-friendly egg label', () => {
