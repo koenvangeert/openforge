@@ -1392,6 +1392,27 @@ describe('App onMount initialization order', () => {
       expect(mockWindowDestroy).not.toHaveBeenCalled()
     })
 
+    it('focuses the Quit button when the close confirmation opens', async () => {
+      const App = (await import('./App.svelte')).default
+
+      render(App)
+
+      await vi.waitFor(() => {
+        expect(mockWindowOnCloseRequested).toHaveBeenCalled()
+      })
+
+      if (!closeRequestedHandler) {
+        throw new Error('Expected close request handler to be registered')
+      }
+
+      await closeRequestedHandler({ preventDefault: vi.fn() })
+
+      const quitButton = screen.getByRole('button', { name: 'Quit' })
+      await vi.waitFor(() => {
+        expect(document.activeElement).toBe(quitButton)
+      })
+    })
+
     it('destroys the window after the user confirms close', async () => {
       const App = (await import('./App.svelte')).default
 

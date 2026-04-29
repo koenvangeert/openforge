@@ -55,6 +55,7 @@
   let appMode = $state<string | null>(null)
   let showShortcutsDialog = $state(false)
   let showCloseConfirm = $state(false)
+  let closeConfirmQuitButton: HTMLButtonElement | null = $state(null)
   let showProjectSwitcher = $state(false)
   let appSidebarCollapsed = $state(localStorage.getItem('appSidebarCollapsed') === 'true')
   let showCommandPalette = $state(false)
@@ -123,6 +124,16 @@
     if (taskId && !selectedTask) {
       $selectedTaskId = null
     }
+  })
+
+  $effect(() => {
+    if (!showCloseConfirm) return
+
+    const focusTimer = setTimeout(() => {
+      closeConfirmQuitButton?.focus()
+    }, 0)
+
+    return () => clearTimeout(focusTimer)
   })
 
   $effect(() => {
@@ -1122,7 +1133,7 @@
       <p class="text-sm text-base-content/70 m-0">Are you sure you want to quit Open Forge?</p>
       <div class="flex justify-end gap-2">
         <button class="btn btn-ghost btn-sm" type="button" onclick={handleCloseCancel}>Cancel</button>
-        <button class="btn btn-error btn-sm" type="button" onclick={handleCloseConfirm}>Quit</button>
+        <button bind:this={closeConfirmQuitButton} class="btn btn-error btn-sm" type="button" onclick={handleCloseConfirm}>Quit</button>
       </div>
     </div>
   </Modal>
