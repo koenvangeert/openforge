@@ -189,8 +189,16 @@ export async function getFileContent(owner: string, repo: string, sha: string): 
   return invoke<string>("get_file_content", { owner, repo, sha });
 }
 
+export async function getFileContentBase64(owner: string, repo: string, sha: string): Promise<string> {
+  return invoke<string>("get_file_content_base64", { owner, repo, sha });
+}
+
 export async function getFileAtRef(owner: string, repo: string, path: string, refSha: string): Promise<string> {
   return invoke<string>("get_file_at_ref", { owner, repo, path, refSha });
+}
+
+export async function getFileAtRefBase64(owner: string, repo: string, path: string, refSha: string): Promise<string> {
+  return invoke<string>("get_file_at_ref_base64", { owner, repo, path, refSha });
 }
 
 export async function getReviewComments(owner: string, repo: string, prNumber: number): Promise<ReviewComment[]> {

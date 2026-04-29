@@ -1,4 +1,5 @@
 use crate::{db, diff_parser};
+use base64::{engine::general_purpose, Engine as _};
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
 use tauri::State;
@@ -159,6 +160,30 @@ pub async fn get_task_diff(
 // File content helpers
 // ============================================================================
 
+fn is_image_path(path: &str) -> bool {
+    let extension = std::path::Path::new(path)
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .map(|ext| ext.to_ascii_lowercase());
+
+    matches!(
+        extension.as_deref(),
+        Some("png" | "jpg" | "jpeg" | "gif" | "webp" | "svg" | "bmp" | "ico")
+    )
+}
+
+fn is_removed_status(status: &str) -> bool {
+    status == "removed" || status == "deleted"
+}
+
+fn bytes_to_frontend_content(path: &str, bytes: &[u8]) -> String {
+    if is_image_path(path) {
+        general_purpose::STANDARD.encode(bytes)
+    } else {
+        String::from_utf8_lossy(bytes).to_string()
+    }
+}
+
 async fn fetch_file_contents(
     worktree_path: &str,
     merge_base: &str,
@@ -180,19 +205,20 @@ async fn fetch_file_contents(
             .map_err(|e| format!("Failed to run git show: {}", e))?;
 
         if old_output.status.success() {
-            String::from_utf8_lossy(&old_output.stdout).to_string()
+            bytes_to_frontend_content(old_file_path, &old_output.stdout)
         } else {
             String::new()
         }
     };
 
-    let new_content = if status == "deleted" {
+    let new_content = if is_removed_status(status) {
         String::new()
     } else if include_uncommitted {
         let full_path = std::path::Path::new(worktree_path).join(path);
-        tokio::fs::read_to_string(&full_path)
-            .await
-            .unwrap_or_default()
+        match tokio::fs::read(&full_path).await {
+            Ok(bytes) => bytes_to_frontend_content(path, &bytes),
+            Err(_) => String::new(),
+        }
     } else {
         let new_output = tokio::process::Command::new("git")
             .arg("-C")
@@ -202,7 +228,7 @@ async fn fetch_file_contents(
             .await
             .map_err(|e| format!("Failed to run git show: {}", e))?;
         if new_output.status.success() {
-            String::from_utf8_lossy(&new_output.stdout).to_string()
+            bytes_to_frontend_content(path, &new_output.stdout)
         } else {
             String::new()
         }
@@ -471,13 +497,13 @@ async fn fetch_commit_file_contents(
             .map_err(|e| format!("Failed to run git show: {}", e))?;
 
         if old_output.status.success() {
-            String::from_utf8_lossy(&old_output.stdout).to_string()
+            bytes_to_frontend_content(old_file_path, &old_output.stdout)
         } else {
             String::new()
         }
     };
 
-    let new_content = if status == "deleted" {
+    let new_content = if is_removed_status(status) {
         String::new()
     } else {
         let new_output = tokio::process::Command::new("git")
@@ -488,7 +514,7 @@ async fn fetch_commit_file_contents(
             .await
             .map_err(|e| format!("Failed to run git show: {}", e))?;
         if new_output.status.success() {
-            String::from_utf8_lossy(&new_output.stdout).to_string()
+            bytes_to_frontend_content(path, &new_output.stdout)
         } else {
             String::new()
         }
@@ -780,6 +806,33 @@ mod tests {
 
         drop(db);
         let _ = std::fs::remove_file(&db_path);
+    }
+
+    #[test]
+    fn test_image_path_detection_is_case_insensitive() {
+        assert!(is_image_path("assets/logo.PNG"));
+        assert!(is_image_path("photo.jpeg"));
+        assert!(is_image_path("icons/vector.svg"));
+        assert!(!is_image_path("src/main.rs"));
+    }
+
+    #[test]
+    fn test_image_content_is_encoded_for_frontend() {
+        let content = bytes_to_frontend_content("assets/logo.png", &[0x89, b'P', b'N', b'G']);
+        assert_eq!(content, "iVBORw==");
+    }
+
+    #[test]
+    fn test_text_content_stays_text_for_frontend() {
+        let content = bytes_to_frontend_content("src/main.rs", b"fn main() {}\n");
+        assert_eq!(content, "fn main() {}\n");
+    }
+
+    #[test]
+    fn test_removed_status_accepts_git_and_github_names() {
+        assert!(is_removed_status("removed"));
+        assert!(is_removed_status("deleted"));
+        assert!(!is_removed_status("modified"));
     }
 
     #[test]

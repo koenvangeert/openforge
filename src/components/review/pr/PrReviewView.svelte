@@ -3,7 +3,7 @@
   import { listen } from '@tauri-apps/api/event'
   import type { UnlistenFn } from '@tauri-apps/api/event'
   import { reviewPrs, selectedReviewPr, prFileDiffs, reviewRequestCount, reviewComments, pendingManualComments, prOverviewComments, agentReviewComments, agentReviewLoading, agentReviewError, authoredPrs, authoredPrCount, activeProjectId } from '../../../lib/stores'
-  import { fetchReviewPrs, getReviewPrs, fetchAuthoredPrs, getAuthoredPrs, getPrFileDiffs, openUrl, getReviewComments, getFileContent, getFileAtRef, markReviewPrViewed, startAgentReview, getAgentReviewComments, abortAgentReview, getProjectConfig, setProjectConfig } from '../../../lib/ipc'
+  import { fetchReviewPrs, getReviewPrs, fetchAuthoredPrs, getAuthoredPrs, getPrFileDiffs, openUrl, getReviewComments, getFileContent, getFileContentBase64, getFileAtRef, getFileAtRefBase64, markReviewPrViewed, startAgentReview, getAgentReviewComments, abortAgentReview, getProjectConfig, setProjectConfig } from '../../../lib/ipc'
   import { useAppRouter } from '../../../lib/router.svelte'
   import { getHTMLElementAt, isInputFocused } from '../../../lib/domUtils'
   import { useVimNavigation } from '../../../lib/useVimNavigation.svelte'
@@ -19,7 +19,7 @@
   import AgentReviewOutputModal from './AgentReviewOutputModal.svelte'
   import { hasMergeConflicts } from '../../../lib/types'
   import type { ReviewPullRequest, AuthoredPullRequest, PrFileDiff } from '../../../lib/types'
-  import type { FileContents } from '../../../lib/diffAdapter'
+  import { isImageFileDiff, type FileContents } from '../../../lib/diffAdapter'
 
   type PrDetailTab = 'overview' | 'files'
 
@@ -378,16 +378,19 @@
     let oldContent = ''
     let newContent = ''
 
+    const fetchBlob = isImageFileDiff(file) ? getFileContentBase64 : getFileContent
+    const fetchAtRef = isImageFileDiff(file) ? getFileAtRefBase64 : getFileAtRef
+
     if (file.status !== 'removed' && file.sha) {
       try {
-        newContent = await getFileContent(pr.repo_owner, pr.repo_name, file.sha)
+        newContent = await fetchBlob(pr.repo_owner, pr.repo_name, file.sha)
       } catch { /* file may not exist */ }
     }
 
     if (file.status !== 'added') {
       const oldPath = file.previous_filename || file.filename
       try {
-        oldContent = await getFileAtRef(pr.repo_owner, pr.repo_name, oldPath, pr.base_ref)
+        oldContent = await fetchAtRef(pr.repo_owner, pr.repo_name, oldPath, pr.base_ref)
       } catch { /* file may not exist on base */ }
     }
 

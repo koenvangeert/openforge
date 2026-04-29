@@ -203,6 +203,24 @@ pub async fn get_file_content(
 }
 
 #[tauri::command]
+pub async fn get_file_content_base64(
+    _db: State<'_, Arc<Mutex<db::Database>>>,
+    github_client: State<'_, GitHubClient>,
+    owner: String,
+    repo: String,
+    sha: String,
+) -> Result<String, String> {
+    let token = crate::secure_store::get_secret("github_token")
+        .map_err(|e| format!("Failed to get config: {}", e))?
+        .ok_or("github_token not configured".to_string())?;
+
+    github_client
+        .get_blob_content_base64(&owner, &repo, &sha, &token)
+        .await
+        .map_err(|e| format!("Failed to get blob content: {}", e))
+}
+
+#[tauri::command]
 pub async fn get_file_at_ref(
     _db: State<'_, Arc<Mutex<db::Database>>>,
     github_client: State<'_, GitHubClient>,
@@ -217,6 +235,25 @@ pub async fn get_file_at_ref(
 
     github_client
         .get_file_at_ref(&owner, &repo, &path, &ref_sha, &token)
+        .await
+        .map_err(|e| format!("Failed to get file at ref: {}", e))
+}
+
+#[tauri::command]
+pub async fn get_file_at_ref_base64(
+    _db: State<'_, Arc<Mutex<db::Database>>>,
+    github_client: State<'_, GitHubClient>,
+    owner: String,
+    repo: String,
+    path: String,
+    ref_sha: String,
+) -> Result<String, String> {
+    let token = crate::secure_store::get_secret("github_token")
+        .map_err(|e| format!("Failed to get config: {}", e))?
+        .ok_or("github_token not configured".to_string())?;
+
+    github_client
+        .get_file_at_ref_base64(&owner, &repo, &path, &ref_sha, &token)
         .await
         .map_err(|e| format!("Failed to get file at ref: {}", e))
 }
