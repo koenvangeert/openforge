@@ -841,6 +841,30 @@ describe('App onMount initialization order', () => {
       })
     })
 
+    it('CMD+SHIFT+P opens the project switcher', async () => {
+      const App = (await import('./App.svelte')).default
+      const projectSwitcherModule = await import('./components/project/ProjectSwitcherModal.svelte')
+
+      render(App)
+
+      await fireEvent.keyDown(window, { key: 'P', metaKey: true, shiftKey: true, bubbles: true })
+
+      await vi.waitFor(() => {
+        expect(projectSwitcherModule.default).toHaveBeenCalled()
+      })
+    })
+
+    it('CMD+P no longer opens the project switcher', async () => {
+      const App = (await import('./App.svelte')).default
+      const projectSwitcherModule = await import('./components/project/ProjectSwitcherModal.svelte')
+
+      render(App)
+
+      await fireEvent.keyDown(window, { key: 'p', metaKey: true, bubbles: true })
+
+      expect(projectSwitcherModule.default).not.toHaveBeenCalled()
+    })
+
     it('action palette move-to-done does not navigate directly from App', async () => {
       const App = (await import('./App.svelte')).default
       const stores = await import('./lib/stores')

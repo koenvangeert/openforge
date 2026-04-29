@@ -90,7 +90,7 @@ export function getGlobalActions(): PaletteAction[] {
     {
       id: 'switch-project',
       label: 'Switch Project',
-      shortcut: '⌘P',
+      shortcut: '⌘⇧P',
       category: 'navigation',
       keywords: ['project', 'switch', 'change'],
     },
