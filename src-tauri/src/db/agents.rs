@@ -172,12 +172,14 @@ impl super::Database {
         let sql = format!(
             "SELECT s.id, s.ticket_id, s.opencode_session_id, s.stage, s.status, s.checkpoint_data, s.error_message, s.created_at, s.updated_at, s.provider, s.claude_session_id, s.pi_session_id
               FROM agent_sessions s
-             INNER JOIN (
-                 SELECT ticket_id, MAX(created_at) as max_created
-                 FROM agent_sessions
-                 WHERE ticket_id IN ({})
-                 GROUP BY ticket_id
-             ) latest ON s.ticket_id = latest.ticket_id AND s.created_at = latest.max_created",
+             WHERE s.ticket_id IN ({})
+               AND s.rowid = (
+                 SELECT s2.rowid
+                   FROM agent_sessions s2
+                  WHERE s2.ticket_id = s.ticket_id
+                  ORDER BY s2.created_at DESC, s2.rowid DESC
+                  LIMIT 1
+               )",
             placeholders.join(", ")
         );
         let mut stmt = conn.prepare(&sql)?;
@@ -357,6 +359,45 @@ mod tests {
             .expect("get failed")
             .expect("not found");
         assert_eq!(latest.id, "ses-new");
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_get_latest_sessions_for_tickets_breaks_created_at_ties_by_rowid() {
+        let (db, path) = make_test_db("latest_sessions_tie_break");
+        insert_test_task(&db);
+
+        db.create_agent_session(
+            "ses-completed",
+            "T-100",
+            None,
+            "implement",
+            "completed",
+            "pi",
+        )
+        .expect("create completed failed");
+        db.create_agent_session("ses-running", "T-100", None, "implement", "running", "pi")
+            .expect("create running failed");
+
+        {
+            let conn = db.connection();
+            let conn = conn.lock().expect("lock connection");
+            conn.execute(
+                "UPDATE agent_sessions SET created_at = 1234 WHERE id IN ('ses-completed', 'ses-running')",
+                [],
+            )
+            .expect("force created_at tie");
+        }
+
+        let sessions = db
+            .get_latest_sessions_for_tickets(&["T-100".to_string()])
+            .expect("get latest sessions failed");
+
+        assert_eq!(sessions.len(), 1);
+        assert_eq!(sessions[0].id, "ses-running");
+        assert_eq!(sessions[0].status, "running");
 
         drop(db);
         let _ = fs::remove_file(&path);

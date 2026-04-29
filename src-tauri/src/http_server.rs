@@ -103,7 +103,7 @@ fn update_pi_session_status_for_pty(
             && pi_session_matches_pty_instance(&session, pty_instance_id)
         {
             if session.status == target_status {
-                return None;
+                return Some(target_status.to_string());
             }
 
             if let Err(e) = db.update_agent_session(
@@ -479,7 +479,7 @@ pub async fn pi_agent_start_handler(
         &payload.task_id,
         payload.pty_instance_id,
         "running",
-        &["completed", "paused", "interrupted"],
+        &["completed", "paused", "interrupted", "running"],
     );
 
     if let Some(new_status) = status_update {
@@ -785,6 +785,58 @@ mod tests {
             Some(r#"{"pty_instance_id":42}"#.to_string())
         );
         assert!(session.error_message.is_none());
+
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn test_pi_status_update_emits_when_matching_session_already_has_target_status() {
+        let (state, path) = test_state("http_pi_agent_start_idempotent_running");
+        let task_id = {
+            let db = state.db.lock().expect("lock db");
+            let project = db
+                .create_project("Project", "/tmp/project")
+                .expect("create project");
+            let task = db
+                .create_task("Task A", "doing", Some(&project.id), None, None, None)
+                .expect("create task");
+            db.create_agent_session(
+                "ses-pi-running",
+                &task.id,
+                None,
+                "implementing",
+                "running",
+                "pi",
+            )
+            .expect("create pi session");
+            db.update_agent_session(
+                "ses-pi-running",
+                "implementing",
+                "running",
+                Some(r#"{"pty_instance_id":42}"#),
+                None,
+            )
+            .expect("store pty instance");
+            task.id
+        };
+
+        let status_update = update_pi_session_status_for_pty(
+            &state,
+            &task_id,
+            42,
+            "running",
+            &["completed", "paused", "interrupted", "running"],
+        );
+
+        assert_eq!(status_update, Some("running".to_string()));
+        let session = state
+            .db
+            .lock()
+            .expect("lock db")
+            .get_agent_session("ses-pi-running")
+            .expect("get session")
+            .expect("session exists");
+        assert_eq!(session.status, "running");
 
         let _ = std::fs::remove_file(path);
     }
