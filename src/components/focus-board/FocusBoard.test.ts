@@ -81,6 +81,10 @@ const taskBacklog = makeTask('T-4', 'backlog', 'Backlog task')
 const onOpenTask = vi.fn()
 const onRunAction = vi.fn()
 
+function getCurrentVimItem(): HTMLElement {
+  return requireElement(document.querySelector('[data-vim-item][aria-current="true"]'), HTMLElement)
+}
+
 function renderBoard(overrides?: {
   projectId?: string | null
   tasks?: Task[]
@@ -168,14 +172,17 @@ describe('FocusBoard', () => {
     })
 
     await waitFor(() => {
-      expect(document.querySelectorAll('.vim-focus').length).toBeGreaterThan(0)
+      expect(getCurrentVimItem().getAttribute('aria-current')).toBe('true')
     })
 
     await fireEvent.keyDown(window, { key: 'j' })
 
-    const focused = requireElement(document.querySelector('.vim-focus'), HTMLElement)
-    expect(focused).toBeTruthy()
-    expect(within(focused).getByText('Doing task')).toBeTruthy()
+    const currentItem = getCurrentVimItem()
+    expect(currentItem.getAttribute('aria-current')).toBe('true')
+    expect(within(currentItem).getByText('Doing task')).toBeTruthy()
+
+    await fireEvent.keyDown(window, { key: 'Enter' })
+    expect(onOpenTask).toHaveBeenCalledWith('T-2')
   })
 
   it('moves vim focus up on k key', async () => {
@@ -190,9 +197,12 @@ describe('FocusBoard', () => {
     await fireEvent.keyDown(window, { key: 'j' })
     await fireEvent.keyDown(window, { key: 'k' })
 
-    const focused = requireElement(document.querySelector('.vim-focus'), HTMLElement)
-    expect(focused).toBeTruthy()
-    expect(within(focused).getByText('Focus task')).toBeTruthy()
+    const currentItem = getCurrentVimItem()
+    expect(currentItem.getAttribute('aria-current')).toBe('true')
+    expect(within(currentItem).getByText('Focus task')).toBeTruthy()
+
+    await fireEvent.keyDown(window, { key: 'Enter' })
+    expect(onOpenTask).toHaveBeenCalledWith('T-1')
   })
 
   it('opens focused task on Enter', async () => {
