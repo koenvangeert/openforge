@@ -47,8 +47,7 @@
   const ac = useAutocomplete(getAutocompleteProjectId())
 
   // ── Auto-focus ───────────────────────────────────────────────────────────────
-  // Use requestAnimationFrame to ensure focus happens after any parent (e.g. Modal)
-  // steals focus with its own $effect.
+  // Use requestAnimationFrame to ensure focus happens after the component's DOM settles.
   $effect(() => {
     if (textareaEl && autofocus) {
       requestAnimationFrame(() => textareaEl?.focus())

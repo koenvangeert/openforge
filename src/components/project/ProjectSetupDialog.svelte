@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { onMount, tick } from 'svelte'
   import type { Project } from '../../lib/types'
   import { createProject, setProjectConfig } from '../../lib/ipc'
   import Modal from '../shared/ui/Modal.svelte'
@@ -16,12 +15,6 @@
   let githubDefaultRepo = $state('')
   let isSubmitting = $state(false)
   let showGithubSection = $state(false)
-  let projectNameInput = $state<HTMLInputElement | null>(null)
-
-  onMount(async () => {
-    await tick()
-    projectNameInput?.focus()
-  })
 
   async function handleSubmit() {
     if (!projectName.trim() || !path.trim()) return
@@ -49,7 +42,7 @@
   }
 </script>
 
-<Modal onClose={close} maxWidth="550px">
+<Modal onClose={close} maxWidth="550px" initialFocus="[data-project-name-input]">
   {#snippet header()}
     <h2 class="text-[0.95rem] font-semibold text-base-content m-0">New Project</h2>
   {/snippet}
@@ -58,7 +51,7 @@
     <label class="flex flex-col gap-1.5">
       <span class="text-xs text-base-content/60 font-medium">Project Name <span class="text-error">*</span></span>
       <input
-        bind:this={projectNameInput}
+        data-project-name-input
         type="text"
         class="input input-bordered input-sm w-full"
         bind:value={projectName}

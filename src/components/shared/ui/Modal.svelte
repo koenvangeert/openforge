@@ -1,22 +1,50 @@
 <script lang="ts">
+  import { tick } from 'svelte'
   import type { Snippet } from 'svelte'
+
+  export type ModalInitialFocus = HTMLElement | string | (() => HTMLElement | null | undefined) | null | undefined
 
   interface Props {
     onClose: () => void
     maxWidth?: string
     overflowVisible?: boolean
+    initialFocus?: ModalInitialFocus
     header?: Snippet
     children: Snippet
   }
 
-  let { onClose, maxWidth = '500px', overflowVisible = false, header, children }: Props = $props()
+  let { onClose, maxWidth = '500px', overflowVisible = false, initialFocus, header, children }: Props = $props()
 
   let modalElement: HTMLDivElement | null = $state(null)
+  let hasAppliedInitialFocus = false
+
+  function resolveInitialFocusTarget(): HTMLElement | null {
+    if (!modalElement) return null
+
+    if (typeof initialFocus === 'function') {
+      return initialFocus() ?? modalElement
+    }
+
+    if (typeof initialFocus === 'string') {
+      return modalElement.querySelector<HTMLElement>(initialFocus) ?? modalElement
+    }
+
+    return initialFocus ?? modalElement
+  }
+
+  function focusInitialTarget() {
+    resolveInitialFocusTarget()?.focus()
+
+    if (initialFocus !== undefined) {
+      void tick().then(() => resolveInitialFocusTarget()?.focus())
+    }
+  }
 
   $effect(() => {
-    if (modalElement) {
-      modalElement.focus()
-    }
+    if (!modalElement || hasAppliedInitialFocus) return
+
+    hasAppliedInitialFocus = true
+    void focusInitialTarget()
   })
 
   function handleKeydown(e: KeyboardEvent) {

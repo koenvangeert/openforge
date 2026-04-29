@@ -93,7 +93,7 @@
   }
 </script>
 
-<Modal onClose={onClose} maxWidth="640px" overflowVisible>
+<Modal onClose={onClose} maxWidth="640px" overflowVisible initialFocus="textarea">
   {#snippet header()}
     <h2 class="text-[0.95rem] font-semibold text-base-content m-0">{mode === 'create' ? 'Create Task' : 'Edit Task'}</h2>
   {/snippet}
@@ -105,7 +105,7 @@
     <PromptInput
       projectId={$activeProjectId || ''}
       value={mode === 'edit' && task ? getTaskPromptText(task) : ''}
-      autofocus={true}
+      autofocus={false}
       actions={mode === 'edit' ? [] : availableActions}
       onSubmit={(prompt) => handleCreateOrUpdate(prompt)}
       onStartTask={mode === 'edit' ? undefined : (prompt) => handleCreateOrUpdate(prompt, '', true)}

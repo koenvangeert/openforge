@@ -1,8 +1,41 @@
 import { render, screen, fireEvent } from '@testing-library/svelte'
+import { tick } from 'svelte'
 import { describe, it, expect, vi } from 'vitest'
 import ModalTestWrapper from './ModalTestWrapper.svelte'
 
 describe('Modal', () => {
+  it('focuses the dialog by default when opened', async () => {
+    render(ModalTestWrapper, { props: { onClose: vi.fn() } })
+
+    await tick()
+
+    expect(document.activeElement).toBe(screen.getByRole('dialog'))
+  })
+
+  it('focuses the requested element returned by initialFocus', async () => {
+    render(ModalTestWrapper, { props: { onClose: vi.fn(), initialFocusTarget: 'primary-button' } })
+
+    await tick()
+
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Primary action' }))
+  })
+
+  it('focuses the requested selector target when initialFocus is a selector', async () => {
+    render(ModalTestWrapper, { props: { onClose: vi.fn(), initialFocusTarget: 'input-selector' } })
+
+    await tick()
+
+    expect(document.activeElement).toBe(screen.getByLabelText('Modal input'))
+  })
+
+  it('falls back to dialog focus when initialFocus does not resolve a target', async () => {
+    render(ModalTestWrapper, { props: { onClose: vi.fn(), initialFocusTarget: 'missing-selector' } })
+
+    await tick()
+
+    expect(document.activeElement).toBe(screen.getByRole('dialog'))
+  })
+
   it('calls onClose when Escape is pressed', async () => {
     const onClose = vi.fn()
     render(ModalTestWrapper, { props: { onClose } })
