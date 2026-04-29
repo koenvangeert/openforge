@@ -6,9 +6,13 @@ use super::error::GitHubError;
 use super::types::*;
 use super::GitHubClient;
 
+fn normalize_base64_content(content: &str) -> String {
+    content.replace('\n', "")
+}
+
 fn decode_base64_content(content: &str) -> Result<String, GitHubError> {
     let decoded = general_purpose::STANDARD
-        .decode(content.replace('\n', ""))
+        .decode(normalize_base64_content(content))
         .map_err(|e| GitHubError::ParseError(format!("Base64 decode error: {}", e)))?;
 
     String::from_utf8(decoded)
@@ -432,6 +436,32 @@ impl GitHubClient {
     }
 
     /// Get blob content by SHA
+    pub async fn get_blob_content_base64(
+        &self,
+        owner: &str,
+        repo: &str,
+        sha: &str,
+        token: &str,
+    ) -> Result<String, GitHubError> {
+        let url = format!(
+            "https://api.github.com/repos/{}/{}/git/blobs/{}",
+            owner, repo, sha
+        );
+
+        let response = self.send_github(self.github_get(&url, token)).await?;
+
+        if !response.status().is_success() {
+            return Err(Self::api_error_from_response(response).await);
+        }
+
+        let blob: BlobResponse = response
+            .json()
+            .await
+            .map_err(|e| GitHubError::ParseError(e.to_string()))?;
+
+        Ok(normalize_base64_content(&blob.content))
+    }
+
     pub async fn get_blob_content(
         &self,
         owner: &str,
@@ -484,11 +514,43 @@ impl GitHubClient {
 
         decode_base64_content(&blob.content)
     }
+
+    pub async fn get_file_at_ref_base64(
+        &self,
+        owner: &str,
+        repo: &str,
+        path: &str,
+        ref_sha: &str,
+        token: &str,
+    ) -> Result<String, GitHubError> {
+        let url = format!(
+            "https://api.github.com/repos/{}/{}/contents/{}?ref={}",
+            owner, repo, path, ref_sha
+        );
+
+        let response = self.send_github(self.github_get(&url, token)).await?;
+
+        if !response.status().is_success() {
+            return Err(Self::api_error_from_response(response).await);
+        }
+
+        let blob: BlobResponse = response
+            .json()
+            .await
+            .map_err(|e| GitHubError::ParseError(e.to_string()))?;
+
+        Ok(normalize_base64_content(&blob.content))
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn normalize_base64_content_removes_newlines_without_decoding() {
+        assert_eq!(normalize_base64_content("SGVs\nbG8="), "SGVsbG8=");
+    }
 
     #[test]
     fn decode_base64_content_decodes_multiline_base64() {

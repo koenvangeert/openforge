@@ -111,7 +111,7 @@ describe('createFileContentsFetcher', () => {
     cleanup()
   })
 
-  it('does not fetch for files without patches', async () => {
+  it('does not fetch for non-image files without patches', async () => {
     const batchFn = vi.fn<(files: PrFileDiff[]) => Promise<Map<string, FileContents>>>()
       .mockResolvedValue(new Map())
 
@@ -128,6 +128,35 @@ describe('createFileContentsFetcher', () => {
     await new Promise(resolve => setTimeout(resolve, 10))
     expect(batchFn).not.toHaveBeenCalled()
     expect(fetcher.fileContentsMap.size).toBe(0)
+    cleanup()
+  })
+
+  it('fetches image files without patches so previews can render', async () => {
+    const imageFile: PrFileDiff = {
+      ...fileNoPatch,
+      filename: 'assets/logo.png',
+      status: 'binary',
+    }
+    const batchFn = vi.fn<(files: PrFileDiff[]) => Promise<Map<string, FileContents>>>()
+      .mockResolvedValue(new Map([
+        ['assets/logo.png', { oldContent: '', newContent: 'base64-image' }],
+      ]))
+
+    let fetcher!: FileContentsFetcherState
+    const cleanup = $effect.root(() => {
+      fetcher = createFileContentsFetcher({
+        getFiles: () => [imageFile],
+        getIncludeUncommitted: () => false,
+        getFetchFileContents: () => undefined,
+        getBatchFetchFileContents: () => batchFn,
+      })
+    })
+
+    await new Promise(resolve => setTimeout(resolve, 10))
+    expect(batchFn).toHaveBeenCalledTimes(1)
+    const [calledFiles] = batchFn.mock.calls[0] as [PrFileDiff[]]
+    expect(calledFiles.map(f => f.filename)).toEqual(['assets/logo.png'])
+    expect(fetcher.fileContentsMap.get('assets/logo.png')?.newContent).toBe('base64-image')
     cleanup()
   })
 

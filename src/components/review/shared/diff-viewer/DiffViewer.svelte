@@ -5,7 +5,7 @@
   import type { PrFileDiff, ReviewComment, ReviewSubmissionComment, AgentReviewComment } from '../../../../lib/types'
   import { pendingManualComments, agentReviewComments } from '../../../../lib/stores'
   import { updateAgentReviewCommentStatus } from '../../../../lib/ipc'
-  import { isTruncated, getTruncationStats, type FileContents } from '../../../../lib/diffAdapter'
+  import { isTruncated, getTruncationStats, isImageFileDiff, getImagePreviewDataUrl, type FileContents } from '../../../../lib/diffAdapter'
   import { buildExtendData, type CommentDisplayData } from '../../../../lib/diffComments'
   import { timeAgo } from '../../../../lib/timeAgo'
   import MarkdownContent from '../../../shared/content/MarkdownContent.svelte'
@@ -156,6 +156,7 @@
       const file = sortedFiles[index]
       if (!file) return 300
       if (collapsedFiles.has(file.filename)) return 60
+      if (isImageFileDiff(file)) return 360
       const lineCount = file.patch_line_count ?? (file.additions + file.deletions) * 2
       return 62 + Math.min(lineCount, 200) * 20
     },
@@ -314,6 +315,41 @@
                     </span>
                   </div>
                 {/if}
+                {#if isImageFileDiff(file)}
+                  {@const imageContents = fileContentsFetcher.fileContentsMap.get(file.filename)}
+                  {@const oldImageSrc = imageContents ? getImagePreviewDataUrl(file.previous_filename || file.filename, imageContents.oldContent) : null}
+                  {@const newImageSrc = imageContents ? getImagePreviewDataUrl(file.filename, imageContents.newContent) : null}
+                  <div class="grid gap-4 p-4 md:grid-cols-2 bg-base-100">
+                    {#if file.status !== 'added'}
+                      <div class="rounded border border-base-300 bg-base-200/40 p-3 min-h-48 flex flex-col">
+                        <div class="mb-2 text-xs font-semibold uppercase tracking-wide text-base-content/60">Before</div>
+                        <div class="flex flex-1 items-center justify-center overflow-auto">
+                          {#if oldImageSrc}
+                            <img src={oldImageSrc} alt={`${file.previous_filename || file.filename} old preview`} class="max-h-96 max-w-full object-contain" />
+                          {:else if imageContents === undefined && (fetchFileContents || batchFetchFileContents)}
+                            <span class="loading loading-spinner loading-sm text-primary" aria-label="Loading old image preview"></span>
+                          {:else}
+                            <span class="text-sm text-base-content/50">No previous image preview</span>
+                          {/if}
+                        </div>
+                      </div>
+                    {/if}
+                    {#if file.status !== 'removed' && file.status !== 'deleted'}
+                      <div class="rounded border border-base-300 bg-base-200/40 p-3 min-h-48 flex flex-col">
+                        <div class="mb-2 text-xs font-semibold uppercase tracking-wide text-base-content/60">After</div>
+                        <div class="flex flex-1 items-center justify-center overflow-auto">
+                          {#if newImageSrc}
+                            <img src={newImageSrc} alt={`${file.filename} new preview`} class="max-h-96 max-w-full object-contain" />
+                          {:else if imageContents === undefined && (fetchFileContents || batchFetchFileContents)}
+                            <span class="loading loading-spinner loading-sm text-primary" aria-label="Loading new image preview"></span>
+                          {:else}
+                            <span class="text-sm text-base-content/50">No image preview</span>
+                          {/if}
+                        </div>
+                      </div>
+                    {/if}
+                  </div>
+                {:else}
                 {@const workerDiffFile = diffWorker.getDiffFile(file.filename)}
                 {#if workerDiffFile}
                 <DiffView
@@ -445,6 +481,7 @@
                     <span class="loading loading-spinner loading-sm mr-2"></span>
                     <span class="text-xs">Processing diff…</span>
                   </div>
+                {/if}
                 {/if}
               {/if}
             </div>

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import type { PrFileDiff } from './types'
-import { getFileLanguage, toGitDiffViewData, isTruncated, getTruncationStats } from './diffAdapter'
+import { getFileLanguage, toGitDiffViewData, isTruncated, getTruncationStats, getImageMimeType, isImageFileDiff, getImagePreviewDataUrl } from './diffAdapter'
 
 // ============================================================================
 // Test Fixtures
@@ -265,6 +265,43 @@ describe('toGitDiffViewData', () => {
     expect(result.newFile).toHaveProperty('fileName')
     expect(result.newFile).toHaveProperty('fileLang')
     expect(Array.isArray(result.hunks)).toBe(true)
+  })
+})
+
+// ============================================================================
+// Image diff helpers
+// ============================================================================
+
+describe('image diff helpers', () => {
+  it('detects common image file extensions case-insensitively', () => {
+    expect(getImageMimeType('assets/logo.PNG')).toBe('image/png')
+    expect(getImageMimeType('photo.jpeg')).toBe('image/jpeg')
+    expect(getImageMimeType('anim.gif')).toBe('image/gif')
+    expect(getImageMimeType('icon.webp')).toBe('image/webp')
+    expect(getImageMimeType('vector.svg')).toBe('image/svg+xml')
+  })
+
+  it('returns null for non-image files', () => {
+    expect(getImageMimeType('src/main.ts')).toBeNull()
+    expect(getImageMimeType('README')).toBeNull()
+  })
+
+  it('treats image paths as image file diffs even when patch is null', () => {
+    const file: PrFileDiff = { ...baseFile, filename: 'assets/logo.png', patch: null }
+    expect(isImageFileDiff(file)).toBe(true)
+  })
+
+  it('does not treat non-image paths as image diffs', () => {
+    expect(isImageFileDiff(baseFile)).toBe(false)
+  })
+
+  it('builds a data URL for non-empty image content', () => {
+    expect(getImagePreviewDataUrl('assets/logo.png', 'abc123')).toBe('data:image/png;base64,abc123')
+  })
+
+  it('returns null when image content is empty or the file type is unsupported', () => {
+    expect(getImagePreviewDataUrl('assets/logo.png', '')).toBeNull()
+    expect(getImagePreviewDataUrl('src/main.ts', 'abc123')).toBeNull()
   })
 })
 

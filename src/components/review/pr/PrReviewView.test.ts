@@ -37,6 +37,10 @@ vi.mock('../../../lib/ipc', () => ({
   getAuthoredPrs: vi.fn().mockResolvedValue([]),
   getPrFileDiffs: vi.fn().mockResolvedValue([]),
   getReviewComments: vi.fn().mockResolvedValue([]),
+  getFileContent: vi.fn().mockResolvedValue(''),
+  getFileContentBase64: vi.fn().mockResolvedValue(''),
+  getFileAtRef: vi.fn().mockResolvedValue(''),
+  getFileAtRefBase64: vi.fn().mockResolvedValue(''),
   getPrOverviewComments: vi.fn().mockResolvedValue([]),
   getAgentReviewComments: vi.fn().mockResolvedValue([]),
   submitPrReview: vi.fn(),
@@ -44,6 +48,8 @@ vi.mock('../../../lib/ipc', () => ({
   openUrl: vi.fn(),
   getProjectConfig: vi.fn().mockResolvedValue(null),
   setProjectConfig: vi.fn().mockResolvedValue(undefined),
+  startAgentReview: vi.fn().mockResolvedValue({ session_id: 'session-1' }),
+  abortAgentReview: vi.fn().mockResolvedValue(undefined),
 }))
 
 import PrReviewView from './PrReviewView.svelte'

@@ -1,5 +1,5 @@
 import type { PrFileDiff } from './types'
-import type { FileContents } from './diffAdapter'
+import { isImageFileDiff, type FileContents } from './diffAdapter'
 
 export interface FileContentsFetcherState {
   readonly fileContentsMap: Map<string, FileContents>
@@ -43,7 +43,7 @@ export function createFileContentsFetcher(deps: {
     const hasFetcher = batchFetchFileContents || fetchFileContents
     if (!hasFetcher || files.length === 0) return
 
-    const pendingFiles = files.filter(f => f.patch && !fetchedKeys.has(f.filename))
+    const pendingFiles = files.filter(f => (f.patch || isImageFileDiff(f)) && !fetchedKeys.has(f.filename))
     if (pendingFiles.length === 0) return
 
     const thisGeneration = ++fetchGeneration

@@ -37,11 +37,15 @@ vi.mock('../../../../lib/diffSearch', () => ({
   countMatchesInPatch: vi.fn().mockReturnValue(0),
 }))
 
-vi.mock('../../../../lib/diffAdapter', () => ({
-  toGitDiffViewData: vi.fn().mockReturnValue({}),
-  isTruncated: vi.fn().mockReturnValue(false),
-  getTruncationStats: vi.fn().mockReturnValue(null),
-}))
+vi.mock('../../../../lib/diffAdapter', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../../lib/diffAdapter')>()
+  return {
+    ...actual,
+    toGitDiffViewData: vi.fn().mockReturnValue({}),
+    isTruncated: vi.fn().mockReturnValue(false),
+    getTruncationStats: vi.fn().mockReturnValue(null),
+  }
+})
 
 vi.mock('../../../../lib/diffComments', () => ({
   buildExtendData: vi.fn().mockReturnValue({}),
@@ -422,7 +426,7 @@ describe('DiffViewer file content fetching', () => {
     expect(calledFile.filename).toBe('src/test.ts')
   })
 
-  it('files without patches are not passed to batch fetch', async () => {
+  it('non-image files without patches are not passed to batch fetch', async () => {
     const fileNoPatch: PrFileDiff = {
       ...fileWithPatch,
       filename: 'src/nopatch.ts',
@@ -440,8 +444,39 @@ describe('DiffViewer file content fetching', () => {
     // Give the effect time to run
     await new Promise(resolve => setTimeout(resolve, 50))
 
-    // batchFn should not be called because no files have patches
+    // batchFn should not be called because no files have patches or image previews
     expect(batchFn).not.toHaveBeenCalled()
+  })
+
+  it('renders image previews for image files without text patches', async () => {
+    const imageFile: PrFileDiff = {
+      ...fileWithPatch,
+      filename: 'assets/logo.png',
+      status: 'binary',
+      patch: null,
+      additions: 0,
+      deletions: 0,
+      changes: 0,
+    }
+    const batchFn = vi.fn().mockResolvedValue(new Map([
+      ['assets/logo.png', { oldContent: '', newContent: 'base64-image' }],
+    ]))
+
+    render(DiffViewer, {
+      props: {
+        files: [imageFile],
+        batchFetchFileContents: batchFn,
+      },
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('img', { name: 'assets/logo.png new preview' })).toBeTruthy()
+    })
+
+    expect(batchFn).toHaveBeenCalledTimes(1)
+    const image = requireElement(screen.getByRole('img', { name: 'assets/logo.png new preview' }), HTMLImageElement)
+    expect(image.getAttribute('src')).toBe('data:image/png;base64,base64-image')
+    expect(screen.queryByText('Processing diff…')).toBeNull()
   })
 
   it('re-fetches when includeUncommitted prop changes', async () => {

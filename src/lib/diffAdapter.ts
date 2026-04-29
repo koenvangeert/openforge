@@ -5,6 +5,17 @@ export interface FileContents {
   newContent: string
 }
 
+const IMAGE_MIME_TYPES: Record<string, string> = {
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  gif: 'image/gif',
+  webp: 'image/webp',
+  svg: 'image/svg+xml',
+  bmp: 'image/bmp',
+  ico: 'image/x-icon',
+}
+
 export interface DiffViewData {
   oldFile: {
     fileName: string
@@ -46,6 +57,22 @@ export function getFileLanguage(filename: string): string {
   }
 
   return languageMap[ext] || 'text'
+}
+
+export function getImageMimeType(filename: string): string | null {
+  const ext = filename.toLowerCase().split('.').pop() || ''
+  return IMAGE_MIME_TYPES[ext] ?? null
+}
+
+export function isImageFileDiff(file: PrFileDiff): boolean {
+  return getImageMimeType(file.filename) !== null || (file.previous_filename !== null && getImageMimeType(file.previous_filename) !== null)
+}
+
+export function getImagePreviewDataUrl(filename: string, base64Content: string): string | null {
+  if (base64Content.length === 0) return null
+  const mimeType = getImageMimeType(filename)
+  if (mimeType === null) return null
+  return `data:${mimeType};base64,${base64Content}`
 }
 
 export function toGitDiffViewData(file: PrFileDiff, contents?: FileContents): DiffViewData {
