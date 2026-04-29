@@ -861,7 +861,7 @@ fn main() {
             commands::plugins::plugin_invoke,
         ])
         .register_uri_scheme_protocol("plugin", |app, request| {
-            plugin_protocol::handle_plugin_uri(&app.app_handle(), &request.uri().to_string())
+            plugin_protocol::handle_plugin_uri(app.app_handle(), &request.uri().to_string())
         })
         .build(tauri_context())
         .expect("error while building tauri application");

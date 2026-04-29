@@ -58,22 +58,12 @@ struct HostRuntime {
     process_token: u64,
 }
 
+#[derive(Default)]
 struct PluginTransportState {
     writer: Option<Arc<tokio::sync::Mutex<tokio::process::ChildStdin>>>,
     pending: HashMap<u64, oneshot::Sender<Result<Value, String>>>,
     session_id: u64,
     process_token: u64,
-}
-
-impl Default for PluginTransportState {
-    fn default() -> Self {
-        Self {
-            writer: None,
-            pending: HashMap::new(),
-            session_id: 0,
-            process_token: 0,
-        }
-    }
 }
 
 impl Default for HostRuntime {

@@ -10,9 +10,9 @@ use tauri::Emitter;
 use tokio::sync::Mutex;
 
 async fn finalize_agent_pty_exit(
-    sessions: &Arc<Mutex<HashMap<String, PtySession>>>,
-    last_output: &Arc<Mutex<HashMap<String, Arc<AtomicU64>>>>,
-    output_buffers: &Arc<Mutex<HashMap<String, Arc<std::sync::Mutex<RingBuffer>>>>>,
+    sessions: &PtySessions,
+    last_output: &LastOutputTimes,
+    output_buffers: &PtyOutputBuffers,
     pid_file: &Path,
     session_key: &str,
     instance_id: u64,
@@ -88,6 +88,11 @@ impl RingBuffer {
         String::from_utf8_lossy(&self.data).to_string()
     }
 }
+
+type SharedRingBuffer = Arc<std::sync::Mutex<RingBuffer>>;
+type PtySessions = Arc<Mutex<HashMap<String, PtySession>>>;
+type LastOutputTimes = Arc<Mutex<HashMap<String, Arc<AtomicU64>>>>;
+type PtyOutputBuffers = Arc<Mutex<HashMap<String, SharedRingBuffer>>>;
 
 // ============================================================================
 // PTY Output Reader and Event Batching
@@ -238,9 +243,9 @@ impl PtyOutputBatcher {
 enum PtyExitAction {
     EmitOnly,
     FinalizeAgent {
-        sessions: Arc<Mutex<HashMap<String, PtySession>>>,
-        last_output: Arc<Mutex<HashMap<String, Arc<AtomicU64>>>>,
-        output_buffers: Arc<Mutex<HashMap<String, Arc<std::sync::Mutex<RingBuffer>>>>>,
+        sessions: PtySessions,
+        last_output: LastOutputTimes,
+        output_buffers: PtyOutputBuffers,
         pid_file: PathBuf,
     },
 }
@@ -397,10 +402,10 @@ struct PtySession {
 /// Manages multiple PTY sessions (one per task)
 #[derive(Clone)]
 pub struct PtyManager {
-    sessions: Arc<Mutex<HashMap<String, PtySession>>>,
+    sessions: PtySessions,
     pid_dir_override: Option<PathBuf>,
-    last_output: Arc<Mutex<HashMap<String, Arc<AtomicU64>>>>,
-    output_buffers: Arc<Mutex<HashMap<String, Arc<std::sync::Mutex<RingBuffer>>>>>,
+    last_output: LastOutputTimes,
+    output_buffers: PtyOutputBuffers,
 }
 
 impl PtyManager {
