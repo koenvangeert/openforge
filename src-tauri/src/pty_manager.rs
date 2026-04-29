@@ -1191,12 +1191,10 @@ impl PtyManager {
             let entry = entry?;
             let path = entry.path();
 
-            // Process files ending with -pty.pid, -claude.pid, or -shell.pid
+            // Process PTY PID files, including legacy task-scoped shell PIDs
+            // and indexed shell PIDs like task-shell-0.pid.
             if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-                if !name.ends_with("-pty.pid")
-                    && !name.ends_with("-claude.pid")
-                    && !name.ends_with("-shell.pid")
-                {
+                if !is_pty_pid_file_name(name) {
                     continue;
                 }
             } else {
@@ -1436,6 +1434,24 @@ fn shell_session_key(task_id: &str, terminal_index: Option<u32>) -> String {
 
 fn shell_pid_file_name(task_id: &str, terminal_index: Option<u32>) -> String {
     format!("{}.pid", shell_session_key(task_id, terminal_index))
+}
+
+fn is_pty_pid_file_name(name: &str) -> bool {
+    name.ends_with("-pty.pid")
+        || name.ends_with("-claude.pid")
+        || name.ends_with("-shell.pid")
+        || is_indexed_shell_pid_file_name(name)
+}
+
+fn is_indexed_shell_pid_file_name(name: &str) -> bool {
+    let Some(stem) = name.strip_suffix(".pid") else {
+        return false;
+    };
+    let Some((_task_id, shell_index)) = stem.rsplit_once("-shell-") else {
+        return false;
+    };
+
+    !shell_index.is_empty() && shell_index.chars().all(|ch| ch.is_ascii_digit())
 }
 
 // ============================================================================
@@ -1735,6 +1751,30 @@ mod tests {
         assert!(!pid_file.exists(), "Invalid PTY PID file should be removed");
 
         let _ = std::fs::remove_dir_all(&tmp_dir);
+    }
+
+    #[test]
+    fn test_cleanup_stale_pids_invalid_indexed_shell_pid() {
+        let mut manager = PtyManager::new();
+        let tmp_dir = tempfile::tempdir().expect("tempdir should succeed");
+        manager.set_pid_dir(tmp_dir.path().to_path_buf());
+
+        let shell0_pid_file = tmp_dir.path().join("task123-shell-0.pid");
+        let shell1_pid_file = tmp_dir.path().join("task123-shell-1.pid");
+        std::fs::write(&shell0_pid_file, "not_a_number").unwrap();
+        std::fs::write(&shell1_pid_file, "not_a_number").unwrap();
+
+        let result = manager.cleanup_stale_pids();
+
+        assert!(result.is_ok());
+        assert!(
+            !shell0_pid_file.exists(),
+            "Indexed shell 0 PID file should be processed and removed"
+        );
+        assert!(
+            !shell1_pid_file.exists(),
+            "Indexed shell 1 PID file should be processed and removed"
+        );
     }
 
     #[test]
