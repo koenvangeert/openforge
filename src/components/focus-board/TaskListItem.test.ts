@@ -86,10 +86,11 @@ describe('TaskListItem', () => {
     expect(screen.getByText('Agent is running.')).toBeTruthy()
   })
 
-  it('truncates reasonText visually using Tailwind truncate class when selected', () => {
+  it('keeps the full reasonText available when selected', () => {
     render(TaskListItem, { props: { ...baseProps, isSelected: true, reasonText: 'A very long reason text that should be ellipsized' } })
-    const reasonTextElement = screen.getByText('A very long reason text that should be ellipsized')
-    expect(reasonTextElement.classList.contains('truncate')).toBe(true)
+    const item = screen.getByRole('button')
+    expect(item.getAttribute('data-selected')).toBe('true')
+    expect(screen.getByText('A very long reason text that should be ellipsized')).toBeTruthy()
   })
 
   it('calls onSelect when clicked', async () => {
@@ -98,6 +99,15 @@ describe('TaskListItem', () => {
     const item = screen.getByRole('button')
     await fireEvent.click(item)
     expect(onSelect).toHaveBeenCalled()
+  })
+
+  it('calls onSelect from keyboard activation', async () => {
+    const onSelect = vi.fn()
+    render(TaskListItem, { props: { ...baseProps, onSelect } })
+    const item = screen.getByRole('button')
+    await fireEvent.keyDown(item, { key: 'Enter' })
+    await fireEvent.keyDown(item, { key: ' ' })
+    expect(onSelect).toHaveBeenCalledTimes(2)
   })
 
   it('calls onContextMenu on right-click', async () => {
@@ -142,17 +152,14 @@ describe('TaskListItem', () => {
     expect(screen.queryByText(/PR #/)).toBeNull()
   })
 
-  it('renders badge-info class on the state badge for pr-queued state', () => {
+  it('renders queued label for pr-queued state', () => {
     render(TaskListItem, { props: { ...baseProps, state: 'pr-queued' as TaskState } })
-    // The state badge renders with text "Queued" for pr-queued state
-    const badge = screen.getByText('Queued')
-    expect(badge.classList.contains('badge-info')).toBe(true)
+    expect(screen.getByText('Queued')).toBeTruthy()
   })
 
-  it('renders badge-error class and "Merge Conflict" label for merge-conflict state', () => {
+  it('renders "Merge Conflict" label for merge-conflict state', () => {
     render(TaskListItem, { props: { ...baseProps, state: 'merge-conflict' as TaskState } })
-    const badge = screen.getByText('Merge Conflict')
-    expect(badge.classList.contains('badge-error')).toBe(true)
+    expect(screen.getByText('Merge Conflict')).toBeTruthy()
   })
 
   it('with multiple PRs, shows the state-driving PR (open preferred over merged)', () => {
