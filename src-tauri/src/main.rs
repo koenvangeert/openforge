@@ -473,6 +473,13 @@ fn restore_resumed_session_state(
     }
 
     if let Some(session) = latest_session {
+        let pty_checkpoint_data = pty_instance_id.map(|id| {
+            serde_json::json!({
+                "pty_instance_id": id,
+            })
+            .to_string()
+        });
+
         let persisted_status = if provider_name == "opencode" {
             match resume_persistence {
                 ResumeSessionPersistence::LeaveExisting => None,
@@ -481,22 +488,20 @@ fn restore_resumed_session_state(
             }
         } else if matches!(session.status.as_str(), "interrupted" | "running") {
             Some("running")
+        } else if provider_name == "pi"
+            && pty_checkpoint_data.is_some()
+            && matches!(session.status.as_str(), "completed" | "paused")
+        {
+            Some(session.status.as_str())
         } else {
             None
         };
 
         if let Some(status) = persisted_status {
-            let pty_checkpoint_data;
-            let checkpoint_data = if status == "running" {
-                if let Some(pty_instance_id) = pty_instance_id {
-                    pty_checkpoint_data = serde_json::json!({
-                        "pty_instance_id": pty_instance_id,
-                    })
-                    .to_string();
-                    Some(pty_checkpoint_data.as_str())
-                } else {
-                    session.checkpoint_data.as_deref()
-                }
+            let checkpoint_data = if status == "running" || provider_name == "pi" {
+                pty_checkpoint_data
+                    .as_deref()
+                    .or(session.checkpoint_data.as_deref())
             } else {
                 None
             };
@@ -1096,6 +1101,81 @@ mod tests {
         assert_eq!(workspace.workspace_path, "/tmp/test-repo/.worktrees/T-100");
         assert_eq!(workspace.opencode_port, Some(4312));
         assert_eq!(workspace.kind, "git_worktree");
+
+        drop(db);
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn restore_resumed_pi_session_refreshes_checkpoint_for_completed_session() {
+        let (db, path) = make_test_db("restore_resumed_pi_completed_checkpoint");
+
+        let project = db
+            .create_project("Test Project", "/tmp/test-repo")
+            .expect("create project failed");
+        let task = db
+            .create_task(
+                "Resume Pi",
+                "doing",
+                Some(&project.id),
+                Some("Resume Pi"),
+                Some("pi"),
+                None,
+            )
+            .expect("create task failed");
+        db.create_worktree_record(
+            &task.id,
+            &project.id,
+            "/tmp/test-repo",
+            "/tmp/test-repo/.worktrees/T-200",
+            "t-200",
+        )
+        .expect("create worktree failed");
+        db.create_agent_session("ses-pi-200", &task.id, None, "implement", "completed", "pi")
+            .expect("create pi session failed");
+        db.set_agent_session_pi_id("ses-pi-200", "pi-ses-200")
+            .expect("set pi session id failed");
+        db.update_agent_session(
+            "ses-pi-200",
+            "implement",
+            "completed",
+            Some(r#"{"pty_instance_id":41}"#),
+            None,
+        )
+        .expect("seed old checkpoint failed");
+
+        let session = db
+            .get_latest_session_for_ticket(&task.id)
+            .expect("get latest session failed")
+            .expect("missing latest session");
+        let target = ResumeTarget {
+            task_id: task.id.clone(),
+            project_id: project.id.clone(),
+            repo_path: "/tmp/test-repo".to_string(),
+            workspace_path: "/tmp/test-repo/.worktrees/T-200".to_string(),
+            kind: "git_worktree".to_string(),
+            branch_name: Some("t-200".to_string()),
+        };
+
+        restore_resumed_session_state(
+            &db,
+            Some(&session),
+            &target,
+            "pi",
+            0,
+            Some(42),
+            ResumeSessionPersistence::Running,
+        );
+
+        let restored = db
+            .get_agent_session("ses-pi-200")
+            .expect("get restored pi session failed")
+            .expect("missing restored pi session");
+        assert_eq!(restored.status, "completed");
+        assert_eq!(
+            restored.checkpoint_data,
+            Some(r#"{"pty_instance_id":42}"#.to_string())
+        );
 
         drop(db);
         let _ = fs::remove_file(path);
