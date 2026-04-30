@@ -3,6 +3,7 @@
   import { activeSessions } from '../../lib/stores'
   import { writePty, killPty, spawnPty, abortImplementation } from '../../lib/ipc'
   import '@xterm/xterm/css/xterm.css'
+  import { getAgentPanelStatusFromSessionStatus, type AgentPanelStatus } from '../../lib/agentPanelSessionSync'
   import { parseCheckpointQuestion } from '../../lib/parseCheckpoint'
   import VoiceInput from '../shared/input/VoiceInput.svelte'
   import {
@@ -23,7 +24,7 @@
 
   let { taskId, isStarting = false }: Props = $props()
 
-  let status = $state<'idle' | 'running' | 'complete' | 'error'>('idle')
+  let status = $state<AgentPanelStatus>('idle')
   let opencodePort = $state<number | null>(null)
   let terminalEl: HTMLDivElement
   let poolEntry: PoolEntry | null = null
@@ -50,14 +51,7 @@
       return
     }
 
-    // Map session status to local UI status
-    if (session.status === 'running' || session.status === 'paused') {
-      status = 'running'
-    } else if (session.status === 'completed') {
-      status = 'complete'
-    } else if (session.status === 'failed' || session.status === 'interrupted') {
-      status = 'error'
-    }
+    status = getAgentPanelStatusFromSessionStatus(session.status)
 
     // Attach TTY for any existing session — show terminal output
     // unless the task never started

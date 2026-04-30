@@ -1,10 +1,10 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte'
-  import { listen } from '@tauri-apps/api/event'
   import type { UnlistenFn } from '@tauri-apps/api/event'
   import { activeSessions } from '../../lib/stores'
   import { writePty, killPty, abortImplementation } from '../../lib/ipc'
   import '@xterm/xterm/css/xterm.css'
+  import { getAgentPanelStatusFromSessionStatus, listenToAgentStatusChanged, type AgentPanelStatus } from '../../lib/agentPanelSessionSync'
   import { acquire, attach, detach, isPtyActive, type PoolEntry } from '../../lib/terminalPool'
   import VoiceInput from '../shared/input/VoiceInput.svelte'
 
@@ -18,12 +18,24 @@
   let terminalEl: HTMLDivElement
   let unlisteners: UnlistenFn[] = []
   let poolEntry: PoolEntry | null = null
-  let status = $state<'idle' | 'running' | 'complete' | 'error'>('idle')
+  let status = $state<AgentPanelStatus>('idle')
   let terminalActive = $state(false)
   let destroyed = false
 
   // Derived state from activeSessions store
   let session = $derived($activeSessions.get(taskId) || null)
+
+  function syncStatusFromSession(sessionStatus: string | null | undefined) {
+    const nextStatus = getAgentPanelStatusFromSessionStatus(sessionStatus)
+    status = nextStatus
+    if (nextStatus === 'running') {
+      terminalActive = isPtyActive(taskId)
+    }
+  }
+
+  $effect(() => {
+    syncStatusFromSession(session?.status)
+  })
 
   onMount(async () => {
     poolEntry = await acquire(taskId)
@@ -32,29 +44,13 @@
     if (destroyed) return
 
     terminalActive = isPtyActive(taskId)
-
-    // If session already exists and is running, PTY is already spawned
-    if (session?.status === 'running') {
-      status = 'running'
-      terminalActive = isPtyActive(taskId)
-    } else if (session?.status === 'completed') {
-      status = 'complete'
-    } else if (session?.status === 'failed' || session?.status === 'interrupted') {
-      status = 'error'
-    }
+    syncStatusFromSession(session?.status)
 
     // Listen for agent-status-changed events (App.svelte also updates activeSessions store)
-    unlisteners.push(await listen<{ task_id: string; status: string }>('agent-status-changed', (event) => {
-      if (event.payload.task_id !== taskId) return
-      const s = event.payload.status
-      if (s === 'running') {
-        status = 'running'
-        terminalActive = isPtyActive(taskId)
-      } else if (s === 'completed') {
-        status = 'complete'
-      } else if (s === 'failed' || s === 'interrupted') {
-        status = 'error'
-      }
+    unlisteners.push(await listenToAgentStatusChanged({
+      taskId,
+      setStatus: (nextStatus) => { status = nextStatus },
+      onRunning: () => { terminalActive = isPtyActive(taskId) },
     }))
   })
 
