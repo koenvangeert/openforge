@@ -1,5 +1,5 @@
 <script lang="ts">
-  import SharedTerminalTabs from '@openforge/terminal-shared/TerminalTabs.svelte'
+  import AppTerminalTabs from '../../../src/components/task-detail/TerminalTabs.svelte'
 
   interface Props {
     taskId: string
@@ -9,23 +9,23 @@
   }
 
   let props: Props = $props()
-  let sharedTerminalTabsRef = $state<any>(null)
+  let appTerminalTabsRef = $state<any>(null)
 
   export function addTab() {
-    sharedTerminalTabsRef?.addTab()
+    appTerminalTabsRef?.addTab()
   }
 
   export async function closeActiveTab() {
-    await sharedTerminalTabsRef?.closeActiveTab()
+    await appTerminalTabsRef?.closeActiveTab()
   }
 
   export function focusActiveTab() {
-    sharedTerminalTabsRef?.focusActiveTab()
+    appTerminalTabsRef?.focusActiveTab()
   }
 
   export function switchToTab(tabIndex: number) {
-    sharedTerminalTabsRef?.switchToTab(tabIndex)
+    appTerminalTabsRef?.switchToTab(tabIndex)
   }
 </script>
 
-<SharedTerminalTabs bind:this={sharedTerminalTabsRef} {...props} />
+<AppTerminalTabs bind:this={appTerminalTabsRef} {...props} />

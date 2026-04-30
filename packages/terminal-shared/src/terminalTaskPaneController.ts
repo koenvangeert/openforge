@@ -4,4 +4,4 @@ export {
   registerTerminalTaskPaneController,
   unregisterTerminalTaskPaneController,
   type TerminalTaskPaneController,
-} from '@openforge/terminal-shared/terminalTaskPaneController'
+} from '../../../src/lib/terminalTaskPaneController'

@@ -3,10 +3,15 @@ import { commandHeld } from './stores'
 export function setupCommandHeldListeners() {
   let showTimer: ReturnType<typeof setTimeout> | null = null
 
+  function clearShowTimer() {
+    if (showTimer) clearTimeout(showTimer)
+    showTimer = null
+  }
+
   function onKeyDown(e: KeyboardEvent) {
     if (e.key !== 'Meta') return
     if (e.repeat) return
-    clearTimeout(showTimer!)
+    clearShowTimer()
     showTimer = setTimeout(() => {
       commandHeld.set(true)
     }, 150)
@@ -14,34 +19,31 @@ export function setupCommandHeldListeners() {
 
   function onKeyUp(e: KeyboardEvent) {
     if (e.key !== 'Meta') return
-    clearTimeout(showTimer!)
-    showTimer = null
+    clearShowTimer()
     commandHeld.set(false)
   }
 
   function onBlur() {
-    clearTimeout(showTimer!)
-    showTimer = null
+    clearShowTimer()
     commandHeld.set(false)
   }
 
   function onVisibilityChange() {
     if (document.hidden) {
-      clearTimeout(showTimer!)
-      showTimer = null
+      clearShowTimer()
       commandHeld.set(false)
     }
   }
 
-  window.addEventListener('keydown', onKeyDown)
-  window.addEventListener('keyup', onKeyUp)
+  window.addEventListener('keydown', onKeyDown, { capture: true })
+  window.addEventListener('keyup', onKeyUp, { capture: true })
   window.addEventListener('blur', onBlur)
   document.addEventListener('visibilitychange', onVisibilityChange)
 
   return () => {
-    clearTimeout(showTimer!)
-    window.removeEventListener('keydown', onKeyDown)
-    window.removeEventListener('keyup', onKeyUp)
+    clearShowTimer()
+    window.removeEventListener('keydown', onKeyDown, { capture: true })
+    window.removeEventListener('keyup', onKeyUp, { capture: true })
     window.removeEventListener('blur', onBlur)
     document.removeEventListener('visibilitychange', onVisibilityChange)
     commandHeld.set(false)

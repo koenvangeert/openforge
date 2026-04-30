@@ -8,4 +8,4 @@ export {
   setConfig,
   spawnShellPty,
   writePty,
-} from '@openforge/terminal-shared/ipc'
+} from '../../../src/lib/ipc'

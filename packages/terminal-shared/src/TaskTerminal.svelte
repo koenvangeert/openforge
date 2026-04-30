@@ -1,5 +1,5 @@
 <script lang="ts">
-  import SharedTaskTerminal from '@openforge/terminal-shared/TaskTerminal.svelte'
+  import AppTaskTerminal from '../../../src/components/task-detail/TaskTerminal.svelte'
 
   interface Props {
     taskId: string
@@ -13,4 +13,4 @@
   let props: Props = $props()
 </script>
 
-<SharedTaskTerminal {...props} />
+<AppTaskTerminal {...props} />

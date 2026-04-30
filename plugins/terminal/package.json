@@ -6,7 +6,8 @@
     "test": "vitest run --config vitest.config.ts"
   },
   "dependencies": {
-    "@openforge/plugin-sdk": "workspace:*"
+    "@openforge/plugin-sdk": "workspace:*",
+    "@openforge/terminal-shared": "workspace:*"
   },
   "peerDependencies": {
     "svelte": "^5.0.0"

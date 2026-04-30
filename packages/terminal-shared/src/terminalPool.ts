@@ -21,4 +21,4 @@ export {
   type ShellLifecycleState,
   type TaskTerminalTabsSession,
   type TerminalTab,
-} from '@openforge/terminal-shared/terminalPool'
+} from '../../../src/lib/terminalPool'

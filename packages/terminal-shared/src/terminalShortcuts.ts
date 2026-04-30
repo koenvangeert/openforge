@@ -1,4 +1,4 @@
 export {
   handleTerminalShortcutKeydown,
   type TerminalShortcutController,
-} from '@openforge/terminal-shared/terminalShortcuts'
+} from '../../../src/lib/terminalShortcuts'

@@ -1,0 +1,19 @@
+{
+  "name": "@openforge/terminal-shared",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "exports": {
+    "./TaskTerminal.svelte": "./src/TaskTerminal.svelte",
+    "./TerminalTabs.svelte": "./src/TerminalTabs.svelte",
+    "./TerminalTaskPane.svelte": "./src/TerminalTaskPane.svelte",
+    "./ipc": "./src/ipc.ts",
+    "./stores": "./src/stores.ts",
+    "./terminalPool": "./src/terminalPool.ts",
+    "./terminalShortcuts": "./src/terminalShortcuts.ts",
+    "./terminalTaskPaneController": "./src/terminalTaskPaneController.ts"
+  },
+  "dependencies": {
+    "svelte": "^5.0.0"
+  }
+}
