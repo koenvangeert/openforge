@@ -104,6 +104,7 @@ vi.mock('../../lib/stores', () => ({
   tasks: writable([]),
   activeProjectId: writable('project-1'),
   startingTasks: writable(new Set()),
+  taskRuntimeInfo: writable(new Map()),
   selfReviewDiffFiles: writable([]),
   selfReviewGeneralComments: writable([]),
   selfReviewArchivedComments: writable([]),
@@ -234,7 +235,7 @@ vi.mock('../../lib/actions', () => ({
   getEnabledActions: vi.fn((actions: { enabled: boolean }[]) => actions.filter(a => a.enabled)),
 }))
 
-import { activeSessions, taskActiveView, commandHeld } from '../../lib/stores'
+import { activeSessions, taskActiveView, commandHeld, taskRuntimeInfo } from '../../lib/stores'
 import type { Task, AgentSession, TaskWorkspaceInfo } from '../../lib/types'
 import PluginSlotTestView from '../plugin/PluginSlotTestView.svelte'
 import TerminalTaskPane from './TerminalTaskPane.svelte'
@@ -314,6 +315,7 @@ describe('createTaskWorkspaceInfo', () => {
 describe('TaskDetailView', () => {
   beforeEach(() => {
     taskActiveView.set(new Map())
+    taskRuntimeInfo.set(new Map())
     commandHeld.set(false)
     taskTabSessions.clear()
     clearTerminalTaskPaneControllers()
@@ -654,6 +656,28 @@ describe('TaskDetailView', () => {
     render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
     await waitFor(() => {
       expect(screen.queryByRole('button', { name: /^terminal\b/i })).toBeNull()
+    })
+  })
+
+  it('shows worktree-backed tab buttons when runtime workspace info arrives after initial load', async () => {
+    const { getTaskWorkspace } = await import('../../lib/ipc')
+    vi.mocked(getTaskWorkspace).mockResolvedValue(null)
+
+    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: /^terminal\b/i })).toBeNull()
+    })
+
+    taskRuntimeInfo.set(new Map([[
+      'T-42',
+      { workspacePath: '/path/to/worktree', opencodePort: null },
+    ]]))
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /^code_view\b/i })).toBeTruthy()
+      expect(screen.getByRole('button', { name: /^review_view\b/i })).toBeTruthy()
+      expect(screen.getByRole('button', { name: /^terminal\b/i })).toBeTruthy()
     })
   })
 

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onDestroy } from 'svelte'
   import { get } from 'svelte/store'
-  import { activeProjectId, activeSessions, commandHeld, error, startingTasks, taskActiveView } from '../../lib/stores'
+  import { activeProjectId, activeSessions, commandHeld, error, startingTasks, taskActiveView, taskRuntimeInfo } from '../../lib/stores'
   import { getTaskWorkspace, updateTaskStatus } from '../../lib/ipc'
   import { useAppRouter } from '../../lib/router.svelte'
   import { moveTaskToComplete } from '../../lib/moveToComplete'
@@ -33,6 +33,7 @@
   let activeView = $state('code')
   let workspacePath = $state<string | null>(null)
   let lastTaskId = ''
+  let workspaceLookupToken = 0
   let actions = $state<Action[]>([])
   const taskShortcuts = useShortcutRegistry()
 
@@ -87,13 +88,23 @@
       lastTaskId = taskId
       const stored = (get(taskActiveView) as Map<string, string>).get(taskId) ?? 'code'
       activeView = normalizeStoredActiveView(stored)
-      workspacePath = null
+      workspacePath = $taskRuntimeInfo.get(taskId)?.workspacePath ?? null
+      const lookupToken = ++workspaceLookupToken
       getTaskWorkspace(taskId).then((workspace) => {
-        workspacePath = workspace?.workspace_path ?? null
+        if (lookupToken !== workspaceLookupToken) return
+        const runtimeWorkspacePath = get(taskRuntimeInfo).get(taskId)?.workspacePath ?? null
+        workspacePath = runtimeWorkspacePath ?? workspace?.workspace_path ?? null
         if (activeView !== 'code' && activeView !== 'review' && workspacePath === null) {
           activeView = 'code'
         }
       })
+    }
+  })
+
+  $effect(() => {
+    const runtimeWorkspacePath = $taskRuntimeInfo.get(task.id)?.workspacePath ?? null
+    if (runtimeWorkspacePath !== null && runtimeWorkspacePath !== workspacePath) {
+      workspacePath = runtimeWorkspacePath
     }
   })
 
