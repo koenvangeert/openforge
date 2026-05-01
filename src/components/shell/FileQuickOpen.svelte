@@ -1,10 +1,11 @@
 <script lang="ts">
-  import { onMount, tick, onDestroy } from 'svelte'
+  import { onDestroy } from 'svelte'
   import { activeProjectId, pendingFileReveal } from '../../lib/stores'
   import { fsSearchFiles } from '../../lib/ipc'
   import { FILE_VIEWER_VIEW_KEY } from '../../lib/fileViewerPlugin'
   import { useListNavigation } from '../../lib/useListNavigation.svelte'
   import { useAppRouter } from '../../lib/router.svelte'
+  import PaletteModal from './PaletteModal.svelte'
 
   interface Props {
     onClose: () => void
@@ -18,7 +19,6 @@
   let results = $state<string[]>([])
   let loading = $state(false)
   let selectedIndex = $state(0)
-  let inputEl: HTMLInputElement | null = $state(null)
   let listContainer: HTMLDivElement | null = $state(null)
   let searchTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -45,15 +45,8 @@
     onCancel() { closeModal() }
   })
 
-  function handleKeyDown(e: KeyboardEvent) {
-    const handled = listNav.handleKeydown(e)
-    if (handled) return
-  }
-
-  function handleBackdropClick(e: MouseEvent) {
-    if (e.target === e.currentTarget) {
-      closeModal()
-    }
+  function handleKeyDown(e: KeyboardEvent): boolean {
+    return listNav.handleKeydown(e)
   }
 
   async function searchFiles(query: string) {
@@ -111,11 +104,6 @@
     }
   })
 
-  onMount(async () => {
-    await tick()
-    inputEl?.focus()
-  })
-
   onDestroy(() => {
     if (searchTimer) {
       clearTimeout(searchTimer)
@@ -124,23 +112,15 @@
   })
 </script>
 
-<div
-  data-testid="file-quick-open-backdrop"
-  role="presentation"
-  class="fixed inset-0 z-50 flex items-start justify-center pt-[15vh] bg-black/50"
-  onclick={handleBackdropClick}
+<PaletteModal
+  ariaLabel="Search files"
+  testId="file-quick-open-backdrop"
+  onClose={closeModal}
+  onKeydown={handleKeyDown}
 >
-  <div
-    role="dialog"
-    aria-modal="true"
-    aria-label="Search files"
-    class="w-full max-w-[520px] bg-base-200 border border-base-300 rounded-lg shadow-2xl overflow-hidden"
-    onkeydown={handleKeyDown}
-    tabindex="-1"
-  >
     <div class="p-3 border-b border-base-300">
       <input
-        bind:this={inputEl}
+        data-palette-initial-focus
         type="text"
         class="input input-sm w-full bg-base-100 border-base-300 focus:outline-none text-base-content placeholder:text-base-content/40"
         placeholder="Search files..."
@@ -195,5 +175,4 @@
       <span class="text-[10px] text-base-content/40"><kbd class="kbd kbd-xs">Enter</kbd> open file</span>
       <span class="text-[10px] text-base-content/40"><kbd class="kbd kbd-xs">Esc</kbd> close</span>
     </div>
-  </div>
-</div>
+</PaletteModal>

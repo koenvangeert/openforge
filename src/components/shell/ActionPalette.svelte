@@ -1,9 +1,9 @@
 <script lang="ts">
-  import { onMount, tick } from 'svelte'
   import type { Task, Action, PullRequestInfo } from '../../lib/types'
   import { getAvailableActions, filterActions, type PaletteAction } from '../../lib/actionPalette'
   import { useListNavigation } from '../../lib/useListNavigation.svelte'
   import HoverTooltip from '../shared/ui/HoverTooltip.svelte'
+  import PaletteModal from './PaletteModal.svelte'
 
   interface Props {
     task: Task | null
@@ -17,7 +17,6 @@
 
   let searchQuery = $state('')
   let selectedActionId = $state<string | null>(null)
-  let inputEl = $state<HTMLInputElement | null>(null)
 
   let allActions = $derived(getAvailableActions(task, customActions, taskPrs))
   let filtered = $derived(filterActions(allActions, searchQuery))
@@ -95,21 +94,9 @@
     onCancel() { onClose() }
   })
 
-  function handleKeyDown(e: KeyboardEvent) {
-    const handled = listNav.handleKeydown(e)
-    if (handled) return
+  function handleKeyDown(e: KeyboardEvent): boolean {
+    return listNav.handleKeydown(e)
   }
-
-  function handleBackdropClick(e: MouseEvent) {
-    if (e.target === e.currentTarget) {
-      onClose()
-    }
-  }
-
-  onMount(async () => {
-    await tick()
-    inputEl?.focus()
-  })
 
   let listContainer: HTMLDivElement | null = $state(null)
 
@@ -132,25 +119,16 @@
   }
 </script>
 
-<!-- svelte-ignore a11y_click_events_have_key_events -->
-<div
-  data-testid="action-palette-backdrop"
-  role="presentation"
-  class="fixed inset-0 z-50 flex items-start justify-center pt-[15vh] bg-black/50"
-  onclick={handleBackdropClick}
+<PaletteModal
+  ariaLabel="Action palette"
+  testId="action-palette-backdrop"
+  {onClose}
+  onKeydown={handleKeyDown}
 >
-  <div
-    role="dialog"
-    aria-modal="true"
-    aria-label="Action palette"
-    class="w-full max-w-[520px] bg-base-200 border border-base-300 rounded-lg shadow-2xl overflow-hidden"
-    onkeydown={handleKeyDown}
-    tabindex="-1"
-  >
     <!-- Search input -->
     <div class="p-3 border-b border-base-300">
       <input
-        bind:this={inputEl}
+        data-palette-initial-focus
         type="text"
         class="input input-sm w-full bg-base-100 border-base-300 focus:outline-none text-base-content placeholder:text-base-content/40"
         placeholder="Type an action..."
@@ -214,5 +192,4 @@
        <span class="text-[10px] text-base-content/40"><kbd class="kbd kbd-xs">Esc</kbd> close</span>
        <span class="text-[10px] text-base-content/40 ml-auto"><kbd class="kbd kbd-xs">⌘K</kbd> toggle</span>
      </div>
-  </div>
-</div>
+</PaletteModal>
