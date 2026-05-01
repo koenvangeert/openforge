@@ -64,11 +64,11 @@ pub async fn update_task(
     db: State<'_, Arc<Mutex<db::Database>>>,
     app: tauri::AppHandle,
     id: String,
-    initial_prompt: String,
+    prompt: String,
 ) -> Result<(), String> {
     let db = crate::db::acquire_db(&db);
-    db.update_task(&id, &initial_prompt)
-        .map_err(|e| format!("Failed to update task: {}", e))?;
+    db.update_task(&id, &prompt)
+        .map_err(|e| format!("Failed to update task prompt: {}", e))?;
     let _ = app.emit(
         "task-changed",
         serde_json::json!({ "action": "updated", "task_id": id }),
@@ -77,16 +77,15 @@ pub async fn update_task(
 }
 
 #[tauri::command]
-pub async fn update_task_initial_prompt_and_summary(
+pub async fn update_task_summary(
     db: State<'_, Arc<Mutex<db::Database>>>,
     app: tauri::AppHandle,
     id: String,
-    initial_prompt: Option<String>,
-    summary: Option<String>,
+    summary: String,
 ) -> Result<(), String> {
     let db = crate::db::acquire_db(&db);
-    db.update_task_title_and_summary(&id, initial_prompt.as_deref(), summary.as_deref())
-        .map_err(|e| format!("Failed to update task initial prompt and summary: {}", e))?;
+    db.update_task_summary(&id, &summary)
+        .map_err(|e| format!("Failed to update task summary: {}", e))?;
     let _ = app.emit(
         "task-changed",
         serde_json::json!({ "action": "updated", "task_id": id }),

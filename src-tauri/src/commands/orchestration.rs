@@ -15,11 +15,11 @@ pub fn build_task_prompt(
     prompt.push_str(&format!(r#"<openforge_task_management>
 This task is {task_id}. You MUST call `openforge_update_task` at both points below — the task is not complete without these updates.
 
-<initial_prompt_update trigger="after_initial_analysis">
-Once you understand the scope, call: openforge_update_task(task_id="{task_id}", initial_prompt="...")
-Write a concise description reflecting the actual work, not the original request verbatim.
-Good: "Add JWT refresh token rotation to auth middleware" — Bad: "implement the auth thing"
-</initial_prompt_update>
+<analysis_update trigger="after_initial_analysis">
+Once you understand the scope, call: openforge_update_task(task_id="{task_id}", summary="...")
+Write a concise initial-analysis status reflecting the actual work, not the original request verbatim.
+Good: "Scoped JWT refresh token rotation in auth middleware" — Bad: "implement the auth thing"
+</analysis_update>
 
 <summary_update trigger="before_finalizing">
 Before reporting completion, call: openforge_update_task(task_id="{task_id}", summary="...")
@@ -27,7 +27,7 @@ Cover: what changed, key decisions, and anything needing attention.
 </summary_update>
 
 <completeness_check>
-Task is incomplete unless both updates were made. If blocked or abandoned, still update the summary with status and what remains.
+Task is incomplete unless both summary updates were made. If blocked or abandoned, still update the summary with status and what remains.
 </completeness_check>
 </openforge_task_management>
 
@@ -443,8 +443,22 @@ mod tests {
         assert!(prompt.contains("Test Task"));
         assert!(prompt.contains("<openforge_task_management>"));
         assert!(prompt.contains("openforge_update_task"));
+        assert!(prompt.contains("summary=\"...\""));
         assert!(prompt.contains("T-123"));
+        assert!(!prompt.contains("initial_prompt=\"...\""));
         assert!(!prompt.contains("External ticket:"));
+    }
+
+    #[test]
+    fn test_build_task_prompt_never_requests_initial_prompt_update() {
+        let task = sample_task("T-124", "Immutable prompt", None);
+
+        let prompt = build_task_prompt(&task, None, false);
+
+        assert!(prompt.contains("<analysis_update trigger=\"after_initial_analysis\">"));
+        assert!(prompt.contains("openforge_update_task(task_id=\"T-124\", summary=\"...\")"));
+        assert!(!prompt.contains("<initial_prompt_update"));
+        assert!(!prompt.contains("initial_prompt=\"...\""));
     }
 
     #[test]

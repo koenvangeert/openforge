@@ -124,6 +124,18 @@ describe('AddTaskDialog', () => {
     expect(textbox.value).toBe('Existing Task')
   })
 
+  it('pre-fills edit mode from mutable prompt when present', async () => {
+    render(AddTaskDialog, {
+      props: {
+        mode: 'edit',
+        task: { ...mockTask, initial_prompt: 'Immutable initial prompt', prompt: 'Mutable prompt text' },
+      },
+    })
+
+    const textbox = await screen.findByRole('textbox') as HTMLTextAreaElement
+    expect(textbox.value).toBe('Mutable prompt text')
+  })
+
   it('calls updateTask when submitted in edit mode', async () => {
     const onTaskSaved = vi.fn()
     render(AddTaskDialog, { props: { mode: 'edit', task: mockTask, onTaskSaved } })

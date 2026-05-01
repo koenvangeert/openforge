@@ -767,7 +767,7 @@ fn main() {
             commands::tasks::get_task_detail,
             commands::tasks::create_task,
             commands::tasks::update_task,
-            commands::tasks::update_task_initial_prompt_and_summary,
+            commands::tasks::update_task_summary,
             commands::tasks::update_task_status,
             commands::tasks::delete_task,
             commands::tasks::clear_done_tasks,

@@ -46,20 +46,20 @@ server.tool(
 
 server.tool(
   'update_task',
-  'Update the initial prompt and/or summary of a task. Call this to set a descriptive initial prompt based on what you\'ve discovered, and a TLDR summary of what you did and what needs attention.',
+  'Update the summary of a task. Call this to set a TLDR summary of what you did and what needs attention. Initial prompts are immutable after task creation.',
   {
     task_id: z.string().describe('ID of the task to update (e.g. "T-42")'),
-    initial_prompt: z.string().optional().describe('New initial prompt for the task'),
-    summary: z.string().optional().describe('TLDR summary of what was done and what needs attention'),
+    summary: z.string().describe('TLDR summary of what was done and what needs attention'),
+    initial_prompt: z.never().optional().describe('Forbidden: initial prompts are immutable after task creation'),
   },
-  async ({ task_id, initial_prompt, summary }) => {
+  async ({ task_id, summary }) => {
     try {
       const res = await fetch(`${BASE_URL}/update_task`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ task_id, initial_prompt, summary }),
+        body: JSON.stringify({ task_id, summary }),
       });
 
       if (!res.ok) {

@@ -212,15 +212,15 @@ impl super::Database {
         }
     }
 
-    pub fn update_task(&self, id: &str, initial_prompt: &str) -> Result<()> {
+    pub fn update_task(&self, id: &str, prompt: &str) -> Result<()> {
         let conn = self.conn.lock().unwrap();
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .expect("time went backwards")
             .as_secs() as i64;
         conn.execute(
-            "UPDATE tasks SET initial_prompt = ?1, updated_at = ?2 WHERE id = ?3",
-            rusqlite::params![initial_prompt, now, id],
+            "UPDATE tasks SET prompt = ?1, updated_at = ?2 WHERE id = ?3",
+            rusqlite::params![prompt, now, id],
         )?;
         Ok(())
     }
@@ -238,41 +238,16 @@ impl super::Database {
         Ok(())
     }
 
-    pub fn update_task_title_and_summary(
-        &self,
-        id: &str,
-        initial_prompt: Option<&str>,
-        summary: Option<&str>,
-    ) -> Result<()> {
+    pub fn update_task_summary(&self, id: &str, summary: &str) -> Result<()> {
         let conn = self.conn.lock().unwrap();
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .expect("time went backwards")
             .as_secs() as i64;
-
-        match (initial_prompt, summary) {
-            (Some(t), Some(s)) => {
-                conn.execute(
-                    "UPDATE tasks SET initial_prompt = ?1, summary = ?2, updated_at = ?3 WHERE id = ?4",
-                    rusqlite::params![t, s, now, id],
-                )?;
-            }
-            (Some(t), None) => {
-                conn.execute(
-                    "UPDATE tasks SET initial_prompt = ?1, updated_at = ?2 WHERE id = ?3",
-                    rusqlite::params![t, now, id],
-                )?;
-            }
-            (None, Some(s)) => {
-                conn.execute(
-                    "UPDATE tasks SET summary = ?1, updated_at = ?2 WHERE id = ?3",
-                    rusqlite::params![s, now, id],
-                )?;
-            }
-            (None, None) => {
-                return Ok(());
-            }
-        }
+        conn.execute(
+            "UPDATE tasks SET summary = ?1, updated_at = ?2 WHERE id = ?3",
+            rusqlite::params![summary, now, id],
+        )?;
         Ok(())
     }
 
@@ -402,33 +377,38 @@ mod tests {
     }
 
     #[test]
-    fn test_update_task_title_and_summary() {
-        let (db, path) = make_test_db("update_task_title_summary");
+    fn test_update_task_updates_prompt_and_preserves_initial_prompt() {
+        let (db, path) = make_test_db("update_task_prompt_preserves_initial_prompt");
 
         let task = db
             .create_task("Original", "backlog", None, None, None, None)
             .expect("create failed");
 
-        db.update_task_title_and_summary(&task.id, Some("New Title"), Some("New Summary"))
-            .expect("update both failed");
+        db.update_task(&task.id, "Updated prompt")
+            .expect("update prompt failed");
 
         let updated = db.get_task(&task.id).expect("get failed").unwrap();
-        assert_eq!(updated.initial_prompt, "New Title");
+        assert_eq!(updated.initial_prompt, "Original");
+        assert_eq!(updated.prompt, Some("Updated prompt".to_string()));
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_update_task_summary_preserves_initial_prompt() {
+        let (db, path) = make_test_db("update_task_summary_preserves_initial_prompt");
+
+        let task = db
+            .create_task("Original prompt", "backlog", None, None, None, None)
+            .expect("create failed");
+
+        db.update_task_summary(&task.id, "New Summary")
+            .expect("update summary failed");
+
+        let updated = db.get_task(&task.id).expect("get failed").unwrap();
+        assert_eq!(updated.initial_prompt, "Original prompt");
         assert_eq!(updated.summary, Some("New Summary".to_string()));
-
-        db.update_task_title_and_summary(&task.id, Some("Another Title"), None)
-            .expect("update title only failed");
-
-        let updated = db.get_task(&task.id).expect("get failed").unwrap();
-        assert_eq!(updated.initial_prompt, "Another Title");
-        assert_eq!(updated.summary, Some("New Summary".to_string()));
-
-        db.update_task_title_and_summary(&task.id, None, Some("Updated Summary"))
-            .expect("update summary only failed");
-
-        let updated = db.get_task(&task.id).expect("get failed").unwrap();
-        assert_eq!(updated.initial_prompt, "Another Title");
-        assert_eq!(updated.summary, Some("Updated Summary".to_string()));
 
         drop(db);
         let _ = fs::remove_file(&path);
@@ -457,18 +437,20 @@ mod tests {
     }
 
     #[test]
-    fn test_update_task() {
-        let (db, path) = make_test_db("update_task");
+    fn test_update_task_preserves_initial_prompt_in_task_list() {
+        let (db, path) = make_test_db("update_task_preserves_initial_prompt_in_task_list");
 
         let task = db
             .create_task("Original", "backlog", None, None, None, None)
             .expect("create failed");
 
-        db.update_task(&task.id, "Updated").expect("update failed");
+        db.update_task(&task.id, "Updated prompt")
+            .expect("update failed");
 
         let tasks = db.get_all_tasks().expect("get_all failed");
         assert_eq!(tasks.len(), 1);
-        assert_eq!(tasks[0].initial_prompt, "Updated");
+        assert_eq!(tasks[0].initial_prompt, "Original");
+        assert_eq!(tasks[0].prompt, Some("Updated prompt".to_string()));
 
         drop(db);
         let _ = fs::remove_file(&path);

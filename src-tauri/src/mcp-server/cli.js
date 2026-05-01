@@ -3,20 +3,22 @@
 const HTTP_PORT = process.env.OPENFORGE_HTTP_PORT ?? '17422';
 const BASE_URL = `http://127.0.0.1:${HTTP_PORT}`;
 
-const COMMANDS = new Set([
-  'create-task',
-  'update-task',
-  'get-task',
-  'list-tasks',
-  'list-projects',
-]);
+const COMMAND_FLAGS = {
+  'create-task': new Set(['initialPrompt', 'projectId', 'worktree']),
+  'update-task': new Set(['taskId', 'summary']),
+  'get-task': new Set(['taskId']),
+  'list-tasks': new Set(['projectId', 'state']),
+  'list-projects': new Set(),
+};
+
+const COMMANDS = new Set(Object.keys(COMMAND_FLAGS));
 
 function printHelp() {
   console.log(`OpenForge CLI
 
 Usage:
   openforge create-task --initial-prompt <text> [--project-id <id>] [--worktree <path>]
-  openforge update-task --task-id <id> [--initial-prompt <text>] [--summary <text>]
+  openforge update-task --task-id <id> --summary <text>
   openforge get-task --task-id <id>
   openforge list-tasks --project-id <id> [--state backlog|doing|done]
   openforge list-projects
@@ -50,10 +52,23 @@ function parseArgs(argv) {
   return { command, flags };
 }
 
+function flagName(name) {
+  return `--${name.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)}`;
+}
+
+function validateSupportedFlags(command, flags) {
+  const supportedFlags = COMMAND_FLAGS[command];
+  for (const name of Object.keys(flags)) {
+    if (!supportedFlags.has(name)) {
+      throw new Error(`${command} does not support ${flagName(name)}`);
+    }
+  }
+}
+
 function requireFlag(flags, name) {
   const value = flags[name];
   if (typeof value !== 'string' || value.length === 0) {
-    throw new Error(`missing required flag --${name.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)}`);
+    throw new Error(`missing required flag ${flagName(name)}`);
   }
   return value;
 }
@@ -99,6 +114,8 @@ async function main(argv) {
     throw new Error(`unknown command: ${command}`);
   }
 
+  validateSupportedFlags(command, flags);
+
   switch (command) {
     case 'create-task': {
       const payload = {
@@ -112,11 +129,10 @@ async function main(argv) {
     case 'update-task': {
       const payload = {
         task_id: requireFlag(flags, 'taskId'),
-        initial_prompt: typeof flags.initialPrompt === 'string' ? flags.initialPrompt : undefined,
         summary: typeof flags.summary === 'string' ? flags.summary : undefined,
       };
-      if (!payload.initial_prompt && !payload.summary) {
-        throw new Error('update-task requires --initial-prompt and/or --summary');
+      if (!payload.summary) {
+        throw new Error('update-task requires --summary');
       }
       printJson(await requestJson('/update_task', { method: 'POST', body: JSON.stringify(payload) }));
       return;

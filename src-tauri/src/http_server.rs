@@ -32,7 +32,7 @@ pub struct CreateTaskResponse {
     pub status: String,
 }
 
-/// Request to update a task's initial_prompt and/or summary
+/// Request to update a task summary. `initial_prompt` is retained only to detect and reject mutation attempts with a clear error.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UpdateTaskRequest {
     pub task_id: String,
@@ -227,19 +227,30 @@ pub async fn create_task_handler(
 pub async fn update_task_handler(
     State(state): State<AppState>,
     Json(request): Json<UpdateTaskRequest>,
-) -> Result<Json<UpdateTaskResponse>, StatusCode> {
-    if request.initial_prompt.is_none() && request.summary.is_none() {
-        return Err(StatusCode::BAD_REQUEST);
+) -> Result<Json<UpdateTaskResponse>, (StatusCode, String)> {
+    if request.initial_prompt.is_some() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "initial_prompt cannot be updated after task creation".to_string(),
+        ));
     }
+
+    let Some(summary) = request.summary.as_deref() else {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "update_task requires summary".to_string(),
+        ));
+    };
 
     let db = state.db.lock().unwrap();
 
-    db.update_task_title_and_summary(
-        &request.task_id,
-        request.initial_prompt.as_deref(),
-        request.summary.as_deref(),
-    )
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    db.update_task_summary(&request.task_id, summary)
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to update task summary: {e}"),
+            )
+        })?;
 
     drop(db);
 
@@ -1106,6 +1117,114 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_update_task_handler_updates_summary_without_changing_initial_prompt() {
+        let (state, path) = test_state("http_update_task_summary_only");
+        let task_id = {
+            let db = state.db.lock().expect("lock db");
+            let project = db
+                .create_project("Project", "/tmp/project")
+                .expect("create project");
+            db.create_task(
+                "Original prompt",
+                "backlog",
+                Some(&project.id),
+                None,
+                None,
+                None,
+            )
+            .expect("create task")
+            .id
+        };
+
+        let router = create_router(state.clone());
+        let response = router
+            .oneshot(
+                Request::builder()
+                    .uri("/update_task")
+                    .method("POST")
+                    .header("content-type", "application/json")
+                    .body(Body::from(format!(
+                        r#"{{"task_id":"{}","summary":"New Summary"}}"#,
+                        task_id
+                    )))
+                    .expect("build request"),
+            )
+            .await
+            .expect("request should succeed");
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let json = response_body_json(response).await;
+        assert_eq!(json["task_id"], task_id);
+        assert_eq!(json["status"], "updated");
+
+        let task = state
+            .db
+            .lock()
+            .expect("lock db")
+            .get_task(&task_id)
+            .expect("get task")
+            .expect("task exists");
+        assert_eq!(task.initial_prompt, "Original prompt");
+        assert_eq!(task.summary, Some("New Summary".to_string()));
+
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[tokio::test]
+    async fn test_update_task_handler_rejects_initial_prompt_and_preserves_task() {
+        let (state, path) = test_state("http_update_task_rejects_initial_prompt");
+        let task_id = {
+            let db = state.db.lock().expect("lock db");
+            let project = db
+                .create_project("Project", "/tmp/project")
+                .expect("create project");
+            let task = db
+                .create_task(
+                    "Original prompt",
+                    "backlog",
+                    Some(&project.id),
+                    None,
+                    None,
+                    None,
+                )
+                .expect("create task");
+            db.update_task_summary(&task.id, "Existing Summary")
+                .expect("seed summary");
+            task.id
+        };
+
+        let router = create_router(state.clone());
+        let response = router
+            .oneshot(
+                Request::builder()
+                    .uri("/update_task")
+                    .method("POST")
+                    .header("content-type", "application/json")
+                    .body(Body::from(format!(
+                        r#"{{"task_id":"{}","initial_prompt":"New prompt","summary":"New Summary"}}"#,
+                        task_id
+                    )))
+                    .expect("build request"),
+            )
+            .await
+            .expect("request should succeed");
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+        let task = state
+            .db
+            .lock()
+            .expect("lock db")
+            .get_task(&task_id)
+            .expect("get task")
+            .expect("task exists");
+        assert_eq!(task.initial_prompt, "Original prompt");
+        assert_eq!(task.summary, Some("Existing Summary".to_string()));
+
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[tokio::test]
     async fn test_get_project_attention_handler_returns_zeroed_row_when_no_attention() {
         let (state, path) = test_state("http_get_project_attention_handler_zeroed_row");
         {
@@ -1537,32 +1656,41 @@ mod tests {
     // ========================================================================
 
     #[test]
-    fn test_update_task_request_creation() {
+    fn test_update_task_request_creation_with_forbidden_initial_prompt_marker() {
         let request = UpdateTaskRequest {
             task_id: "T-123".to_string(),
-            initial_prompt: Some("New Title".to_string()),
+            initial_prompt: Some("Forbidden prompt update".to_string()),
             summary: Some("New Summary".to_string()),
         };
         assert_eq!(request.task_id, "T-123");
-        assert_eq!(request.initial_prompt, Some("New Title".to_string()));
+        assert_eq!(
+            request.initial_prompt,
+            Some("Forbidden prompt update".to_string())
+        );
         assert_eq!(request.summary, Some("New Summary".to_string()));
     }
 
     #[test]
-    fn test_update_task_request_deserialize_all_fields() {
-        let json = r#"{"task_id": "T-456", "initial_prompt": "Updated Title", "summary": "Updated Summary"}"#;
+    fn test_update_task_request_deserializes_forbidden_initial_prompt_for_rejection() {
+        let json = r#"{"task_id": "T-456", "initial_prompt": "Forbidden prompt update", "summary": "Updated Summary"}"#;
         let request: UpdateTaskRequest = serde_json::from_str(json).expect("Failed to deserialize");
         assert_eq!(request.task_id, "T-456");
-        assert_eq!(request.initial_prompt, Some("Updated Title".to_string()));
+        assert_eq!(
+            request.initial_prompt,
+            Some("Forbidden prompt update".to_string())
+        );
         assert_eq!(request.summary, Some("Updated Summary".to_string()));
     }
 
     #[test]
-    fn test_update_task_request_deserialize_title_only() {
-        let json = r#"{"task_id": "T-789", "initial_prompt": "Only Title"}"#;
+    fn test_update_task_request_deserializes_forbidden_initial_prompt_without_summary() {
+        let json = r#"{"task_id": "T-789", "initial_prompt": "Forbidden prompt update"}"#;
         let request: UpdateTaskRequest = serde_json::from_str(json).expect("Failed to deserialize");
         assert_eq!(request.task_id, "T-789");
-        assert_eq!(request.initial_prompt, Some("Only Title".to_string()));
+        assert_eq!(
+            request.initial_prompt,
+            Some("Forbidden prompt update".to_string())
+        );
         assert!(request.summary.is_none());
     }
 
@@ -1576,7 +1704,7 @@ mod tests {
     }
 
     #[test]
-    fn test_update_task_request_deserialize_neither_title_nor_summary() {
+    fn test_update_task_request_deserialize_no_update_fields() {
         let json = r#"{"task_id": "T-111"}"#;
         let request: UpdateTaskRequest = serde_json::from_str(json).expect("Failed to deserialize");
         assert_eq!(request.task_id, "T-111");
@@ -1586,7 +1714,7 @@ mod tests {
 
     #[test]
     fn test_update_task_request_deserialize_missing_task_id_fails() {
-        let json = r#"{"initial_prompt": "No Task ID"}"#;
+        let json = r#"{"initial_prompt": "Forbidden prompt update"}"#;
         let result: Result<UpdateTaskRequest, _> = serde_json::from_str(json);
         assert!(
             result.is_err(),
@@ -1595,10 +1723,10 @@ mod tests {
     }
 
     #[test]
-    fn test_update_task_request_serialize_roundtrip() {
+    fn test_update_task_request_serialize_roundtrip_preserves_forbidden_marker() {
         let original = UpdateTaskRequest {
             task_id: "T-555".to_string(),
-            initial_prompt: Some("Roundtrip Title".to_string()),
+            initial_prompt: Some("Forbidden prompt update".to_string()),
             summary: Some("Roundtrip Summary".to_string()),
         };
         let json = serde_json::to_string(&original).expect("Failed to serialize");

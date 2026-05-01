@@ -15,6 +15,8 @@ import {
 	getAllTasks,
 	installPlugin,
 	spawnShellPty,
+	updateTask,
+	updateTaskSummary,
 } from "./ipc";
 
 describe("ipc spawnShellPty", () => {
@@ -92,6 +94,24 @@ describe("ipc spawnShellPty", () => {
 		await expect(
 			createTask("Created task", "doing", null, null, null),
 		).resolves.toEqual(expect.objectContaining({ id: "T-4", status: "doing" }));
+	});
+
+	it("sends task edits as mutable prompt updates, not initialPrompt updates", async () => {
+		await updateTask("T-42", "Updated prompt");
+
+		expect(invokeMock).toHaveBeenCalledWith("update_task", {
+			id: "T-42",
+			prompt: "Updated prompt",
+		});
+	});
+
+	it("sends summary updates without initialPrompt", async () => {
+		await updateTaskSummary("T-42", "Done");
+
+		expect(invokeMock).toHaveBeenCalledWith("update_task_summary", {
+			id: "T-42",
+			summary: "Done",
+		});
 	});
 
 	it("sends installPlugin metadata as a single command argument", async () => {

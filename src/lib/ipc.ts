@@ -9,12 +9,12 @@ export async function createTask(initialPrompt: string, status: BoardStatus, pro
   return normalizeTask(task)
 }
 
-export async function updateTask(id: string, initialPrompt: string): Promise<void> {
-  return invoke("update_task", { id, initialPrompt });
+export async function updateTask(id: string, prompt: string): Promise<void> {
+  return invoke("update_task", { id, prompt });
 }
 
-export async function updateTaskInitialPromptAndSummary(id: string, initialPrompt: string | null, summary: string | null): Promise<void> {
-  return invoke("update_task_initial_prompt_and_summary", { id, initialPrompt, summary });
+export async function updateTaskSummary(id: string, summary: string): Promise<void> {
+  return invoke("update_task_summary", { id, summary });
 }
 
 export async function updateTaskStatus(id: string, status: BoardStatus): Promise<void> {
