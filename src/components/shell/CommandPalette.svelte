@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, tick } from 'svelte'
+  import { onMount } from 'svelte'
   import { activeSessions, projects, activeProjectId } from '../../lib/stores'
   import { matchesSearch, sortTasks, filterActiveTasks, navigateToTask } from '../../lib/commandPalette'
   import { getAllTasks, getLatestSessions } from '../../lib/ipc'
@@ -9,6 +9,7 @@
   import type { PluginManifest } from '../../lib/plugin/types'
   import { useListNavigation } from '../../lib/useListNavigation.svelte'
   import type { Task } from '../../lib/types'
+  import PaletteModal from './PaletteModal.svelte'
 
   interface Props {
     onClose: () => void
@@ -18,7 +19,6 @@
 
   let searchQuery = $state('')
   let selectedTaskKey = $state<string | null>(null)
-  let inputEl = $state<HTMLInputElement | null>(null)
   let allTasks = $state<Task[]>([])
   let loading = $state(true)
 
@@ -185,15 +185,8 @@
     onCancel() { onClose() }
   })
 
-  function handleKeyDown(e: KeyboardEvent) {
-    const handled = listNav.handleKeydown(e)
-    if (handled) return
-  }
-
-  function handleBackdropClick(e: MouseEvent) {
-    if (e.target === e.currentTarget) {
-      onClose()
-    }
+  function handleKeyDown(e: KeyboardEvent): boolean {
+    return listNav.handleKeydown(e)
   }
 
   function getProjectName(projectId: string | null): string | null {
@@ -209,10 +202,8 @@
     return text.length > max ? text.slice(0, max) + '...' : text
   }
 
-  onMount(async () => {
+  onMount(() => {
     void loadAllTasks()
-    await tick()
-    inputEl?.focus()
   })
 
   let listContainer: HTMLDivElement | null = $state(null)
@@ -226,25 +217,16 @@
   })
 </script>
 
-<!-- svelte-ignore a11y_click_events_have_key_events -->
-<div
-  data-testid="command-palette-backdrop"
-  role="presentation"
-  class="fixed inset-0 z-50 flex items-start justify-center pt-[15vh] bg-black/50"
-  onclick={handleBackdropClick}
+<PaletteModal
+  ariaLabel="Search tasks or commands"
+  testId="command-palette-backdrop"
+  {onClose}
+  onKeydown={handleKeyDown}
 >
-  <div
-    role="dialog"
-    aria-modal="true"
-    aria-label="Search tasks or commands"
-    class="w-full max-w-[520px] bg-base-200 border border-base-300 rounded-lg shadow-2xl overflow-hidden"
-    onkeydown={handleKeyDown}
-    tabindex="-1"
-  >
     <!-- Search input -->
     <div class="p-3 border-b border-base-300">
       <input
-        bind:this={inputEl}
+        data-palette-initial-focus
         type="text"
         class="input input-sm w-full bg-base-100 border-base-300 focus:outline-none text-base-content placeholder:text-base-content/40"
         placeholder="Search tasks or commands..."
@@ -322,5 +304,4 @@
        <span class="text-[10px] text-base-content/40"><kbd class="kbd kbd-xs">Esc</kbd> close</span>
        <span class="text-[10px] text-base-content/40 ml-auto"><kbd class="kbd kbd-xs">Ctrl+N/P</kbd> navigate</span>
      </div>
-  </div>
-</div>
+</PaletteModal>
