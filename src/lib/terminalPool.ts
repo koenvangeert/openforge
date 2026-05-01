@@ -23,6 +23,7 @@ export interface PoolEntry {
   attached: boolean
   spawnPending: boolean
   currentPtyInstance: number | null
+  webglAddon: WebglAddon | null
 }
 
 export interface TerminalTab {
@@ -81,8 +82,12 @@ function safeFit(entry: PoolEntry): boolean {
   return true
 }
 
-function refreshAndFocus(entry: PoolEntry): void {
+function refreshTerminal(entry: PoolEntry): void {
   entry.terminal.refresh(0, (entry.terminal.rows ?? 1) - 1)
+}
+
+function refreshAndFocus(entry: PoolEntry): void {
+  refreshTerminal(entry)
   if (!isModalOpen()) entry.terminal.focus()
 }
 
@@ -124,13 +129,26 @@ function loadWebLinksAddon(terminal: Terminal): void {
   terminal.loadAddon(webLinksAddon)
 }
 
-function loadWebglAddon(terminal: Terminal): void {
+function loadWebglAddon(entry: PoolEntry): void {
+  if (entry.webglAddon !== null) return
+
   try {
     const webglAddon = new WebglAddon()
     webglAddon.onContextLoss(() => {
       webglAddon.dispose()
+      if (entry.webglAddon === webglAddon) {
+        entry.webglAddon = null
+      }
+      requestAnimationFrame(() => {
+        if (!entry.attached || entry.webglAddon !== null) return
+        loadWebglAddon(entry)
+        safeFit(entry)
+        syncPtySize(entry)
+        refreshTerminal(entry)
+      })
     })
-    terminal.loadAddon(webglAddon)
+    entry.terminal.loadAddon(webglAddon)
+    entry.webglAddon = webglAddon
   } catch (error) {
     console.warn('[terminalPool] WebGL addon unavailable, falling back to default renderer:', error)
   }
@@ -171,6 +189,7 @@ export async function acquire(taskId: string): Promise<PoolEntry> {
     attached: false,
     spawnPending: false,
     currentPtyInstance: null,
+    webglAddon: null,
   }
 
   // Replay buffered output from backend
@@ -232,9 +251,9 @@ export async function attach(entry: PoolEntry, wrapperEl: HTMLDivElement): Promi
   // dimensions against a container with real pixel dimensions.
   if (!openedTerminals.has(entry.terminal)) {
     entry.terminal.open(entry.hostDiv)
-    loadWebglAddon(entry.terminal)
     openedTerminals.add(entry.terminal)
   }
+  loadWebglAddon(entry)
 
   // Set up ResizeObserver
   entry.resizeObserver = new ResizeObserver((entries) => {
@@ -268,6 +287,7 @@ export async function attach(entry: PoolEntry, wrapperEl: HTMLDivElement): Promi
 
 export async function recoverActiveTerminal(entry: PoolEntry): Promise<void> {
   if (!entry.attached) return
+  loadWebglAddon(entry)
   await waitForInitialFit(entry)
 }
 

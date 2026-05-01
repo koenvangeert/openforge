@@ -389,6 +389,73 @@ describe("terminalPool", () => {
 		expect(disposeSpy).toHaveBeenCalledTimes(1);
 	});
 
+	it("recoverActiveTerminal reloads the WebGL renderer after context loss", async () => {
+		const entry = await acquire("task-webgl-recover-context");
+		const wrapper = document.createElement("div");
+
+		await attach(entry, wrapper);
+
+		const { loadAddon: loadAddonSpy, refresh: refreshSpy } = getTerminalMocks(entry);
+		getWebglContextLossHandler()();
+		loadAddonSpy.mockClear();
+		refreshSpy.mockClear();
+
+		await recoverActiveTerminal(entry);
+
+		expect(loadAddonSpy).toHaveBeenCalledTimes(1);
+		expect(refreshSpy).toHaveBeenCalled();
+	});
+
+	it("reattach reloads the WebGL renderer after context loss while switching views", async () => {
+		const entry = await acquire("task-webgl-reattach-context");
+		const wrapper1 = document.createElement("div");
+		const wrapper2 = document.createElement("div");
+
+		await attach(entry, wrapper1);
+
+		const { loadAddon: loadAddonSpy, refresh: refreshSpy } = getTerminalMocks(entry);
+		getWebglContextLossHandler()();
+		detach(entry);
+		loadAddonSpy.mockClear();
+		refreshSpy.mockClear();
+
+		await attach(entry, wrapper2);
+
+		expect(loadAddonSpy).toHaveBeenCalledTimes(1);
+		expect(wrapper2.contains(entry.hostDiv)).toBe(true);
+		expect(refreshSpy).toHaveBeenCalled();
+	});
+
+	it("automatic WebGL context recovery does not steal focus from another terminal", async () => {
+		const entry = await acquire("task-webgl-hidden-context");
+		const wrapper = document.createElement("div");
+
+		await attach(entry, wrapper);
+
+		const originalRaf = globalThis.requestAnimationFrame;
+		let rafCallback: FrameRequestCallback = () => {
+			throw new Error("Expected context-loss recovery to schedule an animation frame");
+		};
+		globalThis.requestAnimationFrame = vi.fn((callback: FrameRequestCallback) => {
+			rafCallback = callback;
+			return 1;
+		});
+
+		try {
+			const { loadAddon: loadAddonSpy, focus: focusSpy } = getTerminalMocks(entry);
+			getWebglContextLossHandler()();
+			loadAddonSpy.mockClear();
+			focusSpy.mockClear();
+
+			rafCallback(16);
+
+			expect(loadAddonSpy).toHaveBeenCalledTimes(1);
+			expect(focusSpy).not.toHaveBeenCalled();
+		} finally {
+			globalThis.requestAnimationFrame = originalRaf;
+		}
+	});
+
 	it("attach is idempotent", async () => {
 		const entry = await acquire("task-5");
 		const wrapper = document.createElement("div");
