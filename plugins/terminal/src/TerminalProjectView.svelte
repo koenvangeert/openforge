@@ -4,7 +4,7 @@
   import { killPty } from './lib/ipc'
   import { cleanupProjectTerminalTask, getProjectTerminalTaskId } from './lib/projectTerminal'
   import { clearTaskTerminalTabsSession, getTaskTerminalTabsSession, releaseAllForTask } from './lib/terminalPool'
-  import { handleTerminalShortcutKeydown } from './terminalShortcuts'
+  import { createTerminalShortcutController } from './terminalShortcutController'
 
   interface Props {
     projectId?: string | null
@@ -16,28 +16,8 @@
 
   const terminalTaskId = $derived(projectId ? getProjectTerminalTaskId(projectId) : null)
   let previousTerminalTaskId = $state<string | null>(null)
-  let terminalTabsRef = $state<TerminalTabs | null>(null)
 
-  const controller = {
-    addTab() {
-      terminalTabsRef?.addTab()
-    },
-    async closeActiveTab() {
-      await terminalTabsRef?.closeActiveTab()
-    },
-    focusActiveTab() {
-      terminalTabsRef?.focusActiveTab()
-    },
-    switchToTab(tabIndex: number) {
-      terminalTabsRef?.switchToTab(tabIndex)
-    },
-  }
-
-  function handleWindowKeydown(event: KeyboardEvent) {
-    if (terminalTabsRef === null) return
-
-    handleTerminalShortcutKeydown(event, controller)
-  }
+  const terminalShortcuts = createTerminalShortcutController({ ignoreWhenDetached: true })
 
   function cleanupTerminalTask(taskId: string) {
     void cleanupProjectTerminalTask(taskId, {
@@ -60,12 +40,7 @@
     previousTerminalTaskId = terminalTaskId
   })
 
-  onMount(() => {
-    window.addEventListener('keydown', handleWindowKeydown, { capture: true })
-    return () => {
-      window.removeEventListener('keydown', handleWindowKeydown, { capture: true })
-    }
-  })
+  onMount(() => terminalShortcuts.registerWindowKeydown())
 
   onDestroy(() => {
     if (previousTerminalTaskId !== null) {
@@ -96,7 +71,7 @@
       <div class="flex-1 min-w-0 h-full overflow-hidden">
         {#key terminalTaskId}
           <TerminalTabs
-            bind:this={terminalTabsRef}
+            bind:this={terminalShortcuts.terminalTabsRef}
             taskId={terminalTaskId}
             workspacePath={projectPath}
             onTabChange={null}
