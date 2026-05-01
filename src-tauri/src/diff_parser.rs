@@ -38,19 +38,7 @@ pub fn parse_unified_diff(diff_output: &str, truncate: bool) -> Vec<TaskFileDiff
         // Start of a new file diff
         if line.starts_with("diff --git a/") {
             // Save previous file if exists
-            if let Some(mut file) = current_file.take() {
-                if !patch_lines.is_empty() && file.status != "binary" {
-                    if truncate && patch_lines.len() > 10_000 {
-                        file.patch_line_count = Some(patch_lines.len() as i32);
-                        file.patch = Some(patch_lines[..201].join("\n"));
-                        file.is_truncated = true;
-                    } else {
-                        file.patch = Some(patch_lines.join("\n"));
-                    }
-                }
-                diffs.push(file);
-                patch_lines.clear();
-            }
+            finalize_current_file(&mut current_file, &mut patch_lines, truncate, &mut diffs);
 
             // Parse new file header: "diff --git a/path b/path"
             let filename = extract_filename_from_diff_header(line);
@@ -108,6 +96,22 @@ pub fn parse_unified_diff(diff_output: &str, truncate: bool) -> Vec<TaskFileDiff
     }
 
     // Save last file
+    finalize_current_file(&mut current_file, &mut patch_lines, truncate, &mut diffs);
+
+    // Calculate changes for all files
+    for file in &mut diffs {
+        file.changes = file.additions + file.deletions;
+    }
+
+    diffs
+}
+
+fn finalize_current_file(
+    current_file: &mut Option<TaskFileDiff>,
+    patch_lines: &mut Vec<String>,
+    truncate: bool,
+    diffs: &mut Vec<TaskFileDiff>,
+) {
     if let Some(mut file) = current_file.take() {
         if !patch_lines.is_empty() && file.status != "binary" {
             if truncate && patch_lines.len() > 10_000 {
@@ -119,14 +123,8 @@ pub fn parse_unified_diff(diff_output: &str, truncate: bool) -> Vec<TaskFileDiff
             }
         }
         diffs.push(file);
+        patch_lines.clear();
     }
-
-    // Calculate changes for all files
-    for file in &mut diffs {
-        file.changes = file.additions + file.deletions;
-    }
-
-    diffs
 }
 
 /// Extract filename from "diff --git a/path b/path" line
@@ -330,6 +328,36 @@ index 1234567..abcdefg 100644
         assert!(patch.contains("@@ -1,3 +1,4 @@"));
         assert!(patch.contains("+added"));
         assert!(patch.contains(" line1"));
+    }
+
+    #[test]
+    fn test_finalize_current_file_assigns_truncated_patch_before_push() {
+        let mut current_file = Some(TaskFileDiff {
+            sha: String::new(),
+            filename: "big.rs".to_string(),
+            status: "modified".to_string(),
+            additions: 0,
+            deletions: 0,
+            changes: 0,
+            patch: None,
+            previous_filename: None,
+            is_truncated: false,
+            patch_line_count: None,
+        });
+        let mut patch_lines = vec!["@@ -0,0 +1,10001 @@".to_string()];
+        patch_lines.extend((0..10001).map(|i| format!("+line {i}")));
+        let mut diffs = Vec::new();
+
+        finalize_current_file(&mut current_file, &mut patch_lines, true, &mut diffs);
+
+        assert!(current_file.is_none());
+        assert!(patch_lines.is_empty());
+        assert_eq!(diffs.len(), 1);
+        assert_eq!(diffs[0].filename, "big.rs");
+        assert!(diffs[0].is_truncated);
+        assert_eq!(diffs[0].patch_line_count, Some(10002));
+        let patch = diffs[0].patch.as_ref().unwrap();
+        assert_eq!(patch.lines().count(), 201);
     }
 
     #[test]
