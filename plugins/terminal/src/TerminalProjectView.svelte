@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { onDestroy, onMount } from 'svelte'
+  import { onMount } from 'svelte'
   import TerminalTabs from './TerminalTabs.svelte'
   import { killPty } from './lib/ipc'
-  import { cleanupProjectTerminalTask, getProjectTerminalTaskId } from './lib/projectTerminal'
+  import { cleanupProjectTerminalTask, getProjectTerminalTaskId, markActiveProjectTerminalTask } from './lib/projectTerminal'
   import { clearTaskTerminalTabsSession, getTaskTerminalTabsSession, releaseAllForTask } from './lib/terminalPool'
   import { createTerminalShortcutController } from './terminalShortcutController'
 
@@ -15,7 +15,6 @@
   let { projectId = null, projectName = '', projectPath = '' }: Props = $props()
 
   const terminalTaskId = $derived(projectId ? getProjectTerminalTaskId(projectId) : null)
-  let previousTerminalTaskId = $state<string | null>(null)
 
   const terminalShortcuts = createTerminalShortcutController({ ignoreWhenDetached: true })
 
@@ -33,21 +32,13 @@
   }
 
   $effect(() => {
-    if (previousTerminalTaskId !== null && previousTerminalTaskId !== terminalTaskId) {
-      cleanupTerminalTask(previousTerminalTaskId)
+    const taskIdToCleanup = markActiveProjectTerminalTask(terminalTaskId)
+    if (taskIdToCleanup !== null) {
+      cleanupTerminalTask(taskIdToCleanup)
     }
-
-    previousTerminalTaskId = terminalTaskId
   })
 
   onMount(() => terminalShortcuts.registerWindowKeydown())
-
-  onDestroy(() => {
-    if (previousTerminalTaskId !== null) {
-      cleanupTerminalTask(previousTerminalTaskId)
-      previousTerminalTaskId = null
-    }
-  })
 </script>
 
 <div class="flex flex-col h-full min-h-0 overflow-hidden">
