@@ -279,6 +279,7 @@ vi.mock('./components/project/ProjectSetupDialog.svelte', () => ({ default: vi.f
 vi.mock('./components/shell/IconRail.svelte', () => ({ default: vi.fn() }))
 vi.mock('./components/shell/CommandPalette.svelte', () => ({ default: vi.fn() }))
 vi.mock('./components/shell/ActionPalette.svelte', () => ({ default: vi.fn() }))
+vi.mock('./components/shell/FileQuickOpen.svelte', () => ({ default: vi.fn() }))
 
 vi.mock('./lib/doingStatus', () => ({
   computeDoingStatus: vi.fn(() => 'idle'),
@@ -867,15 +868,63 @@ describe('App onMount initialization order', () => {
       })
     })
 
-    it('CMD+P no longer opens the project switcher', async () => {
+    it('CMD+P opens the file quick-open overlay from the board', async () => {
       const App = (await import('./App.svelte')).default
       const projectSwitcherModule = await import('./components/project/ProjectSwitcherModal.svelte')
+      const fileQuickOpenModule = await import('./components/shell/FileQuickOpen.svelte')
 
       render(App)
 
       await fireEvent.keyDown(window, { key: 'p', metaKey: true, bubbles: true })
 
       expect(projectSwitcherModule.default).not.toHaveBeenCalled()
+      await vi.waitFor(() => {
+        expect(fileQuickOpenModule.default).toHaveBeenCalled()
+      })
+    })
+
+    it('CMD+P opens the file quick-open overlay from plugin views', async () => {
+      const App = (await import('./App.svelte')).default
+      const stores = await import('./lib/stores')
+      const fileQuickOpenModule = await import('./components/shell/FileQuickOpen.svelte')
+
+      stores.currentView.set('plugin:com.openforge.github-sync:pr_review')
+      stores.selectedTaskId.set(null)
+      render(App)
+
+      await fireEvent.keyDown(window, { key: 'p', metaKey: true, bubbles: true })
+
+      await vi.waitFor(() => {
+        expect(fileQuickOpenModule.default).toHaveBeenCalled()
+      })
+    })
+
+    it('CMD+P does not open the file quick-open overlay from task views', async () => {
+      const App = (await import('./App.svelte')).default
+      const stores = await import('./lib/stores')
+      const fileQuickOpenModule = await import('./components/shell/FileQuickOpen.svelte')
+      const selectedTask: Task = {
+        id: 'task-123',
+        initial_prompt: 'Finish task',
+        prompt: null,
+        summary: null,
+        status: 'doing',
+        agent: null,
+        permission_mode: null,
+        project_id: 'proj-1',
+        created_at: 1000,
+        updated_at: 1000,
+      }
+
+      stores.tasks.set([selectedTask])
+      stores.pendingTask.set(null)
+      stores.selectedTaskId.set(selectedTask.id)
+      stores.currentView.set('board')
+      render(App)
+
+      await fireEvent.keyDown(window, { key: 'p', metaKey: true, bubbles: true })
+
+      expect(fileQuickOpenModule.default).not.toHaveBeenCalled()
     })
 
     it('action palette move-to-done does not navigate directly from App', async () => {
@@ -1517,7 +1566,7 @@ describe('App onMount initialization order', () => {
 
       const filesRow = screen.getByText('Files').closest('div')
 
-      expect(filesRow?.textContent).toContain('⌘⇧O')
+      expect(filesRow?.textContent).toContain('⌘P')
     })
 
     it('prevents window close requests and shows a confirmation modal', async () => {

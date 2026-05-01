@@ -49,7 +49,7 @@ describe('registerAppShortcuts', () => {
       { id: 'go-back', label: 'Go Back', keys: [['⌘[']] },
       { id: 'refresh-github', label: 'Refresh GitHub', keys: [['⌘', '⇧', 'R']] },
       { id: 'voice-input', label: 'Voice input', keys: [['⌘D']] },
-      { id: 'files', label: 'Files', keys: [['⌘', '⇧', 'O']] },
+      { id: 'files', label: 'Files', keys: [['⌘P']] },
       { id: 'terminal', label: 'Terminal', keys: [['⌘J']] },
       { id: 'search-tasks', label: 'Search Tasks', keys: [['⌘', '⇧', 'F']] },
       { id: 'action-palette', label: 'Action palette', keys: [['⌘K']] },
@@ -96,7 +96,7 @@ describe('registerAppShortcuts', () => {
     handlers.get('⌘[')?.()
     handlers.get('⌘d')?.()
     handlers.get('⌘⇧f')?.()
-    handlers.get('⌘⇧o')?.()
+    handlers.get('⌘p')?.()
     handlers.get('⌘h')?.()
     handlers.get('⌘,')?.()
     handlers.get('⌃n')?.()
@@ -141,8 +141,7 @@ describe('registerAppShortcuts', () => {
       cycleActiveProject: vi.fn(),
     })
 
-    handlers.get('⌘⇧o')?.()
-    handlers.get('⌃⇧o')?.()
+    handlers.get('⌘p')?.()
 
     expect(toggleFileQuickOpen).not.toHaveBeenCalled()
   })

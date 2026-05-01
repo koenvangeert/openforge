@@ -588,7 +588,7 @@
       toggleVoiceRecording: () => { window.dispatchEvent(new CustomEvent('toggle-voice-recording')) },
       toggleCommandPalette: () => { showCommandPalette = !showCommandPalette },
       toggleFileQuickOpen: () => { showFileQuickOpen = !showFileQuickOpen },
-      canToggleFileQuickOpen: () => !showCommandPalette && !showProjectSwitcher && !showActionPalette && !showShortcutsDialog,
+      canToggleFileQuickOpen: () => selectedTask === null && !showCommandPalette && !showProjectSwitcher && !showActionPalette && !showShortcutsDialog,
       resetToBoard: () => { router.resetToBoard() },
       navigateToSettings: () => { handleNavigate('settings') },
       cycleActiveProject,

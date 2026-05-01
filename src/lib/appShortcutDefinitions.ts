@@ -68,11 +68,8 @@ export const APP_SHORTCUT_DEFINITIONS: readonly AppShortcutDefinition[] = [
   },
   {
     id: 'files',
-    registrations: [
-      { key: '⌘⇧O', action: 'toggleFileQuickOpen' },
-      { key: '⌃⇧O', action: 'toggleFileQuickOpen' },
-    ],
-    help: { id: 'files', label: 'Files', keys: [['⌘', '⇧', 'O']] },
+    registrations: [{ key: '⌘P', action: 'toggleFileQuickOpen' }],
+    help: { id: 'files', label: 'Files', keys: [['⌘P']] },
   },
   {
     id: 'terminal',
