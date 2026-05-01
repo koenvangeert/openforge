@@ -230,6 +230,9 @@ importers:
       '@sveltejs/vite-plugin-svelte':
         specifier: ^7.0.0
         version: 7.0.0(svelte@5.55.5)(vite@8.0.9(@types/node@20.19.33)(esbuild@0.27.3)(jiti@2.6.1))
+      '@types/node':
+        specifier: ^20.19.33
+        version: 20.19.33
       svelte:
         specifier: ^5.0.0
         version: 5.55.5
