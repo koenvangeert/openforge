@@ -1,5 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/svelte'
 import { describe, expect, it, vi } from 'vitest'
+import { getAppShortcutHelpLabel } from '../../lib/appShortcutDefinitions'
 import type { PullRequestInfo, Task } from '../../lib/types'
 
 Element.prototype.scrollIntoView = vi.fn()
@@ -63,7 +64,8 @@ describe('ActionPalette component', () => {
 
     const dialog = screen.getByRole('dialog')
     const actionButtons = screen.getAllByRole('button')
-    const searchTasksIndex = actionButtons.findIndex(button => button.textContent?.includes('Search Tasks'))
+    const searchTasksLabel = getAppShortcutHelpLabel('search-tasks') ?? 'search-tasks'
+    const searchTasksIndex = actionButtons.findIndex(button => button.textContent?.includes(searchTasksLabel))
 
     expect(searchTasksIndex).toBeGreaterThan(0)
 

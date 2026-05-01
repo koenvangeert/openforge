@@ -44,14 +44,14 @@ describe('registerAppShortcuts', () => {
 
   it('exposes help entries from the same shared definitions used for registration', () => {
     expect(getGlobalShortcutHelpEntries()).toEqual([
-      { id: 'switch-project', label: 'Switch project', keys: [['⌘', '⇧', 'P']] },
-      { id: 'new-task', label: 'New task', keys: [['⌘N']] },
-      { id: 'go-back', label: 'Go back', keys: [['⌘[']] },
+      { id: 'switch-project', label: 'Switch Project', keys: [['⌘', '⇧', 'P']] },
+      { id: 'new-task', label: 'New Task', keys: [['⌘N']] },
+      { id: 'go-back', label: 'Go Back', keys: [['⌘[']] },
       { id: 'refresh-github', label: 'Refresh GitHub', keys: [['⌘', '⇧', 'R']] },
       { id: 'voice-input', label: 'Voice input', keys: [['⌘D']] },
       { id: 'files', label: 'Files', keys: [['⌘', '⇧', 'O']] },
       { id: 'terminal', label: 'Terminal', keys: [['⌘J']] },
-      { id: 'search-tasks', label: 'Search tasks', keys: [['⌘', '⇧', 'F']] },
+      { id: 'search-tasks', label: 'Search Tasks', keys: [['⌘', '⇧', 'F']] },
       { id: 'action-palette', label: 'Action palette', keys: [['⌘K']] },
       { id: 'show-shortcuts', label: 'Show shortcuts', keys: [['?']] },
     ])

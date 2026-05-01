@@ -1,3 +1,4 @@
+import { getAppShortcutHelpLabel, getPrimaryAppShortcutKey } from './appShortcutDefinitions'
 import { isQueuedForMerge, isReadyToMerge } from './types'
 import type { Action, PullRequestInfo, Task } from './types'
 
@@ -64,44 +65,37 @@ export function getTaskActions(task: Task, customActions: Action[], taskPrs: Pul
   return actions
 }
 
+interface GlobalActionDefinition {
+  id: string
+  category: PaletteAction['category']
+  keywords: string[]
+}
+
+const GLOBAL_ACTION_DEFINITIONS: readonly GlobalActionDefinition[] = [
+  { id: 'go-back', category: 'navigation', keywords: ['back', 'previous', 'navigate'] },
+  { id: 'search-tasks', category: 'general', keywords: ['find', 'search', 'lookup'] },
+  { id: 'new-task', category: 'general', keywords: ['create', 'add', 'task'] },
+  { id: 'switch-project', category: 'navigation', keywords: ['project', 'switch', 'change'] },
+  { id: 'refresh-github', category: 'general', keywords: ['sync', 'github', 'refresh', 'pull'] },
+]
+
+function getShortcutBackedGlobalAction(definition: GlobalActionDefinition): PaletteAction {
+  const label = getAppShortcutHelpLabel(definition.id)
+  if (!label) {
+    throw new Error(`Missing app shortcut help label for global action ${definition.id}`)
+  }
+
+  return {
+    id: definition.id,
+    label,
+    shortcut: getPrimaryAppShortcutKey(definition.id),
+    category: definition.category,
+    keywords: definition.keywords,
+  }
+}
+
 export function getGlobalActions(): PaletteAction[] {
-  return [
-    {
-      id: 'go-back',
-      label: 'Go Back',
-      shortcut: '⌘[',
-      category: 'navigation',
-      keywords: ['back', 'previous', 'navigate'],
-    },
-    {
-      id: 'search-tasks',
-      label: 'Search Tasks',
-      shortcut: '⌘⇧F',
-      category: 'general',
-      keywords: ['find', 'search', 'lookup'],
-    },
-    {
-      id: 'new-task',
-      label: 'New Task',
-      shortcut: '⌘N',
-      category: 'general',
-      keywords: ['create', 'add', 'task'],
-    },
-    {
-      id: 'switch-project',
-      label: 'Switch Project',
-      shortcut: '⌘⇧P',
-      category: 'navigation',
-      keywords: ['project', 'switch', 'change'],
-    },
-    {
-      id: 'refresh-github',
-      label: 'Refresh GitHub',
-      shortcut: '⌘⇧R',
-      category: 'general',
-      keywords: ['sync', 'github', 'refresh', 'pull'],
-    },
-  ]
+  return GLOBAL_ACTION_DEFINITIONS.map(getShortcutBackedGlobalAction)
 }
 
 export function getAvailableActions(task: Task | null, customActions: Action[], taskPrs: PullRequestInfo[] = []): PaletteAction[] {

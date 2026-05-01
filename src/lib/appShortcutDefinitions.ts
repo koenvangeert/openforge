@@ -36,12 +36,12 @@ export const APP_SHORTCUT_DEFINITIONS: readonly AppShortcutDefinition[] = [
   {
     id: 'switch-project',
     registrations: [{ key: '⌘⇧P', action: 'toggleProjectSwitcher' }],
-    help: { id: 'switch-project', label: 'Switch project', keys: [['⌘', '⇧', 'P']] },
+    help: { id: 'switch-project', label: 'Switch Project', keys: [['⌘', '⇧', 'P']] },
   },
   {
     id: 'new-task',
     registrations: [{ key: '⌘N', action: 'openNewTaskDialog' }],
-    help: { id: 'new-task', label: 'New task', keys: [['⌘N']] },
+    help: { id: 'new-task', label: 'New Task', keys: [['⌘N']] },
   },
   {
     id: 'go-back',
@@ -51,7 +51,7 @@ export const APP_SHORTCUT_DEFINITIONS: readonly AppShortcutDefinition[] = [
       { key: '⌃[', action: 'goBack' },
       { key: '⌃ArrowLeft', action: 'goBack' },
     ],
-    help: { id: 'go-back', label: 'Go back', keys: [['⌘[']] },
+    help: { id: 'go-back', label: 'Go Back', keys: [['⌘[']] },
   },
   {
     id: 'refresh-github',
@@ -82,7 +82,7 @@ export const APP_SHORTCUT_DEFINITIONS: readonly AppShortcutDefinition[] = [
   {
     id: 'search-tasks',
     registrations: [{ key: '⌘⇧F', action: 'toggleCommandPalette' }],
-    help: { id: 'search-tasks', label: 'Search tasks', keys: [['⌘', '⇧', 'F']] },
+    help: { id: 'search-tasks', label: 'Search Tasks', keys: [['⌘', '⇧', 'F']] },
   },
   {
     id: 'action-palette',
@@ -130,6 +130,23 @@ export const APP_SHORTCUT_DEFINITIONS: readonly AppShortcutDefinition[] = [
     help: null,
   },
 ] as const
+
+export function formatShortcutKeySequence(keys: readonly string[]): string {
+  return keys.join('')
+}
+
+export function getAppShortcutDefinition(id: string): AppShortcutDefinition | null {
+  return APP_SHORTCUT_DEFINITIONS.find((definition) => definition.id === id) ?? null
+}
+
+export function getAppShortcutHelpLabel(id: string): string | null {
+  return getAppShortcutDefinition(id)?.help?.label ?? null
+}
+
+export function getPrimaryAppShortcutKey(id: string): string | null {
+  const definition = getAppShortcutDefinition(id)
+  return definition?.registrations[0]?.key ?? (definition?.help?.keys[0] ? formatShortcutKeySequence(definition.help.keys[0]) : null)
+}
 
 export function getGlobalShortcutHelpEntries(): ShortcutHelpEntry[] {
   return APP_SHORTCUT_DEFINITIONS

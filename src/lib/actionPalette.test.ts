@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { filterActions, getAvailableActions, getGlobalActions, getTaskActions } from './actionPalette'
+import { APP_SHORTCUT_DEFINITIONS } from './appShortcutDefinitions'
 import type { Action, Task, PullRequestInfo } from './types'
 
 function makeTask(overrides: Partial<Task> = {}): Task {
@@ -131,25 +132,20 @@ describe('getGlobalActions', () => {
     expect(ids).not.toContain('open-workqueue')
   })
 
-  it('uses CMD+SHIFT+F for Search Tasks', () => {
+  it('uses shared app shortcut definitions for global action labels and shortcuts', () => {
     const actions = getGlobalActions()
-    const searchTasks = actions.find(action => action.id === 'search-tasks')
+    const shortcutDefinitions = new Map(APP_SHORTCUT_DEFINITIONS.map(definition => [definition.id, definition]))
 
-    expect(searchTasks?.shortcut).toBe('⌘⇧F')
-  })
+    for (const actionId of ['go-back', 'search-tasks', 'new-task', 'switch-project', 'refresh-github']) {
+      const action = actions.find(candidate => candidate.id === actionId)
+      const definition = shortcutDefinitions.get(actionId)
+      const primaryShortcut = definition?.registrations[0]?.key ?? definition?.help?.keys[0]?.join('') ?? null
 
-  it('uses CMD+N for New Task', () => {
-    const actions = getGlobalActions()
-    const newTask = actions.find(action => action.id === 'new-task')
-
-    expect(newTask?.shortcut).toBe('⌘N')
-  })
-
-  it('uses CMD+SHIFT+P for Switch Project', () => {
-    const actions = getGlobalActions()
-    const switchProject = actions.find(action => action.id === 'switch-project')
-
-    expect(switchProject?.shortcut).toBe('⌘⇧P')
+      expect(action, `missing global action ${actionId}`).toBeDefined()
+      expect(definition, `missing shortcut definition ${actionId}`).toBeDefined()
+      expect(action?.label).toBe(definition?.help?.label)
+      expect(action?.shortcut).toBe(primaryShortcut)
+    }
   })
 })
 
