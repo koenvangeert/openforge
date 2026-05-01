@@ -24,8 +24,31 @@ export interface ProjectTerminalCleanupResult {
   killFailures: ProjectTerminalKillFailure[]
 }
 
+let activeProjectTerminalTaskId: string | null = null
+
 export function getProjectTerminalTaskId(projectId: string): string {
   return `project-${projectId}`
+}
+
+export function markActiveProjectTerminalTask(taskId: string | null): string | null {
+  const previousTaskId = activeProjectTerminalTaskId
+  activeProjectTerminalTaskId = taskId
+
+  return previousTaskId !== null && previousTaskId !== taskId ? previousTaskId : null
+}
+
+export function releaseInactiveProjectTerminalTask(activeTaskId: string | null): string | null {
+  if (activeProjectTerminalTaskId === null || activeProjectTerminalTaskId === activeTaskId) {
+    return null
+  }
+
+  const taskIdToRelease = activeProjectTerminalTaskId
+  activeProjectTerminalTaskId = null
+  return taskIdToRelease
+}
+
+export function resetActiveProjectTerminalTask(): void {
+  activeProjectTerminalTaskId = null
 }
 
 function normalizeError(error: unknown): string {
