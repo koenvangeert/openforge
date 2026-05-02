@@ -7,11 +7,14 @@ description: Manage OpenForge tasks from AI providers using the installed OpenFo
 
 Use this skill when you need to create follow-up work, inspect task context, or update the current task summary in OpenForge.
 
-The OpenForge CLI client is installed at:
+Use the installed `openforge` launcher directly. If `openforge` is not available on PATH in a non-interactive shell, call the launcher with its explicit fallback path:
 
 ```bash
-OPENFORGE_CLI="{{OPENFORGE_CLI_PATH}}"
+openforge list-projects
+"$HOME/.openforge/bin/openforge" list-projects
 ```
+
+Do not bypass the launcher with the underlying script path.
 
 If OpenForge is listening on a non-default HTTP bridge port, set `OPENFORGE_HTTP_PORT` before running the command. The default is `17422`.
 

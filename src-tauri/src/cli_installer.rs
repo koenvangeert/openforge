@@ -21,7 +21,7 @@ fn write_cli_files(install_dir: &Path) -> Result<(), Box<dyn std::error::Error>>
     fs::write(install_dir.join("cli.js"), OPENFORGE_CLI_JS)?;
     fs::write(
         install_dir.join("openforge-skill.md"),
-        build_openforge_skill(&install_dir.join("cli.js")),
+        build_openforge_skill(),
     )?;
     info!(
         "[cli_installer] OpenForge CLI files written to: {}",
@@ -30,8 +30,8 @@ fn write_cli_files(install_dir: &Path) -> Result<(), Box<dyn std::error::Error>>
     Ok(())
 }
 
-fn build_openforge_skill(cli_path: &Path) -> String {
-    OPENFORGE_SKILL_TEMPLATE.replace("{{OPENFORGE_CLI_PATH}}", &cli_path.to_string_lossy())
+fn build_openforge_skill() -> String {
+    OPENFORGE_SKILL_TEMPLATE.to_string()
 }
 
 fn openforge_cli_path(config_dir: &Path) -> PathBuf {
@@ -255,7 +255,7 @@ pub fn write_provider_skill_files(
     home_dir: &Path,
     config_dir: &Path,
 ) -> Result<Vec<ProviderSkillInstallTarget>, Box<dyn std::error::Error>> {
-    let skill = build_openforge_skill(&openforge_cli_path(config_dir));
+    let skill = build_openforge_skill();
     let targets = provider_skill_install_targets(home_dir, config_dir);
 
     for target in &targets {
@@ -326,8 +326,10 @@ mod tests {
         assert!(!cli_content.contains("'mcp'"));
 
         let skill_content = std::fs::read_to_string(&skill_md).unwrap();
-        assert!(skill_content.contains("openforge"));
-        assert!(skill_content.contains("cli.js"));
+        assert!(skill_content.contains("openforge update-task"));
+        assert!(skill_content.contains("$HOME/.openforge/bin/openforge"));
+        assert!(!skill_content.contains("cli.js"));
+        assert!(!skill_content.contains("exec node"));
         let obsolete_segment = ["mcp", "server"].join("-");
         assert!(!skill_content.contains(&obsolete_segment));
     }
@@ -358,7 +360,10 @@ mod tests {
             let content = std::fs::read_to_string(&target.path).unwrap();
             assert!(content.contains("name: openforge"));
             assert!(content.contains("OPENFORGE_HTTP_PORT"));
-            assert!(content.contains("openforge/cli/cli.js"));
+            assert!(content.contains("openforge get-task"));
+            assert!(content.contains("$HOME/.openforge/bin/openforge"));
+            assert!(!content.contains("openforge/cli/cli.js"));
+            assert!(!content.contains("node \""));
             let obsolete_segment = ["mcp", "server"].join("-");
             assert!(!content.contains(&obsolete_segment));
         }
