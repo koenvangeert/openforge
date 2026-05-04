@@ -296,7 +296,6 @@ export interface AgentEvent {
 
 export interface ImplementationStatus {
   task_id: string;
-  worktree_path: string;
   workspace_path: string;
   port: number;
   session_id: string;
