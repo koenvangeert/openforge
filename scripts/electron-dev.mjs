@@ -61,7 +61,8 @@ export async function resolveElectronDevBackendEnv(options = {}, deps = { isPort
   const result = buildTauriDevEnv({ ...options, env: baseEnv })
   const backendPort = Number(result.env.OPENFORGE_BACKEND_PORT)
 
-  const hasExplicitBackendPort = baseEnv.OPENFORGE_BACKEND_PORT !== undefined || result.env.OPENFORGE_BACKEND_PORT !== String(DEFAULT_DEV_BACKEND_PORT)
+  const defaultDevBackendPort = String(DEFAULT_DEV_BACKEND_PORT)
+  const hasExplicitBackendPort = result.env.OPENFORGE_BACKEND_PORT !== defaultDevBackendPort
   if (hasExplicitBackendPort) {
     await assertBackendPortAvailable(backendPort, deps)
     return result
@@ -76,7 +77,9 @@ export async function resolveElectronDevBackendEnv(options = {}, deps = { isPort
     env: {
       ...result.env,
       OPENFORGE_BACKEND_PORT: selectedPortString,
-      OPENFORGE_HTTP_PORT: baseEnv.OPENFORGE_HTTP_PORT ?? selectedPortString,
+      OPENFORGE_HTTP_PORT: baseEnv.OPENFORGE_HTTP_PORT && baseEnv.OPENFORGE_HTTP_PORT !== defaultDevBackendPort
+        ? baseEnv.OPENFORGE_HTTP_PORT
+        : selectedPortString,
     },
   }
 }

@@ -82,6 +82,25 @@ describe('electron dev script environment', () => {
     expect(result.env.OPENFORGE_HTTP_PORT).toBe('17643')
   })
 
+  it('selects a free port when inherited OpenForge env uses the occupied default dev port', async () => {
+    const result = await resolveElectronDevBackendEnv(
+      {
+        cwd: '/repo/openforge',
+        env: {
+          OPENFORGE_BACKEND_PORT: '17642',
+          OPENFORGE_HTTP_PORT: '17642',
+        },
+        execFileSync: () => {
+          throw new Error('not a git checkout')
+        },
+      },
+      { isPortOpen: async (_host, port) => port === 17642 },
+    )
+
+    expect(result.env.OPENFORGE_BACKEND_PORT).toBe('17643')
+    expect(result.env.OPENFORGE_HTTP_PORT).toBe('17643')
+  })
+
   it('preserves explicit hook client ports when selecting a free backend port', async () => {
     const result = await resolveElectronDevBackendEnv(
       {
