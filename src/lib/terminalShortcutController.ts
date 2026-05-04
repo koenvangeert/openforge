@@ -4,7 +4,7 @@ export interface TerminalTabsShortcutTarget {
   addTab(): void
   closeActiveTab(): Promise<void>
   focusActiveTab(): void
-  switchToTab(tabIndex: number): void
+  switchToTab(tabPosition: number): void
 }
 
 export interface TerminalShortcutControllerOptions {
@@ -38,8 +38,8 @@ export function createTerminalShortcutController(
     focusActiveTab() {
       terminalTabsRef?.focusActiveTab()
     },
-    switchToTab(tabIndex: number) {
-      terminalTabsRef?.switchToTab(tabIndex)
+    switchToTab(tabPosition: number) {
+      terminalTabsRef?.switchToTab(tabPosition)
     },
   }
 

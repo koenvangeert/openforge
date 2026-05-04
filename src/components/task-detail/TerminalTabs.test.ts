@@ -462,6 +462,43 @@ describe('TerminalTabs', () => {
     })
   })
 
+  it('switchToTab selects tabs by visible position instead of stable shell index', async () => {
+    const onTabChange = vi.fn()
+    const { component } = render(TerminalTabs, {
+      props: {
+        taskId: 'T-1',
+        workspacePath: '/path/to/worktree',
+        onTabChange,
+        onTabCountChange: null,
+      },
+    })
+
+    await vi.waitFor(() => {
+      expect(screen.getByText('Shell 1')).toBeTruthy()
+    })
+
+    const addButton = screen.getByRole('button', { name: '+' })
+    await fireEvent.click(addButton)
+    await fireEvent.click(addButton)
+
+    await vi.waitFor(() => {
+      expect(screen.getByText('Shell 3')).toBeTruthy()
+    })
+
+    const closeButtons = screen.getAllByRole('button', { name: '×' })
+    await fireEvent.click(closeButtons[1])
+
+    await vi.waitFor(() => {
+      expect(screen.queryByText('Shell 2')).toBeNull()
+      expect(screen.getByText('Shell 3')).toBeTruthy()
+    })
+
+    onTabChange.mockClear()
+    component.switchToTab(1)
+
+    expect(onTabChange).toHaveBeenCalledWith(2)
+  })
+
   it('does not listen for ⌘T on document directly', async () => {
     render(TerminalTabs, {
       props: {
@@ -638,7 +675,7 @@ describe('TerminalTabs', () => {
     })
   })
 
-  it('shows ⌘⇧1, ⌘⇧2 shortcut hints when commandHeld is true', async () => {
+  it('shows ⌘1, ⌘2 shortcut hints when commandHeld is true', async () => {
     commandHeld.set(true)
     
     render(TerminalTabs, {
@@ -651,14 +688,14 @@ describe('TerminalTabs', () => {
     })
 
     await vi.waitFor(() => {
-      expect(screen.getByText('⌘⇧1')).toBeTruthy()
+      expect(screen.getByText('⌘1')).toBeTruthy()
     })
 
     const addButton = screen.getByRole('button', { name: '+' })
     await fireEvent.click(addButton)
 
     await vi.waitFor(() => {
-      expect(screen.getByText('⌘⇧2')).toBeTruthy()
+      expect(screen.getByText('⌘2')).toBeTruthy()
     })
   })
 
@@ -676,7 +713,7 @@ describe('TerminalTabs', () => {
 
     await vi.waitFor(() => {
       expect(screen.getByText('Shell 1')).toBeTruthy()
-      expect(screen.queryByText('⌘⇧1')).toBeNull()
+      expect(screen.queryByText('⌘1')).toBeNull()
     })
   })
 
@@ -692,19 +729,19 @@ describe('TerminalTabs', () => {
 
     await vi.waitFor(() => {
       expect(screen.getByText('Shell 1')).toBeTruthy()
-      expect(screen.queryByText('⌘⇧1')).toBeNull()
+      expect(screen.queryByText('⌘1')).toBeNull()
     })
 
     commandHeld.set(true)
 
     await vi.waitFor(() => {
-      expect(screen.getByText('⌘⇧1')).toBeTruthy()
+      expect(screen.getByText('⌘1')).toBeTruthy()
     })
 
     commandHeld.set(false)
 
     await vi.waitFor(() => {
-      expect(screen.queryByText('⌘⇧1')).toBeNull()
+      expect(screen.queryByText('⌘1')).toBeNull()
     })
   })
 })
