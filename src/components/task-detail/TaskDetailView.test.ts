@@ -29,14 +29,6 @@ vi.mock('@xterm/addon-web-links', () => {
   return { WebLinksAddon }
 })
 
-vi.mock('@xterm/addon-webgl', () => {
-  class WebglAddon {
-    onContextLoss = vi.fn()
-    dispose = vi.fn()
-  }
-  return { WebglAddon }
-})
-
 vi.mock('@xterm/xterm/css/xterm.css', () => ({}))
 
 vi.mock('../../lib/audioRecorder', () => ({
@@ -157,7 +149,17 @@ const { taskTabSessions } = vi.hoisted(() => ({
 vi.mock('../../lib/terminalPool', () => ({
   acquire: vi.fn().mockResolvedValue({
     taskId: '',
-    terminal: { write: vi.fn(), dispose: vi.fn(), reset: vi.fn(), cols: 80, rows: 24, options: { theme: {} }, focus: vi.fn() },
+    terminal: {
+      open: vi.fn(),
+      write: vi.fn(),
+      dispose: vi.fn(),
+      reset: vi.fn(),
+      cols: 80,
+      rows: 24,
+      options: { theme: {} },
+      focus: vi.fn(),
+      loadAddon: vi.fn(),
+    },
     fitAddon: { fit: vi.fn() },
     hostDiv: document.createElement('div'),
     ptyActive: false,
@@ -807,6 +809,33 @@ describe('TaskDetailView', () => {
       expect(screen.getByRole('button', { name: /shell 1/i })).toBeTruthy()
       expect(get(taskActiveView).get(baseTask.id)).toBe(TERMINAL_VIEW_ID)
     })
+
+    vi.mocked(getTaskWorkspace).mockResolvedValue(null)
+  })
+
+  it('activates shell terminal using the default renderer without WebGL addon wiring', async () => {
+    const { getTaskWorkspace } = await import('../../lib/ipc')
+    const { acquire } = await import('../../lib/terminalPool')
+    const acquireMock = vi.mocked(acquire)
+    acquireMock.mockClear()
+    vi.mocked(getTaskWorkspace).mockResolvedValue(createTaskWorkspaceInfo({ workspace_path: '/path/to/worktree', repo_path: '/repo', branch_name: 'branch' }))
+
+    render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+    await waitFor(() => expect(screen.getByRole('button', { name: /^terminal\b/i })).toBeTruthy())
+
+    await fireEvent.click(screen.getByRole('button', { name: /^terminal\b/i }))
+
+    await waitFor(() => {
+      expect(acquireMock).toHaveBeenCalledWith(`${baseTask.id}-shell-0`)
+    })
+
+    const shellResultIndex = acquireMock.mock.calls.findIndex(([terminalKey]) => terminalKey === `${baseTask.id}-shell-0`)
+    const shellEntry = await acquireMock.mock.results[shellResultIndex].value as {
+      terminal: { loadAddon: ReturnType<typeof vi.fn> } & Record<string, unknown>
+    }
+
+    expect(shellEntry.terminal.loadAddon).not.toHaveBeenCalled()
+    expect(shellEntry.terminal).not.toHaveProperty('onContextLoss')
 
     vi.mocked(getTaskWorkspace).mockResolvedValue(null)
   })

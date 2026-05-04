@@ -33,13 +33,6 @@ vi.mock('@xterm/addon-web-links', () => {
   return { WebLinksAddon }
 })
 
-vi.mock('@xterm/addon-webgl', () => {
-  const WebglAddon = vi.fn().mockImplementation(() => ({
-    onContextLoss: vi.fn(),
-  }))
-  return { WebglAddon }
-})
-
 vi.mock('@xterm/xterm/css/xterm.css', () => ({}))
 
 const { killPtyMock, spawnShellPtyMock } = vi.hoisted(() => ({
@@ -69,7 +62,10 @@ const { taskTabSessions } = vi.hoisted(() => ({
 }))
 
 const { lastTaskTerminalProps } = vi.hoisted(() => ({
-  lastTaskTerminalProps: { onExit: null as null | (() => void) },
+  lastTaskTerminalProps: {
+    all: null as null | Record<string, unknown>,
+    onExit: null as null | (() => void),
+  },
 }))
 
 vi.mock('../../lib/terminalPool', () => ({
@@ -135,6 +131,7 @@ vi.mock('../../lib/terminalPool', () => ({
 // Mock TaskTerminal to avoid complex terminal setup in tab tests
 vi.mock('./TaskTerminal.svelte', () => ({
   default: vi.fn((_node, props) => {
+    lastTaskTerminalProps.all = props
     lastTaskTerminalProps.onExit = props.onExit
     return { update() {}, destroy() {} }
   }),
@@ -266,6 +263,7 @@ describe('TerminalTabs', () => {
     killPtyMock.mockResolvedValue(undefined)
     releaseMock.mockReturnValue(undefined)
     taskTabSessions.clear()
+    lastTaskTerminalProps.all = null
     lastTaskTerminalProps.onExit = null
     commandHeld.set(false)
   })
@@ -283,6 +281,38 @@ describe('TerminalTabs', () => {
     await vi.waitFor(() => {
       expect(screen.getByText('Shell 1')).toBeTruthy()
     })
+  })
+
+  it('renders shell terminals without WebGL renderer wiring props', async () => {
+    render(TerminalTabs, {
+      props: {
+        taskId: 'T-1',
+        workspacePath: '/path/to/worktree',
+        onTabChange: null,
+        onTabCountChange: null,
+      },
+    })
+
+    await vi.waitFor(() => {
+      expect(screen.getByText('Shell 1')).toBeTruthy()
+      expect(lastTaskTerminalProps.all).not.toBeNull()
+    })
+
+    expect(lastTaskTerminalProps.all).toMatchObject({
+      taskId: 'T-1',
+      workspacePath: '/path/to/worktree',
+      terminalKey: 'T-1-shell-0',
+      terminalIndex: 0,
+      isActive: true,
+    })
+    expect(Object.keys(requireDefined(lastTaskTerminalProps.all)).sort()).toEqual([
+      'isActive',
+      'onExit',
+      'taskId',
+      'terminalIndex',
+      'terminalKey',
+      'workspacePath',
+    ])
   })
 
   it('"+" button adds new tab with incremented label', async () => {
