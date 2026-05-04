@@ -6,6 +6,7 @@ import { createMainWindowOptions } from './windowConfig.js'
 import { openDevToolsForDevelopment } from './devTools.js'
 import { createPreloadPath } from './preloadPath.js'
 import { loadAndRevealMainWindow } from './windowStartup.js'
+import { shouldGrantMediaPermission, trustedRendererOrigins } from './mediaPermission.js'
 import { asChildProcessLike, createSidecarLaunchConfig, startSidecar } from './sidecar.js'
 import { handleElectronInvoke } from './backendBridge.js'
 import { createAppEventForwarder } from './eventForwarder.js'
@@ -26,6 +27,18 @@ async function createMainWindow(): Promise<BrowserWindow> {
   const window = new BrowserWindow(createMainWindowOptions(preloadPath))
 
   const rendererUrl = trustedRendererUrlFromEnv()
+  const trustedOrigins = trustedRendererOrigins(rendererUrl)
+  const mainWebContentsId = window.webContents.id
+  window.webContents.session.setPermissionRequestHandler((webContents, permission, callback, details) => {
+    callback(shouldGrantMediaPermission({
+      permission,
+      isMainWindowWebContents: webContents.id === mainWebContentsId,
+      requestingUrl: details.requestingUrl,
+      trustedOrigins,
+      mediaTypes: 'mediaTypes' in details ? details.mediaTypes : undefined,
+    }))
+  })
+
   console.log(`[electron] Loading renderer from ${rendererUrl ?? 'packaged dist/index.html'}`)
   await loadAndRevealMainWindow(window, rendererUrl
     ? { rendererUrl }
