@@ -2,6 +2,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod app_events;
+mod app_invoke;
 mod builtin_plugins;
 mod claude_hooks;
 mod cli_installer;
