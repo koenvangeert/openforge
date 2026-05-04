@@ -138,11 +138,20 @@ export async function packageElectronApp({
   return { appPath: outputAppPath, sidecarPath: sidecarTargetPath }
 }
 
-export async function buildAndPackageElectronApp({ repoRoot = repoRootFromScript() } = {}) {
-  await waitForExit(spawnCommand('pnpm', ['build'], { cwd: repoRoot }), 'pnpm build')
-  await waitForExit(spawnCommand('pnpm', ['electron:build'], { cwd: repoRoot }), 'pnpm electron:build')
-  await waitForExit(spawnCommand('cargo', ['build', '--release'], { cwd: join(repoRoot, 'src-tauri') }), 'cargo build --release')
-  return packageElectronApp({ repoRoot })
+async function runBuildCommand(command, args, options) {
+  await waitForExit(spawnCommand(command, args, options), `${command} ${args.join(' ')}`)
+}
+
+export async function buildAndPackageElectronApp({
+  repoRoot = repoRootFromScript(),
+  runCommand = runBuildCommand,
+  packageApp = packageElectronApp,
+} = {}) {
+  await runCommand('pnpm', ['build:plugins'], { cwd: repoRoot })
+  await runCommand('pnpm', ['build'], { cwd: repoRoot })
+  await runCommand('pnpm', ['electron:build'], { cwd: repoRoot })
+  await runCommand('cargo', ['build', '--release'], { cwd: join(repoRoot, 'src-tauri') })
+  return packageApp({ repoRoot })
 }
 
 async function main() {

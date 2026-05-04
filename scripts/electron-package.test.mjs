@@ -2,6 +2,7 @@ import { mkdir, readFile, readlink, stat, symlink, writeFile } from 'node:fs/pro
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
+  buildAndPackageElectronApp,
   createElectronAppPackageJson,
   electronBundlePath,
   packageElectronApp,
@@ -31,6 +32,29 @@ describe('Electron macOS packaging helpers', () => {
     const plist = '<plist><dict><key>CFBundleExecutable</key><string>Electron</string><key>CFBundleName</key><string>Electron</string></dict></plist>'
 
     expect(updatePlistStringValue(updatePlistStringValue(plist, 'CFBundleExecutable', 'Open Forge'), 'CFBundleName', 'Open Forge')).toContain('<key>CFBundleExecutable</key><string>Open Forge</string>')
+  })
+
+  it('builds plugin frontend artifacts before renderer and Electron packaging builds', async () => {
+    const commands = []
+
+    await buildAndPackageElectronApp({
+      repoRoot: '/repo',
+      runCommand: async (command, args, options) => {
+        commands.push({ command, args, cwd: options.cwd })
+      },
+      packageApp: async ({ repoRoot }) => {
+        commands.push({ command: 'packageElectronApp', args: [], cwd: repoRoot })
+        return { appPath: `${repoRoot}/app`, sidecarPath: `${repoRoot}/sidecar` }
+      },
+    })
+
+    expect(commands).toEqual([
+      { command: 'pnpm', args: ['build:plugins'], cwd: '/repo' },
+      { command: 'pnpm', args: ['build'], cwd: '/repo' },
+      { command: 'pnpm', args: ['electron:build'], cwd: '/repo' },
+      { command: 'cargo', args: ['build', '--release'], cwd: '/repo/src-tauri' },
+      { command: 'packageElectronApp', args: [], cwd: '/repo' },
+    ])
   })
 
   it('packages the compiled renderer, Electron main process, and Rust sidecar into a macOS .app bundle', async () => {
