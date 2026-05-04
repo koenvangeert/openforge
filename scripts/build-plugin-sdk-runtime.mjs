@@ -9,7 +9,7 @@ export async function buildPluginSdkRuntime(options = {}) {
   const workspaceRoot = options.workspaceRoot ? path.resolve(options.workspaceRoot) : defaultWorkspaceRoot
   const outDir = options.outDir
     ? path.resolve(options.outDir)
-    : path.join(workspaceRoot, 'src-tauri/plugin-host/plugin-sdk')
+    : path.join(workspaceRoot, 'dist-electron/plugin-host/plugin-sdk')
   const entry = path.join(workspaceRoot, 'packages/plugin-sdk/src/index.ts')
 
   await build({

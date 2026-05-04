@@ -1,14 +1,15 @@
 #!/usr/bin/env node
 import { spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { existsSync } from 'node:fs'
 import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { buildPluginSdkRuntime } from './build-plugin-sdk-runtime.mjs'
 
 const defaultWorkspaceRoot = path.resolve(import.meta.dirname, '..')
 const STATE_PATH = path.join('.a5c', 'cache', 'dev-plugin-artifacts.json')
-const SDK_RUNTIME_OUTPUT = path.join('src-tauri', 'plugin-host', 'plugin-sdk', 'index.js')
+const SDK_RUNTIME_OUT_DIR = path.join('src-tauri', 'plugin-host', 'plugin-sdk')
+const SDK_RUNTIME_OUTPUT = path.join(SDK_RUNTIME_OUT_DIR, 'index.js')
 const IGNORED_DIRS = new Set(['node_modules', 'dist', '.svelte-kit', 'coverage', '.turbo'])
 const PLUGIN_INPUT_EXTENSIONS = new Set(['.ts', '.svelte', '.json', '.js', '.mjs', '.cjs'])
 
@@ -221,6 +222,7 @@ export async function ensureDevPluginArtifacts(options = {}) {
   const workspaceRoot = options.workspaceRoot ? path.resolve(options.workspaceRoot) : defaultWorkspaceRoot
   const log = options.log ?? console.log
   const runCommand = options.runCommand ?? defaultRunCommand
+  const buildSdkRuntime = options.buildSdkRuntime ?? buildPluginSdkRuntime
   const statePath = path.join(workspaceRoot, STATE_PATH)
   const state = await readJson(statePath, {})
 
@@ -242,7 +244,10 @@ export async function ensureDevPluginArtifacts(options = {}) {
 
   if (sdkRuntime.rebuilt) {
     log(`[dev-plugin-artifacts] rebuilding plugin SDK runtime (${sdkRuntime.reason})`)
-    await runCommand('pnpm', ['build:plugin-sdk-runtime'], { cwd: workspaceRoot, env: options.env ?? process.env })
+    await buildSdkRuntime({
+      workspaceRoot,
+      outDir: path.join(workspaceRoot, SDK_RUNTIME_OUT_DIR),
+    })
   } else {
     log('[dev-plugin-artifacts] plugin SDK runtime is current')
   }
