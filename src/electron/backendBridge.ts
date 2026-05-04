@@ -63,6 +63,7 @@ const SIDECAR_BACKED_COMMANDS = new Set([
   'pty_kill',
   'pty_kill_shells_for_task',
   'get_pty_buffer',
+  'force_github_sync',
   'get_pull_requests',
   'get_pr_comments',
   'mark_comment_addressed',
@@ -166,17 +167,6 @@ export async function handleElectronInvoke(request: ElectronInvokeRequest, deps:
     return openExternalUrl(url, deps.openExternal)
   }
 
-  if (command === 'force_github_sync') {
-    return {
-      new_comments: 0,
-      ci_changes: 0,
-      review_changes: 0,
-      pr_changes: 0,
-      errors: 0,
-      rate_limited: false,
-      rate_limit_reset_at: null,
-    }
-  }
 
   if (isSidecarBackedCommand(command)) {
     return forwardToSidecar(command, payload, deps)

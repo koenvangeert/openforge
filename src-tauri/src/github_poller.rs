@@ -27,6 +27,7 @@
 //! - Network errors trigger retry on next cycle
 //! - Skips projects with missing GitHub config
 
+use crate::app_events::{publish_app_event, AppEventSender};
 use crate::db::{Database, PrRow};
 use crate::github_client::{
     aggregate_ci_status, aggregate_review_status, deduplicate_check_runs, filter_to_required,
@@ -46,6 +47,36 @@ use tokio::time::{sleep, Duration};
 const DEFAULT_GITHUB_POLL_INTERVAL_SECS: u64 = 60;
 const MIN_GITHUB_POLL_INTERVAL_SECS: u64 = 15;
 const MAX_GITHUB_POLL_INTERVAL_SECS: u64 = 300;
+
+#[derive(Clone, Default)]
+pub struct GitHubEventTarget {
+    app: Option<AppHandle>,
+    app_event_tx: Option<AppEventSender>,
+}
+
+impl GitHubEventTarget {
+    pub fn tauri(app: AppHandle) -> Self {
+        Self {
+            app: Some(app),
+            app_event_tx: None,
+        }
+    }
+
+    pub fn sidecar(app_event_tx: Option<AppEventSender>) -> Self {
+        Self {
+            app: None,
+            app_event_tx,
+        }
+    }
+
+    fn emit(&self, event_name: &str, payload: serde_json::Value) -> Result<(), String> {
+        publish_app_event(&self.app_event_tx, event_name, &payload);
+        if let Some(app) = &self.app {
+            app.emit(event_name, payload).map_err(|e| e.to_string())?;
+        }
+        Ok(())
+    }
+}
 
 // ============================================================================
 // PollResult
@@ -100,9 +131,27 @@ fn parse_poll_interval_seconds(raw: Option<String>) -> u64 {
 /// * `app` - Tauri AppHandle for accessing managed state and emitting events
 /// * `github_client` - Shared GitHub API client (caller owns lifetime)
 pub async fn poll_github_once(app: &AppHandle, github_client: &GitHubClient) -> PollResult {
+    let db = app.state::<Arc<Mutex<Database>>>().inner().clone();
+    let events = GitHubEventTarget::tauri(app.clone());
+    poll_github_once_with_state(db, github_client, &events).await
+}
+
+pub async fn poll_github_once_for_sidecar(
+    db: Arc<Mutex<Database>>,
+    github_client: &GitHubClient,
+    app_event_tx: Option<AppEventSender>,
+) -> PollResult {
+    let events = GitHubEventTarget::sidecar(app_event_tx);
+    poll_github_once_with_state(db, github_client, &events).await
+}
+
+async fn poll_github_once_with_state(
+    db: Arc<Mutex<Database>>,
+    github_client: &GitHubClient,
+    events: &GitHubEventTarget,
+) -> PollResult {
     let cycle_start = Instant::now();
     github_client.clear_rate_limit_reset();
-    let db = app.state::<Arc<Mutex<Database>>>();
 
     let github_token = crate::secure_store::get_secret("github_token")
         .unwrap_or(None)
@@ -196,7 +245,7 @@ pub async fn poll_github_once(app: &AppHandle, github_client: &GitHubClient) -> 
         }
 
         let sync_start = Instant::now();
-        if let Err(e) = sync_open_prs(github_client, &db, app, &config, &github_token).await {
+        if let Err(e) = sync_open_prs(github_client, &db, &config, &github_token).await {
             error!(
                 "[GitHub Poller] Failed to sync PRs for project {}: {}",
                 project.id, e
@@ -243,7 +292,7 @@ pub async fn poll_github_once(app: &AppHandle, github_client: &GitHubClient) -> 
         let (new_comments, ci_changes, review_changes, errors) = poll_prs_for_project(
             github_client,
             &db,
-            app,
+            events,
             &github_token,
             open_prs,
             &activity_pr_numbers,
@@ -270,7 +319,7 @@ pub async fn poll_github_once(app: &AppHandle, github_client: &GitHubClient) -> 
     let review_start = Instant::now();
     count_poll_phase_error(
         "review PRs",
-        poll_review_prs(github_client, &db, app, &github_token).await,
+        poll_review_prs(github_client, &db, events, &github_token).await,
         &mut total_errors,
         &mut rate_limit_count,
     );
@@ -282,7 +331,7 @@ pub async fn poll_github_once(app: &AppHandle, github_client: &GitHubClient) -> 
     let authored_start = Instant::now();
     count_poll_phase_error(
         "authored PRs",
-        poll_authored_prs(github_client, &db, app, &github_token).await,
+        poll_authored_prs(github_client, &db, events, &github_token).await,
         &mut total_errors,
         &mut rate_limit_count,
     );
@@ -353,17 +402,33 @@ pub async fn poll_github_once(app: &AppHandle, github_client: &GitHubClient) -> 
 /// # Arguments
 /// * `app` - Tauri AppHandle for accessing managed state and emitting events
 pub async fn start_github_poller(app: AppHandle) {
+    let db = app.state::<Arc<Mutex<Database>>>().inner().clone();
     let github_client = app.state::<GitHubClient>().inner().clone();
+    let events = GitHubEventTarget::tauri(app);
+    start_github_poller_with_state(db, github_client, events).await;
+}
 
+pub async fn start_github_poller_for_sidecar(
+    db: Arc<Mutex<Database>>,
+    github_client: GitHubClient,
+    app_event_tx: Option<AppEventSender>,
+) {
+    let events = GitHubEventTarget::sidecar(app_event_tx);
+    start_github_poller_with_state(db, github_client, events).await;
+}
+
+async fn start_github_poller_with_state(
+    db: Arc<Mutex<Database>>,
+    github_client: GitHubClient,
+    events: GitHubEventTarget,
+) {
     loop {
-        let db = app.state::<Arc<Mutex<Database>>>();
-
         let poll_interval = {
             let db_lock = db.lock().unwrap();
             parse_poll_interval_seconds(db_lock.get_config("github_poll_interval").ok().flatten())
         };
 
-        let result = poll_github_once(&app, &github_client).await;
+        let result = poll_github_once_with_state(db.clone(), &github_client, &events).await;
 
         let has_changes = result.new_comments > 0
             || result.ci_changes > 0
@@ -371,13 +436,13 @@ pub async fn start_github_poller(app: AppHandle) {
             || result.pr_changes > 0;
 
         if has_changes {
-            if let Err(e) = app.emit("github-sync-complete", &result) {
+            if let Err(e) = events.emit("github-sync-complete", json_value_for_event(&result)) {
                 warn!("[GitHub Poller] Failed to emit github-sync-complete: {}", e);
             }
         }
 
         if result.rate_limited {
-            if let Err(e) = app.emit(
+            if let Err(e) = events.emit(
                 "github-rate-limited",
                 serde_json::json!({
                     "reset_at": result.rate_limit_reset_at
@@ -389,6 +454,10 @@ pub async fn start_github_poller(app: AppHandle) {
 
         sleep(Duration::from_secs(poll_interval)).await;
     }
+}
+
+fn json_value_for_event<T: Serialize>(value: &T) -> serde_json::Value {
+    serde_json::to_value(value).unwrap_or(serde_json::Value::Null)
 }
 
 #[derive(Debug)]
@@ -487,7 +556,6 @@ impl fmt::Display for SyncOpenPrsError {
 async fn sync_open_prs(
     github_client: &GitHubClient,
     db: &Mutex<Database>,
-    _app: &AppHandle,
     config: &PollerConfig,
     github_token: &str,
 ) -> Result<usize, SyncOpenPrsError> {
@@ -720,8 +788,8 @@ struct PersistCommentsResult {
     failed_insert_count: usize,
 }
 
-fn persist_polled_comments<R: tauri::Runtime>(
-    app: &impl Emitter<R>,
+fn persist_polled_comments(
+    events: &GitHubEventTarget,
     db: &Database,
     result: &PollSinglePrResult,
     existing_ids: &HashSet<i64>,
@@ -756,7 +824,7 @@ fn persist_polled_comments<R: tauri::Runtime>(
             continue;
         }
 
-        if let Err(e) = app.emit(
+        if let Err(e) = events.emit(
             "new-pr-comment",
             serde_json::json!({
                 "ticket_id": result.ticket_id,
@@ -978,7 +1046,7 @@ async fn poll_single_pr(
 async fn poll_prs_for_project(
     github_client: &GitHubClient,
     db: &Mutex<Database>,
-    app: &AppHandle,
+    events: &GitHubEventTarget,
     github_token: &str,
     open_prs: Vec<PrRow>,
     changed_pr_numbers: &[i64],
@@ -1109,7 +1177,7 @@ async fn poll_prs_for_project(
             }
         };
 
-        let persist_result = persist_polled_comments(app, &db_lock, &result, &existing_ids, now);
+        let persist_result = persist_polled_comments(events, &db_lock, &result, &existing_ids, now);
         new_comment_count += persist_result.new_comment_count;
 
         if let (Some(check_runs), Some(combined_status)) =
@@ -1151,7 +1219,7 @@ async fn poll_prs_for_project(
                     result.pr_id, e
                 );
             } else if result.old_ci_status.as_deref() != Some(new_status.as_str()) {
-                if let Err(e) = app.emit(
+                if let Err(e) = events.emit(
                     "ci-status-changed",
                     serde_json::json!({
                         "task_id": result.ticket_id,
@@ -1182,7 +1250,7 @@ async fn poll_prs_for_project(
                     result.pr_id, e
                 );
             } else if result.old_review_status.as_deref() != Some(review_status.as_str()) {
-                if let Err(e) = app.emit(
+                if let Err(e) = events.emit(
                     "review-status-changed",
                     serde_json::json!({
                         "task_id": result.ticket_id,
@@ -1255,7 +1323,7 @@ fn count_poll_phase_error(
 async fn poll_review_prs(
     github_client: &GitHubClient,
     db: &Mutex<Database>,
-    app: &AppHandle,
+    events: &GitHubEventTarget,
     github_token: &str,
 ) -> Result<(), PollPhaseError> {
     let username = {
@@ -1319,7 +1387,7 @@ async fn poll_review_prs(
             .get_all_review_prs()
             .map(|prs| prs.iter().filter(|p| p.viewed_at.is_none()).count())
             .unwrap_or(0);
-        let _ = app.emit("review-pr-count-changed", count);
+        let _ = events.emit("review-pr-count-changed", serde_json::json!(count));
     }
 
     Ok(())
@@ -1328,7 +1396,7 @@ async fn poll_review_prs(
 async fn poll_authored_prs(
     github_client: &GitHubClient,
     db: &Mutex<Database>,
-    app: &AppHandle,
+    events: &GitHubEventTarget,
     github_token: &str,
 ) -> Result<(), PollPhaseError> {
     let username = {
@@ -1472,7 +1540,7 @@ async fn poll_authored_prs(
             let _ = db_lock.delete_stale_authored_prs(&all_search_ids);
         }
 
-        let _ = app.emit("authored-prs-updated", ());
+        let _ = events.emit("authored-prs-updated", serde_json::Value::Null);
     }
 
     Ok(())
@@ -1935,13 +2003,9 @@ mod tests {
         let existing_ids = db
             .get_existing_comment_ids(42)
             .expect("get existing ids failed");
-        let app = mock_builder()
-            .build(mock_context(noop_assets()))
-            .expect("mock app should build");
-        let app_handle = app.handle().clone();
+        let events = GitHubEventTarget::sidecar(None);
 
-        let persist_result =
-            persist_polled_comments(&app_handle, &db, &result, &existing_ids, 1000);
+        let persist_result = persist_polled_comments(&events, &db, &result, &existing_ids, 1000);
         let comments = db.get_comments_for_pr(42).expect("get comments failed");
 
         assert_eq!(persist_result.failed_insert_count, 0);
@@ -1973,22 +2037,19 @@ mod tests {
         .expect("insert pr failed");
 
         let result = make_review_body_poll_result(84);
-        let app = mock_builder()
-            .build(mock_context(noop_assets()))
-            .expect("mock app should build");
-        let app_handle = app.handle().clone();
+        let events = GitHubEventTarget::sidecar(None);
 
         let first_existing_ids = db
             .get_existing_comment_ids(84)
             .expect("get initial existing ids failed");
         let first_persist =
-            persist_polled_comments(&app_handle, &db, &result, &first_existing_ids, 1000);
+            persist_polled_comments(&events, &db, &result, &first_existing_ids, 1000);
 
         let second_existing_ids = db
             .get_existing_comment_ids(84)
             .expect("get second existing ids failed");
         let second_persist =
-            persist_polled_comments(&app_handle, &db, &result, &second_existing_ids, 1000);
+            persist_polled_comments(&events, &db, &result, &second_existing_ids, 1000);
 
         let comments = db.get_comments_for_pr(84).expect("get comments failed");
 
@@ -2033,13 +2094,9 @@ mod tests {
         let existing_ids = db
             .get_existing_comment_ids(126)
             .expect("get existing ids failed");
-        let app = mock_builder()
-            .build(mock_context(noop_assets()))
-            .expect("mock app should build");
-        let app_handle = app.handle().clone();
+        let events = GitHubEventTarget::sidecar(None);
 
-        let persist_result =
-            persist_polled_comments(&app_handle, &db, &result, &existing_ids, 1000);
+        let persist_result = persist_polled_comments(&events, &db, &result, &existing_ids, 1000);
         let comments = db.get_comments_for_pr(126).expect("get comments failed");
 
         assert_eq!(persist_result.failed_insert_count, 0);

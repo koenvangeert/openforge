@@ -88,23 +88,43 @@ describe('Electron backend bridge command forwarding', () => {
     })
   })
 
-  it('returns a no-op result for force_github_sync until live GitHub client state is ported', async () => {
-    const fetch = vi.fn()
+  it('forwards force_github_sync to the authenticated sidecar so it can use live GitHub client state', async () => {
+    const fetch = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        value: {
+          new_comments: 1,
+          ci_changes: 2,
+          review_changes: 3,
+          pr_changes: 4,
+          errors: 0,
+          rate_limited: false,
+          rate_limit_reset_at: null,
+        },
+      }),
+    }))
 
     await expect(handleElectronInvoke(
       { command: 'force_github_sync', payload: null },
       { sidecarConfig: sidecarConfig(), fetch, openExternal: vi.fn() },
     )).resolves.toEqual({
-      new_comments: 0,
-      ci_changes: 0,
-      review_changes: 0,
-      pr_changes: 0,
+      new_comments: 1,
+      ci_changes: 2,
+      review_changes: 3,
+      pr_changes: 4,
       errors: 0,
       rate_limited: false,
       rate_limit_reset_at: null,
     })
 
-    expect(fetch).not.toHaveBeenCalled()
+    expect(fetch).toHaveBeenCalledWith('http://127.0.0.1:17642/app/invoke', {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer launch-token',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ command: 'force_github_sync', payload: null }),
+    })
   })
 
   it('forwards GitHub and PR review commands to the authenticated sidecar app IPC route', async () => {
@@ -196,7 +216,7 @@ describe('Electron backend bridge command forwarding', () => {
     expect(isSidecarBackedCommand('pty_kill')).toBe(true)
     expect(isSidecarBackedCommand('pty_kill_shells_for_task')).toBe(true)
     expect(isSidecarBackedCommand('get_pty_buffer')).toBe(true)
-    expect(isSidecarBackedCommand('force_github_sync')).toBe(false)
+    expect(isSidecarBackedCommand('force_github_sync')).toBe(true)
     expect(isSidecarBackedCommand('get_pull_requests')).toBe(true)
     expect(isSidecarBackedCommand('get_pr_comments')).toBe(true)
     expect(isSidecarBackedCommand('mark_comment_addressed')).toBe(true)
