@@ -1,6 +1,7 @@
 use crate::{
     app_events::{publish_app_event, AppEventEnvelope, AppEventSender},
     db,
+    github_client::GitHubClient,
     opencode_client::OpenCodeClient,
     pty_manager::PtyManager,
     server_manager::ServerManager,
@@ -35,6 +36,7 @@ pub struct AppState {
     pub pty_manager: Option<PtyManager>,
     pub server_manager: Option<ServerManager>,
     pub sse_bridge_manager: Option<SseBridgeManager>,
+    pub github_client: GitHubClient,
     pub app_event_tx: Option<AppEventSender>,
 }
 
@@ -103,12 +105,7 @@ fn pi_session_matches_pty_instance(session: &db::AgentSessionRow, pty_instance_i
         == Some(pty_instance_id)
 }
 
-fn emit_agent_status_changed(
-    state: &AppState,
-    task_id: &str,
-    status: &str,
-    provider: &str,
-) {
+fn emit_agent_status_changed(state: &AppState, task_id: &str, status: &str, provider: &str) {
     let payload = serde_json::json!({
         "task_id": task_id,
         "status": status,
@@ -1132,7 +1129,10 @@ async fn handle_app_resume_startup_sessions_command(
 
         let result = match provider_name {
             "opencode" => {
-                let port = match server_manager.spawn_server(&target.task_id, workspace_path).await {
+                let port = match server_manager
+                    .spawn_server(&target.task_id, workspace_path)
+                    .await
+                {
                     Ok(port) => port,
                     Err(e) => {
                         error!(
@@ -1343,7 +1343,8 @@ async fn handle_app_abort_implementation_command(
                 if let Some(server_manager) = state.server_manager.as_ref() {
                     if let Some(opencode_session_id) = session.opencode_session_id.as_ref() {
                         if let Some(port) = server_manager.get_server_port(&task_id).await {
-                            let client = OpenCodeClient::with_base_url(format!("http://127.0.0.1:{port}"));
+                            let client =
+                                OpenCodeClient::with_base_url(format!("http://127.0.0.1:{port}"));
                             let _ = client.abort_session(opencode_session_id).await;
                         }
                     }
@@ -1404,7 +1405,14 @@ async fn handle_app_start_implementation_command(
         )
     })?;
 
-    let (task, project_id_owned, additional_instructions, code_cleanup_enabled, use_worktrees, provider_name) = {
+    let (
+        task,
+        project_id_owned,
+        additional_instructions,
+        code_cleanup_enabled,
+        use_worktrees,
+        provider_name,
+    ) = {
         let db = crate::db::acquire_db(&state.db);
         let task = db
             .get_task(&task_id)
@@ -1428,7 +1436,14 @@ async fn handle_app_start_implementation_command(
             .unwrap_or(false);
         let worktrees = db.resolve_use_worktrees(&project_id);
         let provider_name = db.resolve_ai_provider(&project_id);
-        (task, project_id, instructions, cleanup, worktrees, provider_name)
+        (
+            task,
+            project_id,
+            instructions,
+            cleanup,
+            worktrees,
+            provider_name,
+        )
     };
 
     let (working_dir, workspace_kind, branch_name) = if use_worktrees {
@@ -1512,7 +1527,8 @@ async fn handle_app_start_implementation_command(
                         format!("Failed to create session: {e}"),
                     )
                 })?;
-            deferred_opencode_prompt = Some((opencode_session_id.clone(), port, task.agent.clone()));
+            deferred_opencode_prompt =
+                Some((opencode_session_id.clone(), port, task.agent.clone()));
             crate::providers::ProviderSessionResult {
                 port,
                 opencode_session_id: Some(opencode_session_id),
@@ -1622,13 +1638,8 @@ async fn handle_app_start_implementation_command(
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
 
     if let Some((opencode_session_id, port, agent)) = deferred_opencode_prompt {
-        start_opencode_sse_bridge_for_app(
-            state,
-            &task_id,
-            Some(opencode_session_id.clone()),
-            port,
-        )
-        .await?;
+        start_opencode_sse_bridge_for_app(state, &task_id, Some(opencode_session_id.clone()), port)
+            .await?;
         let client = OpenCodeClient::with_base_url(format!("http://127.0.0.1:{port}"));
         client
             .prompt_async(&opencode_session_id, prompt, agent, None)
@@ -1838,27 +1849,96 @@ fn payload_optional_usize(
     }
 }
 
-fn live_github_command_requires_managed_client(command: &str) -> Result<Option<serde_json::Value>, (StatusCode, String)> {
-    Err((
-        StatusCode::NOT_IMPLEMENTED,
-        format!("app IPC command requires managed GitHub client state before Electron sidecar support: {command}"),
-    ))
+fn github_token() -> Result<String, (StatusCode, String)> {
+    crate::secure_store::get_secret("github_token")
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to get config: {e}"),
+            )
+        })?
+        .ok_or_else(|| {
+            (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "github_token not configured".to_string(),
+            )
+        })
 }
 
-fn handle_app_github_review_command(
+async fn github_username_for_state(state: &AppState) -> Result<String, (StatusCode, String)> {
+    let cached_username = {
+        let db = crate::db::acquire_db(&state.db);
+        db.get_config("github_username").map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to get config: {e}"),
+            )
+        })?
+    };
+
+    if let Some(username) = cached_username {
+        return Ok(username);
+    }
+
+    let token = github_token()?;
+    let username = state
+        .github_client
+        .get_authenticated_user(&token)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to get authenticated user: {e}"),
+            )
+        })?;
+
+    let db = crate::db::acquire_db(&state.db);
+    db.set_config("github_username", &username).map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to cache username: {e}"),
+        )
+    })?;
+
+    Ok(username)
+}
+
+async fn refresh_live_pr_caches(state: &AppState) -> Result<(), (StatusCode, String)> {
+    let _ = github_username_for_state(state).await?;
+    let result = crate::github_poller::poll_github_once_for_sidecar(
+        state.db.clone(),
+        &state.github_client,
+        state.app_event_tx.clone(),
+    )
+    .await;
+
+    if result.errors > 0 {
+        Err((
+            StatusCode::BAD_GATEWAY,
+            format!("GitHub sync reported {} error(s)", result.errors),
+        ))
+    } else {
+        Ok(())
+    }
+}
+
+async fn handle_app_github_review_command(
     state: &AppState,
     request: &AppInvokeRequest,
 ) -> Result<Option<serde_json::Value>, (StatusCode, String)> {
-    let db = crate::db::acquire_db(&state.db);
     let value = match request.command.as_str() {
-        "get_pull_requests" => json_value(db.get_all_pull_requests().map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to get pull requests: {e}"),
-            )
-        })?)?,
+        "get_pull_requests" => {
+            let db = crate::db::acquire_db(&state.db);
+            json_value(db.get_all_pull_requests().map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Failed to get pull requests: {e}"),
+                )
+            })?)?
+        }
         "get_pr_comments" => {
             let pr_id = payload_i64(&request.payload, "prId")?;
+            let db = crate::db::acquire_db(&state.db);
             json_value(db.get_comments_for_pr(pr_id).map_err(|e| {
                 (
                     StatusCode::INTERNAL_SERVER_ERROR,
@@ -1868,6 +1948,7 @@ fn handle_app_github_review_command(
         }
         "mark_comment_addressed" => {
             let comment_id = payload_i64(&request.payload, "commentId")?;
+            let db = crate::db::acquire_db(&state.db);
             db.mark_comment_addressed(comment_id).map_err(|e| {
                 (
                     StatusCode::INTERNAL_SERVER_ERROR,
@@ -1878,15 +1959,19 @@ fn handle_app_github_review_command(
             emit_comment_addressed(state);
             return Ok(Some(serde_json::Value::Null));
         }
-        "get_review_prs" => json_value(db.get_all_review_prs().map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to get review PRs: {e}"),
-            )
-        })?)?,
+        "get_review_prs" => {
+            let db = crate::db::acquire_db(&state.db);
+            json_value(db.get_all_review_prs().map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Failed to get review PRs: {e}"),
+                )
+            })?)?
+        }
         "mark_review_pr_viewed" => {
             let pr_id = payload_i64(&request.payload, "prId")?;
             let head_sha = payload_string(&request.payload, "headSha")?;
+            let db = crate::db::acquire_db(&state.db);
             db.mark_review_pr_viewed(pr_id, &head_sha).map_err(|e| {
                 (
                     StatusCode::INTERNAL_SERVER_ERROR,
@@ -1895,25 +1980,261 @@ fn handle_app_github_review_command(
             })?;
             serde_json::Value::Null
         }
-        "get_authored_prs" => json_value(db.get_all_authored_prs().map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to get authored PRs: {e}"),
+        "get_authored_prs" => {
+            let db = crate::db::acquire_db(&state.db);
+            json_value(db.get_all_authored_prs().map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Failed to get authored PRs: {e}"),
+                )
+            })?)?
+        }
+        "force_github_sync" => json_value(
+            crate::github_poller::poll_github_once_for_sidecar(
+                state.db.clone(),
+                &state.github_client,
+                state.app_event_tx.clone(),
             )
-        })?)?,
-        "force_github_sync"
-        | "merge_pull_request"
-        | "get_github_username"
-        | "fetch_review_prs"
-        | "get_pr_file_diffs"
-        | "get_file_content"
-        | "get_file_content_base64"
-        | "get_file_at_ref"
-        | "get_file_at_ref_base64"
-        | "get_review_comments"
-        | "get_pr_overview_comments"
-        | "submit_pr_review"
-        | "fetch_authored_prs" => return live_github_command_requires_managed_client(&request.command),
+            .await,
+        )?,
+        "merge_pull_request" => {
+            let owner = payload_string(&request.payload, "owner")?;
+            let repo = payload_string(&request.payload, "repo")?;
+            let pr_number = payload_i64(&request.payload, "prNumber")?;
+            let token = github_token()?;
+            let response = state
+                .github_client
+                .merge_pr(&owner, &repo, pr_number, &token)
+                .await
+                .map_err(|e| {
+                    (
+                        StatusCode::BAD_GATEWAY,
+                        format!("Failed to merge pull request: {e}"),
+                    )
+                })?;
+            if !response.merged {
+                return Err((
+                    StatusCode::BAD_GATEWAY,
+                    format!("Failed to merge pull request: {}", response.message),
+                ));
+            }
+            serde_json::Value::Null
+        }
+        "get_github_username" => json_value(github_username_for_state(state).await?)?,
+        "fetch_review_prs" => {
+            refresh_live_pr_caches(state).await?;
+            let db = crate::db::acquire_db(&state.db);
+            json_value(db.get_all_review_prs().map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Failed to get review PRs: {e}"),
+                )
+            })?)?
+        }
+        "get_pr_file_diffs" => {
+            let owner = payload_string(&request.payload, "owner")?;
+            let repo = payload_string(&request.payload, "repo")?;
+            let pr_number = payload_i64(&request.payload, "prNumber")?;
+            let token = github_token()?;
+            json_value(
+                state
+                    .github_client
+                    .get_pr_files(&owner, &repo, pr_number, &token)
+                    .await
+                    .map_err(|e| {
+                        (
+                            StatusCode::BAD_GATEWAY,
+                            format!("Failed to get PR files: {e}"),
+                        )
+                    })?,
+            )?
+        }
+        "get_file_content" | "get_file_content_base64" => {
+            let owner = payload_string(&request.payload, "owner")?;
+            let repo = payload_string(&request.payload, "repo")?;
+            let sha = payload_string(&request.payload, "sha")?;
+            let token = github_token()?;
+            if request.command == "get_file_content" {
+                json_value(
+                    state
+                        .github_client
+                        .get_blob_content(&owner, &repo, &sha, &token)
+                        .await
+                        .map_err(|e| {
+                            (
+                                StatusCode::BAD_GATEWAY,
+                                format!("Failed to get blob content: {e}"),
+                            )
+                        })?,
+                )?
+            } else {
+                json_value(
+                    state
+                        .github_client
+                        .get_blob_content_base64(&owner, &repo, &sha, &token)
+                        .await
+                        .map_err(|e| {
+                            (
+                                StatusCode::BAD_GATEWAY,
+                                format!("Failed to get blob content: {e}"),
+                            )
+                        })?,
+                )?
+            }
+        }
+        "get_file_at_ref" | "get_file_at_ref_base64" => {
+            let owner = payload_string(&request.payload, "owner")?;
+            let repo = payload_string(&request.payload, "repo")?;
+            let path = payload_string(&request.payload, "path")?;
+            let ref_sha = payload_string(&request.payload, "refSha")?;
+            let token = github_token()?;
+            if request.command == "get_file_at_ref" {
+                json_value(
+                    state
+                        .github_client
+                        .get_file_at_ref(&owner, &repo, &path, &ref_sha, &token)
+                        .await
+                        .map_err(|e| {
+                            (
+                                StatusCode::BAD_GATEWAY,
+                                format!("Failed to get file at ref: {e}"),
+                            )
+                        })?,
+                )?
+            } else {
+                json_value(
+                    state
+                        .github_client
+                        .get_file_at_ref_base64(&owner, &repo, &path, &ref_sha, &token)
+                        .await
+                        .map_err(|e| {
+                            (
+                                StatusCode::BAD_GATEWAY,
+                                format!("Failed to get file at ref: {e}"),
+                            )
+                        })?,
+                )?
+            }
+        }
+        "get_review_comments" => {
+            let owner = payload_string(&request.payload, "owner")?;
+            let repo = payload_string(&request.payload, "repo")?;
+            let pr_number = payload_i64(&request.payload, "prNumber")?;
+            let token = github_token()?;
+            let comments = state
+                .github_client
+                .get_pr_review_comments(&owner, &repo, pr_number, &token)
+                .await
+                .map_err(|e| {
+                    (
+                        StatusCode::BAD_GATEWAY,
+                        format!("Failed to get review comments: {e}"),
+                    )
+                })?;
+            json_value(
+                comments
+                    .into_iter()
+                    .map(|c| crate::commands::review::FrontendReviewComment {
+                        id: c.id,
+                        pr_number,
+                        repo_owner: owner.clone(),
+                        repo_name: repo.clone(),
+                        line: c.line.or_else(|| {
+                            c.extra
+                                .get("original_line")
+                                .and_then(|v| v.as_i64())
+                                .map(|v| v as i32)
+                        }),
+                        side: c.side,
+                        path: c.path,
+                        body: c.body,
+                        author: c.user.login,
+                        created_at: c.created_at,
+                        in_reply_to_id: c.in_reply_to_id,
+                    })
+                    .collect::<Vec<_>>(),
+            )?
+        }
+        "get_pr_overview_comments" => {
+            let owner = payload_string(&request.payload, "owner")?;
+            let repo = payload_string(&request.payload, "repo")?;
+            let pr_number = payload_i64(&request.payload, "prNumber")?;
+            let token = github_token()?;
+            let comments = state
+                .github_client
+                .get_pr_comments(&owner, &repo, pr_number, &token, None)
+                .await
+                .map_err(|e| {
+                    (
+                        StatusCode::BAD_GATEWAY,
+                        format!("Failed to get PR overview comments: {e}"),
+                    )
+                })?;
+            json_value(
+                comments
+                    .into_iter()
+                    .map(|c| crate::commands::review::FrontendPrOverviewComment {
+                        id: c.id,
+                        body: c.body,
+                        author: c.user.login,
+                        avatar_url: c
+                            .user
+                            .extra
+                            .get("avatar_url")
+                            .and_then(|v| v.as_str())
+                            .map(String::from),
+                        comment_type: c.comment_type,
+                        file_path: c.path,
+                        line_number: c.line,
+                        created_at: c.created_at,
+                    })
+                    .collect::<Vec<_>>(),
+            )?
+        }
+        "submit_pr_review" => {
+            let owner = payload_string(&request.payload, "owner")?;
+            let repo = payload_string(&request.payload, "repo")?;
+            let pr_number = payload_i64(&request.payload, "prNumber")?;
+            let event = payload_string(&request.payload, "event")?;
+            let body = payload_string(&request.payload, "body")?;
+            let commit_id = payload_string(&request.payload, "commitId")?;
+            let comments = request
+                .payload
+                .get("comments")
+                .cloned()
+                .unwrap_or_else(|| serde_json::json!([]));
+            let comments: Vec<crate::github_client::ReviewSubmitComment> =
+                serde_json::from_value(comments).map_err(|e| {
+                    (
+                        StatusCode::BAD_REQUEST,
+                        format!("payload.comments is invalid: {e}"),
+                    )
+                })?;
+            let token = github_token()?;
+            state
+                .github_client
+                .submit_review(
+                    &owner, &repo, pr_number, &event, &body, comments, &commit_id, &token,
+                )
+                .await
+                .map_err(|e| {
+                    (
+                        StatusCode::BAD_GATEWAY,
+                        format!("Failed to submit review: {e}"),
+                    )
+                })?;
+            serde_json::Value::Null
+        }
+        "fetch_authored_prs" => {
+            refresh_live_pr_caches(state).await?;
+            let db = crate::db::acquire_db(&state.db);
+            json_value(db.get_all_authored_prs().map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Failed to get authored PRs: {e}"),
+                )
+            })?)?
+        }
         _ => return Ok(None),
     };
 
@@ -1979,7 +2300,10 @@ impl AppInstallPluginRequest {
     }
 }
 
-fn app_task_workspace_path(state: &AppState, task_id: &str) -> Result<String, (StatusCode, String)> {
+fn app_task_workspace_path(
+    state: &AppState,
+    task_id: &str,
+) -> Result<String, (StatusCode, String)> {
     let db = crate::db::acquire_db(&state.db);
     crate::commands::self_review::resolve_workspace_path(&db, task_id)
         .map_err(|e| (StatusCode::NOT_FOUND, e))
@@ -1995,7 +2319,12 @@ fn app_project_root(state: &AppState, project_id: &str) -> Result<String, (Statu
             )
         })?
         .map(|project| project.path)
-        .ok_or_else(|| (StatusCode::NOT_FOUND, format!("Project not found: {project_id}")))
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                format!("Project not found: {project_id}"),
+            )
+        })
 }
 
 fn app_resolve_project_path(
@@ -2037,10 +2366,10 @@ fn app_detect_file_type(path: &std::path::Path) -> &'static str {
         .unwrap_or("")
         .to_ascii_lowercase();
     match ext.as_str() {
-        "ts" | "tsx" | "js" | "jsx" | "rs" | "py" | "rb" | "go" | "json" | "yaml"
-        | "yml" | "md" | "txt" | "toml" | "css" | "html" | "svelte" | "vue" | "sh"
-        | "bash" | "zsh" | "sql" | "graphql" | "xml" | "csv" | "env" | "gitignore"
-        | "prettierrc" | "eslintrc" | "cfg" | "ini" | "conf" | "log" | "lock" => "text",
+        "ts" | "tsx" | "js" | "jsx" | "rs" | "py" | "rb" | "go" | "json" | "yaml" | "yml"
+        | "md" | "txt" | "toml" | "css" | "html" | "svelte" | "vue" | "sh" | "bash" | "zsh"
+        | "sql" | "graphql" | "xml" | "csv" | "env" | "gitignore" | "prettierrc" | "eslintrc"
+        | "cfg" | "ini" | "conf" | "log" | "lock" => "text",
         "png" | "jpg" | "jpeg" | "gif" | "svg" | "webp" | "ico" | "bmp" => "image",
         "pdf" => "document",
         _ => "binary",
@@ -2163,7 +2492,9 @@ async fn app_read_file_preview(
     }
 }
 
-fn app_agent_review_live_blocker(command: &str) -> Result<Option<serde_json::Value>, (StatusCode, String)> {
+fn app_agent_review_live_blocker(
+    command: &str,
+) -> Result<Option<serde_json::Value>, (StatusCode, String)> {
     Err((
         StatusCode::NOT_IMPLEMENTED,
         format!("app IPC command requires provider and server manager state before Electron sidecar support: {command}"),
@@ -2174,7 +2505,8 @@ fn app_data_dir(state: &AppState) -> Result<std::path::PathBuf, (StatusCode, Str
     let Some(app) = state.app.as_ref() else {
         return Err((
             StatusCode::NOT_IMPLEMENTED,
-            "app IPC command requires app data path state before Electron sidecar support".to_string(),
+            "app IPC command requires app data path state before Electron sidecar support"
+                .to_string(),
         ));
     };
 
@@ -2255,7 +2587,8 @@ async fn handle_app_plugin_command(
             serde_json::Value::Null
         }
         "install_plugin_from_local" => {
-            let source_path = std::path::PathBuf::from(payload_string(&request.payload, "sourcePath")?);
+            let source_path =
+                std::path::PathBuf::from(payload_string(&request.payload, "sourcePath")?);
             let app_data_dir = app_data_dir(state)?;
             let plugin = crate::plugin_installation::install_local_plugin_bundle(
                 &source_path,
@@ -2274,12 +2607,10 @@ async fn handle_app_plugin_command(
         "install_plugin_from_npm" => {
             let package_name = payload_string(&request.payload, "packageName")?;
             let app_data_dir = app_data_dir(state)?;
-            let plugin = crate::plugin_installation::install_npm_plugin_bundle(
-                &package_name,
-                &app_data_dir,
-            )
-            .await
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
+            let plugin =
+                crate::plugin_installation::install_npm_plugin_bundle(&package_name, &app_data_dir)
+                    .await
+                    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
             let db = crate::db::acquire_db(&state.db);
             db.install_plugin(&plugin).map_err(|e| {
                 (
@@ -2338,12 +2669,13 @@ async fn handle_app_plugin_command(
             let plugin_id = payload_string(&request.payload, "pluginId")?;
             let enabled = payload_bool(&request.payload, "enabled")?;
             let db = crate::db::acquire_db(&state.db);
-            db.set_plugin_enabled(&project_id, &plugin_id, enabled).map_err(|e| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Failed to set plugin enabled: {e}"),
-                )
-            })?;
+            db.set_plugin_enabled(&project_id, &plugin_id, enabled)
+                .map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("Failed to set plugin enabled: {e}"),
+                    )
+                })?;
             serde_json::Value::Null
         }
         "get_enabled_plugins" => {
@@ -2372,12 +2704,13 @@ async fn handle_app_plugin_command(
             let key = payload_string(&request.payload, "key")?;
             let value = payload_string(&request.payload, "value")?;
             let db = crate::db::acquire_db(&state.db);
-            db.set_plugin_storage(&plugin_id, &key, &value).map_err(|e| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Failed to set plugin storage: {e}"),
-                )
-            })?;
+            db.set_plugin_storage(&plugin_id, &key, &value)
+                .map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("Failed to set plugin storage: {e}"),
+                    )
+                })?;
             serde_json::Value::Null
         }
         "plugin_invoke" => {
@@ -2390,13 +2723,19 @@ async fn handle_app_plugin_command(
                 .unwrap_or(serde_json::Value::Null);
             let plugin = {
                 let db = crate::db::acquire_db(&state.db);
-                db.get_plugin(&plugin_id).map_err(|e| {
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        format!("Failed to load plugin metadata: {e}"),
-                    )
-                })?
-                .ok_or_else(|| (StatusCode::NOT_FOUND, format!("Unknown plugin: {plugin_id}")))?
+                db.get_plugin(&plugin_id)
+                    .map_err(|e| {
+                        (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            format!("Failed to load plugin metadata: {e}"),
+                        )
+                    })?
+                    .ok_or_else(|| {
+                        (
+                            StatusCode::NOT_FOUND,
+                            format!("Unknown plugin: {plugin_id}"),
+                        )
+                    })?
             };
             let backend_entry = plugin.backend_entry.clone().ok_or_else(|| {
                 (
@@ -2414,12 +2753,14 @@ async fn handle_app_plugin_command(
                     "app IPC command requires plugin host state before Electron sidecar support: plugin_invoke".to_string(),
                 ));
             };
-            let plugin_host = app.try_state::<crate::plugin_host::PluginHost>().ok_or_else(|| {
-                (
-                    StatusCode::SERVICE_UNAVAILABLE,
-                    "plugin host state is not available".to_string(),
-                )
-            })?;
+            let plugin_host = app
+                .try_state::<crate::plugin_host::PluginHost>()
+                .ok_or_else(|| {
+                    (
+                        StatusCode::SERVICE_UNAVAILABLE,
+                        "plugin host state is not available".to_string(),
+                    )
+                })?;
             plugin_host
                 .invoke_backend(&plugin_id, &command, &backend_path, payload)
                 .await
@@ -2479,7 +2820,11 @@ async fn handle_app_files_review_command(
                     size: if is_dir { None } else { Some(metadata.len()) },
                     modified_at,
                 };
-                if is_dir { dirs.push(entry) } else { files.push(entry) }
+                if is_dir {
+                    dirs.push(entry)
+                } else {
+                    files.push(entry)
+                }
             }
             dirs.sort_by(|left, right| left.name.cmp(&right.name));
             files.sort_by(|left, right| left.name.cmp(&right.name));
@@ -2490,7 +2835,8 @@ async fn handle_app_files_review_command(
             let project_id = payload_string(&request.payload, "projectId")?;
             let file_path = payload_string(&request.payload, "filePath")?;
             let project_root = app_project_root(state, &project_id)?;
-            let full_path = app_resolve_project_path(std::path::Path::new(&project_root), Some(&file_path))?;
+            let full_path =
+                app_resolve_project_path(std::path::Path::new(&project_root), Some(&file_path))?;
             json_value(app_read_file_preview(&full_path).await?)?
         }
         "fs_search_files" => {
@@ -2505,7 +2851,11 @@ async fn handle_app_files_review_command(
             if project_root.is_empty() {
                 serde_json::json!([])
             } else {
-                json_value(crate::command_discovery::search_project_files(&project_root, &query, limit))?
+                json_value(crate::command_discovery::search_project_files(
+                    &project_root,
+                    &query,
+                    limit,
+                ))?
             }
         }
         "add_self_review_comment" => {
@@ -2515,18 +2865,21 @@ async fn handle_app_files_review_command(
             let line_number = payload_optional_i32(&request.payload, "lineNumber")?;
             let body = payload_string(&request.payload, "body")?;
             let db = crate::db::acquire_db(&state.db);
-            json_value(db.insert_self_review_comment(
-                &task_id,
-                &comment_type,
-                file_path.as_deref(),
-                line_number,
-                &body,
-            ).map_err(|e| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Failed to add self review comment: {e}"),
+            json_value(
+                db.insert_self_review_comment(
+                    &task_id,
+                    &comment_type,
+                    file_path.as_deref(),
+                    line_number,
+                    &body,
                 )
-            })?)?
+                .map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("Failed to add self review comment: {e}"),
+                    )
+                })?,
+            )?
         }
         "get_active_self_review_comments" => {
             let task_id = payload_string(&request.payload, "taskId")?;
@@ -2541,12 +2894,15 @@ async fn handle_app_files_review_command(
         "get_archived_self_review_comments" => {
             let task_id = payload_string(&request.payload, "taskId")?;
             let db = crate::db::acquire_db(&state.db);
-            json_value(db.get_archived_self_review_comments(&task_id).map_err(|e| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Failed to get archived self review comments: {e}"),
-                )
-            })?)?
+            json_value(
+                db.get_archived_self_review_comments(&task_id)
+                    .map_err(|e| {
+                        (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            format!("Failed to get archived self review comments: {e}"),
+                        )
+                    })?,
+            )?
         }
         "delete_self_review_comment" => {
             let comment_id = payload_i64(&request.payload, "commentId")?;
@@ -2573,34 +2929,39 @@ async fn handle_app_files_review_command(
         "get_agent_review_comments" => {
             let review_pr_id = payload_i64(&request.payload, "reviewPrId")?;
             let db = crate::db::acquire_db(&state.db);
-            json_value(db.get_agent_review_comments_for_pr(review_pr_id).map_err(|e| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Failed to get agent review comments: {e}"),
-                )
-            })?)?
+            json_value(
+                db.get_agent_review_comments_for_pr(review_pr_id)
+                    .map_err(|e| {
+                        (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            format!("Failed to get agent review comments: {e}"),
+                        )
+                    })?,
+            )?
         }
         "update_agent_review_comment_status" => {
             let comment_id = payload_i64(&request.payload, "commentId")?;
             let status = payload_string(&request.payload, "status")?;
             let db = crate::db::acquire_db(&state.db);
-            db.update_agent_review_comment_status(comment_id, &status).map_err(|e| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Failed to update agent review comment status: {e}"),
-                )
-            })?;
+            db.update_agent_review_comment_status(comment_id, &status)
+                .map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("Failed to update agent review comment status: {e}"),
+                    )
+                })?;
             serde_json::Value::Null
         }
         "dismiss_all_agent_review_comments" => {
             let review_pr_id = payload_i64(&request.payload, "reviewPrId")?;
             let db = crate::db::acquire_db(&state.db);
-            db.delete_agent_review_comments_for_pr(review_pr_id).map_err(|e| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Failed to dismiss all agent review comments: {e}"),
-                )
-            })?;
+            db.delete_agent_review_comments_for_pr(review_pr_id)
+                .map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("Failed to dismiss all agent review comments: {e}"),
+                    )
+                })?;
             serde_json::Value::Null
         }
         "get_task_diff" => {
@@ -2712,7 +3073,9 @@ async fn handle_app_files_review_command(
                 .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?,
             )?
         }
-        "start_agent_review" | "abort_agent_review" => return app_agent_review_live_blocker(&request.command),
+        "start_agent_review" | "abort_agent_review" => {
+            return app_agent_review_live_blocker(&request.command)
+        }
         _ => return Ok(None),
     };
 
@@ -2789,7 +3152,7 @@ async fn app_invoke_handler(
     if let Some(value) = handle_app_pty_command(&state, &request).await? {
         return Ok(Json(AppInvokeResponse { value }));
     }
-    if let Some(value) = handle_app_github_review_command(&state, &request)? {
+    if let Some(value) = handle_app_github_review_command(&state, &request).await? {
         return Ok(Json(AppInvokeResponse { value }));
     }
     if let Some(value) = handle_app_plugin_command(&state, &request).await? {
@@ -2923,13 +3286,19 @@ async fn app_invoke_handler(
                 format!("Failed to get tasks: {e}"),
             )
         })?)?,
-        "get_project_attention" => json_value(db.get_project_attention_summaries().map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to get project attention: {e}"),
-            )
-        })?)?,
-        "get_app_mode" => json_value(if cfg!(debug_assertions) { "dev" } else { "prod" })?,
+        "get_project_attention" => {
+            json_value(db.get_project_attention_summaries().map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Failed to get project attention: {e}"),
+                )
+            })?)?
+        }
+        "get_app_mode" => json_value(if cfg!(debug_assertions) {
+            "dev"
+        } else {
+            "prod"
+        })?,
         "get_git_branch" => {
             let output = std::process::Command::new("git")
                 .args(["rev-parse", "--abbrev-ref", "HEAD"])
@@ -2944,7 +3313,10 @@ async fn app_invoke_handler(
             if output.status.success() {
                 json_value(String::from_utf8_lossy(&output.stdout).trim().to_string())?
             } else {
-                return Err((StatusCode::INTERNAL_SERVER_ERROR, "Not a git repository".to_string()));
+                return Err((
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Not a git repository".to_string(),
+                ));
             }
         }
         "get_session_status" => {
@@ -2957,7 +3329,12 @@ async fn app_invoke_handler(
                         format!("Failed to get session status: {e}"),
                     )
                 })?
-                .ok_or_else(|| (StatusCode::NOT_FOUND, format!("Session {session_id} not found")))?;
+                .ok_or_else(|| {
+                    (
+                        StatusCode::NOT_FOUND,
+                        format!("Session {session_id} not found"),
+                    )
+                })?;
             json_value(session)?
         }
         "get_latest_session" => {
@@ -2987,7 +3364,9 @@ async fn app_invoke_handler(
                     format!("Failed to get latest session: {e}"),
                 )
             })? {
-                if matches!(session.provider.as_str(), "claude-code" | "pi") && session.status == "running" {
+                if matches!(session.provider.as_str(), "claude-code" | "pi")
+                    && session.status == "running"
+                {
                     let next_status = if session.provider == "pi" && success {
                         "completed"
                     } else {
@@ -3158,15 +3537,29 @@ async fn start_http_server_with_app_state(
 
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
     let (app_event_tx, _) = tokio::sync::broadcast::channel(1024);
+    let github_client = app
+        .as_ref()
+        .map(|app| app.state::<GitHubClient>().inner().clone())
+        .unwrap_or_else(GitHubClient::new);
     let state = AppState {
         app,
-        db,
+        db: db.clone(),
         backend_token: std::env::var("OPENFORGE_BACKEND_TOKEN").ok(),
         pty_manager: Some(pty_manager),
         server_manager: Some(server_manager),
         sse_bridge_manager: Some(sse_bridge_manager),
-        app_event_tx: Some(app_event_tx),
+        github_client: github_client.clone(),
+        app_event_tx: Some(app_event_tx.clone()),
     };
+
+    if state.app.is_none() {
+        tokio::spawn(crate::github_poller::start_github_poller_for_sidecar(
+            db,
+            github_client,
+            Some(app_event_tx),
+        ));
+    }
+
     let router = create_router(state);
 
     info!("[http_server] Starting on {}", addr);
@@ -3212,6 +3605,7 @@ mod tests {
                 pty_manager: Some(PtyManager::new()),
                 server_manager: Some(ServerManager::new()),
                 sse_bridge_manager: Some(SseBridgeManager::new()),
+                github_client: GitHubClient::new(),
                 app_event_tx: Some(app_event_tx),
             },
             path,
@@ -3301,14 +3695,9 @@ mod tests {
             let _ = axum::serve(listener, router).await;
         });
 
-        start_opencode_sse_bridge_for_app(
-            &state,
-            &task_id,
-            Some("oc-session-1".to_string()),
-            port,
-        )
-        .await
-        .expect("start bridge through app state");
+        start_opencode_sse_bridge_for_app(&state, &task_id, Some("oc-session-1".to_string()), port)
+            .await
+            .expect("start bridge through app state");
 
         let event = tokio::time::timeout(std::time::Duration::from_secs(3), events.recv())
             .await
@@ -3509,7 +3898,9 @@ mod tests {
                     .method("POST")
                     .header("authorization", "Bearer test-token")
                     .header("content-type", "application/json")
-                    .body(Body::from("{\"command\":\"get_project_attention\",\"payload\":null}"))
+                    .body(Body::from(
+                        "{\"command\":\"get_project_attention\",\"payload\":null}",
+                    ))
                     .expect("build request"),
             )
             .await
@@ -3528,7 +3919,9 @@ mod tests {
                     .method("POST")
                     .header("authorization", "Bearer test-token")
                     .header("content-type", "application/json")
-                    .body(Body::from("{\"command\":\"get_app_mode\",\"payload\":null}"))
+                    .body(Body::from(
+                        "{\"command\":\"get_app_mode\",\"payload\":null}",
+                    ))
                     .expect("build request"),
             )
             .await
@@ -3543,7 +3936,9 @@ mod tests {
                     .method("POST")
                     .header("authorization", "Bearer test-token")
                     .header("content-type", "application/json")
-                    .body(Body::from("{\"command\":\"get_git_branch\",\"payload\":null}"))
+                    .body(Body::from(
+                        "{\"command\":\"get_git_branch\",\"payload\":null}",
+                    ))
                     .expect("build request"),
             )
             .await
@@ -3636,12 +4031,10 @@ mod tests {
             .await
             .expect("request should succeed");
         assert_eq!(delete_task.status(), StatusCode::OK);
-        assert!(
-            crate::db::acquire_db(&state.db)
-                .get_task(task_id)
-                .expect("get deleted task")
-                .is_none()
-        );
+        assert!(crate::db::acquire_db(&state.db)
+            .get_task(task_id)
+            .expect("get deleted task")
+            .is_none());
 
         let done_task = {
             let db = crate::db::acquire_db(&state.db);
@@ -3665,12 +4058,10 @@ mod tests {
             .await
             .expect("request should succeed");
         assert_eq!(response_body_json(clear_done).await["value"], 1);
-        assert!(
-            crate::db::acquire_db(&state.db)
-                .get_task(&done_task.id)
-                .expect("get cleared task")
-                .is_none()
-        );
+        assert!(crate::db::acquire_db(&state.db)
+            .get_task(&done_task.id)
+            .expect("get cleared task")
+            .is_none());
 
         let delete_project = router
             .oneshot(
@@ -3776,7 +4167,9 @@ mod tests {
             .await
             .expect("request should succeed");
         assert_eq!(status_response.status(), StatusCode::OK);
-        assert!(response_body_text(status_response).await.contains("session-pi"));
+        assert!(response_body_text(status_response)
+            .await
+            .contains("session-pi"));
 
         let finalize_response = router
             .clone()
@@ -3853,7 +4246,9 @@ mod tests {
             .expect("request should succeed");
 
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
-        assert!(response_body_text(response).await.contains("Task not found"));
+        assert!(response_body_text(response)
+            .await
+            .contains("Task not found"));
 
         let _ = std::fs::remove_file(path);
     }
@@ -3945,7 +4340,9 @@ mod tests {
         let mut saw_output = false;
         let mut saw_exit = false;
         for _ in 0..8 {
-            let Ok(event) = tokio::time::timeout(std::time::Duration::from_secs(2), events.recv()).await else {
+            let Ok(event) =
+                tokio::time::timeout(std::time::Duration::from_secs(2), events.recv()).await
+            else {
                 break;
             };
             let event = event.expect("event should be available");
@@ -4042,8 +4439,15 @@ mod tests {
             .expect("create worktree");
             db.update_worktree_server(&task.id, 4096, 1234)
                 .expect("update worktree server");
-            db.create_agent_session("ses-legacy", &task.id, None, "implement", "running", "opencode")
-                .expect("create session");
+            db.create_agent_session(
+                "ses-legacy",
+                &task.id,
+                None,
+                "implement",
+                "running",
+                "opencode",
+            )
+            .expect("create session");
             task.id
         };
         let router = create_router(state);
@@ -4096,15 +4500,19 @@ mod tests {
         ).await.expect("request should succeed");
         assert_eq!(install.status(), StatusCode::OK);
 
-        let list = router.clone().oneshot(
-            Request::builder()
-                .uri("/app/invoke")
-                .method("POST")
-                .header("authorization", "Bearer test-token")
-                .header("content-type", "application/json")
-                .body(Body::from(r#"{"command":"list_plugins","payload":null}"#))
-                .expect("build request"),
-        ).await.expect("request should succeed");
+        let list = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/app/invoke")
+                    .method("POST")
+                    .header("authorization", "Bearer test-token")
+                    .header("content-type", "application/json")
+                    .body(Body::from(r#"{"command":"list_plugins","payload":null}"#))
+                    .expect("build request"),
+            )
+            .await
+            .expect("request should succeed");
         let list_json = response_body_json(list).await;
         assert_eq!(list_json["value"][0]["id"], "com.example.echo");
         assert_eq!(list_json["value"][0]["api_version"], 1);
@@ -4120,16 +4528,26 @@ mod tests {
         ).await.expect("request should succeed");
         assert_eq!(set_enabled.status(), StatusCode::OK);
 
-        let enabled = router.clone().oneshot(
-            Request::builder()
-                .uri("/app/invoke")
-                .method("POST")
-                .header("authorization", "Bearer test-token")
-                .header("content-type", "application/json")
-                .body(Body::from(format!(r#"{{"command":"get_enabled_plugins","payload":{{"projectId":"{}"}}}}"#, project_id)))
-                .expect("build request"),
-        ).await.expect("request should succeed");
-        assert_eq!(response_body_json(enabled).await["value"][0]["id"], "com.example.echo");
+        let enabled = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/app/invoke")
+                    .method("POST")
+                    .header("authorization", "Bearer test-token")
+                    .header("content-type", "application/json")
+                    .body(Body::from(format!(
+                        r#"{{"command":"get_enabled_plugins","payload":{{"projectId":"{}"}}}}"#,
+                        project_id
+                    )))
+                    .expect("build request"),
+            )
+            .await
+            .expect("request should succeed");
+        assert_eq!(
+            response_body_json(enabled).await["value"][0]["id"],
+            "com.example.echo"
+        );
 
         let storage = router.clone().oneshot(
             Request::builder()
@@ -4164,16 +4582,25 @@ mod tests {
         ).await.expect("request should succeed");
         assert_eq!(uninstall.status(), StatusCode::NOT_IMPLEMENTED);
 
-        let still_installed = router.clone().oneshot(
-            Request::builder()
-                .uri("/app/invoke")
-                .method("POST")
-                .header("authorization", "Bearer test-token")
-                .header("content-type", "application/json")
-                .body(Body::from(r#"{"command":"get_plugin","payload":{"pluginId":"com.example.echo"}}"#))
-                .expect("build request"),
-        ).await.expect("request should succeed");
-        assert_eq!(response_body_json(still_installed).await["value"]["id"], "com.example.echo");
+        let still_installed = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/app/invoke")
+                    .method("POST")
+                    .header("authorization", "Bearer test-token")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        r#"{"command":"get_plugin","payload":{"pluginId":"com.example.echo"}}"#,
+                    ))
+                    .expect("build request"),
+            )
+            .await
+            .expect("request should succeed");
+        assert_eq!(
+            response_body_json(still_installed).await["value"]["id"],
+            "com.example.echo"
+        );
 
         let _ = std::fs::remove_file(path);
     }
@@ -4204,8 +4631,18 @@ mod tests {
                 false,
             )
             .expect("insert PR");
-            db.insert_pr_comment(501, 10, "reviewer", "Please fix", "review", Some("src/main.rs"), Some(12), false, 3000)
-                .expect("insert PR comment");
+            db.insert_pr_comment(
+                501,
+                10,
+                "reviewer",
+                "Please fix",
+                "review",
+                Some("src/main.rs"),
+                Some(12),
+                false,
+                3000,
+            )
+            .expect("insert PR comment");
             db.upsert_review_pr(
                 20,
                 7,
@@ -4267,12 +4704,17 @@ mod tests {
                     .method("POST")
                     .header("authorization", "Bearer test-token")
                     .header("content-type", "application/json")
-                    .body(Body::from(r#"{"command":"get_pull_requests","payload":null}"#))
+                    .body(Body::from(
+                        r#"{"command":"get_pull_requests","payload":null}"#,
+                    ))
                     .expect("build request"),
             )
             .await
             .expect("request should succeed");
-        assert_eq!(response_body_json(pull_requests).await["value"][0]["title"], "Fix bug");
+        assert_eq!(
+            response_body_json(pull_requests).await["value"][0]["title"],
+            "Fix bug"
+        );
 
         let comments = router
             .clone()
@@ -4282,12 +4724,17 @@ mod tests {
                     .method("POST")
                     .header("authorization", "Bearer test-token")
                     .header("content-type", "application/json")
-                    .body(Body::from(r#"{"command":"get_pr_comments","payload":{"prId":10}}"#))
+                    .body(Body::from(
+                        r#"{"command":"get_pr_comments","payload":{"prId":10}}"#,
+                    ))
                     .expect("build request"),
             )
             .await
             .expect("request should succeed");
-        assert_eq!(response_body_json(comments).await["value"][0]["body"], "Please fix");
+        assert_eq!(
+            response_body_json(comments).await["value"][0]["body"],
+            "Please fix"
+        );
 
         let mark_comment = router
             .clone()
@@ -4297,7 +4744,9 @@ mod tests {
                     .method("POST")
                     .header("authorization", "Bearer test-token")
                     .header("content-type", "application/json")
-                    .body(Body::from(r#"{"command":"mark_comment_addressed","payload":{"commentId":501}}"#))
+                    .body(Body::from(
+                        r#"{"command":"mark_comment_addressed","payload":{"commentId":501}}"#,
+                    ))
                     .expect("build request"),
             )
             .await
@@ -4319,7 +4768,10 @@ mod tests {
             )
             .await
             .expect("request should succeed");
-        assert_eq!(response_body_json(review_prs).await["value"][0]["title"], "Review me");
+        assert_eq!(
+            response_body_json(review_prs).await["value"][0]["title"],
+            "Review me"
+        );
 
         let mark_viewed = router
             .clone()
@@ -4343,12 +4795,17 @@ mod tests {
                     .method("POST")
                     .header("authorization", "Bearer test-token")
                     .header("content-type", "application/json")
-                    .body(Body::from(r#"{"command":"get_authored_prs","payload":null}"#))
+                    .body(Body::from(
+                        r#"{"command":"get_authored_prs","payload":null}"#,
+                    ))
                     .expect("build request"),
             )
             .await
             .expect("request should succeed");
-        assert_eq!(response_body_json(authored_prs).await["value"][0]["title"], "Authored by me");
+        assert_eq!(
+            response_body_json(authored_prs).await["value"][0]["title"],
+            "Authored by me"
+        );
 
         let _ = std::fs::remove_file(path);
     }
@@ -4359,11 +4816,16 @@ mod tests {
         let temp_dir = tempfile::tempdir().expect("temp project dir");
         std::fs::write(temp_dir.path().join("README.md"), "hello electron").expect("write file");
         std::fs::create_dir_all(temp_dir.path().join("src")).expect("create src dir");
-        std::fs::write(temp_dir.path().join("src/main.rs"), "fn main() {}\n").expect("write rust file");
+        std::fs::write(temp_dir.path().join("src/main.rs"), "fn main() {}\n")
+            .expect("write rust file");
         let repo = git2::Repository::init(temp_dir.path()).expect("init repo");
         let mut index = repo.index().expect("repo index");
-        index.add_path(std::path::Path::new("README.md")).expect("add readme");
-        index.add_path(std::path::Path::new("src/main.rs")).expect("add main");
+        index
+            .add_path(std::path::Path::new("README.md"))
+            .expect("add readme");
+        index
+            .add_path(std::path::Path::new("src/main.rs"))
+            .expect("add main");
         index.write().expect("write index");
         let (project_id, task_id) = {
             let db = state.db.lock().expect("db lock");
@@ -4422,8 +4884,13 @@ mod tests {
                 .body(Body::from(format!(r#"{{"command":"fs_read_dir","payload":{{"projectId":"{}","dirPath":null}}}}"#, project_id)))
                 .expect("build request"),
         ).await.expect("request should succeed");
-        let dir_entries = response_body_json(dir).await["value"].as_array().expect("dir entries").clone();
-        assert!(dir_entries.iter().any(|entry| entry["name"] == "src" && entry["isDir"] == true));
+        let dir_entries = response_body_json(dir).await["value"]
+            .as_array()
+            .expect("dir entries")
+            .clone();
+        assert!(dir_entries
+            .iter()
+            .any(|entry| entry["name"] == "src" && entry["isDir"] == true));
 
         let file = router.clone().oneshot(
             Request::builder()
@@ -4438,7 +4905,8 @@ mod tests {
         assert_eq!(file_json["value"]["content"], "hello electron");
         assert_eq!(file_json["value"]["mimeType"], "text/markdown");
 
-        std::fs::write(temp_dir.path().join("src/main.py"), "print(\"hello\")").expect("write python file");
+        std::fs::write(temp_dir.path().join("src/main.py"), "print(\"hello\")")
+            .expect("write python file");
         let py_file = router.clone().oneshot(
             Request::builder()
                 .uri("/app/invoke")
@@ -4448,7 +4916,10 @@ mod tests {
                 .body(Body::from(format!(r#"{{"command":"fs_read_file","payload":{{"projectId":"{}","filePath":"src/main.py"}}}}"#, project_id)))
                 .expect("build request"),
         ).await.expect("request should succeed");
-        assert_eq!(response_body_json(py_file).await["value"]["mimeType"], "text/python");
+        assert_eq!(
+            response_body_json(py_file).await["value"]["mimeType"],
+            "text/python"
+        );
 
         let search = router.clone().oneshot(
             Request::builder()
@@ -4459,7 +4930,11 @@ mod tests {
                 .body(Body::from(format!(r#"{{"command":"fs_search_files","payload":{{"projectId":"{}","query":"main","limit":10}}}}"#, project_id)))
                 .expect("build request"),
         ).await.expect("request should succeed");
-        assert!(response_body_json(search).await["value"].as_array().expect("search").iter().any(|value| value == "src/main.rs"));
+        assert!(response_body_json(search).await["value"]
+            .as_array()
+            .expect("search")
+            .iter()
+            .any(|value| value == "src/main.rs"));
 
         let added = router.clone().oneshot(
             Request::builder()
@@ -4470,7 +4945,9 @@ mod tests {
                 .body(Body::from(format!(r#"{{"command":"add_self_review_comment","payload":{{"taskId":"{}","commentType":"general","filePath":null,"lineNumber":null,"body":"Self review note"}}}}"#, task_id)))
                 .expect("build request"),
         ).await.expect("request should succeed");
-        let self_comment_id = response_body_json(added).await["value"].as_i64().expect("self comment id");
+        let self_comment_id = response_body_json(added).await["value"]
+            .as_i64()
+            .expect("self comment id");
         assert!(self_comment_id > 0);
 
         let active = router.clone().oneshot(
@@ -4482,7 +4959,10 @@ mod tests {
                 .body(Body::from(format!(r#"{{"command":"get_active_self_review_comments","payload":{{"taskId":"{}"}}}}"#, task_id)))
                 .expect("build request"),
         ).await.expect("request should succeed");
-        assert_eq!(response_body_json(active).await["value"][0]["body"], "Self review note");
+        assert_eq!(
+            response_body_json(active).await["value"][0]["body"],
+            "Self review note"
+        );
 
         let archive = router.clone().oneshot(
             Request::builder()
@@ -4504,7 +4984,10 @@ mod tests {
                 .body(Body::from(format!(r#"{{"command":"get_archived_self_review_comments","payload":{{"taskId":"{}"}}}}"#, task_id)))
                 .expect("build request"),
         ).await.expect("request should succeed");
-        assert_eq!(response_body_json(archived).await["value"][0]["id"], self_comment_id);
+        assert_eq!(
+            response_body_json(archived).await["value"][0]["id"],
+            self_comment_id
+        );
 
         let delete_self = router.clone().oneshot(
             Request::builder()
@@ -4517,16 +5000,24 @@ mod tests {
         ).await.expect("request should succeed");
         assert_eq!(delete_self.status(), StatusCode::OK);
 
-        let agent_comments = router.clone().oneshot(
-            Request::builder()
-                .uri("/app/invoke")
-                .method("POST")
-                .header("authorization", "Bearer test-token")
-                .header("content-type", "application/json")
-                .body(Body::from(r#"{"command":"get_agent_review_comments","payload":{"reviewPrId":88}}"#))
-                .expect("build request"),
-        ).await.expect("request should succeed");
-        let agent_comment_id = response_body_json(agent_comments).await["value"][0]["id"].as_i64().expect("agent comment id");
+        let agent_comments = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/app/invoke")
+                    .method("POST")
+                    .header("authorization", "Bearer test-token")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        r#"{"command":"get_agent_review_comments","payload":{"reviewPrId":88}}"#,
+                    ))
+                    .expect("build request"),
+            )
+            .await
+            .expect("request should succeed");
+        let agent_comment_id = response_body_json(agent_comments).await["value"][0]["id"]
+            .as_i64()
+            .expect("agent comment id");
 
         let update_agent = router.clone().oneshot(
             Request::builder()
@@ -4620,20 +5111,37 @@ mod tests {
                 .expect("build request"),
         ).await.expect("request should succeed");
         assert_eq!(diff.status(), StatusCode::OK);
-        let diff_value = response_body_json(diff).await["value"].as_array().expect("diffs").clone();
-        assert!(diff_value.iter().any(|file| file["filename"] == "tracked.txt"));
-        assert!(diff_value.iter().any(|file| file["filename"] == "untracked.txt"));
+        let diff_value = response_body_json(diff).await["value"]
+            .as_array()
+            .expect("diffs")
+            .clone();
+        assert!(diff_value
+            .iter()
+            .any(|file| file["filename"] == "tracked.txt"));
+        assert!(diff_value
+            .iter()
+            .any(|file| file["filename"] == "untracked.txt"));
 
-        let commits = router.clone().oneshot(
-            Request::builder()
-                .uri("/app/invoke")
-                .method("POST")
-                .header("authorization", "Bearer test-token")
-                .header("content-type", "application/json")
-                .body(Body::from(format!(r#"{{"command":"get_task_commits","payload":{{"taskId":"{}"}}}}"#, task_id)))
-                .expect("build request"),
-        ).await.expect("request should succeed");
-        let commit_value = response_body_json(commits).await["value"].as_array().expect("commits").clone();
+        let commits = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/app/invoke")
+                    .method("POST")
+                    .header("authorization", "Bearer test-token")
+                    .header("content-type", "application/json")
+                    .body(Body::from(format!(
+                        r#"{{"command":"get_task_commits","payload":{{"taskId":"{}"}}}}"#,
+                        task_id
+                    )))
+                    .expect("build request"),
+            )
+            .await
+            .expect("request should succeed");
+        let commit_value = response_body_json(commits).await["value"]
+            .as_array()
+            .expect("commits")
+            .clone();
         assert_eq!(commit_value.len(), 1);
         assert_eq!(commit_value[0]["message"], "feature change");
 
@@ -4647,7 +5155,11 @@ mod tests {
                 .expect("build request"),
         ).await.expect("request should succeed");
         assert_eq!(commit_diff.status(), StatusCode::OK);
-        assert!(response_body_json(commit_diff).await["value"].as_array().expect("commit diff").iter().any(|file| file["filename"] == "tracked.txt"));
+        assert!(response_body_json(commit_diff).await["value"]
+            .as_array()
+            .expect("commit diff")
+            .iter()
+            .any(|file| file["filename"] == "tracked.txt"));
 
         let task_contents = router.clone().oneshot(
             Request::builder()
@@ -4671,7 +5183,10 @@ mod tests {
                 .body(Body::from(format!(r#"{{"command":"get_task_batch_file_contents","payload":{{"taskId":"{}","files":[{{"path":"tracked.txt","old_path":null,"status":"modified"}}],"includeUncommitted":true}}}}"#, task_id)))
                 .expect("build request"),
         ).await.expect("request should succeed");
-        assert_eq!(response_body_json(batch).await["value"][0][1], "base\nfeature\n");
+        assert_eq!(
+            response_body_json(batch).await["value"][0][1],
+            "base\nfeature\n"
+        );
 
         let commit_contents = router.clone().oneshot(
             Request::builder()
@@ -4682,7 +5197,10 @@ mod tests {
                 .body(Body::from(format!(r#"{{"command":"get_commit_file_contents","payload":{{"taskId":"{}","commitSha":"{}","path":"tracked.txt","oldPath":null,"status":"modified"}}}}"#, task_id, feature_sha)))
                 .expect("build request"),
         ).await.expect("request should succeed");
-        assert_eq!(response_body_json(commit_contents).await["value"][1], "base\nfeature\n");
+        assert_eq!(
+            response_body_json(commit_contents).await["value"][1],
+            "base\nfeature\n"
+        );
 
         let commit_batch = router.oneshot(
             Request::builder()
@@ -4693,7 +5211,10 @@ mod tests {
                 .body(Body::from(format!(r#"{{"command":"get_commit_batch_file_contents","payload":{{"taskId":"{}","commitSha":"{}","files":[{{"path":"tracked.txt","old_path":null,"status":"modified"}}]}}}}"#, task_id, feature_sha)))
                 .expect("build request"),
         ).await.expect("request should succeed");
-        assert_eq!(response_body_json(commit_batch).await["value"][0][0], "base\n");
+        assert_eq!(
+            response_body_json(commit_batch).await["value"][0][0],
+            "base\n"
+        );
 
         let _ = std::fs::remove_file(path);
     }
@@ -4703,24 +5224,31 @@ mod tests {
         let (state, path) = test_state("app_invoke_files_review_blockers");
         let router = create_router(state);
 
-        let response = router.oneshot(
-            Request::builder()
-                .uri("/app/invoke")
-                .method("POST")
-                .header("authorization", "Bearer test-token")
-                .header("content-type", "application/json")
-                .body(Body::from(r#"{"command":"start_agent_review","payload":{"reviewPrId":88}}"#))
-                .expect("build request"),
-        ).await.expect("request should succeed");
+        let response = router
+            .oneshot(
+                Request::builder()
+                    .uri("/app/invoke")
+                    .method("POST")
+                    .header("authorization", "Bearer test-token")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        r#"{"command":"start_agent_review","payload":{"reviewPrId":88}}"#,
+                    ))
+                    .expect("build request"),
+            )
+            .await
+            .expect("request should succeed");
         assert_eq!(response.status(), StatusCode::NOT_IMPLEMENTED);
-        assert!(response_body_text(response).await.contains("requires provider and server manager state"));
+        assert!(response_body_text(response)
+            .await
+            .contains("requires provider and server manager state"));
 
         let _ = std::fs::remove_file(path);
     }
 
     #[tokio::test]
-    async fn test_app_invoke_rejects_live_github_commands_until_client_state_is_ported() {
-        let (state, path) = test_state("app_invoke_rejects_live_github");
+    async fn test_app_invoke_force_github_sync_uses_sidecar_managed_client_state() {
+        let (state, path) = test_state("app_invoke_force_github_sync");
         let router = create_router(state);
 
         let response = router
@@ -4730,14 +5258,26 @@ mod tests {
                     .method("POST")
                     .header("authorization", "Bearer test-token")
                     .header("content-type", "application/json")
-                    .body(Body::from(r#"{"command":"force_github_sync","payload":null}"#))
+                    .body(Body::from(
+                        r#"{"command":"force_github_sync","payload":null}"#,
+                    ))
                     .expect("build request"),
             )
             .await
             .expect("request should succeed");
 
-        assert_eq!(response.status(), StatusCode::NOT_IMPLEMENTED);
-        assert!(response_body_text(response).await.contains("requires managed GitHub client state"));
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = response_body_json(response).await;
+        assert_eq!(body["value"]["new_comments"], 0);
+        assert_eq!(body["value"]["ci_changes"], 0);
+        assert_eq!(body["value"]["review_changes"], 0);
+        assert_eq!(body["value"]["pr_changes"], 0);
+        assert_eq!(body["value"]["errors"], 0);
+        assert_eq!(body["value"]["rate_limited"], false);
+        assert_eq!(
+            body["value"]["rate_limit_reset_at"],
+            serde_json::Value::Null
+        );
         let _ = std::fs::remove_file(path);
     }
 
@@ -4754,7 +5294,7 @@ mod tests {
                     .header("authorization", "Bearer test-token")
                     .header("content-type", "application/json")
                     .body(Body::from(
-                        r#"{"command":"force_github_sync","payload":null}"#,
+                        r#"{"command":"transcribe_audio","payload":null}"#,
                     ))
                     .expect("build request"),
             )
