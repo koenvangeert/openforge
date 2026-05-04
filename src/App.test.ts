@@ -86,7 +86,7 @@ const {
 
 vi.mock('./lib/desktopIpc', () => ({
   invokeDesktopCommand: vi.fn(),
-  isElectronDesktopBridgeAvailable: vi.fn(() => false),
+  isElectronDesktopBridgeAvailable: vi.fn(() => true),
   listenDesktopEvent: vi.fn(async (eventName: string, callback: Function) => {
     callOrder.push('listen')
     eventListeners.set(eventName, callback)
@@ -94,12 +94,8 @@ vi.mock('./lib/desktopIpc', () => ({
   }),
 }))
 
-vi.mock('@tauri-apps/api/core', () => ({
-  invoke: vi.fn(),
-}))
-
-vi.mock('@tauri-apps/api/window', () => ({
-  getCurrentWindow: vi.fn(() => ({
+vi.mock('./lib/desktopWindow', () => ({
+  createDesktopWindow: vi.fn(() => ({
     onCloseRequested: mockWindowOnCloseRequested,
     destroy: mockWindowDestroy,
   })),

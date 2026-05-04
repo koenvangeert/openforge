@@ -76,6 +76,15 @@ export function updatePlistStringValue(plist, key, value) {
   return plist.replace(pattern, `$1${value}$3`)
 }
 
+export function updatePlistBooleanValue(plist, key, value) {
+  const boolTag = value ? 'true' : 'false'
+  const pattern = new RegExp(`(<key>${escapeRegExp(key)}</key>\\s*)<(true|false)\\s*/>`)
+  if (!pattern.test(plist)) {
+    return plist.replace('</dict>', `\n\t<key>${key}</key>\n\t<${boolTag}/>\n</dict>`)
+  }
+  return plist.replace(pattern, `$1<${boolTag}/>`)
+}
+
 async function copyIcon(repoRoot, resourcesDir) {
   const iconPath = join(repoRoot, 'src-tauri', 'icons', 'icon.icns')
   if (!(await pathExists(iconPath))) return
@@ -89,6 +98,7 @@ async function updateInfoPlist(appPath) {
   plist = updatePlistStringValue(plist, 'CFBundleName', APP_NAME)
   plist = updatePlistStringValue(plist, 'CFBundleDisplayName', APP_NAME)
   plist = updatePlistStringValue(plist, 'CFBundleIdentifier', 'com.openforge.app.electron')
+  plist = updatePlistBooleanValue(plist, 'ApplePressAndHoldEnabled', false)
   await writeFile(plistPath, plist)
 }
 

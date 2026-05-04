@@ -41,7 +41,7 @@ If you prefer to build from source or want to run the latest unreleased changes:
 git clone https://github.com/koenvangeert/openforge.git
 cd openforge
 pnpm install
-pnpm tauri:install
+pnpm electron:install
 ```
 
 This builds a production release, copies `Open Forge.app` to `/Applications`, and removes the macOS quarantine flag. If an existing instance is running it will be closed automatically before the install.
@@ -79,7 +79,8 @@ Open Forge is a command center for AI-assisted development. You define coding ta
 ## Tech stack
 
 - **Frontend** — Svelte 5, TypeScript, Tailwind CSS v4, daisyUI v5
-- **Backend** — Rust, Tauri v2, SQLite
+- **Desktop shell** — Electron/Chromium main + sandboxed preload
+- **Backend** — Rust sidecar, SQLite
 - **AI agents** — Claude Code CLI (via PTY), OpenCode (via HTTP/SSE)
 
 ## Prerequisites
@@ -95,14 +96,14 @@ Open Forge is a command center for AI-assisted development. You define coding ta
 # Install frontend dependencies
 pnpm install
 
-# Run the full desktop app in dev mode
-pnpm tauri:dev
+# Run the full Electron desktop app in dev mode
+pnpm electron:dev
 
-# Or run just the frontend dev server (no Tauri shell)
+# Or run just the frontend dev server (no desktop shell)
 pnpm dev
 ```
 
-`pnpm tauri:dev` shares Rust build artifacts through the checkout's Git common directory by setting `CARGO_TARGET_DIR` to `.cargo-target` beside the primary `.git` directory. That keeps Tauri/Rust dev boots fast across git worktrees after the first compile. Set `CARGO_TARGET_DIR` yourself to override it, or use `pnpm tauri:dev:raw` for Tauri's default `src-tauri/target` behavior.
+`pnpm electron:dev` starts Vite, builds the Rust sidecar, builds the Electron main/preload bundle, then launches Electron. It shares Rust build artifacts through the checkout's Git common directory by setting `CARGO_TARGET_DIR` to `.cargo-target` beside the primary `.git` directory. Set `CARGO_TARGET_DIR` yourself to override it.
 
 ## Testing
 
@@ -119,18 +120,15 @@ cargo build
 cargo clippy
 ```
 
-Rust debug-profile validation uses a no-op Tauri asset context, so `cargo test`, `cargo check`, `cargo build`, and `cargo clippy` do not require a prebuilt `dist/` frontend bundle. Production/release packaging still embeds `build.frontendDist`; run `pnpm tauri:build` (or `pnpm build` before any release-profile Cargo build) when validating the packaged app.
+Rust validation builds the backend sidecar and does not require a prebuilt `dist/` frontend bundle. Release packaging is Electron-owned; use `pnpm electron:install` for a full local app build/install.
 
 ## Building
 
 ```bash
-# Production build
-pnpm tauri:build
+# Build renderer, Electron main/preload, plugins, and Rust sidecar into a macOS app bundle
+pnpm electron:package
 
-# Install the built macOS app
-pnpm tauri:install
-
-# Experimental Electron shell build/install from source
+# Build and install the Electron app into /Applications
 pnpm electron:install
 ```
 

@@ -15,8 +15,8 @@ The inventory records:
 - the current top-level payload keys sent to Tauri,
 - the intended migration owner (`rust-sidecar` or `electron-main`),
 - the broad migration domain used for vertical slices,
-- app shell event channel names currently registered by `registerAppTauriEventListeners()`,
-- high-risk dynamic event patterns used outside `registerAppTauriEventListeners()`: PTY output/exit channels, shell-tab PTY channels, Whisper download progress, plugin sidecar lifecycle events, and plugin-defined host events.
+- app shell event channel names currently registered by `registerAppDesktopEventListeners()`,
+- high-risk dynamic event patterns used outside `registerAppDesktopEventListeners()`: PTY output/exit channels, shell-tab PTY channels, Whisper download progress, plugin sidecar lifecycle events, and plugin-defined host events.
 
 ## Contract tests
 
@@ -34,7 +34,7 @@ These tests intentionally lock the current Tauri boundary before porting. If a c
 - It falls back to Tauri `invoke()` when running in the existing Tauri shell.
 - `listenDesktopEvent()` provides the same Electron-first/Tauri-fallback event adapter and returns a plain unsubscriber.
 - `src/lib/ipc.ts` keeps its public API and command names, but delegates through this transport seam instead of importing Tauri invoke directly.
-- `registerAppTauriEventListeners()` uses the event adapter by default while retaining dependency injection for tests.
+- `registerAppDesktopEventListeners()` uses the event adapter by default while retaining dependency injection for tests.
 
 This foundation does **not** port backend product domains, remove Tauri, implement browser workspaces, or expose raw Node/HTTP to the renderer.
 

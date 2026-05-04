@@ -47,7 +47,7 @@ async function runWithCommands(root) {
         workspaceRoot: options.workspaceRoot,
         outDir: path.relative(root, options.outDir),
       })
-      await write(root, 'src-tauri/plugin-host/plugin-sdk/index.js', 'sdk runtime\n')
+      await write(root, path.join(path.relative(root, options.outDir), 'index.js'), 'sdk runtime\n')
       return path.join(options.outDir, 'index.js')
     },
     runCommand: async (command, args, options) => {
@@ -69,7 +69,7 @@ describe('incremental dev plugin artifact builds', () => {
       expect(first.sdkRuntimeBuilds).toEqual([
         {
           workspaceRoot: root,
-          outDir: path.join('src-tauri', 'plugin-host', 'plugin-sdk'),
+          outDir: path.join('dist-electron', 'plugin-host', 'plugin-sdk'),
         },
       ])
       expect(first.commands.map((command) => [command.command, ...command.args].join(' '))).toEqual([
@@ -101,7 +101,7 @@ describe('incremental dev plugin artifact builds', () => {
       expect(update.sdkRuntimeBuilds).toEqual([
         {
           workspaceRoot: root,
-          outDir: path.join('src-tauri', 'plugin-host', 'plugin-sdk'),
+          outDir: path.join('dist-electron', 'plugin-host', 'plugin-sdk'),
         },
       ])
       expect(update.commands.map((command) => [command.command, ...command.args].join(' '))).toEqual([
@@ -146,25 +146,6 @@ describe('incremental dev plugin artifact builds', () => {
       expect(update.sdkRuntimeBuilds).toEqual([])
       expect(update.commands).toEqual([])
       expect(update.result.bundledPlugins.rebuilt).toBe(false)
-    } finally {
-      await rm(root, { recursive: true, force: true })
-    }
-  })
-
-  it('builds the remaining Tauri dev runtime with an explicit legacy output path', async () => {
-    const root = await makeWorkspace()
-
-    try {
-      const update = await runWithCommands(root)
-
-      expect(update.sdkRuntimeBuilds).toEqual([
-        {
-          workspaceRoot: root,
-          outDir: path.join('src-tauri', 'plugin-host', 'plugin-sdk'),
-        },
-      ])
-      await expect(readFile(path.join(root, 'src-tauri/plugin-host/plugin-sdk/index.js'), 'utf8')).resolves.toBe('sdk runtime\n')
-      await expect(readFile(path.join(root, 'dist-electron/plugin-host/plugin-sdk/index.js'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
     } finally {
       await rm(root, { recursive: true, force: true })
     }

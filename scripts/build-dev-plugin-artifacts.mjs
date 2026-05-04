@@ -8,7 +8,7 @@ import { buildPluginSdkRuntime } from './build-plugin-sdk-runtime.mjs'
 
 const defaultWorkspaceRoot = path.resolve(import.meta.dirname, '..')
 const STATE_PATH = path.join('.a5c', 'cache', 'dev-plugin-artifacts.json')
-const SDK_RUNTIME_OUT_DIR = path.join('src-tauri', 'plugin-host', 'plugin-sdk')
+const SDK_RUNTIME_OUT_DIR = path.join('dist-electron', 'plugin-host', 'plugin-sdk')
 const SDK_RUNTIME_OUTPUT = path.join(SDK_RUNTIME_OUT_DIR, 'index.js')
 const IGNORED_DIRS = new Set(['node_modules', 'dist', '.svelte-kit', 'coverage', '.turbo'])
 const PLUGIN_INPUT_EXTENSIONS = new Set(['.ts', '.svelte', '.json', '.js', '.mjs', '.cjs'])

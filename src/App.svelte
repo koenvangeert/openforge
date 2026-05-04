@@ -44,7 +44,7 @@
   import { ICON_RAIL_HIDDEN_VIEWS, getViews } from './lib/views'
   import { registerAppShortcuts } from './lib/appShortcuts'
   import { getGlobalShortcutHelpEntries } from './lib/appShortcutDefinitions'
-  import { registerAppTauriEventListeners } from './lib/appTauriEventListeners'
+  import { registerAppDesktopEventListeners } from './lib/appDesktopEventListeners'
   import { loadAppStartupData } from './lib/appStartup'
   
   let unlisteners: DesktopUnlistenFn[] = []
@@ -595,7 +595,7 @@
       cycleActiveProject,
     })
 
-    unlisteners.push(...await registerAppTauriEventListeners({
+    unlisteners.push(...await registerAppDesktopEventListeners({
       appWindow,
       onCloseRequested: handleCloseRequested,
       loadTasks,

@@ -103,6 +103,6 @@
         Uses approximately 1 GB of RAM during transcription.
       {/if}
     </p>
-    <p class="text-[0.7rem] text-base-content/50">Note: macOS may re-prompt for microphone permission on each app launch (Tauri v2 known issue).</p>
+    <p class="text-[0.7rem] text-base-content/50">Note: macOS controls microphone access per installed app bundle; re-approve access after replacing a local build if prompted.</p>
   </div>
 </div>

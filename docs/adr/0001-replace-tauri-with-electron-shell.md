@@ -6,9 +6,9 @@ Task: KVG-915
 
 ## Context
 
-Open Forge is currently a Tauri v2 desktop app with a Svelte 5 + TypeScript frontend and a substantial Rust backend under `src-tauri/`.
+Open Forge was a Tauri v2 desktop app with a Svelte 5 + TypeScript frontend and a substantial Rust backend under `src-tauri/` when this ADR was accepted. KVG-947 completed the Electron shell cutover: package scripts and frontend runtime dependencies are Electron-only, while the Rust sidecar remains in `src-tauri/` as follow-up extraction debt.
 
-Current-state evidence:
+Original current-state evidence:
 
 - `package.json` exposes Vite frontend scripts plus Tauri lifecycle scripts: `tauri:dev`, `tauri:build`, and `tauri:install`.
 - `src/lib/ipc.ts` is the frontend boundary for backend calls and currently imports `invoke` from `@tauri-apps/api/core`. It exports the typed API used by Svelte components for tasks, projects, GitHub/PR review, PTY, Whisper, plugins, file access, and agent review.

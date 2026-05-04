@@ -3,7 +3,7 @@ import { spawn } from 'node:child_process'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { connect } from 'node:net'
-import { DEFAULT_DEV_BACKEND_PORT, buildTauriDevEnv } from './tauri-dev-env.mjs'
+import { DEFAULT_DEV_BACKEND_PORT, buildElectronSidecarDevEnv } from './cargo-target-env.mjs'
 
 export const ELECTRON_RENDERER_URL = 'http://127.0.0.1:1420'
 const VITE_READY_TIMEOUT_MS = 30_000
@@ -59,7 +59,7 @@ async function findAvailableBackendPort(startPort, deps = { isPortOpen }) {
 
 export async function resolveElectronDevBackendEnv(options = {}, deps = { isPortOpen }) {
   const baseEnv = options.env ?? process.env
-  const result = buildTauriDevEnv({ ...options, env: baseEnv })
+  const result = buildElectronSidecarDevEnv({ ...options, env: baseEnv })
   const backendPort = Number(result.env.OPENFORGE_BACKEND_PORT)
 
   const defaultDevBackendPort = String(DEFAULT_DEV_BACKEND_PORT)

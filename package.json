@@ -16,11 +16,6 @@
     "build": "pnpm build:plugin-sdk-runtime && vite build",
     "lint": "node scripts/check-svelte-unused-imports.mjs",
     "preview": "vite preview",
-    "tauri": "tauri",
-    "tauri:dev": "node scripts/tauri-dev.mjs",
-    "tauri:dev:raw": "tauri dev",
-    "tauri:build": "tauri build",
-    "tauri:install": "bash scripts/install-mac.sh",
     "test": "vitest run"
   },
   "dependencies": {
@@ -47,8 +42,6 @@
     "@a5c-ai/babysitter-sdk": "^0.0.187",
     "@git-diff-view/lowlight": "^0.0.39",
     "@sveltejs/vite-plugin-svelte": "^7.0.0",
-    "@tauri-apps/api": "^2.0.0",
-    "@tauri-apps/cli": "^2.10.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/svelte": "^5.3.1",
     "@types/node": "^20.10.6",

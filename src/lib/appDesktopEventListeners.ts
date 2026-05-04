@@ -25,7 +25,7 @@ export interface AppWindowCloseTarget {
   onCloseRequested(handler: (event: { preventDefault: () => void }) => void): Promise<DesktopUnlistenFn>
 }
 
-export interface AppTauriEventDeps {
+export interface AppDesktopEventDeps {
   appWindow: AppWindowCloseTarget
   onCloseRequested(event: { preventDefault: () => void }): void
   loadTasks(): Promise<void> | void
@@ -69,7 +69,7 @@ async function getOrLoadActiveSession(taskId: string): Promise<AgentSession | nu
   }
 }
 
-export async function registerAppTauriEventListeners(deps: AppTauriEventDeps): Promise<DesktopUnlistenFn[]> {
+export async function registerAppDesktopEventListeners(deps: AppDesktopEventDeps): Promise<DesktopUnlistenFn[]> {
   const listen = deps.listen ?? listenDesktopEvent
   const unlisteners: DesktopUnlistenFn[] = []
 

@@ -7,7 +7,7 @@ import { appShellEventContracts, dynamicShellEventContracts, ipcCommandContracts
 
 interface ParsedInvokeContract {
   functionName: string
-  tauriCommand: string
+  ipcCommand: string
   payloadKeys: string[]
 }
 
@@ -88,7 +88,7 @@ function parseIpcInvokeContracts(): ParsedInvokeContract[] {
 
     contracts.push({
       functionName: statement.name.text,
-      tauriCommand: commandArgument.text,
+      ipcCommand: commandArgument.text,
       payloadKeys,
     })
   }
@@ -97,17 +97,11 @@ function parseIpcInvokeContracts(): ParsedInvokeContract[] {
 }
 
 describe('Electron migration Phase 0 contract inventory', () => {
-  it('keeps renderer event subscriptions and Vitest seams behind the desktop IPC adapter', () => {
-    const rawTauriEventModule = '@tauri-apps/api/' + 'event'
-    const allowedRawEventImporters = new Set([
-      'src/lib/desktopIpc.ts',
-      'src/lib/desktopIpc.test.ts',
-    ])
+  it('keeps renderer event subscriptions and Vitest seams behind the Electron desktop IPC adapter', () => {
+    const forbiddenDesktopRuntimeImport = '@tauri' + '-apps/api'
     const offenders = rawEventBoundaryCandidateFiles()
       .map(file => ({ file: relative(process.cwd(), file).split('\\').join('/'), source: readFileSync(file, 'utf8') }))
-      .filter(({ file, source }) =>
-        source.includes(rawTauriEventModule) && !allowedRawEventImporters.has(file)
-      )
+      .filter(({ source }) => source.includes(forbiddenDesktopRuntimeImport))
       .map(({ file }) => file)
 
     expect(offenders).toEqual([])
@@ -122,21 +116,21 @@ describe('Electron migration Phase 0 contract inventory', () => {
     expect(ipcCommandContracts.map(contract => contract.functionName).sort()).toEqual(exportedFunctions)
   })
 
-  it('locks ipc.ts Tauri command names and top-level payload keys', () => {
+  it('locks ipc.ts IPC command names and top-level payload keys', () => {
     const parsedContracts = parseIpcInvokeContracts()
       .map(contract => [contract.functionName, contract] as const)
       .sort(([left], [right]) => left.localeCompare(right))
     const inventoriedContracts = ipcCommandContracts
-      .map(({ functionName, tauriCommand, payloadKeys }) => [
+      .map(({ functionName, ipcCommand, payloadKeys }) => [
         functionName,
-        { functionName, tauriCommand, payloadKeys: [...payloadKeys] },
+        { functionName, ipcCommand, payloadKeys: [...payloadKeys] },
       ] as const)
       .sort(([left], [right]) => left.localeCompare(right))
 
     expect(inventoriedContracts).toEqual(parsedContracts)
   })
 
-  it('locks the current app shell event channel names registered by appTauriEventListeners', () => {
+  it('locks the current app shell event channel names registered by appDesktopEventListeners', () => {
     expect(appShellEventContracts.map(contract => contract.eventName)).toEqual([
       'github-sync-complete',
       'review-status-changed',
@@ -158,7 +152,7 @@ describe('Electron migration Phase 0 contract inventory', () => {
     ])
   })
 
-  it('locks high-risk dynamic PTY and plugin event patterns outside appTauriEventListeners', () => {
+  it('locks high-risk dynamic PTY and plugin event patterns outside appDesktopEventListeners', () => {
     expect(dynamicShellEventContracts.map(contract => contract.eventPattern)).toEqual([
       'pty-output-{taskId}',
       'pty-exit-{taskId}',
@@ -167,7 +161,7 @@ describe('Electron migration Phase 0 contract inventory', () => {
       'plugin:sidecar-exited',
       'plugin:sidecar-failed',
       'whisper-download-progress',
-      '{plugin-defined-tauri-event}',
+      '{plugin-defined-desktop-event}',
     ])
     expect(dynamicShellEventContracts.find(contract => contract.eventPattern === 'pty-output-{taskId}')).toMatchObject({
       payload: '{ task_id: string; data: string; instance_id: number }',
@@ -208,11 +202,11 @@ describe('Electron migration Phase 0 contract inventory', () => {
 
   it('classifies the shell-owned open URL command for Electron main while leaving backend commands on the Rust sidecar', () => {
     expect(ipcCommandContracts.find(contract => contract.functionName === 'openUrl')).toMatchObject({
-      tauriCommand: 'open_url',
+      ipcCommand: 'open_url',
       targetOwner: 'electron-main',
     })
     expect(ipcCommandContracts.find(contract => contract.functionName === 'createTask')).toMatchObject({
-      tauriCommand: 'create_task',
+      ipcCommand: 'create_task',
       targetOwner: 'rust-sidecar',
     })
   })

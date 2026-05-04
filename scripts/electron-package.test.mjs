@@ -6,6 +6,7 @@ import {
   createElectronAppPackageJson,
   electronBundlePath,
   packageElectronApp,
+  updatePlistBooleanValue,
   updatePlistStringValue,
 } from './electron-package.mjs'
 
@@ -28,10 +29,17 @@ describe('Electron macOS packaging helpers', () => {
     })
   })
 
-  it('updates plist string values while preserving the rest of the document', () => {
+  it('updates plist string and boolean values while preserving the rest of the document', () => {
     const plist = '<plist><dict><key>CFBundleExecutable</key><string>Electron</string><key>CFBundleName</key><string>Electron</string></dict></plist>'
+    const updated = updatePlistBooleanValue(
+      updatePlistStringValue(updatePlistStringValue(plist, 'CFBundleExecutable', 'Open Forge'), 'CFBundleName', 'Open Forge'),
+      'ApplePressAndHoldEnabled',
+      false,
+    )
 
-    expect(updatePlistStringValue(updatePlistStringValue(plist, 'CFBundleExecutable', 'Open Forge'), 'CFBundleName', 'Open Forge')).toContain('<key>CFBundleExecutable</key><string>Open Forge</string>')
+    expect(updated).toContain('<key>CFBundleExecutable</key><string>Open Forge</string>')
+    expect(updated).toContain('<key>ApplePressAndHoldEnabled</key>')
+    expect(updated).toContain('<false/>')
   })
 
   it('builds plugin frontend artifacts before renderer and Electron packaging builds', async () => {
@@ -87,5 +95,6 @@ describe('Electron macOS packaging helpers', () => {
     await expect(readlink(join(output, 'Contents/Frameworks/Electron Framework.framework/Resources'))).resolves.toBe('Versions/Current/Resources')
     await expect(readFile(join(output, 'Contents/Resources/app/package.json'), 'utf8').then(JSON.parse)).resolves.toMatchObject({ main: 'dist-electron/main.js' })
     await expect(readFile(join(output, 'Contents/Info.plist'), 'utf8')).resolves.toContain('<key>CFBundleExecutable</key><string>Open Forge</string>')
+    await expect(readFile(join(output, 'Contents/Info.plist'), 'utf8')).resolves.toMatch(/<key>ApplePressAndHoldEnabled<\/key>\s*<false\/>/)
   })
 })
