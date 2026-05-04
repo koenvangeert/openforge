@@ -41,7 +41,6 @@ type TerminalPoolEntry = Awaited<ReturnType<typeof acquire>>;
 const listenCallbacks = new Map<string, ListenCallback>();
 const unlistenFns: UnlistenMock[] = [];
 let webLinksHandler: ((event: MouseEvent, uri: string) => void) | null = null;
-let webglAddonConstructionCount = 0;
 let fontLoadMock: Mock;
 const originalDocumentFonts = document.fonts;
 
@@ -115,6 +114,12 @@ function getFitAddonMocks(entry: TerminalPoolEntry) {
 	};
 }
 
+function getLoadedAddonNames(entry: TerminalPoolEntry): string[] {
+	return vi
+		.mocked(entry.terminal.loadAddon)
+		.mock.calls.map(([addon]) => Object.getPrototypeOf(addon)?.constructor?.name ?? "");
+}
+
 vi.mock("./desktopIpc", () => ({
 	listenDesktopEvent: vi.fn(async (eventName: string, cb: (event: unknown) => void) => {
 		listenCallbacks.set(eventName, cb);
@@ -163,20 +168,6 @@ vi.mock("@xterm/addon-web-links", () => {
 	}
 
 	return { WebLinksAddon };
-});
-
-vi.mock("@xterm/addon-webgl", () => {
-	class WebglAddon {
-		constructor() {
-			webglAddonConstructionCount++;
-		}
-
-		onContextLoss = vi.fn(() => ({ dispose: vi.fn() }));
-		activate = vi.fn();
-		dispose = vi.fn();
-	}
-
-	return { WebglAddon };
 });
 
 vi.mock("./ipc", () => ({
@@ -231,7 +222,6 @@ describe("terminalPool", () => {
 		listenCallbacks.clear();
 		unlistenFns.length = 0;
 		webLinksHandler = null;
-		webglAddonConstructionCount = 0;
 		fontLoadMock = vi.fn().mockResolvedValue([]);
 		Object.defineProperty(document, "fonts", {
 			configurable: true,
@@ -352,10 +342,11 @@ describe("terminalPool", () => {
 		expect(shellOpenSpy).toHaveBeenCalledWith(shellEntry.hostDiv);
 		expect(agentLoadAddonSpy).toHaveBeenCalledTimes(2);
 		expect(shellLoadAddonSpy).toHaveBeenCalledTimes(2);
-		expect(webglAddonConstructionCount).toBe(0);
+		expect(getLoadedAddonNames(agentEntry)).toEqual(["FitAddon", "WebLinksAddon"]);
+		expect(getLoadedAddonNames(shellEntry)).toEqual(["FitAddon", "WebLinksAddon"]);
 	});
 
-	it("recoverActiveTerminal refits without enabling the WebGL renderer", async () => {
+	it("recoverActiveTerminal refits without changing the stable default renderer", async () => {
 		const entry = await acquire("task-stable-renderer-recover");
 		const wrapper = document.createElement("div");
 
@@ -369,7 +360,6 @@ describe("terminalPool", () => {
 
 		expect(loadAddonSpy).not.toHaveBeenCalled();
 		expect(refreshSpy).toHaveBeenCalled();
-		expect(webglAddonConstructionCount).toBe(0);
 	});
 
 	it("attach is idempotent", async () => {
