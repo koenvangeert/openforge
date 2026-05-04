@@ -5,7 +5,7 @@ use crate::{
     opencode_client::OpenCodeClient,
     pty_manager::PtyManager,
     server_manager::ServerManager,
-    sse_bridge::SseBridgeManager,
+    sse_bridge::{SseBridgeError, SseBridgeManager},
 };
 use axum::{
     extract::{Json, Path, Query, State},
@@ -871,11 +871,18 @@ fn publish_startup_resume_complete(state: &AppState) {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ExistingSseBridge {
+    Error,
+    TreatAsResumed,
+}
+
 async fn start_opencode_sse_bridge_for_app(
     state: &AppState,
     task_id: &str,
     opencode_session_id: Option<String>,
     port: u16,
+    existing_bridge: ExistingSseBridge,
 ) -> Result<(), (StatusCode, String)> {
     let Some(sse_bridge_manager) = state.sse_bridge_manager.as_ref() else {
         return Err((
@@ -894,7 +901,16 @@ async fn start_opencode_sse_bridge_for_app(
             port,
         )
         .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
+        .or_else(|e| match (existing_bridge, e) {
+            (ExistingSseBridge::TreatAsResumed, SseBridgeError::AlreadyRunning(task_id)) => {
+                info!(
+                    "[app_invoke] OpenCode SSE bridge already running for task {}; treating resume as idempotent",
+                    task_id
+                );
+                Ok(())
+            }
+            (_, e) => Err((StatusCode::INTERNAL_SERVER_ERROR, e.to_string())),
+        })
 }
 
 async fn cleanup_task_runtime_for_app(
@@ -1149,6 +1165,7 @@ async fn handle_app_resume_startup_sessions_command(
                         &target.task_id,
                         Some(opencode_session_id),
                         port,
+                        ExistingSseBridge::TreatAsResumed,
                     )
                     .await
                     {
@@ -1638,8 +1655,14 @@ async fn handle_app_start_implementation_command(
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
 
     if let Some((opencode_session_id, port, agent)) = deferred_opencode_prompt {
-        start_opencode_sse_bridge_for_app(state, &task_id, Some(opencode_session_id.clone()), port)
-            .await?;
+        start_opencode_sse_bridge_for_app(
+            state,
+            &task_id,
+            Some(opencode_session_id.clone()),
+            port,
+            ExistingSseBridge::Error,
+        )
+        .await?;
         let client = OpenCodeClient::with_base_url(format!("http://127.0.0.1:{port}"));
         client
             .prompt_async(&opencode_session_id, prompt, agent, None)
@@ -3695,9 +3718,15 @@ mod tests {
             let _ = axum::serve(listener, router).await;
         });
 
-        start_opencode_sse_bridge_for_app(&state, &task_id, Some("oc-session-1".to_string()), port)
-            .await
-            .expect("start bridge through app state");
+        start_opencode_sse_bridge_for_app(
+            &state,
+            &task_id,
+            Some("oc-session-1".to_string()),
+            port,
+            ExistingSseBridge::Error,
+        )
+        .await
+        .expect("start bridge through app state");
 
         let event = tokio::time::timeout(std::time::Duration::from_secs(3), events.recv())
             .await
@@ -3719,6 +3748,95 @@ mod tests {
         assert_eq!(
             session.checkpoint_data.as_deref().unwrap_or(""),
             event.payload["data"].as_str().unwrap_or("")
+        );
+
+        state
+            .sse_bridge_manager
+            .as_ref()
+            .expect("bridge manager")
+            .stop_bridge(&task_id)
+            .await;
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[tokio::test]
+    async fn test_start_opencode_sse_bridge_for_app_is_idempotent_when_bridge_already_running() {
+        let (state, path) = test_state("app_opencode_bridge_already_running");
+        let task_id = {
+            let db = state.db.lock().expect("db lock");
+            let task = db
+                .create_task(
+                    "OpenCode sidecar bridge idempotent",
+                    "doing",
+                    None,
+                    None,
+                    None,
+                    None,
+                )
+                .expect("create task");
+            db.create_agent_session(
+                "agent-session-1",
+                &task.id,
+                Some("oc-session-1"),
+                "implementing",
+                "running",
+                "opencode",
+            )
+            .expect("create session");
+            task.id
+        };
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind test OpenCode SSE server");
+        let port = listener.local_addr().expect("local addr").port();
+        let router = axum::Router::new().route(
+            "/event",
+            axum::routing::get(|| async {
+                axum::response::sse::Sse::new(futures::stream::pending::<
+                    Result<axum::response::sse::Event, std::convert::Infallible>,
+                >())
+            }),
+        );
+        tokio::spawn(async move {
+            let _ = axum::serve(listener, router).await;
+        });
+
+        start_opencode_sse_bridge_for_app(
+            &state,
+            &task_id,
+            Some("oc-session-1".to_string()),
+            port,
+            ExistingSseBridge::Error,
+        )
+        .await
+        .expect("first bridge start should succeed");
+
+        let duplicate_start = start_opencode_sse_bridge_for_app(
+            &state,
+            &task_id,
+            Some("oc-session-2".to_string()),
+            port,
+            ExistingSseBridge::Error,
+        )
+        .await;
+        assert!(
+            duplicate_start.is_err(),
+            "non-resume bridge starts should still reject an already-running bridge"
+        );
+
+        let resume_start = start_opencode_sse_bridge_for_app(
+            &state,
+            &task_id,
+            Some("oc-session-1".to_string()),
+            port,
+            ExistingSseBridge::TreatAsResumed,
+        )
+        .await;
+
+        assert!(
+            resume_start.is_ok(),
+            "already-running bridge should be treated as a successful idempotent resume, got {resume_start:?}"
         );
 
         state
