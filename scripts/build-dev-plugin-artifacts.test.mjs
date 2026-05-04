@@ -31,24 +31,32 @@ async function makeWorkspace() {
   return root
 }
 
-async function createArtifacts(root) {
-  await write(root, 'src-tauri/plugin-host/plugin-sdk/index.js', 'sdk runtime\n')
+async function createPluginArtifacts(root) {
   await write(root, 'plugins/demo/dist/index.js', 'demo bundle\n')
 }
 
 async function runWithCommands(root) {
   const commands = []
+  const sdkRuntimeBuilds = []
 
   const result = await ensureDevPluginArtifacts({
     workspaceRoot: root,
     log: () => {},
+    buildSdkRuntime: async (options) => {
+      sdkRuntimeBuilds.push({
+        workspaceRoot: options.workspaceRoot,
+        outDir: path.relative(root, options.outDir),
+      })
+      await write(root, 'src-tauri/plugin-host/plugin-sdk/index.js', 'sdk runtime\n')
+      return path.join(options.outDir, 'index.js')
+    },
     runCommand: async (command, args, options) => {
       commands.push({ command, args, cwd: options.cwd })
-      await createArtifacts(root)
+      await createPluginArtifacts(root)
     },
   })
 
-  return { result, commands }
+  return { result, commands, sdkRuntimeBuilds }
 }
 
 describe('incremental dev plugin artifact builds', () => {
@@ -58,8 +66,13 @@ describe('incremental dev plugin artifact builds', () => {
     try {
       const first = await runWithCommands(root)
 
+      expect(first.sdkRuntimeBuilds).toEqual([
+        {
+          workspaceRoot: root,
+          outDir: path.join('src-tauri', 'plugin-host', 'plugin-sdk'),
+        },
+      ])
       expect(first.commands.map((command) => [command.command, ...command.args].join(' '))).toEqual([
-        'pnpm build:plugin-sdk-runtime',
         'pnpm build:plugins',
       ])
       expect(first.result.sdkRuntime.rebuilt).toBe(true)
@@ -67,6 +80,7 @@ describe('incremental dev plugin artifact builds', () => {
 
       const second = await runWithCommands(root)
 
+      expect(second.sdkRuntimeBuilds).toEqual([])
       expect(second.commands).toEqual([])
       expect(second.result.sdkRuntime.rebuilt).toBe(false)
       expect(second.result.bundledPlugins.rebuilt).toBe(false)
@@ -84,8 +98,13 @@ describe('incremental dev plugin artifact builds', () => {
 
       const update = await runWithCommands(root)
 
+      expect(update.sdkRuntimeBuilds).toEqual([
+        {
+          workspaceRoot: root,
+          outDir: path.join('src-tauri', 'plugin-host', 'plugin-sdk'),
+        },
+      ])
       expect(update.commands.map((command) => [command.command, ...command.args].join(' '))).toEqual([
-        'pnpm build:plugin-sdk-runtime',
         'pnpm build:plugins',
       ])
       expect(update.result.sdkRuntime.reason).toBe('inputs-changed')
@@ -104,6 +123,7 @@ describe('incremental dev plugin artifact builds', () => {
 
       const update = await runWithCommands(root)
 
+      expect(update.sdkRuntimeBuilds).toEqual([])
       expect(update.commands.map((command) => [command.command, ...command.args].join(' '))).toEqual([
         'pnpm build:plugins',
       ])
@@ -123,8 +143,28 @@ describe('incremental dev plugin artifact builds', () => {
 
       const update = await runWithCommands(root)
 
+      expect(update.sdkRuntimeBuilds).toEqual([])
       expect(update.commands).toEqual([])
       expect(update.result.bundledPlugins.rebuilt).toBe(false)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it('builds the remaining Tauri dev runtime with an explicit legacy output path', async () => {
+    const root = await makeWorkspace()
+
+    try {
+      const update = await runWithCommands(root)
+
+      expect(update.sdkRuntimeBuilds).toEqual([
+        {
+          workspaceRoot: root,
+          outDir: path.join('src-tauri', 'plugin-host', 'plugin-sdk'),
+        },
+      ])
+      await expect(readFile(path.join(root, 'src-tauri/plugin-host/plugin-sdk/index.js'), 'utf8')).resolves.toBe('sdk runtime\n')
+      await expect(readFile(path.join(root, 'dist-electron/plugin-host/plugin-sdk/index.js'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
     } finally {
       await rm(root, { recursive: true, force: true })
     }
