@@ -1,5 +1,5 @@
 use crate::github_client::GitHubClient;
-use crate::{db, github_poller};
+use crate::{db, github_poller, github_runtime};
 use std::sync::{Arc, Mutex};
 use tauri::{Emitter, State};
 
@@ -54,10 +54,7 @@ pub async fn open_url(url: String) -> Result<(), String> {
 pub async fn get_pull_requests(
     db: State<'_, Arc<Mutex<db::Database>>>,
 ) -> Result<Vec<db::PrRow>, String> {
-    let db_lock = crate::db::acquire_db(&db);
-    db_lock
-        .get_all_pull_requests()
-        .map_err(|e| format!("Failed to get pull requests: {}", e))
+    github_runtime::get_pull_requests(&db)
 }
 
 #[tauri::command]
@@ -65,10 +62,7 @@ pub async fn get_pr_comments(
     db: State<'_, Arc<Mutex<db::Database>>>,
     pr_id: i64,
 ) -> Result<Vec<db::PrCommentRow>, String> {
-    let db_lock = crate::db::acquire_db(&db);
-    db_lock
-        .get_comments_for_pr(pr_id)
-        .map_err(|e| format!("Failed to get PR comments: {}", e))
+    github_runtime::get_pr_comments(&db, pr_id)
 }
 
 /// Mark a PR comment as addressed
@@ -79,10 +73,7 @@ pub async fn mark_comment_addressed(
 
     comment_id: i64,
 ) -> Result<(), String> {
-    let db_lock = crate::db::acquire_db(&db);
-    db_lock
-        .mark_comment_addressed(comment_id)
-        .map_err(|e| format!("Failed to mark comment addressed: {}", e))?;
+    github_runtime::mark_comment_addressed(&db, comment_id)?;
     let _ = app.emit("comment-addressed", ());
     Ok(())
 }
@@ -94,23 +85,7 @@ pub async fn merge_pull_request(
     repo: String,
     pr_number: i64,
 ) -> Result<(), String> {
-    let token = crate::secure_store::get_secret("github_token")
-        .map_err(|e| format!("Failed to get config: {}", e))?
-        .ok_or("github_token not configured".to_string())?;
-
-    let response = github_client
-        .merge_pr(&owner, &repo, pr_number, &token)
-        .await
-        .map_err(|e| format!("Failed to merge pull request: {}", e))?;
-
-    if !response.merged {
-        return Err(format!(
-            "Failed to merge pull request: {}",
-            response.message
-        ));
-    }
-
-    Ok(())
+    github_runtime::merge_pull_request(github_client.inner(), &owner, &repo, pr_number).await
 }
 
 #[cfg(test)]
