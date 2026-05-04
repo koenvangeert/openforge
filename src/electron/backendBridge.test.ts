@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { handleElectronInvoke, isSidecarBackedCommand } from './backendBridge'
+import { ipcCommandContracts } from '../lib/electronMigrationContracts'
 import type { SidecarLaunchConfig } from './sidecar'
 
 function sidecarConfig(): SidecarLaunchConfig {
@@ -209,6 +210,15 @@ describe('Electron backend bridge command forwarding', () => {
       },
       body: JSON.stringify({ command: 'transcribe_audio', payload: { audioData: [0, 0.25, -0.25] } }),
     })
+  })
+
+  it('declares every Rust-owned renderer IPC command as sidecar-backed after the Electron cutover', () => {
+    const missing = ipcCommandContracts
+      .filter(contract => contract.targetOwner === 'rust-sidecar')
+      .map(contract => contract.ipcCommand)
+      .filter(command => !isSidecarBackedCommand(command))
+
+    expect(missing).toEqual([])
   })
 
   it('declares config/projects/tasks, PTY/session, GitHub/PR review, and Whisper commands as sidecar-backed for this slice', () => {

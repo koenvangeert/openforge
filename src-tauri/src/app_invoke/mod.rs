@@ -6,6 +6,7 @@ mod github_review;
 mod lifecycle;
 mod plugins;
 mod pty;
+mod runtime;
 mod whisper;
 
 use lifecycle::cleanup_task_runtime_for_app;
@@ -167,6 +168,13 @@ pub(crate) async fn handle_files_review_command(
     request: &AppInvokeRequest,
 ) -> AppResult<Option<serde_json::Value>> {
     files_review::handle_app_files_review_command(state, request).await
+}
+
+pub(crate) async fn handle_runtime_command(
+    state: &AppState,
+    request: &AppInvokeRequest,
+) -> AppResult<Option<serde_json::Value>> {
+    runtime::handle_app_runtime_command(state, request).await
 }
 
 pub(crate) async fn handle_unmatched_command(
