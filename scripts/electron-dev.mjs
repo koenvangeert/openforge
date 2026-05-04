@@ -3,14 +3,14 @@ import { spawn } from 'node:child_process'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { connect } from 'node:net'
-import { buildTauriDevEnv } from './tauri-dev-env.mjs'
+import { DEFAULT_DEV_BACKEND_PORT, buildTauriDevEnv } from './tauri-dev-env.mjs'
 
 export const ELECTRON_RENDERER_URL = 'http://127.0.0.1:1420'
 const VITE_READY_TIMEOUT_MS = 30_000
 const VITE_READY_INTERVAL_MS = 250
 const VITE_HOST = '127.0.0.1'
 const VITE_PORT = 1420
-const DEFAULT_BACKEND_PORT = 17642
+const BACKEND_PORT_PROBE_LIMIT = 50
 
 function logStep(message) {
   console.log(`[electron-dev] ${message}`)
@@ -41,9 +41,46 @@ export async function assertVitePortAvailable(deps = { isPortOpen }) {
   }
 }
 
-export async function assertBackendPortAvailable(port = Number(process.env.OPENFORGE_BACKEND_PORT ?? DEFAULT_BACKEND_PORT), deps = { isPortOpen }) {
+export async function assertBackendPortAvailable(port = Number(process.env.OPENFORGE_BACKEND_PORT ?? DEFAULT_DEV_BACKEND_PORT), deps = { isPortOpen }) {
   if (await deps.isPortOpen(VITE_HOST, port)) {
     throw new Error(`Port ${port} is already in use. Stop the existing OpenForge sidecar/Electron process before running pnpm electron:dev, or set OPENFORGE_BACKEND_PORT to a free port.`)
+  }
+}
+
+async function findAvailableBackendPort(startPort, deps = { isPortOpen }) {
+  for (let offset = 0; offset < BACKEND_PORT_PROBE_LIMIT; offset += 1) {
+    const port = startPort + offset
+    if (!await deps.isPortOpen(VITE_HOST, port)) return port
+  }
+
+  throw new Error(`No free OpenForge backend port found from ${startPort} through ${startPort + BACKEND_PORT_PROBE_LIMIT - 1}. Set OPENFORGE_BACKEND_PORT to a free port.`)
+}
+
+export async function resolveElectronDevBackendEnv(options = {}, deps = { isPortOpen }) {
+  const baseEnv = options.env ?? process.env
+  const result = buildTauriDevEnv({ ...options, env: baseEnv })
+  const backendPort = Number(result.env.OPENFORGE_BACKEND_PORT)
+
+  const defaultDevBackendPort = String(DEFAULT_DEV_BACKEND_PORT)
+  const hasExplicitBackendPort = result.env.OPENFORGE_BACKEND_PORT !== defaultDevBackendPort
+  if (hasExplicitBackendPort) {
+    await assertBackendPortAvailable(backendPort, deps)
+    return result
+  }
+
+  const selectedPort = await findAvailableBackendPort(backendPort, deps)
+  if (selectedPort === backendPort) return result
+
+  const selectedPortString = String(selectedPort)
+  return {
+    ...result,
+    env: {
+      ...result.env,
+      OPENFORGE_BACKEND_PORT: selectedPortString,
+      OPENFORGE_HTTP_PORT: baseEnv.OPENFORGE_HTTP_PORT && baseEnv.OPENFORGE_HTTP_PORT !== defaultDevBackendPort
+        ? baseEnv.OPENFORGE_HTTP_PORT
+        : selectedPortString,
+    },
   }
 }
 
@@ -131,7 +168,7 @@ function stopProcess(child) {
 async function main() {
   logStep('Starting Vite dev server on http://127.0.0.1:1420 ...')
   await assertVitePortAvailable()
-  await assertBackendPortAvailable()
+  const devBackend = await resolveElectronDevBackendEnv()
   const vite = spawnCommand('pnpm', ['exec', 'vite', '--host', VITE_HOST])
   let electron = null
   const cleanup = () => {
@@ -150,8 +187,8 @@ async function main() {
   try {
     logStep('Waiting for Vite readiness ...')
     await waitForVite(ELECTRON_RENDERER_URL, vite)
-    const { env: cargoEnv, cargoTargetDir, source } = buildTauriDevEnv()
-    const sidecarPath = process.env.OPENFORGE_SIDECAR_PATH ?? electronSidecarPath(cargoTargetDir)
+    const { env: cargoEnv, cargoTargetDir, source } = devBackend
+    const sidecarPath = cargoEnv.OPENFORGE_SIDECAR_PATH ?? electronSidecarPath(cargoTargetDir)
     logStep(`Vite is ready; building Rust sidecar (${source} target dir: ${cargoTargetDir}) ...`)
     await waitForExit(
       spawnCommand('cargo', ['build'], { cwd: join(repoRoot(), 'src-tauri'), env: cargoEnv }),
@@ -160,7 +197,7 @@ async function main() {
     logStep('Building Electron main process ...')
     await waitForExit(spawnCommand('pnpm', ['electron:build']), 'electron:build')
     logStep('Launching Electron with Rust sidecar. Close the Electron window to stop this command.')
-    electron = spawnCommand('pnpm', ['exec', 'electron', '.'], { env: buildElectronDevEnv(process.env, sidecarPath) })
+    electron = spawnCommand('pnpm', ['exec', 'electron', '.'], { env: buildElectronDevEnv(cargoEnv, sidecarPath) })
     await waitForExit(electron, 'electron')
     logStep('Electron exited; stopping Vite ...')
   } finally {

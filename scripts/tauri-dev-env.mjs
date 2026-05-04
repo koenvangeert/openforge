@@ -4,6 +4,8 @@ import path from 'node:path'
 const FALLBACK_RUST_TARGET_DIR = path.join('src-tauri', 'target')
 const SHARED_TARGET_DIR_NAME = '.cargo-target'
 const NON_STANDARD_COMMON_DIR_TARGET_NAME = 'openforge-cargo-target'
+const DEFAULT_PRODUCTION_BACKEND_PORT = '17422'
+export const DEFAULT_DEV_BACKEND_PORT = 17642
 
 export function resolveGitCommonDir(cwd, gitCommonDir) {
   return path.normalize(path.isAbsolute(gitCommonDir) ? gitCommonDir : path.resolve(cwd, gitCommonDir))
@@ -55,12 +57,18 @@ export function computeCargoTargetDir({
 export function buildTauriDevEnv(options = {}) {
   const env = options.env ?? process.env
   const result = computeCargoTargetDir({ ...options, env })
+  const legacyBackendPort = env.AI_COMMAND_CENTER_PORT === DEFAULT_PRODUCTION_BACKEND_PORT
+    ? undefined
+    : env.AI_COMMAND_CENTER_PORT
+  const backendPort = env.OPENFORGE_BACKEND_PORT ?? legacyBackendPort ?? String(DEFAULT_DEV_BACKEND_PORT)
 
   return {
     ...result,
     env: {
       ...env,
       CARGO_TARGET_DIR: result.cargoTargetDir,
+      OPENFORGE_BACKEND_PORT: backendPort,
+      OPENFORGE_HTTP_PORT: env.OPENFORGE_HTTP_PORT ?? backendPort,
     },
   }
 }
