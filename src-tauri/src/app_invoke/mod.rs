@@ -2,6 +2,7 @@ pub(crate) mod payload;
 
 mod core;
 mod files_review;
+mod github_review;
 mod lifecycle;
 mod plugins;
 mod pty;
@@ -152,6 +153,13 @@ pub(crate) async fn handle_plugin_command(
     request: &AppInvokeRequest,
 ) -> AppResult<Option<serde_json::Value>> {
     plugins::handle_app_plugin_command(state, request).await
+}
+
+pub(crate) async fn handle_github_review_command(
+    state: &AppState,
+    request: &AppInvokeRequest,
+) -> AppResult<Option<serde_json::Value>> {
+    github_review::handle_app_github_review_command(state, request).await
 }
 
 pub(crate) async fn handle_files_review_command(
