@@ -129,7 +129,12 @@ pnpm tauri:build
 
 # Install the built macOS app
 pnpm tauri:install
+
+# Experimental Electron shell build/install from source
+pnpm electron:install
 ```
+
+`pnpm electron:install` builds the Svelte renderer, Electron main/preload files, and the Rust sidecar, packages them into `src-tauri/target/release/bundle/electron/macos/Open Forge.app`, then copies the app to `/Applications`.
 
 ## First-run setup
 

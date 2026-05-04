@@ -4,9 +4,13 @@ import { defineConfig } from 'vite'
 import { createDaisyUiTailwindPluginAliases } from './src/lib/viteDaisyUi'
 import { createOpenForgeChunkGroups, OPEN_FORGE_CHUNK_SIZE_WARNING_LIMIT } from './src/lib/viteChunks'
 import { createOpenForgeViteLogger } from './src/lib/viteLogger'
+import { DESKTOP_ASSET_BASE } from './src/lib/viteDesktopBuild'
 
 // https://vitejs.dev/config/
 export default defineConfig({
+  // Electron packages load index.html through file://, so emitted asset URLs must
+  // stay relative to the HTML file instead of resolving from filesystem root.
+  base: DESKTOP_ASSET_BASE,
   // Temporary workaround for Lightning CSS 1.32.0 false-positive
   // ::highlight(...) warnings until the upstream fix is released through Vite.
   customLogger: createOpenForgeViteLogger(),

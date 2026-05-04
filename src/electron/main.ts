@@ -10,6 +10,7 @@ import { asChildProcessLike, createSidecarLaunchConfig, startSidecar } from './s
 import { handleElectronInvoke } from './backendBridge.js'
 import { createAppEventForwarder } from './eventForwarder.js'
 import { trustedRendererUrlFromEnv } from './rendererUrl.js'
+import { resolveElectronSidecarPath } from './sidecarPath.js'
 import type { AppEventForwarder } from './eventForwarder.js'
 import type { SidecarHandle } from './sidecar.js'
 
@@ -47,15 +48,16 @@ function registerSkeletonIpc(): void {
 }
 
 async function bootSidecar(): Promise<void> {
-  if (!process.env.OPENFORGE_SIDECAR_PATH) {
+  const sidecarPath = resolveElectronSidecarPath(process.env, currentDir())
+  if (!sidecarPath) {
     if (!process.env.OPENFORGE_ELECTRON_DEV_DISABLE_SIDECAR) {
-      console.warn('[electron] OPENFORGE_SIDECAR_PATH is not set; skipping sidecar launch for skeleton dev mode')
+      console.warn('[electron] no bundled sidecar found and OPENFORGE_SIDECAR_PATH is not set; skipping sidecar launch for skeleton dev mode')
     }
     return
   }
 
   const config = createSidecarLaunchConfig({
-    executablePath: process.env.OPENFORGE_SIDECAR_PATH,
+    executablePath: sidecarPath,
     port: Number(process.env.OPENFORGE_BACKEND_PORT ?? 17642),
     processEnv: process.env,
   })

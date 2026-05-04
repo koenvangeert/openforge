@@ -10,6 +10,8 @@
     "dev:plugin-artifacts": "node scripts/build-dev-plugin-artifacts.mjs",
     "dev": "vite",
     "electron:build": "node scripts/electron-build.mjs",
+    "electron:package": "node scripts/electron-package.mjs",
+    "electron:install": "bash scripts/install-electron-mac.sh",
     "electron:dev": "node scripts/electron-dev.mjs",
     "build": "pnpm build:plugin-sdk-runtime && vite build",
     "lint": "node scripts/check-svelte-unused-imports.mjs",
