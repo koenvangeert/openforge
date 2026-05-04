@@ -23,8 +23,8 @@
     appTerminalTabsRef?.focusActiveTab()
   }
 
-  export function switchToTab(tabIndex: number) {
-    appTerminalTabsRef?.switchToTab(tabIndex)
+  export function switchToTab(tabPosition: number) {
+    appTerminalTabsRef?.switchToTab(tabPosition)
   }
 </script>
 

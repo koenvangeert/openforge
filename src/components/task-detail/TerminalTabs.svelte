@@ -60,8 +60,8 @@
       focusTerminal(tab.key)
     }
 
-  function switchToTabByIndex(tabIndex: number) {
-      const tab = tabs.find(t => t.index === tabIndex)
+  function switchToTabByPosition(tabPosition: number) {
+      const tab = tabs[tabPosition]
       if (tab) {
         activeTabIndex = tab.index
         syncSession()
@@ -70,8 +70,8 @@
       }
    }
 
-  export function switchToTab(tabIndex: number) {
-    switchToTabByIndex(tabIndex)
+  export function switchToTab(tabPosition: number) {
+    switchToTabByPosition(tabPosition)
   }
 
   export function focusActiveTab() {
@@ -124,7 +124,7 @@
 
 <div class="flex flex-col h-full">
   <div class="flex items-center overflow-x-auto border-b border-base-300 bg-base-200 shrink-0">
-    {#each tabs as tab (tab.index)}
+    {#each tabs as tab, tabPosition (tab.index)}
       <div class="flex items-center whitespace-nowrap">
           <button
             class="flex items-center gap-1 px-3 py-1.5 text-sm {activeTabIndex === tab.index ? 'border-b-2 border-primary text-base-content font-semibold' : 'text-base-content/50'}"
@@ -135,7 +135,7 @@
               focusTerminal(tab.key)
             }}
          >
-           {tab.label}{#if $commandHeld && tab.index < 9}<kbd class="kbd kbd-xs opacity-50">⌘⇧{tab.index + 1}</kbd>{/if}
+           {tab.label}{#if $commandHeld && tabPosition < 9}<kbd class="kbd kbd-xs opacity-50">⌘{tabPosition + 1}</kbd>{/if}
          </button>
         <button
           class="pr-2 text-xs leading-none opacity-60 hover:opacity-100"
