@@ -15,7 +15,7 @@ use axum::{
 use futures::Stream;
 use log::{error, info, warn};
 use serde::{Deserialize, Serialize};
-use std::{convert::Infallible, net::SocketAddr, sync::Mutex};
+use std::{convert::Infallible, net::SocketAddr, str::FromStr, sync::Mutex};
 use tauri::{Emitter, Manager};
 
 /// Request to create a new task from OpenCode
@@ -839,7 +839,13 @@ fn payload_optional_u32(
 }
 
 fn publish_task_changed(state: &AppState, task_id: &str) {
-    let payload = serde_json::json!({ "action": "updated", "task_id": task_id });
+    publish_task_changed_payload(
+        state,
+        serde_json::json!({ "action": "updated", "task_id": task_id }),
+    );
+}
+
+fn publish_task_changed_payload(state: &AppState, payload: serde_json::Value) {
     publish_app_event(&state.app_event_tx, "task-changed", &payload);
     if let Some(app) = state.app.as_ref() {
         let _ = app.emit("task-changed", payload);
@@ -864,6 +870,159 @@ fn publish_startup_resume_complete(state: &AppState) {
     if let Some(app) = state.app.as_ref() {
         let _ = app.emit("startup-resume-complete", payload);
     }
+}
+
+async fn cleanup_task_runtime_for_app(
+    state: &AppState,
+    task_id: &str,
+    remove_branch: bool,
+) -> Result<(), (StatusCode, String)> {
+    if let Some(pty_manager) = state.pty_manager.as_ref() {
+        let _ = pty_manager.kill_pty(task_id).await;
+        pty_manager.kill_shells_for_task(task_id).await;
+    }
+    if let Some(server_manager) = state.server_manager.as_ref() {
+        let _ = server_manager.stop_server(task_id).await;
+    }
+
+    let worktree = {
+        let db = crate::db::acquire_db(&state.db);
+        db.get_worktree_for_task(task_id).map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to get worktree: {e}"),
+            )
+        })?
+    };
+
+    if let Some(worktree) = worktree {
+        let repo_path = std::path::Path::new(&worktree.repo_path);
+        let worktree_path = std::path::Path::new(&worktree.worktree_path);
+        let remove_result = if remove_branch {
+            crate::git_worktree::remove_worktree_with_branch(
+                repo_path,
+                worktree_path,
+                Some(&worktree.branch_name),
+            )
+            .await
+        } else {
+            crate::git_worktree::remove_worktree(repo_path, worktree_path).await
+        };
+        if let Err(e) = remove_result {
+            error!(
+                "[app_invoke] Failed to remove worktree at {}: {}",
+                worktree_path.display(),
+                e
+            );
+        }
+
+        if !remove_branch {
+            let db = crate::db::acquire_db(&state.db);
+            if let Err(e) = db.delete_worktree_record(task_id) {
+                error!(
+                    "[app_invoke] Failed to delete worktree record for {}: {}",
+                    task_id, e
+                );
+            }
+        }
+    }
+
+    Ok(())
+}
+
+async fn handle_app_core_task_project_command(
+    state: &AppState,
+    request: &AppInvokeRequest,
+) -> Result<Option<serde_json::Value>, (StatusCode, String)> {
+    let value = match request.command.as_str() {
+        "update_task_status" => {
+            let id = payload_string(&request.payload, "id")?;
+            let status_text = payload_string(&request.payload, "status")?;
+            let status = db::BoardStatus::from_str(&status_text)
+                .map_err(|e| (StatusCode::BAD_REQUEST, e))?;
+            {
+                let db = crate::db::acquire_db(&state.db);
+                db.update_task_status(&id, status.as_str()).map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("Failed to update task status: {e}"),
+                    )
+                })?;
+                if status == db::BoardStatus::Done {
+                    let _ = db.update_task_workspace_status(&id, "completed");
+                }
+            }
+            publish_task_changed(state, &id);
+            if status == db::BoardStatus::Done {
+                cleanup_task_runtime_for_app(state, &id, false).await?;
+            }
+            serde_json::Value::Null
+        }
+        "delete_task" => {
+            let id = payload_string(&request.payload, "id")?;
+            cleanup_task_runtime_for_app(state, &id, true).await?;
+            {
+                let db = crate::db::acquire_db(&state.db);
+                db.delete_task(&id).map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("Failed to delete task: {e}"),
+                    )
+                })?;
+            }
+            publish_task_changed_payload(
+                state,
+                serde_json::json!({ "action": "deleted", "task_id": id }),
+            );
+            serde_json::Value::Null
+        }
+        "clear_done_tasks" => {
+            let project_id = payload_string(&request.payload, "projectId")?;
+            let task_ids = {
+                let db = crate::db::acquire_db(&state.db);
+                db.get_task_ids_by_status(&project_id, db::BoardStatus::Done.as_str())
+                    .map_err(|e| {
+                        (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            format!("Failed to get done tasks: {e}"),
+                        )
+                    })?
+            };
+            let mut deleted = 0u32;
+            for id in &task_ids {
+                cleanup_task_runtime_for_app(state, id, true).await?;
+                let db = crate::db::acquire_db(&state.db);
+                db.delete_task(id).map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("Failed to delete task {id}: {e}"),
+                    )
+                })?;
+                deleted += 1;
+            }
+            if deleted > 0 {
+                publish_task_changed_payload(
+                    state,
+                    serde_json::json!({ "action": "cleared_done", "count": deleted }),
+                );
+            }
+            json_value(deleted)?
+        }
+        "delete_project" => {
+            let id = payload_string(&request.payload, "id")?;
+            let db = crate::db::acquire_db(&state.db);
+            db.delete_project(&id).map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Failed to delete project: {e}"),
+                )
+            })?;
+            serde_json::Value::Null
+        }
+        _ => return Ok(None),
+    };
+
+    Ok(Some(value))
 }
 
 async fn handle_app_resume_startup_sessions_command(
@@ -2556,6 +2715,9 @@ async fn app_invoke_handler(
 ) -> Result<Json<AppInvokeResponse>, (StatusCode, String)> {
     require_backend_token(&state, &headers)?;
 
+    if let Some(value) = handle_app_core_task_project_command(&state, &request).await? {
+        return Ok(Json(AppInvokeResponse { value }));
+    }
     if let Some(value) = handle_app_resume_startup_sessions_command(&state, &request).await? {
         return Ok(Json(AppInvokeResponse { value }));
     }
@@ -3256,6 +3418,103 @@ mod tests {
                 .len(),
             0
         );
+
+        let task_id = task["id"].as_str().expect("task id");
+        let update_status = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/app/invoke")
+                    .method("POST")
+                    .header("authorization", "Bearer test-token")
+                    .header("content-type", "application/json")
+                    .body(Body::from(format!(
+                        r#"{{"command":"update_task_status","payload":{{"id":"{}","status":"doing"}}}}"#,
+                        task_id
+                    )))
+                    .expect("build request"),
+            )
+            .await
+            .expect("request should succeed");
+        assert_eq!(update_status.status(), StatusCode::OK);
+        assert_eq!(
+            crate::db::acquire_db(&state.db)
+                .get_task(task_id)
+                .expect("get updated task")
+                .expect("updated task exists")
+                .status,
+            "doing"
+        );
+
+        let delete_task = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/app/invoke")
+                    .method("POST")
+                    .header("authorization", "Bearer test-token")
+                    .header("content-type", "application/json")
+                    .body(Body::from(format!(
+                        r#"{{"command":"delete_task","payload":{{"id":"{}"}}}}"#,
+                        task_id
+                    )))
+                    .expect("build request"),
+            )
+            .await
+            .expect("request should succeed");
+        assert_eq!(delete_task.status(), StatusCode::OK);
+        assert!(
+            crate::db::acquire_db(&state.db)
+                .get_task(task_id)
+                .expect("get deleted task")
+                .is_none()
+        );
+
+        let done_task = {
+            let db = crate::db::acquire_db(&state.db);
+            db.create_task("Done task", "done", Some(project_id), None, None, None)
+                .expect("create done task")
+        };
+        let clear_done = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/app/invoke")
+                    .method("POST")
+                    .header("authorization", "Bearer test-token")
+                    .header("content-type", "application/json")
+                    .body(Body::from(format!(
+                        r#"{{"command":"clear_done_tasks","payload":{{"projectId":"{}"}}}}"#,
+                        project_id
+                    )))
+                    .expect("build request"),
+            )
+            .await
+            .expect("request should succeed");
+        assert_eq!(response_body_json(clear_done).await["value"], 1);
+        assert!(
+            crate::db::acquire_db(&state.db)
+                .get_task(&done_task.id)
+                .expect("get cleared task")
+                .is_none()
+        );
+
+        let delete_project = router
+            .oneshot(
+                Request::builder()
+                    .uri("/app/invoke")
+                    .method("POST")
+                    .header("authorization", "Bearer test-token")
+                    .header("content-type", "application/json")
+                    .body(Body::from(format!(
+                        r#"{{"command":"delete_project","payload":{{"id":"{}"}}}}"#,
+                        project_id
+                    )))
+                    .expect("build request"),
+            )
+            .await
+            .expect("request should succeed");
+        assert_eq!(delete_project.status(), StatusCode::OK);
 
         let _ = std::fs::remove_file(path);
     }

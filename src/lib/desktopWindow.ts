@@ -32,11 +32,25 @@ export function createDesktopWindow(deps: CreateDesktopWindowDeps = {}): Desktop
   const getWindow = deps.getCurrentWindow ?? getCurrentWindow
 
   if (bridge) {
+    let isDestroying = false
+
     return {
-      async onCloseRequested() {
-        return () => undefined
+      async onCloseRequested(handler) {
+        const listener = (event: BeforeUnloadEvent) => {
+          if (isDestroying) return
+
+          handler({
+            preventDefault() {
+              event.preventDefault()
+              event.returnValue = ''
+            },
+          })
+        }
+        window.addEventListener('beforeunload', listener)
+        return () => window.removeEventListener('beforeunload', listener)
       },
       async destroy() {
+        isDestroying = true
         close()
       },
     }
