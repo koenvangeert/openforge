@@ -3,6 +3,7 @@ import { cp, mkdir, rm, writeFile } from 'node:fs/promises'
 import { spawn } from 'node:child_process'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { buildPluginSdkRuntime } from './build-plugin-sdk-runtime.mjs'
 
 function repoRoot() {
   return resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -14,7 +15,10 @@ export async function copyHostRuntimeAssets(root = repoRoot(), electronDist = re
   const hostRuntimeDir = resolve(electronDist, HOST_RUNTIME_RESOURCE_DIR)
   await rm(hostRuntimeDir, { recursive: true, force: true })
   await mkdir(hostRuntimeDir, { recursive: true })
-  await cp(resolve(root, 'src-tauri', 'plugin-host', 'plugin-sdk'), resolve(hostRuntimeDir, 'plugin-sdk'), { recursive: true })
+  await buildPluginSdkRuntime({
+    workspaceRoot: root,
+    outDir: resolve(hostRuntimeDir, 'plugin-sdk'),
+  })
 
   const svelteRuntimeDir = resolve(hostRuntimeDir, 'svelte')
   await cp(resolve(root, 'node_modules', 'svelte', 'src'), svelteRuntimeDir, { recursive: true })
