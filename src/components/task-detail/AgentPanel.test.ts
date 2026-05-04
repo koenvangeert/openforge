@@ -87,8 +87,8 @@ vi.mock('@tauri-apps/api/webviewWindow', () => ({
   })
 }))
 
-vi.mock('@tauri-apps/api/event', () => ({
-  listen: vi.fn().mockImplementation((eventName: string, cb: TauriEventCallback) => {
+vi.mock('../../lib/desktopIpc', () => ({
+  listenDesktopEvent: vi.fn().mockImplementation((eventName: string, cb: TauriEventCallback) => {
     const existing = listenCallbacks.get(eventName) || []
     existing.push(cb)
     listenCallbacks.set(eventName, existing)

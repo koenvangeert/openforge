@@ -32,7 +32,7 @@ function findFirstInvoke(node: ts.Node): ts.CallExpression | null {
   return found
 }
 
-function collectRuntimeSourceFiles(directory: string): string[] {
+function collectSourceFiles(directory: string): string[] {
   const entries = readdirSync(directory).sort()
   const files: string[] = []
 
@@ -41,16 +41,23 @@ function collectRuntimeSourceFiles(directory: string): string[] {
     const stat = statSync(path)
     if (stat.isDirectory()) {
       if (entry === '__mocks__') continue
-      files.push(...collectRuntimeSourceFiles(path))
+      files.push(...collectSourceFiles(path))
       continue
     }
 
     if (!/\.(svelte|ts)$/.test(entry)) continue
-    if (/\.test\.ts$/.test(entry) || /\.svelte\.test\.ts$/.test(entry)) continue
     files.push(path)
   }
 
   return files
+}
+
+function rawEventBoundaryCandidateFiles(): string[] {
+  return [
+    ...collectSourceFiles(resolve(process.cwd(), 'src')),
+    resolve(process.cwd(), 'vitest.config.ts'),
+    resolve(process.cwd(), 'packages/plugin-sdk/vitest.config.ts'),
+  ]
 }
 
 function parseIpcInvokeContracts(): ParsedInvokeContract[] {
@@ -90,12 +97,16 @@ function parseIpcInvokeContracts(): ParsedInvokeContract[] {
 }
 
 describe('Electron migration Phase 0 contract inventory', () => {
-  it('keeps renderer runtime event subscriptions behind the desktop IPC adapter', () => {
-    const allowedRawEventImporters = new Set(['src/lib/desktopIpc.ts'])
-    const offenders = collectRuntimeSourceFiles(resolve(process.cwd(), 'src'))
+  it('keeps renderer event subscriptions and Vitest seams behind the desktop IPC adapter', () => {
+    const rawTauriEventModule = '@tauri-apps/api/' + 'event'
+    const allowedRawEventImporters = new Set([
+      'src/lib/desktopIpc.ts',
+      'src/lib/desktopIpc.test.ts',
+    ])
+    const offenders = rawEventBoundaryCandidateFiles()
       .map(file => ({ file: relative(process.cwd(), file).split('\\').join('/'), source: readFileSync(file, 'utf8') }))
       .filter(({ file, source }) =>
-        source.includes('@tauri-apps/api/event') && !allowedRawEventImporters.has(file)
+        source.includes(rawTauriEventModule) && !allowedRawEventImporters.has(file)
       )
       .map(({ file }) => file)
 

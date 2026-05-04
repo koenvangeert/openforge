@@ -7,7 +7,6 @@ export default defineConfig({
     include: ['src/**/*.test.ts'],
     alias: {
       '@tauri-apps/api/core': new URL('../../src/__mocks__/@tauri-apps/api/core.ts', import.meta.url).pathname,
-      '@tauri-apps/api/event': new URL('../../src/__mocks__/@tauri-apps/api/event.ts', import.meta.url).pathname,
     },
   },
 })

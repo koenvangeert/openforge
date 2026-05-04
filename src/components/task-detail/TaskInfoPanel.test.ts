@@ -28,8 +28,8 @@ vi.mock('../../lib/ipc', () => ({
   openUrl: vi.fn().mockResolvedValue(undefined),
 }))
 
-vi.mock('@tauri-apps/api/event', () => ({
-  listen: vi.fn().mockResolvedValue(() => {}),
+vi.mock('../../lib/desktopIpc', () => ({
+  listenDesktopEvent: vi.fn().mockResolvedValue(() => {}),
 }))
 
 const baseTask: Task = {

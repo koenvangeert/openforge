@@ -11,7 +11,6 @@ export default defineConfig({
     include: ['src/**/*.test.ts', 'scripts/**/*.test.mjs', 'src-tauri/src/openforge-cli/**/*.test.js'],
     alias: {
       '@tauri-apps/api/core': new URL('./src/__mocks__/@tauri-apps/api/core.ts', import.meta.url).pathname,
-      '@tauri-apps/api/event': new URL('./src/__mocks__/@tauri-apps/api/event.ts', import.meta.url).pathname,
       '@openforge/plugin-sdk/domain': new URL('./packages/plugin-sdk/src/domain.ts', import.meta.url).pathname,
       '@openforge/plugin-sdk/numberParsing': new URL('./packages/plugin-sdk/src/numberParsing.ts', import.meta.url).pathname,
       '@openforge/plugin-sdk/sanitize': new URL('./packages/plugin-sdk/src/sanitize.ts', import.meta.url).pathname,

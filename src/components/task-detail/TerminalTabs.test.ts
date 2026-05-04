@@ -56,8 +56,8 @@ vi.mock('../../lib/ipc', () => ({
   openUrl: vi.fn().mockResolvedValue(undefined),
 }))
 
-vi.mock('@tauri-apps/api/event', () => ({
-  listen: vi.fn().mockImplementation(() => Promise.resolve(() => {})),
+vi.mock('../../lib/desktopIpc', () => ({
+  listenDesktopEvent: vi.fn().mockImplementation(() => Promise.resolve(() => {})),
 }))
 
 const { releaseMock } = vi.hoisted(() => ({

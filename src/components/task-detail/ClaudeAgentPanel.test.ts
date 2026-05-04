@@ -45,8 +45,8 @@ vi.mock('../../lib/ipc', () => ({
   getPtyBuffer: vi.fn().mockResolvedValue(null),
 }))
 
-vi.mock('@tauri-apps/api/event', () => ({
-  listen: vi.fn().mockResolvedValue(() => {}),
+vi.mock('../../lib/desktopIpc', () => ({
+  listenDesktopEvent: vi.fn().mockResolvedValue(() => {}),
 }))
 
 vi.mock('../../lib/audioRecorder', () => ({
