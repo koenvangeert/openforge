@@ -1,5 +1,4 @@
-import { listen } from '@tauri-apps/api/event'
-import type { UnlistenFn } from '@tauri-apps/api/event'
+import { listenDesktopEvent, type DesktopUnlistenFn } from './desktopIpc'
 import { getTaskWorkspace, killPty as killPtyIpc, spawnPty, writePty } from './ipc'
 import type { PtyEvent } from './types'
 
@@ -26,8 +25,8 @@ export function createPtyBridge(deps: {
   let expectedPtyInstance: number | null = null
   let awaitingSpawnInstance = false
   const pendingExitInstances = new Set<number>()
-  let ptyOutputUnlisten: UnlistenFn | null = null
-  let ptyExitUnlisten: UnlistenFn | null = null
+  let ptyOutputUnlisten: DesktopUnlistenFn | null = null
+  let ptyExitUnlisten: DesktopUnlistenFn | null = null
 
   function markExited(): void {
     ptySpawned = false
@@ -41,14 +40,14 @@ export function createPtyBridge(deps: {
     if (ptyOutputUnlisten) { ptyOutputUnlisten(); ptyOutputUnlisten = null }
     if (ptyExitUnlisten) { ptyExitUnlisten(); ptyExitUnlisten = null }
 
-    ptyOutputUnlisten = await listen<PtyEvent>(`pty-output-${deps.taskId}`, (event) => {
+    ptyOutputUnlisten = await listenDesktopEvent<PtyEvent>(`pty-output-${deps.taskId}`, (event) => {
       const term = deps.getTerminal()
       if (term && event.payload.data) {
         term.write(event.payload.data)
       }
     })
 
-    ptyExitUnlisten = await listen<PtyEvent>(`pty-exit-${deps.taskId}`, (event) => {
+    ptyExitUnlisten = await listenDesktopEvent<PtyEvent>(`pty-exit-${deps.taskId}`, (event) => {
       const exitInstance = event.payload?.instance_id
       if (exitInstance == null) {
         console.warn('[usePtyBridge] Ignoring pty-exit without instance_id')

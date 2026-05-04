@@ -15,6 +15,11 @@
 
   const terminalShortcuts = createTerminalShortcutController()
   const controller = terminalShortcuts.controller
+  let terminalTabsRef = $state<TerminalTabs | null>(null)
+
+  $effect(() => {
+    terminalShortcuts.terminalTabsRef = terminalTabsRef
+  })
 
   $effect(() => {
     if (taskId === previousTaskId) {
@@ -44,7 +49,7 @@
 {#if workspacePath !== null}
   <div class="flex flex-col flex-1 overflow-hidden h-full">
     <TerminalTabs
-      bind:this={terminalShortcuts.terminalTabsRef}
+      bind:this={terminalTabsRef}
       taskId={taskId}
       {workspacePath}
       onTabChange={null}

@@ -1,6 +1,7 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod app_events;
 mod builtin_plugins;
 mod claude_hooks;
 mod cli_installer;
@@ -32,6 +33,7 @@ use log::{debug, error, info, warn};
 use opencode_client::OpenCodeClient;
 use pty_manager::PtyManager;
 use std::collections::{HashMap, HashSet};
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use tauri::{Emitter, Manager};
 use whisper_manager::{WhisperManager, WhisperModelSize};
@@ -65,17 +67,17 @@ fn tauri_context() -> tauri::Context<tauri::Wry> {
 // ============================================================================
 
 #[derive(Debug, Clone)]
-struct ResumeTarget {
-    task_id: String,
-    project_id: String,
-    repo_path: String,
-    workspace_path: String,
-    kind: String,
-    branch_name: Option<String>,
+pub(crate) struct ResumeTarget {
+    pub(crate) task_id: String,
+    pub(crate) project_id: String,
+    pub(crate) repo_path: String,
+    pub(crate) workspace_path: String,
+    pub(crate) kind: String,
+    pub(crate) branch_name: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ResumeSessionPersistence {
+pub(crate) enum ResumeSessionPersistence {
     LeaveExisting,
     Running,
     Completed,
@@ -99,7 +101,7 @@ fn opencode_resume_persistence(
     }
 }
 
-async fn resolve_resume_session_persistence(
+pub(crate) async fn resolve_resume_session_persistence(
     provider_name: &str,
     latest_session: Option<&db::AgentSessionRow>,
     port: u16,
@@ -136,7 +138,7 @@ async fn resolve_resume_session_persistence(
     ResumeSessionPersistence::LeaveExisting
 }
 
-fn load_resume_targets(db: &db::Database) -> rusqlite::Result<Vec<ResumeTarget>> {
+pub(crate) fn load_resume_targets(db: &db::Database) -> rusqlite::Result<Vec<ResumeTarget>> {
     let mut targets: Vec<ResumeTarget> = db
         .get_resumable_task_workspaces()?
         .into_iter()
@@ -433,7 +435,7 @@ fn resolve_startup_project_id(db: &db::Database) -> Result<Option<String>, Strin
     Ok(projects.first().map(|project| project.id.clone()))
 }
 
-fn restore_resumed_session_state(
+pub(crate) fn restore_resumed_session_state(
     db: &db::Database,
     latest_session: Option<&db::AgentSessionRow>,
     target: &ResumeTarget,
@@ -521,7 +523,124 @@ fn restore_resumed_session_state(
 // Main
 // ============================================================================
 
+const APP_IDENTIFIER: &str = "com.opencode.openforge";
+
+fn database_filename() -> &'static str {
+    if cfg!(debug_assertions) {
+        "openforge_dev.db"
+    } else {
+        "openforge.db"
+    }
+}
+
+fn initialize_database(app_data_dir: &Path) -> db::Database {
+    migration::run(app_data_dir);
+    let db_path = app_data_dir.join(database_filename());
+
+    info!(
+        "Initializing database at: {:?} (mode: {})",
+        db_path,
+        if cfg!(debug_assertions) { "dev" } else { "prod" }
+    );
+
+    db::Database::new(db_path).expect("Failed to initialize database")
+}
+
+fn run_database_startup_maintenance(database: &db::Database) {
+    match database.mark_running_sessions_interrupted() {
+        Ok(count) if count > 0 => {
+            info!(
+                "[startup] Marked {} stale running sessions as interrupted",
+                count
+            );
+        }
+        Ok(_) => {}
+        Err(e) => {
+            warn!("[startup] Failed to mark stale sessions: {}", e);
+        }
+    }
+
+    match database.clear_stale_worktree_servers() {
+        Ok(count) if count > 0 => {
+            info!(
+                "[startup] Cleared stale server info from {} worktree(s)",
+                count
+            );
+        }
+        Ok(_) => {}
+        Err(e) => {
+            warn!("[startup] Failed to clear stale worktree servers: {}", e);
+        }
+    }
+
+    match database.clear_stale_task_workspace_ports() {
+        Ok(count) if count > 0 => {
+            info!(
+                "[startup] Cleared stale server info from {} task workspace(s)",
+                count
+            );
+        }
+        Ok(_) => {}
+        Err(e) => {
+            warn!("[startup] Failed to clear stale task workspace ports: {}", e);
+        }
+    }
+}
+
+fn sidecar_app_data_dir() -> Result<PathBuf, String> {
+    let data_dir = dirs::data_dir().ok_or_else(|| "failed to resolve user data directory".to_string())?;
+    let app_data_dir = data_dir.join(APP_IDENTIFIER);
+    std::fs::create_dir_all(&app_data_dir).map_err(|error| {
+        format!(
+            "failed to create app data directory {}: {error}",
+            app_data_dir.display()
+        )
+    })?;
+    Ok(app_data_dir)
+}
+
+fn should_run_electron_sidecar() -> bool {
+    std::env::var("OPENFORGE_ELECTRON_SIDECAR").ok().as_deref() == Some("1")
+        || std::env::args().any(|arg| arg == "--electron-sidecar")
+}
+
+fn run_electron_sidecar() -> Result<(), Box<dyn std::error::Error>> {
+    let app_data_dir = sidecar_app_data_dir().map_err(std::io::Error::other)?;
+    let database = initialize_database(&app_data_dir);
+    run_database_startup_maintenance(&database);
+    if let Err(e) = cli_installer::install_openforge_cli() {
+        warn!("[startup] Failed to install OpenForge CLI: {}", e);
+    }
+
+    let db_arc = Arc::new(Mutex::new(database));
+    let pty_manager = PtyManager::new();
+    let server_manager = server_manager::ServerManager::new();
+    let (http_ready_tx, _http_ready_rx) = tokio::sync::oneshot::channel::<()>();
+
+    println!(
+        "[electron-sidecar] using database {}",
+        app_data_dir.join(database_filename()).display()
+    );
+
+    tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()?
+        .block_on(http_server::start_http_sidecar_server(
+            db_arc,
+            pty_manager,
+            server_manager,
+            http_ready_tx,
+        ))
+}
+
 fn main() {
+    if should_run_electron_sidecar() {
+        if let Err(error) = run_electron_sidecar() {
+            eprintln!("[electron-sidecar] failed: {error}");
+            std::process::exit(1);
+        }
+        return;
+    }
     // Fix PATH for macOS GUI apps launched from Finder/Dock.
     // Without this, ~/.opencode/bin and other user PATH entries are missing.
     #[cfg(desktop)]
@@ -568,68 +687,8 @@ fn main() {
                 .app_data_dir()
                 .expect("Failed to get app data directory");
 
-            migration::run(&app_data_dir);
-
-            let db_filename = if cfg!(debug_assertions) {
-                "openforge_dev.db"
-            } else {
-                "openforge.db"
-            };
-            let db_path = app_data_dir.join(db_filename);
-
-            info!(
-                "Initializing database at: {:?} (mode: {})",
-                db_path,
-                if cfg!(debug_assertions) {
-                    "dev"
-                } else {
-                    "prod"
-                }
-            );
-
-            let database = db::Database::new(db_path).expect("Failed to initialize database");
-
-            match database.mark_running_sessions_interrupted() {
-                Ok(count) if count > 0 => {
-                    info!(
-                        "[startup] Marked {} stale running sessions as interrupted",
-                        count
-                    );
-                }
-                Ok(_) => {}
-                Err(e) => {
-                    warn!("[startup] Failed to mark stale sessions: {}", e);
-                }
-            }
-
-            match database.clear_stale_worktree_servers() {
-                Ok(count) if count > 0 => {
-                    info!(
-                        "[startup] Cleared stale server info from {} worktree(s)",
-                        count
-                    );
-                }
-                Ok(_) => {}
-                Err(e) => {
-                    warn!("[startup] Failed to clear stale worktree servers: {}", e);
-                }
-            }
-
-            match database.clear_stale_task_workspace_ports() {
-                Ok(count) if count > 0 => {
-                    info!(
-                        "[startup] Cleared stale server info from {} task workspace(s)",
-                        count
-                    );
-                }
-                Ok(_) => {}
-                Err(e) => {
-                    warn!(
-                        "[startup] Failed to clear stale task workspace ports: {}",
-                        e
-                    );
-                }
-            }
+            let database = initialize_database(&app_data_dir);
+            run_database_startup_maintenance(&database);
 
             if let Err(e) = cli_installer::install_openforge_cli() {
                 warn!("[startup] Failed to install OpenForge CLI: {}", e);
@@ -642,14 +701,41 @@ fn main() {
                 .unwrap_or(WhisperModelSize::Small);
 
             let db_arc = Arc::new(Mutex::new(database));
+            let pty_manager = PtyManager::new();
+            let server_manager = server_manager::ServerManager::new();
+            let sse_bridge_manager = sse_bridge::SseBridgeManager::new();
+
+            app.manage(db_arc.clone());
+
+            info!("Database initialized successfully");
+            let github_client = GitHubClient::new();
+            let opencode_client =
+                OpenCodeClient::with_base_url("http://127.0.0.1:4096".to_string());
+            let plugin_host = plugin_host::PluginHost::new(app.handle().clone());
+            let plugin_host_startup = plugin_host.clone();
+            let whisper_manager = WhisperManager::with_active_model(whisper_model_pref);
+
+            app.manage(opencode_client);
+            app.manage(github_client);
+            app.manage(server_manager.clone());
+            app.manage(sse_bridge_manager);
+            app.manage(pty_manager.clone());
+            app.manage(plugin_host);
+            app.manage(whisper_manager);
+            app.manage(Arc::new(tokio::sync::Notify::new()));
 
             let (http_ready_tx, http_ready_rx) = tokio::sync::oneshot::channel::<()>();
             let app_handle_http = app.handle().clone();
             let db_for_http = db_arc.clone();
+            let pty_for_http = pty_manager.clone();
             tauri::async_runtime::spawn(async move {
-                if let Err(e) =
-                    http_server::start_http_server(app_handle_http, db_for_http, http_ready_tx)
-                        .await
+                if let Err(e) = http_server::start_http_server(
+                    app_handle_http,
+                    db_for_http,
+                    pty_for_http,
+                    http_ready_tx,
+                )
+                .await
                 {
                     error!("[http_server] Failed to start: {}", e);
                 }
@@ -661,28 +747,6 @@ fn main() {
                 Ok(path) => info!("Claude hooks settings generated at: {:?}", path),
                 Err(e) => warn!("Failed to generate Claude hooks settings: {}", e),
             }
-
-            app.manage(db_arc.clone());
-
-            info!("Database initialized successfully");
-            let github_client = GitHubClient::new();
-            let opencode_client =
-                OpenCodeClient::with_base_url("http://127.0.0.1:4096".to_string());
-            let server_manager = server_manager::ServerManager::new();
-            let sse_bridge_manager = sse_bridge::SseBridgeManager::new();
-            let pty_manager = PtyManager::new();
-            let plugin_host = plugin_host::PluginHost::new(app.handle().clone());
-            let plugin_host_startup = plugin_host.clone();
-            let whisper_manager = WhisperManager::with_active_model(whisper_model_pref);
-
-            app.manage(opencode_client);
-            app.manage(github_client);
-            app.manage(server_manager);
-            app.manage(sse_bridge_manager);
-            app.manage(pty_manager);
-            app.manage(plugin_host);
-            app.manage(whisper_manager);
-            app.manage(Arc::new(tokio::sync::Notify::new()));
 
             tauri::async_runtime::spawn(async move {
                 if let Err(e) = plugin_host_startup.start_sidecar().await {

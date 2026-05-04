@@ -67,15 +67,15 @@ vi.mock('./pluginLoader', async (importOriginal) => {
 })
 
 const {
-  listenMock,
-  tauriEventHandlers,
+  listenDesktopEventMock,
+  desktopEventHandlers,
 } = vi.hoisted(() => ({
-  listenMock: vi.fn(),
-  tauriEventHandlers: new Map<string, (event: { payload: unknown }) => void>(),
+  listenDesktopEventMock: vi.fn(),
+  desktopEventHandlers: new Map<string, (event: { payload: unknown }) => void>(),
 }))
 
-vi.mock('@tauri-apps/api/event', () => ({
-  listen: listenMock,
+vi.mock('../desktopIpc', () => ({
+  listenDesktopEvent: listenDesktopEventMock,
 }))
 
 vi.mock('./builtinPluginModules', () => ({
@@ -143,10 +143,10 @@ describe('pluginRegistry', () => {
     getPluginStorageMock.mockReset()
     setPluginStorageMock.mockReset()
     spawnShellPtyMock.mockReset()
-    listenMock.mockReset()
-    tauriEventHandlers.clear()
-    listenMock.mockImplementation(async (event: string, handler: (event: { payload: unknown }) => void) => {
-      tauriEventHandlers.set(event, handler)
+    listenDesktopEventMock.mockReset()
+    desktopEventHandlers.clear()
+    listenDesktopEventMock.mockImplementation(async (event: string, handler: (event: { payload: unknown }) => void) => {
+      desktopEventHandlers.set(event, handler)
       return vi.fn()
     })
     loadPluginFrontendMock.mockReset()
@@ -457,8 +457,8 @@ describe('pluginRegistry', () => {
 
     let resolveOutputListen: ((unlisten: () => void) => void) | null = null
     let resolveExitListen: ((unlisten: () => void) => void) | null = null
-    listenMock.mockImplementation((event: string, handler: (event: { payload: unknown }) => void) => {
-      tauriEventHandlers.set(event, handler)
+    listenDesktopEventMock.mockImplementation((event: string, handler: (event: { payload: unknown }) => void) => {
+      desktopEventHandlers.set(event, handler)
       return new Promise<() => void>((resolve) => {
         if (event === 'pty-output-T-1-shell-0') {
           resolveOutputListen = resolve
@@ -504,7 +504,7 @@ describe('pluginRegistry', () => {
     await expect(spawn).resolves.toBe(42)
     expect(spawnShellPtyMock).toHaveBeenCalledWith('T-1', '/tmp/worktree', 80, 24, 0)
 
-    tauriEventHandlers.get('pty-output-T-1-shell-0')?.({ payload: { data: 'hello' } })
+    desktopEventHandlers.get('pty-output-T-1-shell-0')?.({ payload: { data: 'hello' } })
     expect(outputHandler).toHaveBeenCalledWith({ data: 'hello' })
   })
 

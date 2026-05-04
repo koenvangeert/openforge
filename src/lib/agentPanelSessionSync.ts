@@ -1,5 +1,4 @@
-import { listen } from '@tauri-apps/api/event'
-import type { UnlistenFn } from '@tauri-apps/api/event'
+import { listenDesktopEvent, type DesktopUnlistenFn } from './desktopIpc'
 
 export type AgentPanelStatus = 'idle' | 'running' | 'complete' | 'error'
 
@@ -58,6 +57,6 @@ export function createAgentStatusChangedHandler({
   }
 }
 
-export async function listenToAgentStatusChanged(options: AgentStatusChangedHandlerOptions): Promise<UnlistenFn> {
-  return listen<AgentStatusChangedPayload>('agent-status-changed', createAgentStatusChangedHandler(options))
+export async function listenToAgentStatusChanged(options: AgentStatusChangedHandlerOptions): Promise<DesktopUnlistenFn> {
+  return listenDesktopEvent<AgentStatusChangedPayload>('agent-status-changed', createAgentStatusChangedHandler(options))
 }

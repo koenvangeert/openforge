@@ -1,3 +1,4 @@
+use crate::app_events::{publish_app_event, AppEventSender};
 use log::{error, info, warn};
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use std::collections::HashMap;
@@ -253,7 +254,8 @@ enum PtyExitAction {
 struct PtyEventEmitterConfig {
     session_key: String,
     instance_id: u64,
-    app_handle: tauri::AppHandle,
+    app_handle: Option<tauri::AppHandle>,
+    app_event_tx: Option<AppEventSender>,
     ring_buffer: Arc<std::sync::Mutex<RingBuffer>>,
     exit_action: PtyExitAction,
 }
@@ -274,6 +276,7 @@ fn spawn_batched_pty_event_emitter(mut rx: PtyOutputReceiver, config: PtyEventEm
             session_key,
             instance_id,
             app_handle,
+            app_event_tx,
             ring_buffer,
             exit_action,
         } = config;
@@ -287,19 +290,24 @@ fn spawn_batched_pty_event_emitter(mut rx: PtyOutputReceiver, config: PtyEventEm
             tokio::time::interval(tokio::time::Duration::from_millis(PTY_FLUSH_INTERVAL_MS));
         interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
+        let mut emit_pty_event = |event_name: &str, payload: &serde_json::Value| {
+            publish_app_event(&app_event_tx, event_name, payload);
+            if let Some(app_handle) = app_handle.as_ref() {
+                emit_tauri_pty_event(app_handle, event_name, payload)
+            } else {
+                Ok(())
+            }
+        };
+
         loop {
             tokio::select! {
                 msg = rx.recv() => {
                     match msg {
                         Some(Some(text)) => {
-                            batcher.push_output(&text, &mut |event_name, payload| {
-                                emit_tauri_pty_event(&app_handle, event_name, payload)
-                            });
+                            batcher.push_output(&text, &mut emit_pty_event);
                         }
                         Some(None) | None => {
-                            batcher.flush_pending(&mut |event_name, payload| {
-                                emit_tauri_pty_event(&app_handle, event_name, payload)
-                            });
+                            batcher.flush_pending(&mut emit_pty_event);
 
                             let agent_success = match exit_action {
                                 PtyExitAction::EmitOnly => None,
@@ -319,24 +327,25 @@ fn spawn_batched_pty_event_emitter(mut rx: PtyOutputReceiver, config: PtyEventEm
                             };
 
                             info!("[PTY] key={} emitter received exit signal", session_key);
-                            let _ = app_handle.emit(
-                                &format!("pty-exit-{}", session_key),
-                                serde_json::json!({"instance_id": instance_id}),
-                            );
+                            let exit_event_name = format!("pty-exit-{}", session_key);
+                            let exit_payload = serde_json::json!({"instance_id": instance_id});
+                            publish_app_event(&app_event_tx, &exit_event_name, &exit_payload);
+                            if let Some(app_handle) = app_handle.as_ref() {
+                                let _ = app_handle.emit(&exit_event_name, exit_payload);
+                            }
                             if let Some(success) = agent_success {
-                                let _ = app_handle.emit(
-                                    "agent-pty-exited",
-                                    serde_json::json!({"task_id": &session_key, "success": success}),
-                                );
+                                let payload = serde_json::json!({"task_id": &session_key, "success": success});
+                                publish_app_event(&app_event_tx, "agent-pty-exited", &payload);
+                                if let Some(app_handle) = app_handle.as_ref() {
+                                    let _ = app_handle.emit("agent-pty-exited", payload);
+                                }
                             }
                             break;
                         }
                     }
                 }
                 _ = interval.tick() => {
-                    batcher.flush_pending(&mut |event_name, payload| {
-                        emit_tauri_pty_event(&app_handle, event_name, payload)
-                    });
+                    batcher.flush_pending(&mut emit_pty_event);
                 }
             }
         }
@@ -437,7 +446,8 @@ impl PtyManager {
         opencode_session_id: &str,
         cols: u16,
         rows: u16,
-        app_handle: tauri::AppHandle,
+        app_handle: Option<tauri::AppHandle>,
+        app_event_tx: Option<AppEventSender>,
     ) -> Result<u64, PtyError> {
         let mut sessions = self.sessions.lock().await;
 
@@ -551,6 +561,7 @@ impl PtyManager {
                 session_key: task_id.to_string(),
                 instance_id,
                 app_handle,
+                app_event_tx,
                 ring_buffer: ring_buffer_emitter,
                 exit_action: PtyExitAction::EmitOnly,
             },
@@ -590,7 +601,8 @@ impl PtyManager {
         permission_mode: Option<&str>,
         cols: u16,
         rows: u16,
-        app_handle: tauri::AppHandle,
+        app_handle: Option<tauri::AppHandle>,
+        app_event_tx: Option<AppEventSender>,
     ) -> Result<u64, PtyError> {
         let mut sessions = self.sessions.lock().await;
 
@@ -722,6 +734,7 @@ impl PtyManager {
                 session_key: task_id.to_string(),
                 instance_id,
                 app_handle,
+                app_event_tx,
                 ring_buffer: ring_buffer_emitter,
                 exit_action: PtyExitAction::FinalizeAgent {
                     sessions: Arc::clone(&self.sessions),
@@ -745,7 +758,8 @@ impl PtyManager {
         continue_session: bool,
         cols: u16,
         rows: u16,
-        app_handle: tauri::AppHandle,
+        app_handle: Option<tauri::AppHandle>,
+        app_event_tx: Option<AppEventSender>,
     ) -> Result<u64, PtyError> {
         let mut sessions = self.sessions.lock().await;
 
@@ -861,6 +875,7 @@ impl PtyManager {
                 session_key: task_id.to_string(),
                 instance_id,
                 app_handle,
+                app_event_tx,
                 ring_buffer: ring_buffer_emitter,
                 exit_action: PtyExitAction::FinalizeAgent {
                     sessions: Arc::clone(&self.sessions),
@@ -881,7 +896,8 @@ impl PtyManager {
         cols: u16,
         rows: u16,
         terminal_index: Option<u32>,
-        app_handle: tauri::AppHandle,
+        app_handle: Option<tauri::AppHandle>,
+        app_event_tx: Option<AppEventSender>,
     ) -> Result<u64, PtyError> {
         let key = shell_session_key(task_id, terminal_index);
         let mut sessions = self.sessions.lock().await;
@@ -993,6 +1009,7 @@ impl PtyManager {
                 session_key: key.clone(),
                 instance_id,
                 app_handle,
+                app_event_tx,
                 ring_buffer: ring_buffer_emitter,
                 exit_action: PtyExitAction::EmitOnly,
             },

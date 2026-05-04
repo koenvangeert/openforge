@@ -4,7 +4,8 @@ import { activeSessions, checkpointNotification, taskRuntimeInfo } from './store
 import type { AgentSession } from './types'
 import { registerAppTauriEventListeners } from './appTauriEventListeners'
 import type { AppEventListen } from './appTauriEventListeners'
-import type { UnlistenFn } from '@tauri-apps/api/event'
+import { appShellEventContracts } from './electronMigrationContracts'
+import type { DesktopUnlistenFn } from './desktopIpc'
 
 vi.mock('./terminalPool', () => ({
   release: vi.fn(),
@@ -43,7 +44,7 @@ function createSession(overrides: Partial<AgentSession> = {}): AgentSession {
 
 function createHarness() {
   const handlers = new Map<string, (event: { payload: unknown }) => unknown>()
-  const unlisten: UnlistenFn = vi.fn()
+  const unlisten: DesktopUnlistenFn = vi.fn()
   const listen = vi.fn(async (eventName: string, handler: (event: { payload: unknown }) => unknown) => {
     handlers.set(eventName, handler)
     return unlisten
@@ -78,26 +79,10 @@ describe('registerAppTauriEventListeners', () => {
     const unlisteners = await registerAppTauriEventListeners(deps)
 
     expect(onCloseRequested).toHaveBeenCalledWith(deps.onCloseRequested)
-    expect(unlisteners).toHaveLength(18)
-    expect(listen.mock.calls.map(([eventName]) => eventName)).toEqual([
-      'github-sync-complete',
-      'review-status-changed',
-      'action-complete',
-      'implementation-failed',
-      'server-resumed',
-      'startup-resume-complete',
-      'new-pr-comment',
-      'comment-addressed',
-      'ci-status-changed',
-      'agent-event',
-      'session-aborted',
-      'agent-status-changed',
-      'agent-pty-exited',
-      'review-pr-count-changed',
-      'authored-prs-updated',
-      'github-rate-limited',
-      'task-changed',
-    ])
+    expect(unlisteners).toHaveLength(appShellEventContracts.length + 1)
+    expect(listen.mock.calls.map(([eventName]) => eventName)).toEqual(
+      appShellEventContracts.map(contract => contract.eventName),
+    )
   })
 
   it('marks action-complete sessions completed and clears checkpoint notification', async () => {

@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invokeDesktopCommand as invoke, isElectronDesktopBridgeAvailable } from "./desktopIpc";
 import { normalizeTask } from "./boardStatus"
 import type { AgentInfo, AgentReviewComment, AgentSession, AuthoredPullRequest, AutocompleteAgentInfo, BoardStatus, CommandInfo, CommitInfo, FileContent, FileEntry, ImplementationStatus, PollResult, PrComment, PrFileDiff, PrOverviewComment, Project, ProjectAttention, ProviderModelInfo, PullRequestInfo, ReviewComment, ReviewPullRequest, ReviewSubmissionComment, SelfReviewComment, SkillInfo, Task, TaskWorkspaceInfo, TranscriptionResult, WhisperModelSizeId, WhisperModelStatus, WorktreeInfo } from "./types";
 
@@ -82,6 +82,11 @@ export async function getTasksForProject(projectId: string): Promise<Task[]> {
 
 export async function startImplementation(taskId: string, repoPath: string): Promise<ImplementationStatus> {
   return invoke<ImplementationStatus>("start_implementation", { taskId, repoPath });
+}
+
+export async function resumeStartupSessions(): Promise<void> {
+  if (!isElectronDesktopBridgeAvailable()) return
+  return invoke("resume_startup_sessions");
 }
 
 export async function abortImplementation(taskId: string): Promise<void> {

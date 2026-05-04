@@ -1,5 +1,5 @@
-import { listen as tauriListen } from '@tauri-apps/api/event'
-import type { Event, UnlistenFn } from '@tauri-apps/api/event'
+import { listenDesktopEvent } from './desktopIpc'
+import type { DesktopEvent, DesktopUnlistenFn } from './desktopIpc'
 import { get } from 'svelte/store'
 import {
   activeSessions,
@@ -18,11 +18,11 @@ import type { AgentEvent, AgentSession } from './types'
 
 export type AppEventListen = <T>(
   event: string,
-  handler: (event: Event<T>) => void | Promise<void>,
-) => Promise<UnlistenFn>
+  handler: (event: DesktopEvent<T>) => void | Promise<void>,
+) => Promise<DesktopUnlistenFn>
 
 export interface AppWindowCloseTarget {
-  onCloseRequested(handler: (event: { preventDefault: () => void }) => void): Promise<UnlistenFn>
+  onCloseRequested(handler: (event: { preventDefault: () => void }) => void): Promise<DesktopUnlistenFn>
 }
 
 export interface AppTauriEventDeps {
@@ -69,9 +69,9 @@ async function getOrLoadActiveSession(taskId: string): Promise<AgentSession | nu
   }
 }
 
-export async function registerAppTauriEventListeners(deps: AppTauriEventDeps): Promise<UnlistenFn[]> {
-  const listen = deps.listen ?? tauriListen
-  const unlisteners: UnlistenFn[] = []
+export async function registerAppTauriEventListeners(deps: AppTauriEventDeps): Promise<DesktopUnlistenFn[]> {
+  const listen = deps.listen ?? listenDesktopEvent
+  const unlisteners: DesktopUnlistenFn[] = []
 
   unlisteners.push(await deps.appWindow.onCloseRequested(deps.onCloseRequested))
 

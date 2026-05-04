@@ -136,8 +136,8 @@ function getDisposableAddon(value: unknown): { dispose: () => void } {
 	return value;
 }
 
-vi.mock("@tauri-apps/api/event", () => ({
-	listen: vi.fn(async (eventName: string, cb: (event: unknown) => void) => {
+vi.mock("./desktopIpc", () => ({
+	listenDesktopEvent: vi.fn(async (eventName: string, cb: (event: unknown) => void) => {
 		listenCallbacks.set(eventName, cb);
 		const unlisten = vi.fn();
 		unlistenFns.push(unlisten);

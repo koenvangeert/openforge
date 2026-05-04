@@ -225,6 +225,9 @@ vi.mock('./lib/ipc', () => ({
   getProjectConfig: vi.fn(async () => null),
   setProjectConfig: vi.fn(),
   startImplementation: vi.fn(),
+  resumeStartupSessions: vi.fn(async () => {
+    callOrder.push('resumeStartupSessions')
+  }),
   mergePullRequest: vi.fn(),
   getWorktreeForTask: vi.fn(),
   getSessionStatus: vi.fn(),
@@ -556,10 +559,12 @@ describe('App onMount initialization order', () => {
     })
 
     const firstListen = callOrder.indexOf('listen')
+    const firstResumeStartupSessions = callOrder.indexOf('resumeStartupSessions')
     const firstGetProjects = callOrder.indexOf('getProjects')
     const firstGetAppMode = callOrder.indexOf('getAppMode')
 
-    expect(firstListen).toBeLessThan(firstGetProjects)
+    expect(firstListen).toBeLessThan(firstResumeStartupSessions)
+    expect(firstResumeStartupSessions).toBeLessThan(firstGetProjects)
     expect(firstListen).toBeLessThan(firstGetAppMode)
   }, 15000)
 

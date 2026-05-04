@@ -2,8 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const listenCallbacks = new Map<string, (event: { payload?: { instance_id?: number } }) => void>()
 
-vi.mock('@tauri-apps/api/event', () => ({
-  listen: vi.fn(async (eventName: string, callback: (event: { payload?: { instance_id?: number } }) => void) => {
+vi.mock('./desktopIpc', () => ({
+  listenDesktopEvent: vi.fn(async (eventName: string, callback: (event: { payload?: { instance_id?: number } }) => void) => {
     listenCallbacks.set(eventName, callback)
     return () => {
       listenCallbacks.delete(eventName)

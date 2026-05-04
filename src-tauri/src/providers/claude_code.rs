@@ -45,7 +45,8 @@ impl ClaudeCodeProvider {
                 permission_mode,
                 80,
                 24,
-                app.clone(),
+                Some(app.clone()),
+                None,
             )
             .await
             .map_err(|e| e.to_string())?;
@@ -95,7 +96,8 @@ impl ClaudeCodeProvider {
                 permission_mode,
                 80,
                 24,
-                app.clone(),
+                Some(app.clone()),
+                None,
             )
             .await
             .map_err(|e| e.to_string())?;

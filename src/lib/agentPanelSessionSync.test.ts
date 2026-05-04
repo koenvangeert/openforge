@@ -1,10 +1,16 @@
 import { describe, expect, it, vi } from 'vitest'
 
+vi.mock('./desktopIpc', () => ({
+  listenDesktopEvent: vi.fn(),
+}))
+
 import {
   createAgentStatusChangedHandler,
   getAgentPanelStatusFromSessionStatus,
+  listenToAgentStatusChanged,
   type AgentPanelStatus,
 } from './agentPanelSessionSync'
+import { listenDesktopEvent } from './desktopIpc'
 
 describe('agent panel session status synchronization', () => {
   it.each([
@@ -62,6 +68,15 @@ describe('agent panel session status synchronization', () => {
 
     expect(setStatus).toHaveBeenCalledWith('complete')
     expect(onRunning).not.toHaveBeenCalled()
+  })
+
+  it('subscribes through the desktop event adapter so Electron and Tauri share the same path', async () => {
+    const unlisten = vi.fn()
+    vi.mocked(listenDesktopEvent).mockResolvedValueOnce(unlisten)
+
+    await expect(listenToAgentStatusChanged({ taskId: 'T-1', setStatus: vi.fn() })).resolves.toBe(unlisten)
+
+    expect(listenDesktopEvent).toHaveBeenCalledWith('agent-status-changed', expect.any(Function))
   })
 
   it('ignores unrecognized status events so stale events do not reset local panel state', () => {
