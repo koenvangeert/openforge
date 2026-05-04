@@ -632,263 +632,6 @@ fn require_backend_token(
     Ok(())
 }
 
-fn payload_string(payload: &serde_json::Value, key: &str) -> Result<String, (StatusCode, String)> {
-    payload
-        .get(key)
-        .and_then(|value| value.as_str())
-        .map(ToString::to_string)
-        .ok_or_else(|| {
-            (
-                StatusCode::BAD_REQUEST,
-                format!("payload.{key} must be a string"),
-            )
-        })
-}
-
-fn json_value<T: Serialize>(value: T) -> Result<serde_json::Value, (StatusCode, String)> {
-    serde_json::to_value(value).map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("failed to serialize app IPC response: {e}"),
-        )
-    })
-}
-
-fn payload_i64(payload: &serde_json::Value, key: &str) -> Result<i64, (StatusCode, String)> {
-    payload
-        .get(key)
-        .and_then(|value| value.as_i64())
-        .ok_or_else(|| {
-            (
-                StatusCode::BAD_REQUEST,
-                format!("payload.{key} must be an integer"),
-            )
-        })
-}
-
-fn emit_comment_addressed(state: &AppState) {
-    let payload = serde_json::Value::Null;
-    if let Some(app) = &state.app {
-        let _ = app.emit("comment-addressed", payload.clone());
-    }
-    publish_app_event(&state.app_event_tx, "comment-addressed", &payload);
-}
-
-async fn handle_app_github_review_command(
-    state: &AppState,
-    request: &AppInvokeRequest,
-) -> Result<Option<serde_json::Value>, (StatusCode, String)> {
-    let runtime_error = |error: String| (StatusCode::INTERNAL_SERVER_ERROR, error);
-    let value = match request.command.as_str() {
-        "get_pull_requests" => {
-            json_value(crate::github_runtime::get_pull_requests(&state.db).map_err(runtime_error)?)?
-        }
-        "get_pr_comments" => {
-            let pr_id = payload_i64(&request.payload, "prId")?;
-            json_value(
-                crate::github_runtime::get_pr_comments(&state.db, pr_id).map_err(runtime_error)?,
-            )?
-        }
-        "mark_comment_addressed" => {
-            let comment_id = payload_i64(&request.payload, "commentId")?;
-            crate::github_runtime::mark_comment_addressed(&state.db, comment_id)
-                .map_err(runtime_error)?;
-            emit_comment_addressed(state);
-            return Ok(Some(serde_json::Value::Null));
-        }
-        "get_review_prs" => {
-            json_value(crate::github_runtime::get_review_prs(&state.db).map_err(runtime_error)?)?
-        }
-        "mark_review_pr_viewed" => {
-            let pr_id = payload_i64(&request.payload, "prId")?;
-            let head_sha = payload_string(&request.payload, "headSha")?;
-            crate::github_runtime::mark_review_pr_viewed(&state.db, pr_id, &head_sha)
-                .map_err(runtime_error)?;
-            serde_json::Value::Null
-        }
-        "get_authored_prs" => {
-            json_value(crate::github_runtime::get_authored_prs(&state.db).map_err(runtime_error)?)?
-        }
-        "force_github_sync" => json_value(
-            crate::github_poller::poll_github_once_for_sidecar(
-                state.db.clone(),
-                &state.github_client,
-                state.app_event_tx.clone(),
-            )
-            .await,
-        )?,
-        "merge_pull_request" => {
-            let owner = payload_string(&request.payload, "owner")?;
-            let repo = payload_string(&request.payload, "repo")?;
-            let pr_number = payload_i64(&request.payload, "prNumber")?;
-            crate::github_runtime::merge_pull_request(
-                &state.github_client,
-                &owner,
-                &repo,
-                pr_number,
-            )
-            .await
-            .map_err(runtime_error)?;
-            serde_json::Value::Null
-        }
-        "get_github_username" => json_value(
-            crate::github_runtime::github_username(&state.db, &state.github_client)
-                .await
-                .map_err(runtime_error)?,
-        )?,
-        "fetch_review_prs" => json_value(
-            crate::github_runtime::fetch_review_prs(&state.db, &state.github_client)
-                .await
-                .map_err(runtime_error)?,
-        )?,
-        "get_pr_file_diffs" => {
-            let owner = payload_string(&request.payload, "owner")?;
-            let repo = payload_string(&request.payload, "repo")?;
-            let pr_number = payload_i64(&request.payload, "prNumber")?;
-            json_value(
-                crate::github_runtime::get_pr_file_diffs(
-                    &state.github_client,
-                    &owner,
-                    &repo,
-                    pr_number,
-                )
-                .await
-                .map_err(runtime_error)?,
-            )?
-        }
-        "get_file_content" | "get_file_content_base64" => {
-            let owner = payload_string(&request.payload, "owner")?;
-            let repo = payload_string(&request.payload, "repo")?;
-            let sha = payload_string(&request.payload, "sha")?;
-            if request.command == "get_file_content" {
-                json_value(
-                    crate::github_runtime::get_file_content(
-                        &state.github_client,
-                        &owner,
-                        &repo,
-                        &sha,
-                    )
-                    .await
-                    .map_err(runtime_error)?,
-                )?
-            } else {
-                json_value(
-                    crate::github_runtime::get_file_content_base64(
-                        &state.github_client,
-                        &owner,
-                        &repo,
-                        &sha,
-                    )
-                    .await
-                    .map_err(runtime_error)?,
-                )?
-            }
-        }
-        "get_file_at_ref" | "get_file_at_ref_base64" => {
-            let owner = payload_string(&request.payload, "owner")?;
-            let repo = payload_string(&request.payload, "repo")?;
-            let path = payload_string(&request.payload, "path")?;
-            let ref_sha = payload_string(&request.payload, "refSha")?;
-            if request.command == "get_file_at_ref" {
-                json_value(
-                    crate::github_runtime::get_file_at_ref(
-                        &state.github_client,
-                        &owner,
-                        &repo,
-                        &path,
-                        &ref_sha,
-                    )
-                    .await
-                    .map_err(runtime_error)?,
-                )?
-            } else {
-                json_value(
-                    crate::github_runtime::get_file_at_ref_base64(
-                        &state.github_client,
-                        &owner,
-                        &repo,
-                        &path,
-                        &ref_sha,
-                    )
-                    .await
-                    .map_err(runtime_error)?,
-                )?
-            }
-        }
-        "get_review_comments" => {
-            let owner = payload_string(&request.payload, "owner")?;
-            let repo = payload_string(&request.payload, "repo")?;
-            let pr_number = payload_i64(&request.payload, "prNumber")?;
-            json_value(
-                crate::github_runtime::get_review_comments(
-                    &state.github_client,
-                    &owner,
-                    &repo,
-                    pr_number,
-                )
-                .await
-                .map_err(runtime_error)?,
-            )?
-        }
-        "get_pr_overview_comments" => {
-            let owner = payload_string(&request.payload, "owner")?;
-            let repo = payload_string(&request.payload, "repo")?;
-            let pr_number = payload_i64(&request.payload, "prNumber")?;
-            json_value(
-                crate::github_runtime::get_pr_overview_comments(
-                    &state.github_client,
-                    &owner,
-                    &repo,
-                    pr_number,
-                )
-                .await
-                .map_err(runtime_error)?,
-            )?
-        }
-        "submit_pr_review" => {
-            let owner = payload_string(&request.payload, "owner")?;
-            let repo = payload_string(&request.payload, "repo")?;
-            let pr_number = payload_i64(&request.payload, "prNumber")?;
-            let event = payload_string(&request.payload, "event")?;
-            let body = payload_string(&request.payload, "body")?;
-            let commit_id = payload_string(&request.payload, "commitId")?;
-            let comments = request
-                .payload
-                .get("comments")
-                .cloned()
-                .unwrap_or_else(|| serde_json::json!([]));
-            let comments: Vec<crate::github_client::ReviewSubmitComment> =
-                serde_json::from_value(comments).map_err(|e| {
-                    (
-                        StatusCode::BAD_REQUEST,
-                        format!("payload.comments is invalid: {e}"),
-                    )
-                })?;
-            crate::github_runtime::submit_pr_review(
-                &state.github_client,
-                &owner,
-                &repo,
-                pr_number,
-                &event,
-                &body,
-                comments,
-                &commit_id,
-            )
-            .await
-            .map_err(runtime_error)?;
-            serde_json::Value::Null
-        }
-        "fetch_authored_prs" => json_value(
-            crate::github_runtime::fetch_authored_prs(&state.db, &state.github_client)
-                .await
-                .map_err(runtime_error)?,
-        )?,
-        _ => return Ok(None),
-    };
-
-    Ok(Some(value))
-}
-
 fn app_event_sse_data(envelope: &AppEventEnvelope) -> String {
     serde_json::to_string(envelope).unwrap_or_else(|_| {
         "{\"eventName\":\"app-event-serialization-failed\",\"payload\":null}".to_string()
@@ -970,7 +713,7 @@ async fn app_invoke_handler(
     if let Some(value) = crate::app_invoke::handle_pty_command(&state, &request).await? {
         return Ok(Json(AppInvokeResponse { value }));
     }
-    if let Some(value) = handle_app_github_review_command(&state, &request).await? {
+    if let Some(value) = crate::app_invoke::handle_github_review_command(&state, &request).await? {
         return Ok(Json(AppInvokeResponse { value }));
     }
     if let Some(value) = crate::app_invoke::handle_plugin_command(&state, &request).await? {
@@ -2353,6 +2096,75 @@ mod tests {
         assert_eq!(
             response_body_json(still_installed).await["value"]["id"],
             "com.example.echo"
+        );
+
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[tokio::test]
+    async fn test_app_invoke_github_review_handler_uses_shared_boundary() {
+        let (state, path) = test_state("app_invoke_github_shared_boundary");
+        {
+            let db = state.db.lock().expect("db lock");
+            let task = db
+                .create_task("PR task", "doing", None, None, None, None)
+                .expect("create task");
+            db.insert_pull_request(
+                10,
+                &task.id,
+                "owner",
+                "repo",
+                "Fix bug",
+                "https://github.com/owner/repo/pull/5",
+                "open",
+                1000,
+                2000,
+                false,
+            )
+            .expect("insert PR");
+        }
+
+        let request = AppInvokeRequest {
+            command: "get_pull_requests".to_string(),
+            payload: serde_json::Value::Null,
+        };
+
+        let value = crate::app_invoke::handle_github_review_command(&state, &request)
+            .await
+            .expect("github handler should succeed")
+            .expect("github handler should own get_pull_requests");
+
+        assert_eq!(value[0]["title"], "Fix bug");
+
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[tokio::test]
+    async fn test_app_invoke_submit_pr_review_rejects_null_comments_before_runtime() {
+        let (state, path) = test_state("app_invoke_submit_pr_review_null_comments");
+        let router = create_router(state);
+
+        let response = router
+            .oneshot(
+                Request::builder()
+                    .uri("/app/invoke")
+                    .method("POST")
+                    .header("authorization", "Bearer test-token")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        r#"{"command":"submit_pr_review","payload":{"owner":"owner","repo":"repo","prNumber":7,"event":"COMMENT","body":"looks risky","commitId":"sha-1","comments":null}}"#,
+                    ))
+                    .expect("build request"),
+            )
+            .await
+            .expect("request should complete");
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        assert!(
+            response_body_text(response)
+                .await
+                .contains("payload.comments is invalid"),
+            "null comments should be rejected by shared payload parsing before GitHub runtime"
         );
 
         let _ = std::fs::remove_file(path);
