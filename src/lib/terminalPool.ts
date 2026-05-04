@@ -2,7 +2,7 @@ import { listenDesktopEvent, type DesktopUnlistenFn } from './desktopIpc'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import { WebglAddon } from '@xterm/addon-webgl'
-import { Terminal } from '@xterm/xterm'
+import { Terminal, type ILinkHandler } from '@xterm/xterm'
 import { get } from 'svelte/store'
 import { getPtyBuffer, openUrl, resizePty, writePty } from './ipc'
 import { getTerminalOptions, preloadTerminalFonts } from './terminalOptions'
@@ -118,12 +118,24 @@ function waitForInitialFit(entry: PoolEntry): Promise<void> {
   })
 }
 
+function openTerminalLink(event: MouseEvent, uri: string): void {
+  event.preventDefault()
+  event.stopPropagation()
+  openUrl(uri).catch(error => {
+    console.error('[terminalPool] Failed to open terminal link:', error)
+  })
+}
+
+function createTerminalLinkHandler(): ILinkHandler {
+  return {
+    allowNonHttpProtocols: false,
+    activate: (event, uri) => openTerminalLink(event, uri),
+  }
+}
+
 function loadWebLinksAddon(terminal: Terminal): void {
   const webLinksAddon = new WebLinksAddon((event, uri) => {
-    event.preventDefault()
-    openUrl(uri).catch(error => {
-      console.error('[terminalPool] Failed to open terminal link:', error)
-    })
+    openTerminalLink(event, uri)
   })
 
   terminal.loadAddon(webLinksAddon)
@@ -158,7 +170,10 @@ export async function acquire(taskId: string): Promise<PoolEntry> {
   const existing = pool.get(taskId)
   if (existing) return existing
 
-  const terminal = new Terminal(getTerminalOptions(get(themeMode)))
+  const terminal = new Terminal({
+    ...getTerminalOptions(get(themeMode)),
+    linkHandler: createTerminalLinkHandler(),
+  })
 
   const fitAddon = new FitAddon()
   terminal.loadAddon(fitAddon)

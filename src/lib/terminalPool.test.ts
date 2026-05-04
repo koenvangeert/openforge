@@ -47,6 +47,9 @@ const originalDocumentFonts = document.fonts;
 
 interface TerminalMockOptions {
 	fontFamily?: string;
+	linkHandler?: {
+		activate: (event: MouseEvent, text: string, range: unknown) => void;
+	};
 }
 
 function getTerminalFontFamily(terminal: unknown): string | undefined {
@@ -308,17 +311,40 @@ describe("terminalPool", () => {
 		expect(listenCallbacks.has("pty-exit-task-3")).toBe(true);
 	});
 
-	it("acquire loads WebLinksAddon and routes links through openUrl", async () => {
+	it("acquire loads WebLinksAddon and routes detected web links through openUrl", async () => {
 		const entry = await acquire("task-links");
 		const { loadAddon: loadAddonSpy } = getTerminalMocks(entry);
 		const openUrlMock = vi.mocked(openUrl);
+		const event = new MouseEvent("click");
+		const preventDefault = vi.spyOn(event, "preventDefault");
+		const stopPropagation = vi.spyOn(event, "stopPropagation");
 
 		expect(loadAddonSpy).toHaveBeenCalledTimes(2);
 		expect(webLinksHandler).not.toBeNull();
 
-		getWebLinksHandler()(new MouseEvent("click"), "https://example.com/pool");
+		getWebLinksHandler()(event, "https://example.com/pool");
 
+		expect(preventDefault).toHaveBeenCalled();
+		expect(stopPropagation).toHaveBeenCalled();
 		expect(openUrlMock).toHaveBeenCalledWith("https://example.com/pool");
+	});
+
+	it("routes OSC 8 terminal hyperlinks through openUrl instead of xterm default browser handling", async () => {
+		const entry = await acquire("task-osc8-link");
+		const openUrlMock = vi.mocked(openUrl);
+		const event = new MouseEvent("click");
+		const preventDefault = vi.spyOn(event, "preventDefault");
+		const stopPropagation = vi.spyOn(event, "stopPropagation");
+
+		entry.terminal.options.linkHandler?.activate(
+			event,
+			"https://example.com/osc8",
+			{ start: { x: 1, y: 1 }, end: { x: 10, y: 1 } },
+		);
+
+		expect(preventDefault).toHaveBeenCalled();
+		expect(stopPropagation).toHaveBeenCalled();
+		expect(openUrlMock).toHaveBeenCalledWith("https://example.com/osc8");
 	});
 
 	it("attach appends hostDiv to wrapper and marks attached", async () => {
