@@ -352,12 +352,18 @@ mod tests {
         // Test 2: Valid legacy Tauri value from env
         std::env::set_var("AI_COMMAND_CENTER_PORT", "9999");
         let port = get_http_server_port();
-        assert_eq!(port, 9999, "Should return 9999 when AI_COMMAND_CENTER_PORT is set to 9999");
+        assert_eq!(
+            port, 9999,
+            "Should return 9999 when AI_COMMAND_CENTER_PORT is set to 9999"
+        );
 
         // Test 3: Electron sidecar backend port has precedence
         backend_guard.set("17642");
         let port = get_http_server_port();
-        assert_eq!(port, 17642, "Should prefer OPENFORGE_BACKEND_PORT in sidecar mode");
+        assert_eq!(
+            port, 17642,
+            "Should prefer OPENFORGE_BACKEND_PORT in sidecar mode"
+        );
 
         // Test 4: Invalid sidecar value falls back to default because env fallback only applies to lookup errors.
         backend_guard.set("invalid");
