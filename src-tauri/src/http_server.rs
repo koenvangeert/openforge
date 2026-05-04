@@ -722,6 +722,9 @@ async fn app_invoke_handler(
     if let Some(value) = crate::app_invoke::handle_files_review_command(&state, &request).await? {
         return Ok(Json(AppInvokeResponse { value }));
     }
+    if let Some(value) = crate::app_invoke::handle_runtime_command(&state, &request).await? {
+        return Ok(Json(AppInvokeResponse { value }));
+    }
 
     let value = crate::app_invoke::handle_unmatched_command(&state, &request).await?;
     Ok(Json(AppInvokeResponse { value }))
@@ -1607,6 +1610,101 @@ mod tests {
         assert_eq!(response.status(), StatusCode::OK);
         let received = receiver.recv().await.expect("startup completion event");
         assert_eq!(received.event_name, "startup-resume-complete");
+
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[tokio::test]
+    async fn test_app_invoke_accepts_remaining_electron_cutover_ipc_commands() {
+        let (state, path) = test_state("app_invoke_electron_cutover_remaining_ipc");
+        let (project_id, task_id) = {
+            let db = crate::db::acquire_db(&state.db);
+            let project = db
+                .create_project("IPC Parity Project", "/tmp/openforge-ipc-parity")
+                .expect("create project");
+            db.set_project_config(&project.id, "ai_provider", "claude-code")
+                .expect("set provider");
+            let task = db
+                .create_task("ipc parity", "doing", Some(&project.id), None, None, None)
+                .expect("create task");
+            db.create_agent_session(
+                "session-ipc-parity",
+                &task.id,
+                None,
+                "implementing",
+                "running",
+                "claude-code",
+            )
+            .expect("create session");
+            (project.id, task.id)
+        };
+        let router = create_router(state.clone());
+
+        let requests = [
+            ("check_opencode_installed", serde_json::Value::Null),
+            ("check_pi_installed", serde_json::Value::Null),
+            ("check_claude_installed", serde_json::Value::Null),
+            ("get_agents", serde_json::Value::Null),
+            (
+                "get_worktree_for_task",
+                serde_json::json!({ "taskId": task_id }),
+            ),
+            (
+                "abort_session",
+                serde_json::json!({ "sessionId": "session-ipc-parity" }),
+            ),
+            (
+                "get_session_output",
+                serde_json::json!({ "taskId": "missing-task" }),
+            ),
+            (
+                "list_opencode_commands",
+                serde_json::json!({ "projectId": project_id }),
+            ),
+            (
+                "list_opencode_skills",
+                serde_json::json!({ "projectId": project_id }),
+            ),
+            (
+                "save_skill_content",
+                serde_json::json!({ "projectId": project_id, "skillName": "review-skill", "level": "project", "sourceDir": "unsupported", "content": "---\nname: review-skill\n---\n" }),
+            ),
+            (
+                "search_opencode_files",
+                serde_json::json!({ "projectId": project_id, "query": "README" }),
+            ),
+            (
+                "list_opencode_agents",
+                serde_json::json!({ "projectId": project_id }),
+            ),
+            (
+                "list_opencode_models",
+                serde_json::json!({ "projectId": project_id }),
+            ),
+        ];
+
+        for (command, payload) in requests {
+            let body = serde_json::json!({ "command": command, "payload": payload });
+            let response = router
+                .clone()
+                .oneshot(
+                    Request::builder()
+                        .uri("/app/invoke")
+                        .method("POST")
+                        .header("authorization", "Bearer test-token")
+                        .header("content-type", "application/json")
+                        .body(Body::from(body.to_string()))
+                        .expect("build request"),
+                )
+                .await
+                .expect("request should complete");
+
+            assert_ne!(
+                response.status(),
+                StatusCode::NOT_IMPLEMENTED,
+                "{command} should be routed by app_invoke after Electron cutover"
+            );
+        }
 
         let _ = std::fs::remove_file(path);
     }

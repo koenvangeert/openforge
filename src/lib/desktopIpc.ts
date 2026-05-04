@@ -1,6 +1,3 @@
-import { invoke as tauriInvoke } from '@tauri-apps/api/core'
-import { listen as tauriListen } from '@tauri-apps/api/event'
-
 export type DesktopUnlistenFn = () => void
 
 export interface DesktopEvent<T> {
@@ -25,6 +22,14 @@ function electronBridge(): OpenForgeDesktopBridge | null {
   return window.openforge ?? null
 }
 
+function requireElectronBridge(): OpenForgeDesktopBridge {
+  const bridge = electronBridge()
+  if (!bridge) {
+    throw new Error('Open Forge desktop bridge is unavailable; run the app in the Electron shell')
+  }
+  return bridge
+}
+
 export function isElectronDesktopBridgeAvailable(): boolean {
   return electronBridge() !== null
 }
@@ -32,27 +37,14 @@ export function isElectronDesktopBridgeAvailable(): boolean {
 export async function invokeDesktopCommand<T>(command: string): Promise<T>
 export async function invokeDesktopCommand<T>(command: string, payload: unknown): Promise<T>
 export async function invokeDesktopCommand<T>(command: string, payload?: unknown): Promise<T> {
-  const bridge = electronBridge()
-  if (bridge) {
-    return bridge.invoke(command, payload ?? null) as Promise<T>
-  }
-
-  if (payload === undefined) {
-    return tauriInvoke<T>(command)
-  }
-  return tauriInvoke<T>(command, payload as Parameters<typeof tauriInvoke<T>>[1])
+  return requireElectronBridge().invoke(command, payload ?? null) as Promise<T>
 }
 
 export async function listenDesktopEvent<T>(
   eventName: string,
   handler: (event: DesktopEvent<T>) => void | Promise<void>,
 ): Promise<DesktopUnlistenFn> {
-  const bridge = electronBridge()
-  if (!bridge) {
-    return tauriListen<T>(eventName, handler as Parameters<typeof tauriListen<T>>[1])
-  }
-
-  const unsubscribe = bridge.onEvent(eventName, (payload) => {
+  const unsubscribe = requireElectronBridge().onEvent(eventName, (payload) => {
     void handler({ event: eventName, payload: payload as T })
   })
 

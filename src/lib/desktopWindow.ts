@@ -1,4 +1,3 @@
-import { getCurrentWindow } from '@tauri-apps/api/window'
 import type { OpenForgeDesktopBridge, DesktopUnlistenFn } from './desktopIpc'
 
 export interface DesktopCloseRequestEvent {
@@ -10,15 +9,9 @@ export interface DesktopWindowTarget {
   destroy(): Promise<void>
 }
 
-interface TauriWindowTarget {
-  onCloseRequested(handler: (event: DesktopCloseRequestEvent) => void | Promise<void>): Promise<DesktopUnlistenFn>
-  destroy(): Promise<void>
-}
-
 export interface CreateDesktopWindowDeps {
   electronBridge?: OpenForgeDesktopBridge | null
   close?: () => void
-  getCurrentWindow?: () => TauriWindowTarget
 }
 
 function currentElectronBridge(): OpenForgeDesktopBridge | null {
@@ -29,36 +22,31 @@ function currentElectronBridge(): OpenForgeDesktopBridge | null {
 export function createDesktopWindow(deps: CreateDesktopWindowDeps = {}): DesktopWindowTarget {
   const bridge = deps.electronBridge ?? currentElectronBridge()
   const close = deps.close ?? (() => window.close())
-  const getWindow = deps.getCurrentWindow ?? getCurrentWindow
 
-  if (bridge) {
-    let isDestroying = false
-
-    return {
-      async onCloseRequested(handler) {
-        const listener = (event: BeforeUnloadEvent) => {
-          if (isDestroying) return
-
-          handler({
-            preventDefault() {
-              event.preventDefault()
-              event.returnValue = ''
-            },
-          })
-        }
-        window.addEventListener('beforeunload', listener)
-        return () => window.removeEventListener('beforeunload', listener)
-      },
-      async destroy() {
-        isDestroying = true
-        close()
-      },
-    }
+  if (!bridge) {
+    throw new Error('Open Forge desktop window controls are unavailable; run the app in the Electron shell')
   }
 
-  const tauriWindow = getWindow()
+  let isDestroying = false
+
   return {
-    onCloseRequested: (handler) => tauriWindow.onCloseRequested(handler),
-    destroy: () => tauriWindow.destroy(),
+    async onCloseRequested(handler) {
+      const listener = (event: BeforeUnloadEvent) => {
+        if (isDestroying) return
+
+        handler({
+          preventDefault() {
+            event.preventDefault()
+            event.returnValue = ''
+          },
+        })
+      }
+      window.addEventListener('beforeunload', listener)
+      return () => window.removeEventListener('beforeunload', listener)
+    },
+    async destroy() {
+      isDestroying = true
+      close()
+    },
   }
 }

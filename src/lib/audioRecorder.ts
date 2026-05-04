@@ -121,8 +121,8 @@ export function createAudioRecorder(options?: AudioRecorderOptions): AudioRecord
         throw new Error('AudioRecorder: already recording');
       }
 
-      // Known issue: Tauri v2 bug #8979 — WKWebView's mic permission dialog
-      // re-appears on every app launch. This is an upstream Tauri issue.
+      // macOS permission prompts are scoped to the installed app bundle. Local
+      // replacement builds may require the user to grant microphone access again.
       mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
       audioContext = new AudioContext();

@@ -16,20 +16,20 @@ Frontend:
 
 - Svelte 5 + TypeScript UI in `src/`.
 - Vite-based build/dev scripts in `package.json`.
-- `src/lib/ipc.ts` is the typed frontend backend-call boundary and currently delegates to Tauri `invoke()`.
-- `src/lib/appTauriEventListeners.ts` centralizes Tauri event listener registration for app and backend events.
+- `src/lib/ipc.ts` is the typed frontend backend-call boundary and now delegates through the Electron preload bridge.
+- `src/lib/appDesktopEventListeners.ts` centralizes desktop event listener registration for app and backend events.
 
 Desktop shell:
 
-- Tauri v2 configured by `src-tauri/tauri.conf.json`.
-- Current scripts include `tauri:dev`, `tauri:build`, and `tauri:install`.
-- The Tauri config sets app identity, macOS bundle values, CSP, one main window, and plugin URI/CSP allowances.
+- Electron is the supported desktop shell.
+- Current scripts include `electron:dev`, `electron:build`, `electron:package`, and `electron:install`.
+- Electron main owns app identity, macOS bundle values, CSP, one main window, microphone permission policy, sidecar supervision, and plugin URI/CSP allowances.
 
 Rust backend:
 
-- Located under `src-tauri/` today.
-- `src-tauri/src/main.rs` owns startup, app data directory lookup, DB initialization, stale state cleanup, HTTP hook server startup, GitHub polling, PTY/server/plugin/Whisper managers, startup resume, Tauri command registration, plugin URI protocol handling, and shutdown cleanup.
-- `src-tauri/Cargo.toml` mixes Tauri dependencies with backend dependencies such as SQLite, Git, PTY, Whisper/Metal, HTTP, keychain, and async runtime.
+- Located under `src-tauri/` today as historical migration debt.
+- `src-tauri/src/main.rs` now starts the Electron Rust sidecar HTTP/SSE backend directly. The removed Tauri shell startup path no longer launches a webview app.
+- `src-tauri/Cargo.toml` still mixes remaining Rust Tauri internals with backend dependencies such as SQLite, Git, PTY, Whisper/Metal, HTTP, keychain, and async runtime; this is tracked for follow-up extraction.
 - `src-tauri/src/http_server.rs` already provides a loopback Axum server for OpenForge automation/hook endpoints. It is a useful starting point, not a complete IPC replacement.
 
 ## Target architecture
@@ -83,7 +83,7 @@ Purpose: freeze current behavior before architecture changes.
 Actions:
 
 1. Enumerate all `src/lib/ipc.ts` exports and map each export to its current Tauri command name and payload shape.
-2. Enumerate all events currently listened to in `src/lib/appTauriEventListeners.ts` and other `@tauri-apps/api/event` imports.
+2. Enumerate all events currently listened to in `src/lib/appDesktopEventListeners.ts` and other `@tauri-apps/api/event` imports.
 3. Enumerate backend event producers in Rust by searching for `emit(...)` and stream bridges.
 4. Classify each command/event:
    - backend-owned request/response command,
@@ -208,23 +208,27 @@ Acceptance gate:
 
 Purpose: complete the hard merge-time cutover.
 
-Actions:
+Cutover status:
 
-1. Remove Tauri runtime dependencies and Tauri scripts from `package.json`.
-2. Remove or archive `src-tauri/tauri.conf.json` and Tauri-specific build configuration.
-3. Move Rust backend code out of `src-tauri` into its final backend crate/service location.
-4. Remove direct imports of `@tauri-apps/api/*` from `src/`.
-5. Replace Tauri plugin URI protocol usage with an Electron/main-owned equivalent or a backend-served local protocol with equivalent CSP controls.
-6. Update developer documentation and scripts for Electron dev/build.
-7. Keep unsigned local macOS packaging sufficient for milestone 1.
+1. Tauri shell scripts and frontend package dependencies are removed from `package.json`.
+2. `src-tauri/tauri.conf.json`, Tauri capability files, Tauri Info.plist, and Tauri build hooks are removed.
+3. Renderer IPC/window code is Electron-only and no longer imports `@tauri-apps/api/*`.
+4. Plugin URI handling is Electron/main-owned via `src/electron/pluginProtocol.ts`.
+5. Developer docs and source install flow use `pnpm electron:dev`, `pnpm electron:package`, and `pnpm electron:install`.
+6. Rollback and data backup guidance lives in `docs/electron-cutover-rollback.md`.
+
+Deferred cleanup after cutover:
+
+- Move the Rust backend crate out of the historical `src-tauri` directory and remove the remaining Rust `tauri` crate dependency once plugin host/app event abstractions no longer use Tauri types internally.
 
 Acceptance gate:
 
-- `grep -R "@tauri-apps/api\|tauri" src package.json` has only intentional historical/documentation references.
+- `package.json` has no Tauri scripts or frontend Tauri dependencies.
+- `src/lib/desktopIpc.ts` and `src/lib/desktopWindow.ts` have no `@tauri-apps/api/*` imports.
 - Electron app boots on macOS from a clean checkout.
 - Electron app boots on macOS with existing user data.
 - All contract, frontend, and backend tests pass.
-- A manual daily-driver smoke test passes.
+- A manual daily-driver smoke test passes across Settings, tasks, terminal, plugins, and review.
 
 ## Command and event contract strategy
 
@@ -251,7 +255,7 @@ Important payload rule: preserve the generated frontend camelCase API shape unle
 
 ### Event inventory sources
 
-- Frontend listeners in `src/lib/appTauriEventListeners.ts` and any other `@tauri-apps/api/event` imports.
+- Frontend listeners in `src/lib/appDesktopEventListeners.ts` and any other `@tauri-apps/api/event` imports.
 - Rust `emit(...)` calls in `src-tauri/src`.
 - PTY and SSE bridge paths.
 

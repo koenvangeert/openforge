@@ -4,8 +4,9 @@ const { invokeMock } = vi.hoisted(() => ({
 	invokeMock: vi.fn(),
 }));
 
-vi.mock("@tauri-apps/api/core", () => ({
-	invoke: invokeMock,
+vi.mock("./desktopIpc", () => ({
+	invokeDesktopCommand: invokeMock,
+	isElectronDesktopBridgeAvailable: vi.fn(() => true),
 }));
 
 import {

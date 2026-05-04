@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { writable } from 'svelte/store'
 import type { AgentSession } from '../../lib/types'
 
-type TauriEventCallback = (event: { payload: unknown }) => void
+type DesktopEventCallback = (event: { payload: unknown }) => void
 
 // Mock xterm.js — provide a minimal Terminal stub
 vi.mock('@xterm/xterm', () => {
@@ -53,7 +53,7 @@ vi.mock('../../lib/audioRecorder', () => ({
 
 // Mock terminalPool to avoid xterm constructor issues in test environment
 const { listenCallbacks, mockPoolEntry, mockSessionHistoryPort, mockShellLifecycleState } = vi.hoisted(() => ({
-  listenCallbacks: new Map<string, TauriEventCallback[]>(),
+  listenCallbacks: new Map<string, DesktopEventCallback[]>(),
   mockPoolEntry: {
     taskId: '',
     terminal: { write: vi.fn(), dispose: vi.fn(), reset: vi.fn(), cols: 80, rows: 24 },
@@ -76,19 +76,9 @@ const { listenCallbacks, mockPoolEntry, mockSessionHistoryPort, mockShellLifecyc
 }))
 
 
-vi.mock('@tauri-apps/api/webviewWindow', () => ({
-  getCurrentWebviewWindow: vi.fn().mockReturnValue({
-    listen: vi.fn().mockImplementation((eventName, cb) => {
-      const existing = listenCallbacks.get(eventName) || []
-      existing.push(cb)
-      listenCallbacks.set(eventName, existing)
-      return Promise.resolve(() => {})
-    })
-  })
-}))
 
 vi.mock('../../lib/desktopIpc', () => ({
-  listenDesktopEvent: vi.fn().mockImplementation((eventName: string, cb: TauriEventCallback) => {
+  listenDesktopEvent: vi.fn().mockImplementation((eventName: string, cb: DesktopEventCallback) => {
     const existing = listenCallbacks.get(eventName) || []
     existing.push(cb)
     listenCallbacks.set(eventName, existing)
@@ -128,7 +118,7 @@ import { activeSessions } from '../../lib/stores'
 import { killPty, spawnPty } from '../../lib/ipc'
 import { updateShellLifecycleState } from '../../lib/terminalPool'
 
-function emitTauriEvent(eventName: string, payload: unknown = {}) {
+function emitDesktopEvent(eventName: string, payload: unknown = {}) {
   const callbacks = listenCallbacks.get(eventName) || []
   for (const cb of callbacks) {
     cb({ payload })
@@ -549,7 +539,7 @@ describe('OpenCodeAgentPanel (via router)', () => {
     vi.mocked(spawnPty).mockClear()
     mockPoolEntry.ptyActive = false
 
-    emitTauriEvent('action-complete', { task_id: 'T-1' })
+    emitDesktopEvent('action-complete', { task_id: 'T-1' })
 
     expect(spawnPty).not.toHaveBeenCalled()
   })

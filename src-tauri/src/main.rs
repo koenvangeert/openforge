@@ -31,7 +31,6 @@ mod server_manager;
 mod sse_bridge;
 mod user_environment;
 mod whisper_manager;
-use github_client::GitHubClient;
 use log::{debug, error, info, warn};
 use opencode_client::OpenCodeClient;
 use pty_manager::PtyManager;
@@ -40,30 +39,6 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use tauri::{Emitter, Manager};
 use whisper_manager::{WhisperManager, WhisperModelSize};
-
-#[cfg(any(debug_assertions, test))]
-fn rust_validation_tauri_context() -> tauri::Context<tauri::Wry> {
-    // Tauri embeds `build.frontendDist` at macro-expansion time when the custom-protocol
-    // feature is enabled. Local Rust-only validation should not require a prebuilt Vite bundle.
-    tauri::generate_context!(assets = tauri::test::noop_assets())
-}
-
-#[cfg(all(debug_assertions, not(test)))]
-fn tauri_context() -> tauri::Context<tauri::Wry> {
-    rust_validation_tauri_context()
-}
-
-#[cfg(all(not(debug_assertions), not(test)))]
-fn tauri_context() -> tauri::Context<tauri::Wry> {
-    tauri::generate_context!()
-}
-
-#[cfg(test)]
-fn tauri_context() -> tauri::Context<tauri::Wry> {
-    panic!(
-        "unit tests should use tauri::test::mock_context instead of the production Tauri context"
-    )
-}
 
 // ============================================================================
 // Startup: Resume OpenCode Servers
@@ -610,11 +585,6 @@ fn sidecar_app_data_dir() -> Result<PathBuf, String> {
     Ok(app_data_dir)
 }
 
-fn should_run_electron_sidecar() -> bool {
-    std::env::var("OPENFORGE_ELECTRON_SIDECAR").ok().as_deref() == Some("1")
-        || std::env::args().any(|arg| arg == "--electron-sidecar")
-}
-
 fn run_electron_sidecar() -> Result<(), Box<dyn std::error::Error>> {
     let app_data_dir = sidecar_app_data_dir().map_err(std::io::Error::other)?;
     let database = initialize_database(&app_data_dir);
@@ -654,376 +624,22 @@ fn run_electron_sidecar() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn main() {
-    if should_run_electron_sidecar() {
-        if let Err(error) = run_electron_sidecar() {
-            eprintln!("[electron-sidecar] failed: {error}");
-            std::process::exit(1);
-        }
-        return;
+    if let Err(error) = run_electron_sidecar() {
+        eprintln!("[electron-sidecar] failed: {error}");
+        std::process::exit(1);
     }
-    // Fix PATH for macOS GUI apps launched from Finder/Dock.
-    // Without this, ~/.opencode/bin and other user PATH entries are missing.
-    #[cfg(desktop)]
-    let _ = fix_path_env::fix();
-
-    // ctrlc handler is set up after app is built so it can trigger proper cleanup
-
-    let log_plugin = {
-        let mut builder = tauri_plugin_log::Builder::new()
-            .timezone_strategy(tauri_plugin_log::TimezoneStrategy::UseLocal)
-            .max_file_size(10_000_000)
-            .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepSome(5));
-
-        if cfg!(debug_assertions) {
-            builder = builder
-                .level(log::LevelFilter::Warn)
-                .level_for("openforge", log::LevelFilter::Debug)
-                .targets([
-                    tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Stdout),
-                    tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::LogDir {
-                        file_name: None,
-                    }),
-                ]);
-        } else {
-            builder = builder
-                .level(log::LevelFilter::Warn)
-                .level_for("openforge", log::LevelFilter::Info)
-                .targets([
-                    tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Stdout),
-                    tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::LogDir {
-                        file_name: None,
-                    }),
-                ]);
-        }
-
-        builder.build()
-    };
-
-    let app = tauri::Builder::default()
-        .plugin(log_plugin)
-        .setup(|app| {
-            let app_data_dir = app
-                .path()
-                .app_data_dir()
-                .expect("Failed to get app data directory");
-
-            let database = initialize_database(&app_data_dir);
-            run_database_startup_maintenance(&database);
-
-            if let Err(e) = cli_installer::install_openforge_cli() {
-                warn!("[startup] Failed to install OpenForge CLI: {}", e);
-            }
-            let whisper_model_pref = database
-                .get_config("whisper_model_size")
-                .ok()
-                .flatten()
-                .and_then(|s| WhisperModelSize::from_str(&s))
-                .unwrap_or(WhisperModelSize::Small);
-
-            let db_arc = Arc::new(Mutex::new(database));
-            let pty_manager = PtyManager::new();
-            let server_manager = server_manager::ServerManager::new();
-            let sse_bridge_manager = sse_bridge::SseBridgeManager::new();
-
-            app.manage(db_arc.clone());
-
-            info!("Database initialized successfully");
-            let github_client = GitHubClient::new();
-            let opencode_client =
-                OpenCodeClient::with_base_url("http://127.0.0.1:4096".to_string());
-            let plugin_host = plugin_host::PluginHost::new(app.handle().clone());
-            let plugin_host_startup = plugin_host.clone();
-            let whisper_manager = WhisperManager::with_active_model(whisper_model_pref);
-
-            app.manage(opencode_client);
-            app.manage(github_client);
-            app.manage(server_manager.clone());
-            app.manage(sse_bridge_manager);
-            app.manage(pty_manager.clone());
-            app.manage(plugin_host);
-            app.manage(whisper_manager);
-            app.manage(Arc::new(tokio::sync::Notify::new()));
-
-            let (http_ready_tx, http_ready_rx) = tokio::sync::oneshot::channel::<()>();
-            let app_handle_http = app.handle().clone();
-            let db_for_http = db_arc.clone();
-            let pty_for_http = pty_manager.clone();
-            tauri::async_runtime::spawn(async move {
-                if let Err(e) = http_server::start_http_server(
-                    app_handle_http,
-                    db_for_http,
-                    pty_for_http,
-                    http_ready_tx,
-                )
-                .await
-                {
-                    error!("[http_server] Failed to start: {}", e);
-                }
-            });
-            debug!("HTTP server task started");
-
-            let hooks_port = claude_hooks::get_http_server_port();
-            match claude_hooks::generate_hooks_settings(hooks_port) {
-                Ok(path) => info!("Claude hooks settings generated at: {:?}", path),
-                Err(e) => warn!("Failed to generate Claude hooks settings: {}", e),
-            }
-
-            tauri::async_runtime::spawn(async move {
-                if let Err(e) = plugin_host_startup.start_sidecar().await {
-                    warn!("[startup] Plugin sidecar auto-start skipped: {}", e);
-                }
-            });
-
-            if let Err(e) = server_manager::ServerManager::new().cleanup_stale_pids() {
-                warn!("Failed to cleanup stale server PIDs: {}", e);
-            }
-
-            if let Err(e) = PtyManager::new().cleanup_stale_pids() {
-                warn!("Failed to cleanup stale PTY PIDs: {}", e);
-            }
-
-            info!("Server manager initialized");
-
-            let app_handle_github = app.handle().clone();
-            tauri::async_runtime::spawn(async move {
-                github_poller::start_github_poller(app_handle_github).await;
-            });
-
-            debug!("GitHub poller task started");
-
-            let app_handle_resume = app.handle().clone();
-            tauri::async_runtime::spawn(async move {
-                resume_task_servers(app_handle_resume, http_ready_rx).await;
-            });
-
-            debug!("Server resume task started");
-
-            let app_handle_root_server = app.handle().clone();
-            let db_for_root_server = db_arc.clone();
-            tauri::async_runtime::spawn(async move {
-                let startup_project_id = {
-                    match db_for_root_server.lock() {
-                        Ok(db) => match resolve_startup_project_id(&db) {
-                            Ok(project_id) => project_id,
-                            Err(e) => {
-                                warn!("[startup] Failed to resolve root server project: {}", e);
-                                None
-                            }
-                        },
-                        Err(e) => {
-                            error!(
-                                "[startup] database lock error during root server startup: {}",
-                                e
-                            );
-                            None
-                        }
-                    }
-                };
-
-                if let Some(project_id) = startup_project_id {
-                    if let Err(e) =
-                        start_project_root_server(&app_handle_root_server, &project_id).await
-                    {
-                        warn!(
-                            "[startup] root OpenCode server auto-start failed for {}: {}",
-                            project_id, e
-                        );
-                    }
-                }
-            });
-
-            Ok(())
-        })
-        .invoke_handler(tauri::generate_handler![
-            commands::opencode::get_agents,
-            commands::opencode::create_session,
-            commands::opencode::send_prompt,
-            commands::tasks::get_tasks,
-            commands::tasks::get_task_detail,
-            commands::tasks::create_task,
-            commands::tasks::update_task,
-            commands::tasks::update_task_summary,
-            commands::tasks::update_task_status,
-            commands::tasks::delete_task,
-            commands::tasks::clear_done_tasks,
-            commands::projects::create_project,
-            commands::projects::get_projects,
-            commands::projects::update_project,
-            commands::projects::delete_project,
-            commands::projects::get_project_config,
-            commands::projects::set_project_config,
-            commands::projects::get_tasks_for_project,
-            commands::projects::get_worktree_for_task,
-            commands::projects::get_task_workspace,
-            commands::projects::get_project_attention,
-            commands::orchestration::start_implementation,
-            commands::orchestration::abort_implementation,
-            commands::orchestration::finalize_claude_session,
-            commands::github::force_github_sync,
-            commands::github::get_pull_requests,
-            commands::github::get_pr_comments,
-            commands::github::mark_comment_addressed,
-            commands::github::merge_pull_request,
-            commands::agents::get_session_status,
-            commands::agents::abort_session,
-            commands::agents::get_latest_session,
-            commands::agents::get_latest_sessions,
-            commands::agents::get_session_output,
-            commands::github::open_url,
-            commands::config::get_config,
-            commands::config::set_config,
-            commands::config::check_opencode_installed,
-            commands::config::check_pi_installed,
-            commands::config::get_app_mode,
-            commands::config::get_git_branch,
-            commands::config::check_claude_installed,
-            commands::review::get_github_username,
-            commands::authored_prs::fetch_authored_prs,
-            commands::authored_prs::get_authored_prs,
-            commands::review::fetch_review_prs,
-            commands::review::get_review_prs,
-            commands::review::get_pr_file_diffs,
-            commands::review::get_file_content,
-            commands::review::get_file_content_base64,
-            commands::review::get_file_at_ref,
-            commands::review::get_file_at_ref_base64,
-            commands::review::get_review_comments,
-            commands::review::get_pr_overview_comments,
-            commands::review::submit_pr_review,
-            commands::review::mark_review_pr_viewed,
-            commands::pty::pty_spawn,
-            commands::pty::pty_write,
-            commands::pty::pty_resize,
-            commands::pty::pty_kill,
-            commands::pty::get_pty_buffer,
-            commands::pty::pty_spawn_shell,
-            commands::pty::pty_kill_shells_for_task,
-            commands::pty::get_running_pty_task_ids,
-            commands::self_review::get_task_diff,
-            commands::self_review::get_task_commits,
-            commands::self_review::get_task_file_contents,
-            commands::self_review::get_task_batch_file_contents,
-            commands::self_review::get_commit_diff,
-            commands::self_review::get_commit_file_contents,
-            commands::self_review::get_commit_batch_file_contents,
-            commands::self_review::add_self_review_comment,
-            commands::self_review::get_active_self_review_comments,
-            commands::self_review::get_archived_self_review_comments,
-            commands::self_review::delete_self_review_comment,
-            commands::self_review::archive_self_review_comments,
-            commands::opencode::list_opencode_commands,
-            commands::opencode::list_opencode_skills,
-            commands::opencode::save_skill_content,
-            commands::opencode::search_opencode_files,
-            commands::whisper::transcribe_audio,
-            commands::whisper::get_whisper_model_status,
-            commands::whisper::download_whisper_model,
-            commands::whisper::get_all_whisper_model_statuses,
-            commands::whisper::set_whisper_model,
-            commands::opencode::list_opencode_agents,
-            commands::opencode::list_opencode_models,
-            commands::agent_review::start_agent_review,
-            commands::agent_review::get_agent_review_comments,
-            commands::agent_review::update_agent_review_comment_status,
-            commands::agent_review::dismiss_all_agent_review_comments,
-            commands::agent_review::abort_agent_review,
-            commands::files::fs_read_dir,
-            commands::files::fs_read_file,
-            commands::files::fs_search_files,
-            commands::plugins::install_plugin,
-            commands::plugins::install_plugin_from_local,
-            commands::plugins::install_plugin_from_npm,
-            commands::plugins::uninstall_plugin,
-            commands::plugins::get_plugin,
-            commands::plugins::list_plugins,
-            commands::plugins::set_plugin_enabled,
-            commands::plugins::get_enabled_plugins,
-            commands::plugins::get_plugin_storage,
-            commands::plugins::set_plugin_storage,
-            commands::plugins::plugin_invoke,
-        ])
-        .register_uri_scheme_protocol("plugin", |app, request| {
-            plugin_protocol::handle_plugin_uri(app.app_handle(), &request.uri().to_string())
-        })
-        .build(tauri_context())
-        .expect("error while building tauri application");
-
-    // Fix Ctrl+C to route through Tauri's exit path so RunEvent::Exit fires
-    let ctrlc_handle = app.handle().clone();
-    ctrlc::set_handler(move || {
-        info!("[shutdown] Ctrl+C received, triggering exit...");
-        ctrlc_handle.exit(0);
-    })
-    .ok();
-
-    app.run(|app_handle, event| {
-        if let tauri::RunEvent::Exit = event {
-            info!("[shutdown] App exit triggered, cleaning up...");
-            let sse_mgr = app_handle.state::<sse_bridge::SseBridgeManager>();
-            let server_mgr = app_handle.state::<server_manager::ServerManager>();
-            let pty_mgr = app_handle.state::<pty_manager::PtyManager>();
-            let plugin_host = app_handle.state::<plugin_host::PluginHost>();
-
-            tauri::async_runtime::block_on(async {
-                info!("[shutdown] Killing all PTY sessions...");
-
-                pty_mgr.kill_all().await;
-
-                info!("[shutdown] Stopping all SSE bridges...");
-                sse_mgr.stop_all().await;
-
-                info!("[shutdown] Stopping all OpenCode servers...");
-                if let Err(e) = server_mgr.stop_all().await {
-                    error!("[shutdown] Error stopping servers: {}", e);
-                }
-
-                info!("[shutdown] Stopping plugin sidecar...");
-                if let Err(e) = plugin_host.stop_sidecar().await {
-                    error!("[shutdown] Error stopping plugin sidecar: {}", e);
-                }
-
-                info!("[shutdown] Cleanup complete");
-            });
-        }
-    });
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
         load_resume_targets, opencode_resume_persistence, restore_resumed_session_state,
-        rust_validation_tauri_context, should_start_project_root_server, ResumeSessionPersistence,
-        ResumeTarget,
+        should_start_project_root_server, ResumeSessionPersistence, ResumeTarget,
     };
     use crate::db::test_helpers::make_test_db;
     use crate::opencode_client::SessionStatusInfo;
     use std::collections::HashMap;
     use std::fs;
-    use tauri::test::{mock_builder, mock_context, noop_assets};
-
-    #[test]
-    fn test_mock_builder_does_not_require_frontend_dist_assets() {
-        let app = mock_builder().build(mock_context(noop_assets()));
-
-        assert!(
-            app.is_ok(),
-            "mock builder should not require frontendDist assets"
-        );
-    }
-
-    #[test]
-    fn test_rust_validation_context_does_not_require_frontend_dist_assets() {
-        let context = rust_validation_tauri_context();
-
-        let index_asset = tauri::utils::assets::AssetKey::from("index.html");
-
-        assert_eq!(context.config().product_name.as_deref(), Some("Open Forge"));
-        assert!(
-            context.assets().get(&index_asset).is_none(),
-            "rust validation context should not embed frontendDist assets"
-        );
-    }
-
     #[test]
     fn test_should_start_project_root_server_for_opencode_project() {
         assert!(should_start_project_root_server(

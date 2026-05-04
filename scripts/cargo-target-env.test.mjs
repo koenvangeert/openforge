@@ -3,13 +3,13 @@ import path from 'node:path'
 
 import {
   DEFAULT_DEV_BACKEND_PORT,
-  buildTauriDevEnv,
+  buildElectronSidecarDevEnv,
   computeCargoTargetDir,
   resolveGitCommonDir,
   sharedCargoTargetDirFromGitCommonDir,
-} from './tauri-dev-env.mjs'
+} from './cargo-target-env.mjs'
 
-describe('tauri dev shared Cargo target env', () => {
+describe('Electron sidecar dev shared Cargo target env', () => {
   it('resolves relative git common dirs from the current worktree', () => {
     expect(resolveGitCommonDir('/repo/worktrees/KVG-820', '../../main/.git')).toBe(
       path.resolve('/repo/worktrees/KVG-820', '../../main/.git'),
@@ -69,7 +69,7 @@ describe('tauri dev shared Cargo target env', () => {
   })
 
   it('returns an environment object with CARGO_TARGET_DIR and dev backend ports set', () => {
-    const result = buildTauriDevEnv({
+    const result = buildElectronSidecarDevEnv({
       cwd: '/repo/worktrees/KVG-820',
       env: { PATH: '/bin' },
       execFileSync: () => '../main/.git\n',
@@ -85,7 +85,7 @@ describe('tauri dev shared Cargo target env', () => {
   })
 
   it('uses an explicit dev backend port for both backend binding and hook clients when the hook port is not explicit', () => {
-    const result = buildTauriDevEnv({
+    const result = buildElectronSidecarDevEnv({
       cwd: '/repo/openforge',
       env: { OPENFORGE_BACKEND_PORT: '18000' },
       execFileSync: () => {
@@ -98,7 +98,7 @@ describe('tauri dev shared Cargo target env', () => {
   })
 
   it('uses a non-production dev backend port when the legacy production port is inherited', () => {
-    const result = buildTauriDevEnv({
+    const result = buildElectronSidecarDevEnv({
       cwd: '/repo/openforge',
       env: { AI_COMMAND_CENTER_PORT: '17422' },
       execFileSync: () => {
@@ -111,7 +111,7 @@ describe('tauri dev shared Cargo target env', () => {
   })
 
   it('preserves custom legacy AI_COMMAND_CENTER_PORT values as dev backend port overrides', () => {
-    const result = buildTauriDevEnv({
+    const result = buildElectronSidecarDevEnv({
       cwd: '/repo/openforge',
       env: { AI_COMMAND_CENTER_PORT: '19000' },
       execFileSync: () => {
@@ -124,7 +124,7 @@ describe('tauri dev shared Cargo target env', () => {
   })
 
   it('prefers OPENFORGE_BACKEND_PORT over legacy AI_COMMAND_CENTER_PORT in dev', () => {
-    const result = buildTauriDevEnv({
+    const result = buildElectronSidecarDevEnv({
       cwd: '/repo/openforge',
       env: {
         OPENFORGE_BACKEND_PORT: '18000',
@@ -140,7 +140,7 @@ describe('tauri dev shared Cargo target env', () => {
   })
 
   it('preserves explicit dev backend and hook client port overrides', () => {
-    const result = buildTauriDevEnv({
+    const result = buildElectronSidecarDevEnv({
       cwd: '/repo/openforge',
       env: {
         OPENFORGE_BACKEND_PORT: '18000',

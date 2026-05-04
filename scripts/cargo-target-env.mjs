@@ -54,7 +54,7 @@ export function computeCargoTargetDir({
   }
 }
 
-export function buildTauriDevEnv(options = {}) {
+export function buildElectronSidecarDevEnv(options = {}) {
   const env = options.env ?? process.env
   const result = computeCargoTargetDir({ ...options, env })
   const legacyBackendPort = env.AI_COMMAND_CENTER_PORT === DEFAULT_PRODUCTION_BACKEND_PORT

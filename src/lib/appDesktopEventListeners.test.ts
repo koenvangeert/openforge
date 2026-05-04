@@ -2,8 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { get } from 'svelte/store'
 import { activeSessions, checkpointNotification, taskRuntimeInfo } from './stores'
 import type { AgentSession } from './types'
-import { registerAppTauriEventListeners } from './appTauriEventListeners'
-import type { AppEventListen } from './appTauriEventListeners'
+import { registerAppDesktopEventListeners } from './appDesktopEventListeners'
+import type { AppEventListen } from './appDesktopEventListeners'
 import { appShellEventContracts } from './electronMigrationContracts'
 import type { DesktopUnlistenFn } from './desktopIpc'
 
@@ -65,7 +65,7 @@ function createHarness() {
   return { handlers, deps, unlisten, listen, onCloseRequested }
 }
 
-describe('registerAppTauriEventListeners', () => {
+describe('registerAppDesktopEventListeners', () => {
   beforeEach(() => {
     activeSessions.set(new Map())
     checkpointNotification.set(null)
@@ -76,7 +76,7 @@ describe('registerAppTauriEventListeners', () => {
   it('registers window close handling and all shell event channels', async () => {
     const { deps, listen, onCloseRequested } = createHarness()
 
-    const unlisteners = await registerAppTauriEventListeners(deps)
+    const unlisteners = await registerAppDesktopEventListeners(deps)
 
     expect(onCloseRequested).toHaveBeenCalledWith(deps.onCloseRequested)
     expect(unlisteners).toHaveLength(appShellEventContracts.length + 1)
@@ -97,7 +97,7 @@ describe('registerAppTauriEventListeners', () => {
       timestamp: 123,
     })
 
-    await registerAppTauriEventListeners(deps)
+    await registerAppDesktopEventListeners(deps)
     await handlers.get('action-complete')?.({ payload: { task_id: 'task-1' } })
 
     expect(get(activeSessions).get('task-1')?.status).toBe('completed')
@@ -111,7 +111,7 @@ describe('registerAppTauriEventListeners', () => {
     const { deps, handlers } = createHarness()
     activeSessions.set(new Map([['task-1', createSession({ status: 'running', checkpoint_data: null })]]))
 
-    await registerAppTauriEventListeners(deps)
+    await registerAppDesktopEventListeners(deps)
     await handlers.get('agent-event')?.({
       payload: {
         task_id: 'task-1',
@@ -131,7 +131,7 @@ describe('registerAppTauriEventListeners', () => {
     const { deps, handlers } = createHarness()
     vi.mocked(getLatestSession).mockResolvedValue(createSession({ id: 'session-resumed' }))
 
-    await registerAppTauriEventListeners(deps)
+    await registerAppDesktopEventListeners(deps)
     await handlers.get('server-resumed')?.({
       payload: { task_id: 'task-1', port: 1234, workspace_path: '/tmp/work' },
     })
@@ -144,7 +144,7 @@ describe('registerAppTauriEventListeners', () => {
     const { deps, handlers } = createHarness()
     activeSessions.set(new Map([['task-1', createSession()]]))
 
-    await registerAppTauriEventListeners(deps)
+    await registerAppDesktopEventListeners(deps)
     await handlers.get('task-changed')?.({ payload: { action: 'deleted', task_id: 'task-1' } })
 
     expect(get(activeSessions).has('task-1')).toBe(false)
