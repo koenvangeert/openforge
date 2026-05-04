@@ -107,6 +107,26 @@ describe('registerAppTauriEventListeners', () => {
     expect(deps.loadProjectAttention).toHaveBeenCalledOnce()
   })
 
+  it('applies sidecar-forwarded OpenCode checkpoint events to active sessions', async () => {
+    const { deps, handlers } = createHarness()
+    activeSessions.set(new Map([['task-1', createSession({ status: 'running', checkpoint_data: null })]]))
+
+    await registerAppTauriEventListeners(deps)
+    await handlers.get('agent-event')?.({
+      payload: {
+        task_id: 'task-1',
+        event_type: 'permission.asked',
+        data: '{"properties":{"description":"Allow file write?"}}',
+        timestamp: 123,
+      },
+    })
+
+    expect(get(activeSessions).get('task-1')?.status).toBe('paused')
+    expect(get(activeSessions).get('task-1')?.checkpoint_data).toBe('{"properties":{"description":"Allow file write?"}}')
+    expect(get(checkpointNotification)?.ticketId).toBe('task-1')
+    expect(deps.loadProjectAttention).toHaveBeenCalledOnce()
+  })
+
   it('records runtime info and latest session on server-resumed', async () => {
     const { deps, handlers } = createHarness()
     vi.mocked(getLatestSession).mockResolvedValue(createSession({ id: 'session-resumed' }))

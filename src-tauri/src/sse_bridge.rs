@@ -1,3 +1,4 @@
+use crate::app_events::{publish_app_event, AppEventSender};
 use crate::db;
 use crate::opencode_client::{OpenCodeClient, OpenCodeError, SessionInfo, SessionStatusInfo};
 use eventsource_client::{self as es, Client};
@@ -72,8 +73,7 @@ pub struct FailurePayload {
 // Helpers
 // ============================================================================
 
-fn persist_session_completed(app: &AppHandle, task_id: &str) {
-    let db = app.state::<Arc<std::sync::Mutex<db::Database>>>();
+fn persist_session_completed(db: &Arc<std::sync::Mutex<db::Database>>, task_id: &str) {
     if let Ok(db_lock) = db.lock() {
         if let Ok(Some(session)) = db_lock.get_latest_session_for_ticket(task_id) {
             if let Err(e) =
@@ -88,8 +88,11 @@ fn persist_session_completed(app: &AppHandle, task_id: &str) {
     };
 }
 
-fn persist_session_interrupted(app: &AppHandle, task_id: &str, reason: &str) {
-    let db = app.state::<Arc<std::sync::Mutex<db::Database>>>();
+fn persist_session_interrupted(
+    db: &Arc<std::sync::Mutex<db::Database>>,
+    task_id: &str,
+    reason: &str,
+) {
     if let Ok(db_lock) = db.lock() {
         if let Ok(Some(session)) = db_lock.get_latest_session_for_ticket(task_id) {
             if let Err(e) = db_lock.update_agent_session(
@@ -108,20 +111,31 @@ fn persist_session_interrupted(app: &AppHandle, task_id: &str, reason: &str) {
     };
 }
 
-fn emit_session_interrupted(app: &AppHandle, task_id: &str) {
-    if let Err(e) = app.emit(
-        "agent-status-changed",
-        serde_json::json!({
-            "task_id": task_id,
-            "status": "interrupted",
-            "provider": "opencode"
-        }),
-    ) {
-        warn!(
-            "[SSE] Failed to emit interrupted status for task {}: {}",
-            task_id, e
-        );
+fn emit_app_event(
+    app: Option<&AppHandle>,
+    app_event_tx: &Option<AppEventSender>,
+    event_name: &str,
+    payload: &serde_json::Value,
+) {
+    if let Some(app) = app {
+        if let Err(e) = app.emit(event_name, payload.clone()) {
+            warn!("[SSE] Failed to emit {}: {}", event_name, e);
+        }
     }
+    publish_app_event(app_event_tx, event_name, payload);
+}
+
+fn emit_session_interrupted(
+    app: Option<&AppHandle>,
+    app_event_tx: &Option<AppEventSender>,
+    task_id: &str,
+) {
+    let payload = serde_json::json!({
+        "task_id": task_id,
+        "status": "interrupted",
+        "provider": "opencode"
+    });
+    emit_app_event(app, app_event_tx, "agent-status-changed", &payload);
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -314,6 +328,30 @@ impl SseBridgeManager {
         opencode_session_id: Option<String>,
         server_port: u16,
     ) -> Result<(), SseBridgeError> {
+        let db = app
+            .state::<Arc<std::sync::Mutex<db::Database>>>()
+            .inner()
+            .clone();
+        self.start_bridge_with_app_events(
+            Some(app),
+            db,
+            None,
+            task_id,
+            opencode_session_id,
+            server_port,
+        )
+        .await
+    }
+
+    pub async fn start_bridge_with_app_events(
+        &self,
+        app: Option<AppHandle>,
+        db: Arc<std::sync::Mutex<db::Database>>,
+        app_event_tx: Option<AppEventSender>,
+        task_id: String,
+        opencode_session_id: Option<String>,
+        server_port: u16,
+    ) -> Result<(), SseBridgeError> {
         {
             let bridges = self.bridges.lock().await;
             if bridges.contains_key(&task_id) {
@@ -356,6 +394,8 @@ impl SseBridgeManager {
             tokio::select! {
                 result = stream.try_for_each(|event| {
                     let app_clone = app.clone();
+                    let app_event_tx_clone = app_event_tx.clone();
+                    let db_clone = db.clone();
                     let task_id = task_id_clone.clone();
                     let opencode_session_id_clone = opencode_session_id_clone.clone();
                     let child_poll_in_progress = child_poll_in_progress.clone();
@@ -413,9 +453,14 @@ impl SseBridgeManager {
                                         .as_secs(),
                                 };
 
-                                if let Err(e) = app_clone.emit("agent-event", &payload) {
-                                    warn!("[SSE] Failed to emit agent-event: {}", e);
-                                }
+                                let payload_value = serde_json::to_value(&payload)
+                                    .unwrap_or_else(|_| serde_json::Value::Null);
+                                emit_app_event(
+                                    app_clone.as_ref(),
+                                    &app_event_tx_clone,
+                                    "agent-event",
+                                    &payload_value,
+                                );
 
                                 // Layer 1: SessionID filtering — only react to status-changing events
                                 // from OUR session. Child/unrelated session events are still forwarded
@@ -456,25 +501,27 @@ impl SseBridgeManager {
                                         spawned_child_poll = true;
                                         let our_session_id_opt = opencode_session_id_clone.clone();
                                         let app_for_poll = app_clone.clone();
+                                        let app_event_tx_for_poll = app_event_tx_clone.clone();
+                                        let db_for_poll = db_clone.clone();
                                         let task_id_for_poll = task_id.clone();
                                         let poll_flag = child_poll_in_progress.clone();
 
                                         tokio::spawn(async move {
-                                            let emit_complete = |app: &AppHandle, task_id: &str| {
+                                            let emit_complete = |app: Option<&AppHandle>, app_event_tx: &Option<AppEventSender>, task_id: &str| {
                                                 let completion = CompletionPayload { task_id: task_id.to_string() };
-                                                if let Err(e) = app.emit("action-complete", &completion) {
-                                                    warn!("[SSE] Failed to emit action-complete: {}", e);
-                                                }
+                                                let payload = serde_json::to_value(&completion)
+                                                    .unwrap_or_else(|_| serde_json::Value::Null);
+                                                emit_app_event(app, app_event_tx, "action-complete", &payload);
                                             };
 
-                                            let mark_interrupted = |app: &AppHandle, task_id: &str, outcome: DescendantPollOutcome| {
+                                            let mark_interrupted = |app: Option<&AppHandle>, app_event_tx: &Option<AppEventSender>, db: &Arc<std::sync::Mutex<db::Database>>, task_id: &str, outcome: DescendantPollOutcome| {
                                                 let reason = interruption_reason_for_descendant_outcome(outcome);
                                                 warn!(
                                                     "[SSE] Descendant polling ended without confirmed completion for task {} ({:?}) — marking interrupted",
                                                     task_id, outcome
                                                 );
-                                                persist_session_interrupted(app, task_id, reason);
-                                                emit_session_interrupted(app, task_id);
+                                                persist_session_interrupted(db, task_id, reason);
+                                                emit_session_interrupted(app, app_event_tx, task_id);
                                             };
 
                                             let our_session_id = match our_session_id_opt {
@@ -482,12 +529,14 @@ impl SseBridgeManager {
                                                 None => {
                                                     match completion_action_for_descendant_outcome(DescendantPollOutcome::MissingRootSessionId) {
                                                         CompletionAction::EmitComplete => {
-                                                            emit_complete(&app_for_poll, &task_id_for_poll);
-                                                            persist_session_completed(&app_for_poll, &task_id_for_poll);
+                                                            emit_complete(app_for_poll.as_ref(), &app_event_tx_for_poll, &task_id_for_poll);
+                                                            persist_session_completed(&db_for_poll, &task_id_for_poll);
                                                         }
                                                         CompletionAction::MarkInterrupted => {
                                                             mark_interrupted(
-                                                                &app_for_poll,
+                                                                app_for_poll.as_ref(),
+                                                                &app_event_tx_for_poll,
+                                                                &db_for_poll,
                                                                 &task_id_for_poll,
                                                                 DescendantPollOutcome::MissingRootSessionId,
                                                             );
@@ -542,11 +591,17 @@ impl SseBridgeManager {
 
                                             match completion_action_for_descendant_outcome(poll_outcome) {
                                                 CompletionAction::EmitComplete => {
-                                                    emit_complete(&app_for_poll, &task_id_for_poll);
-                                                    persist_session_completed(&app_for_poll, &task_id_for_poll);
+                                                    emit_complete(app_for_poll.as_ref(), &app_event_tx_for_poll, &task_id_for_poll);
+                                                    persist_session_completed(&db_for_poll, &task_id_for_poll);
                                                 }
                                                 CompletionAction::MarkInterrupted => {
-                                                    mark_interrupted(&app_for_poll, &task_id_for_poll, poll_outcome);
+                                                    mark_interrupted(
+                                                        app_for_poll.as_ref(),
+                                                        &app_event_tx_for_poll,
+                                                        &db_for_poll,
+                                                        &task_id_for_poll,
+                                                        poll_outcome,
+                                                    );
                                                 }
                                             }
 
@@ -561,9 +616,14 @@ impl SseBridgeManager {
                                         task_id: task_id.clone(),
                                         error: evt.data.clone(),
                                     };
-                                    if let Err(e) = app_clone.emit("implementation-failed", &failure) {
-                                        warn!("[SSE] Failed to emit implementation-failed: {}", e);
-                                    }
+                                    let payload = serde_json::to_value(&failure)
+                                        .unwrap_or_else(|_| serde_json::Value::Null);
+                                    emit_app_event(
+                                        app_clone.as_ref(),
+                                        &app_event_tx_clone,
+                                        "implementation-failed",
+                                        &payload,
+                                    );
                                 }
 
                                 let child_poll_active = child_poll_in_progress.load(Ordering::SeqCst);
@@ -589,8 +649,7 @@ impl SseBridgeManager {
                                 };
 
                                 if let Some(new_status) = new_session_status {
-                                    let db = app_clone.state::<Arc<std::sync::Mutex<db::Database>>>();
-                                    let lock_result = db.lock();
+                                    let lock_result = db_clone.lock();
                                     if let Ok(db_lock) = lock_result {
                                         if let Ok(Some(session)) = db_lock.get_latest_session_for_ticket(&task_id) {
                                             let error_msg = if new_status == "failed" {
@@ -671,7 +730,14 @@ impl SseBridgeManager {
 mod tests {
     use super::*;
     use crate::opencode_client::SessionStatusInfo;
+    use axum::{
+        response::sse::{Event, Sse},
+        routing::get,
+        Router,
+    };
+    use futures::stream;
     use std::collections::HashSet;
+    use std::convert::Infallible;
 
     fn make_session(id: &str, parent_id: Option<&str>) -> crate::opencode_client::SessionInfo {
         crate::opencode_client::SessionInfo {
@@ -680,6 +746,87 @@ mod tests {
             parent_id: parent_id.map(str::to_string),
             extra: serde_json::Map::new(),
         }
+    }
+
+    #[tokio::test]
+    async fn sidecar_bridge_publishes_opencode_status_events_to_app_event_stream() {
+        let (db, path) = crate::db::test_helpers::make_test_db("sidecar_bridge_status_events");
+        let db = Arc::new(std::sync::Mutex::new(db));
+        let task_id = {
+            let db_lock = db.lock().expect("db lock");
+            let task = db_lock
+                .create_task("OpenCode task", "doing", None, None, None, None)
+                .expect("create task");
+            db_lock
+                .create_agent_session(
+                    "agent-session-1",
+                    &task.id,
+                    Some("oc-session-1"),
+                    "implementing",
+                    "running",
+                    "opencode",
+                )
+                .expect("create session");
+            task.id
+        };
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind test SSE server");
+        let port = listener.local_addr().expect("local addr").port();
+        let router = Router::new().route(
+            "/event",
+            get(|| async {
+                let payload = serde_json::json!({
+                    "type": "session.status",
+                    "properties": {
+                        "sessionID": "oc-session-1",
+                        "status": { "type": "busy" }
+                    }
+                })
+                .to_string();
+                Sse::new(stream::iter([Ok::<_, Infallible>(
+                    Event::default().event("message").data(payload),
+                )]))
+            }),
+        );
+        tokio::spawn(async move {
+            let _ = axum::serve(listener, router).await;
+        });
+
+        let (app_event_tx, mut events) = tokio::sync::broadcast::channel(16);
+        let manager = SseBridgeManager::new();
+        manager
+            .start_bridge_with_app_events(
+                None,
+                db.clone(),
+                Some(app_event_tx),
+                task_id.clone(),
+                Some("oc-session-1".to_string()),
+                port,
+            )
+            .await
+            .expect("start sidecar-safe bridge");
+
+        let event = tokio::time::timeout(std::time::Duration::from_secs(3), events.recv())
+            .await
+            .expect("app event timeout")
+            .expect("app event");
+
+        assert_eq!(event.event_name, "agent-event");
+        assert_eq!(event.payload["task_id"], task_id);
+        assert_eq!(event.payload["event_type"], "session.status");
+
+        let session = db
+            .lock()
+            .expect("db lock")
+            .get_agent_session("agent-session-1")
+            .expect("get session")
+            .expect("session exists");
+        assert_eq!(session.status, "running");
+
+        manager.stop_bridge(&task_id).await;
+        let _ = std::fs::remove_file(path);
     }
 
     #[test]
