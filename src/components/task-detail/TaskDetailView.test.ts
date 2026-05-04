@@ -146,8 +146,8 @@ vi.mock('../../lib/ipc', () => ({
   deleteSelfReviewComment: vi.fn().mockResolvedValue(undefined),
 }))
 
-vi.mock('@tauri-apps/api/event', () => ({
-  listen: vi.fn().mockResolvedValue(() => {}),
+vi.mock('../../lib/desktopIpc', () => ({
+  listenDesktopEvent: vi.fn().mockResolvedValue(() => {}),
 }))
 
 const { taskTabSessions } = vi.hoisted(() => ({

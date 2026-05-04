@@ -84,13 +84,14 @@ const {
   mockExecutePluginCommand: vi.fn(async (_pluginId: string, _commandId: string) => true),
 }))
 
-vi.mock('@tauri-apps/api/event', () => ({
-  listen: vi.fn(async (eventName: string, callback: Function) => {
+vi.mock('./lib/desktopIpc', () => ({
+  invokeDesktopCommand: vi.fn(),
+  isElectronDesktopBridgeAvailable: vi.fn(() => false),
+  listenDesktopEvent: vi.fn(async (eventName: string, callback: Function) => {
     callOrder.push('listen')
     eventListeners.set(eventName, callback)
     return () => {}
   }),
-  emit: vi.fn(),
 }))
 
 vi.mock('@tauri-apps/api/core', () => ({

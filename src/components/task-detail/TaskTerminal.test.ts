@@ -39,8 +39,8 @@ vi.mock('../../lib/ipc', () => ({
 
 let listenCallback: ((event: { payload: unknown }) => void) | null = null
 
-vi.mock('@tauri-apps/api/event', () => ({
-  listen: vi.fn().mockImplementation((_event: string, cb: (event: { payload: unknown }) => void) => {
+vi.mock('../../lib/desktopIpc', () => ({
+  listenDesktopEvent: vi.fn().mockImplementation((_event: string, cb: (event: { payload: unknown }) => void) => {
     listenCallback = cb
     return Promise.resolve(() => {})
   }),
@@ -384,13 +384,13 @@ describe('TaskTerminal', () => {
     expect(theme.foreground).toBe('#POOLFG')
   })
 
-  it('listens for pty-exit event with terminalKey', async () => {
-    const { listen } = await import('@tauri-apps/api/event')
+  it('listens for pty-exit event with terminalKey through the desktop IPC adapter', async () => {
+    const { listenDesktopEvent } = await import('../../lib/desktopIpc')
 
     render(TaskTerminal, { props: { taskId: 'T-1', workspacePath: '/path/to/worktree', terminalKey: 'T-1-shell-2', terminalIndex: 2, isActive: true } })
 
     await vi.waitFor(() => {
-      expect(listen).toHaveBeenCalledWith('pty-exit-T-1-shell-2', expect.any(Function))
+      expect(listenDesktopEvent).toHaveBeenCalledWith('pty-exit-T-1-shell-2', expect.any(Function))
     })
   })
 
