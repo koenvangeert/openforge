@@ -74,4 +74,36 @@ describe('Electron app event forwarding', () => {
     })
     forwarder.stop()
   })
+
+  it('treats an intentional stop abort as a clean event stream shutdown', async () => {
+    const releaseLock = vi.fn()
+    const fetch = vi.fn(async (_url: string, init: { signal: AbortSignal }) => ({
+      ok: true,
+      body: {
+        getReader: () => ({
+          read: () => new Promise<ReadableStreamReadResult<Uint8Array>>((_, reject) => {
+            init.signal.addEventListener('abort', () => {
+              reject(new DOMException('This operation was aborted', 'AbortError'))
+            }, { once: true })
+          }),
+          releaseLock,
+        }),
+      } as unknown as ReadableStream<Uint8Array>,
+      text: async () => '',
+    }))
+    const forwarder = createAppEventForwarder({
+      sidecarConfig: sidecarConfig(),
+      fetch,
+      windows: () => [],
+    })
+
+    const run = forwarder.start()
+    await expect(forwarder.ready()).resolves.toBeUndefined()
+
+    forwarder.stop()
+
+    await expect(run).resolves.toBeUndefined()
+    await expect(forwarder.ready()).resolves.toBeUndefined()
+    expect(releaseLock).toHaveBeenCalled()
+  })
 })
