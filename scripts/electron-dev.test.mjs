@@ -1,5 +1,50 @@
-import { describe, expect, it } from 'vitest'
-import { ELECTRON_RENDERER_URL, assertBackendPortAvailable, assertVitePortAvailable, buildElectronDevEnv, electronSidecarPath, resolveElectronDevBackendEnv, waitForVite } from './electron-dev.mjs'
+import { EventEmitter } from 'node:events'
+import { describe, expect, it, vi } from 'vitest'
+import { ELECTRON_RENDERER_URL, assertBackendPortAvailable, assertVitePortAvailable, buildElectronDevEnv, cleanupDevProcesses, electronSidecarPath, resolveElectronDevBackendEnv, stopProcess, waitForVite } from './electron-dev.mjs'
+
+function createChildProcessMock() {
+  const events = new EventEmitter()
+  return {
+    killed: false,
+    killSignals: [],
+    unrefCalls: 0,
+    kill(signal = 'SIGTERM') {
+      this.killed = true
+      this.killSignals.push(signal)
+      return true
+    },
+    once(event, handler) {
+      events.once(event, handler)
+      return this
+    },
+    off(event, handler) {
+      events.off(event, handler)
+      return this
+    },
+    emitExit(code = 0, signal = null) {
+      events.emit('exit', code, signal)
+    },
+    unref() {
+      this.unrefCalls += 1
+    },
+  }
+}
+
+function createCleanupTimerDeps() {
+  const timer = { unref: vi.fn() }
+  let timeoutCallback = null
+  return {
+    timer,
+    setTimeout: vi.fn((callback) => {
+      timeoutCallback = callback
+      return timer
+    }),
+    clearTimeout: vi.fn(),
+    fireTimeout() {
+      timeoutCallback?.()
+    },
+  }
+}
 
 describe('electron dev script environment', () => {
   it('starts Electron against the Vite dev server and disables sidecar warning when no sidecar path is configured', () => {
@@ -153,5 +198,47 @@ describe('electron dev script environment', () => {
     }
 
     await expect(waitForVite(ELECTRON_RENDERER_URL, exitedProcess)).rejects.toThrow('Vite dev server exited before becoming ready')
+  })
+
+  it('waits for a stopped dev child to exit and cancels the cleanup timer before resolving', async () => {
+    const child = createChildProcessMock()
+    const timerDeps = createCleanupTimerDeps()
+    const stop = stopProcess(child, { graceMs: 100, ...timerDeps })
+
+    expect(child.killSignals).toEqual(['SIGTERM'])
+    expect(timerDeps.setTimeout).toHaveBeenCalledWith(expect.any(Function), 100)
+    expect(timerDeps.timer.unref).toHaveBeenCalled()
+
+    child.emitExit(0, null)
+
+    await expect(stop).resolves.toBe('terminated')
+    expect(timerDeps.clearTimeout).toHaveBeenCalledWith(timerDeps.timer)
+  })
+
+  it('force-kills and unreferences a stubborn dev child after the cleanup grace period', async () => {
+    const child = createChildProcessMock()
+    const timerDeps = createCleanupTimerDeps()
+    const stop = stopProcess(child, { graceMs: 100, ...timerDeps })
+
+    timerDeps.fireTimeout()
+
+    await expect(stop).resolves.toBe('killed')
+
+    expect(child.killSignals).toEqual(['SIGTERM', 'SIGKILL'])
+    expect(child.unrefCalls).toBe(1)
+  })
+
+  it('cleans up Vite and Electron child processes before resolving', async () => {
+    const vite = createChildProcessMock()
+    const electron = createChildProcessMock()
+    const cleanup = cleanupDevProcesses({ vite, electron }, { graceMs: 100 })
+
+    expect(vite.killSignals).toEqual(['SIGTERM'])
+    expect(electron.killSignals).toEqual(['SIGTERM'])
+
+    vite.emitExit(0, null)
+    electron.emitExit(0, null)
+
+    await expect(cleanup).resolves.toEqual(['terminated', 'terminated'])
   })
 })

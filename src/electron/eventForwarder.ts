@@ -69,12 +69,32 @@ export function createAppEventForwarder(deps: AppEventForwarderDeps): AppEventFo
   const abortController = new AbortController()
   const decoder = new TextDecoder()
   let buffer = ''
+  let readySettled = false
   let resolveReady!: () => void
   let rejectReady!: (error: unknown) => void
   const readyPromise = new Promise<void>((resolve, reject) => {
     resolveReady = resolve
     rejectReady = reject
   })
+
+  function markReady(): void {
+    if (readySettled) return
+    readySettled = true
+    resolveReady()
+  }
+
+  function failReady(error: unknown): void {
+    if (readySettled) return
+    readySettled = true
+    rejectReady(error)
+  }
+
+  function isIntentionalAbort(error: unknown): boolean {
+    return abortController.signal.aborted
+      && typeof error === 'object'
+      && error !== null
+      && (error as { name?: unknown }).name === 'AbortError'
+  }
 
   function forward(envelope: OpenForgeEventEnvelope): void {
     for (const window of deps.windows()) {
@@ -106,7 +126,7 @@ export function createAppEventForwarder(deps: AppEventForwarderDeps): AppEventFo
         throw new Error(`failed to connect to Rust app event stream: ${detail}`)
       }
 
-      resolveReady()
+      markReady()
 
       if (!response.body) return
 
@@ -121,7 +141,12 @@ export function createAppEventForwarder(deps: AppEventForwarderDeps): AppEventFo
         reader.releaseLock()
       }
     } catch (error) {
-      rejectReady(error)
+      if (isIntentionalAbort(error)) {
+        markReady()
+        return
+      }
+
+      failReady(error)
       throw error
     }
   }

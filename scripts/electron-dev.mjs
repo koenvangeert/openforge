@@ -11,6 +11,7 @@ const VITE_READY_INTERVAL_MS = 250
 const VITE_HOST = '127.0.0.1'
 const VITE_PORT = 1420
 const BACKEND_PORT_PROBE_LIMIT = 50
+export const ELECTRON_DEV_STOP_GRACE_MS = 2_000
 
 function logStep(message) {
   console.log(`[electron-dev] ${message}`)
@@ -160,9 +161,56 @@ export async function waitForVite(url = ELECTRON_RENDERER_URL, viteProcess = nul
   throw new Error(`Vite dev server did not become ready at ${url}: ${message}`)
 }
 
-function stopProcess(child) {
-  if (child.killed) return
+function hasExited(child) {
+  return child.exitCode !== null && child.exitCode !== undefined
+    || child.signalCode !== null && child.signalCode !== undefined
+}
+
+function waitForChildExit(child, graceMs, deps = {}) {
+  if (hasExited(child)) return Promise.resolve('exited')
+
+  const scheduleTimeout = deps.setTimeout ?? setTimeout
+  const cancelTimeout = deps.clearTimeout ?? clearTimeout
+
+  return new Promise((resolvePromise) => {
+    let settled = false
+    let timeout = null
+    const settle = (result) => {
+      if (settled) return
+      settled = true
+      child.off?.('exit', onExit)
+      if (timeout !== null) cancelTimeout(timeout)
+      resolvePromise(result)
+    }
+    const onExit = () => settle('exited')
+
+    child.once('exit', onExit)
+    timeout = scheduleTimeout(() => settle('timeout'), graceMs)
+    timeout?.unref?.()
+  })
+}
+
+export async function stopProcess(child, options = {}) {
+  const graceMs = options.graceMs ?? ELECTRON_DEV_STOP_GRACE_MS
+
+  if (!child) return 'absent'
+  if (hasExited(child)) return 'already-exited'
+
   child.kill('SIGTERM')
+  const result = await waitForChildExit(child, graceMs, options)
+  if (result !== 'timeout') return 'terminated'
+
+  child.kill('SIGKILL')
+  child.unref?.()
+  return 'killed'
+}
+
+export async function cleanupDevProcesses(children, options = {}) {
+  const stopTasks = [children.vite, children.electron]
+    .filter(Boolean)
+    .map(child => stopProcess(child, options))
+
+  return Promise.all(stopTasks)
 }
 
 async function main() {
@@ -171,18 +219,16 @@ async function main() {
   const devBackend = await resolveElectronDevBackendEnv()
   const vite = spawnCommand('pnpm', ['exec', 'vite', '--host', VITE_HOST])
   let electron = null
+  let cleanupPromise = null
   const cleanup = () => {
-    stopProcess(vite)
-    if (electron) stopProcess(electron)
+    cleanupPromise ??= cleanupDevProcesses({ vite, electron })
+    return cleanupPromise
   }
-  process.once('SIGINT', () => {
-    cleanup()
-    process.exit(130)
-  })
-  process.once('SIGTERM', () => {
-    cleanup()
-    process.exit(143)
-  })
+  const shutdown = (exitCode) => {
+    void cleanup().finally(() => process.exit(exitCode))
+  }
+  process.once('SIGINT', () => shutdown(130))
+  process.once('SIGTERM', () => shutdown(143))
 
   try {
     logStep('Waiting for Vite readiness ...')
@@ -199,9 +245,10 @@ async function main() {
     logStep('Launching Electron with Rust sidecar. Close the Electron window to stop this command.')
     electron = spawnCommand('pnpm', ['exec', 'electron', '.'], { env: buildElectronDevEnv(cargoEnv, sidecarPath) })
     await waitForExit(electron, 'electron')
+    electron = null
     logStep('Electron exited; stopping Vite ...')
   } finally {
-    cleanup()
+    await cleanup()
   }
 }
 
