@@ -1,7 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte'
-  import { listen } from '@tauri-apps/api/event'
-  import type { UnlistenFn } from '@tauri-apps/api/event'
+  import { listenDesktopEvent, type DesktopUnlistenFn } from '../../../lib/desktopIpc'
   import { downloadWhisperModel } from '../../../lib/ipc'
   import type { WhisperModelSizeId } from '../../../lib/types'
 
@@ -21,7 +20,7 @@
   let status = $state<'downloading' | 'complete' | 'error'>('downloading')
   let errorMessage = $state<string | null>(null)
 
-  let unlisten: UnlistenFn | null = null
+  let unlisten: DesktopUnlistenFn | null = null
   let completed = false
   function formatMB(bytes: number): string {
     return (bytes / 1024 / 1024).toFixed(0) + ' MB'
@@ -50,7 +49,7 @@
   }
 
   onMount(async () => {
-    unlisten = await listen<{ model_size: string; bytes_downloaded: number; total_bytes: number; percentage: number }>(
+    unlisten = await listenDesktopEvent<{ model_size: string; bytes_downloaded: number; total_bytes: number; percentage: number }>(
       'whisper-download-progress',
       (event) => {
         if (event.payload.model_size !== modelSize) return

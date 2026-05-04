@@ -1,5 +1,5 @@
-import { readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { readdirSync, readFileSync, statSync } from 'node:fs'
+import { relative, resolve } from 'node:path'
 import ts from 'typescript'
 import { describe, expect, it } from 'vitest'
 import * as ipc from './ipc'
@@ -30,6 +30,27 @@ function findFirstInvoke(node: ts.Node): ts.CallExpression | null {
 
   ts.forEachChild(node, visit)
   return found
+}
+
+function collectRuntimeSourceFiles(directory: string): string[] {
+  const entries = readdirSync(directory).sort()
+  const files: string[] = []
+
+  for (const entry of entries) {
+    const path = resolve(directory, entry)
+    const stat = statSync(path)
+    if (stat.isDirectory()) {
+      if (entry === '__mocks__') continue
+      files.push(...collectRuntimeSourceFiles(path))
+      continue
+    }
+
+    if (!/\.(svelte|ts)$/.test(entry)) continue
+    if (/\.test\.ts$/.test(entry) || /\.svelte\.test\.ts$/.test(entry)) continue
+    files.push(path)
+  }
+
+  return files
 }
 
 function parseIpcInvokeContracts(): ParsedInvokeContract[] {
@@ -69,6 +90,18 @@ function parseIpcInvokeContracts(): ParsedInvokeContract[] {
 }
 
 describe('Electron migration Phase 0 contract inventory', () => {
+  it('keeps renderer runtime event subscriptions behind the desktop IPC adapter', () => {
+    const allowedRawEventImporters = new Set(['src/lib/desktopIpc.ts'])
+    const offenders = collectRuntimeSourceFiles(resolve(process.cwd(), 'src'))
+      .map(file => ({ file: relative(process.cwd(), file).split('\\').join('/'), source: readFileSync(file, 'utf8') }))
+      .filter(({ file, source }) =>
+        source.includes('@tauri-apps/api/event') && !allowedRawEventImporters.has(file)
+      )
+      .map(({ file }) => file)
+
+    expect(offenders).toEqual([])
+  })
+
   it('lists every public runtime ipc.ts function export', () => {
     const exportedFunctions = Object.entries(ipc)
       .filter(([, value]) => typeof value === 'function')

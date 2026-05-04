@@ -1,7 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte'
-  import { listen } from '@tauri-apps/api/event'
-  import type { UnlistenFn } from '@tauri-apps/api/event'
+  import { listenDesktopEvent, type DesktopUnlistenFn } from '../../../lib/desktopIpc'
   import { reviewPrs, selectedReviewPr, prFileDiffs, reviewRequestCount, reviewComments, pendingManualComments, prOverviewComments, agentReviewComments, agentReviewLoading, agentReviewError, authoredPrs, authoredPrCount, activeProjectId } from '../../../lib/stores'
   import { fetchReviewPrs, getReviewPrs, fetchAuthoredPrs, getAuthoredPrs, getPrFileDiffs, openUrl, getReviewComments, getFileContent, getFileContentBase64, getFileAtRef, getFileAtRefBase64, markReviewPrViewed, startAgentReview, getAgentReviewComments, abortAgentReview, getProjectConfig, setProjectConfig } from '../../../lib/ipc'
   import { useAppRouter } from '../../../lib/router.svelte'
@@ -40,7 +39,7 @@
   let activeTab = $state<PrDetailTab>('overview')
   let reviewSessionKey = $state<string | null>(null)
   let showOutputModal = $state(false)
-  let unlisteners: UnlistenFn[] = []
+  let unlisteners: DesktopUnlistenFn[] = []
 
   // Repo filtering
   let excludedRepos = $state<Set<string>>(new Set())
@@ -401,17 +400,17 @@
     loadPrs()
     loadAuthoredPrs()
     unlisteners.push(
-      await listen('authored-prs-updated', () => {
+      await listenDesktopEvent('authored-prs-updated', () => {
         silentRefreshAuthoredPrs()
       })
     )
     unlisteners.push(
-      await listen('review-pr-count-changed', () => {
+      await listenDesktopEvent('review-pr-count-changed', () => {
         silentRefreshPrs()
       })
     )
     unlisteners.push(
-      await listen<{ task_id: string; event_type: string; data: string }>('agent-event', async (event) => {
+      await listenDesktopEvent<{ task_id: string; event_type: string; data: string }>('agent-event', async (event) => {
         const { task_id, event_type, data } = event.payload
         const pr = $selectedReviewPr
         if (!pr) return
