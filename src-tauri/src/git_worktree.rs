@@ -68,6 +68,85 @@ fn acquire_lock(repo_path: &Path) -> Arc<Mutex<()>> {
 }
 
 // ============================================================================
+// Command Environment
+// ============================================================================
+
+static LOGIN_SHELL_PATH: Lazy<Option<String>> = Lazy::new(read_login_shell_path);
+
+fn read_login_shell_path() -> Option<String> {
+    let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string());
+    let output = std::process::Command::new(&shell)
+        .arg("-ilc")
+        .arg("printf '%s' \"$PATH\"")
+        .output();
+
+    match output {
+        Ok(output) if output.status.success() => {
+            let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            (!path.is_empty()).then_some(path)
+        }
+        Ok(output) => {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            warn!("Failed to get login shell PATH from {}: {}", shell, stderr);
+            None
+        }
+        Err(err) => {
+            warn!("Failed to run login shell {} for PATH: {}", shell, err);
+            None
+        }
+    }
+}
+
+fn add_path_entries(entries: &mut Vec<String>, path: Option<&str>) {
+    for entry in path.unwrap_or_default().split(':') {
+        let trimmed = entry.trim();
+        if !trimmed.is_empty() && !entries.iter().any(|existing| existing == trimmed) {
+            entries.push(trimmed.to_string());
+        }
+    }
+}
+
+fn merge_user_tool_path(
+    current_path: Option<&str>,
+    login_shell_path: Option<&str>,
+    home_dir: Option<&Path>,
+) -> String {
+    let mut entries = Vec::new();
+    add_path_entries(&mut entries, current_path);
+    add_path_entries(&mut entries, login_shell_path);
+
+    if let Some(home_dir) = home_dir {
+        for relative in [".local/bin", ".cargo/bin", ".bun/bin"] {
+            let entry = home_dir.join(relative).to_string_lossy().to_string();
+            add_path_entries(&mut entries, Some(&entry));
+        }
+    }
+
+    add_path_entries(
+        &mut entries,
+        Some("/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"),
+    );
+
+    entries.join(":")
+}
+
+fn user_tool_path() -> String {
+    let current_path = std::env::var("PATH").ok();
+    let home_dir = dirs::home_dir();
+    merge_user_tool_path(
+        current_path.as_deref(),
+        LOGIN_SHELL_PATH.as_deref(),
+        home_dir.as_deref(),
+    )
+}
+
+fn git_command() -> Command {
+    let mut command = Command::new("git");
+    command.env("PATH", user_tool_path());
+    command
+}
+
+// ============================================================================
 // Worktree Operations
 // ============================================================================
 
@@ -91,7 +170,7 @@ pub async fn create_worktree(
     let lock = acquire_lock(repo_path);
     let _guard = lock.lock().await;
 
-    let prune_output = Command::new("git")
+    let prune_output = git_command()
         .arg("-C")
         .arg(repo_path)
         .arg("worktree")
@@ -105,7 +184,7 @@ pub async fn create_worktree(
     }
 
     // Fetch latest from origin so the base ref (e.g. origin/main) is up to date
-    let fetch_output = Command::new("git")
+    let fetch_output = git_command()
         .arg("-C")
         .arg(repo_path)
         .arg("fetch")
@@ -127,7 +206,7 @@ pub async fn create_worktree(
     if result.is_err() {
         info!("Worktree creation failed, attempting cleanup and retry...");
 
-        let _ = Command::new("git")
+        let _ = git_command()
             .arg("-C")
             .arg(repo_path)
             .arg("worktree")
@@ -137,7 +216,7 @@ pub async fn create_worktree(
             .output()
             .await;
 
-        let _ = Command::new("git")
+        let _ = git_command()
             .arg("-C")
             .arg(repo_path)
             .arg("worktree")
@@ -157,7 +236,7 @@ async fn try_create_worktree_inner(
     branch_name: &str,
     base_ref: &str,
 ) -> Result<(), GitWorktreeError> {
-    let add_output = Command::new("git")
+    let add_output = git_command()
         .arg("-C")
         .arg(repo_path)
         .arg("worktree")
@@ -174,7 +253,7 @@ async fn try_create_worktree_inner(
         return Err(GitWorktreeError::WorktreeAddFailed(stderr.to_string()));
     }
 
-    let _ = Command::new("git")
+    let _ = git_command()
         .arg("-C")
         .arg(worktree_path)
         .arg("branch")
@@ -219,7 +298,7 @@ pub async fn create_review_worktree(
     let lock = acquire_lock(repo_path);
     let _guard = lock.lock().await;
 
-    let prune_output = Command::new("git")
+    let prune_output = git_command()
         .arg("-C")
         .arg(repo_path)
         .arg("worktree")
@@ -233,7 +312,7 @@ pub async fn create_review_worktree(
     }
 
     // Fetch the specific branch so origin/{remote_branch} is up to date
-    let fetch_output = Command::new("git")
+    let fetch_output = git_command()
         .arg("-C")
         .arg(repo_path)
         .arg("fetch")
@@ -259,7 +338,7 @@ pub async fn create_review_worktree(
     if result.is_err() {
         info!("Review worktree creation failed, attempting cleanup and retry...");
 
-        let _ = Command::new("git")
+        let _ = git_command()
             .arg("-C")
             .arg(repo_path)
             .arg("worktree")
@@ -269,7 +348,7 @@ pub async fn create_review_worktree(
             .output()
             .await;
 
-        let _ = Command::new("git")
+        let _ = git_command()
             .arg("-C")
             .arg(repo_path)
             .arg("worktree")
@@ -289,7 +368,7 @@ async fn try_create_review_worktree_inner(
     remote_branch: &str,
 ) -> Result<(), GitWorktreeError> {
     let remote_ref = format!("origin/{}", remote_branch);
-    let add_output = Command::new("git")
+    let add_output = git_command()
         .arg("-C")
         .arg(repo_path)
         .arg("worktree")
@@ -332,7 +411,7 @@ pub async fn remove_worktree_with_branch(
     let _guard = lock.lock().await;
 
     // Step 1: Force remove the worktree via git
-    let remove_output = Command::new("git")
+    let remove_output = git_command()
         .arg("-C")
         .arg(repo_path)
         .arg("worktree")
@@ -375,7 +454,7 @@ pub async fn remove_worktree_with_branch(
     }
 
     // Step 4: Prune stale worktree references
-    let prune_output = Command::new("git")
+    let prune_output = git_command()
         .arg("-C")
         .arg(repo_path)
         .arg("worktree")
@@ -389,7 +468,7 @@ pub async fn remove_worktree_with_branch(
     }
 
     if let Some(branch) = branch_name {
-        let branch_output = Command::new("git")
+        let branch_output = git_command()
             .arg("-C")
             .arg(repo_path)
             .arg("branch")
@@ -485,6 +564,35 @@ mod tests {
     fn test_slugify_branch_name_unicode() {
         let result = slugify_branch_name("T-7", "Add 日本語 support");
         assert_eq!(result, "T-7/add-support");
+    }
+
+    #[test]
+    fn merge_user_tool_path_preserves_current_path_and_adds_login_shell_path() {
+        let path = merge_user_tool_path(
+            Some("/usr/bin:/bin"),
+            Some("/Users/test/.bun/bin:/opt/homebrew/bin:/usr/bin"),
+            Some(Path::new("/Users/test")),
+        );
+
+        let entries: Vec<&str> = path.split(':').collect();
+        assert_eq!(entries[0], "/usr/bin");
+        assert_eq!(entries[1], "/bin");
+        assert!(entries.contains(&"/Users/test/.bun/bin"));
+        assert!(entries.contains(&"/opt/homebrew/bin"));
+        assert_eq!(
+            entries.iter().filter(|entry| **entry == "/usr/bin").count(),
+            1
+        );
+    }
+
+    #[test]
+    fn merge_user_tool_path_adds_common_home_tool_bins_when_shell_path_is_sparse() {
+        let path = merge_user_tool_path(Some("/usr/bin"), None, Some(Path::new("/Users/test")));
+        let entries: Vec<&str> = path.split(':').collect();
+
+        assert!(entries.contains(&"/Users/test/.local/bin"));
+        assert!(entries.contains(&"/Users/test/.cargo/bin"));
+        assert!(entries.contains(&"/Users/test/.bun/bin"));
     }
 }
 
