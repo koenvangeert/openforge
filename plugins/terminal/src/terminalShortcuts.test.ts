@@ -35,6 +35,16 @@ describe('terminal shortcuts', () => {
     expect(event.defaultPrevented).toBe(true)
   })
 
+  it('ignores Cmd+digit so app-level view shortcuts can handle it', () => {
+    const controller = makeController()
+    const event = makeKeyEvent({ key: '3', code: 'Digit3', metaKey: true })
+
+    expect(handleTerminalShortcutKeydown(event, controller)).toBe(false)
+
+    expect(controller.switchToTab).not.toHaveBeenCalled()
+    expect(event.defaultPrevented).toBe(false)
+  })
+
   it('ignores non-terminal shortcuts', () => {
     const controller = makeController()
     const event = makeKeyEvent({ key: 'n', code: 'KeyN', metaKey: true })

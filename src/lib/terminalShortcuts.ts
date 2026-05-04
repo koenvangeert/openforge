@@ -39,14 +39,6 @@ export function handleTerminalShortcutKeydown(event: KeyboardEvent, controller: 
     return true
   }
 
-  const shortcutDigit = getShortcutDigit(event)
-  if (shortcutDigit !== null) {
-    event.preventDefault()
-    event.stopPropagation()
-    controller.switchToTab(shortcutDigit - 1)
-    return true
-  }
-
   const key = event.key.toLowerCase()
   if (key === 't') {
     event.preventDefault()

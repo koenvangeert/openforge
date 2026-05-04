@@ -15,9 +15,19 @@ function makeKeyEvent(init: KeyboardEventInit): KeyboardEvent {
 }
 
 describe('terminal shortcuts', () => {
-  it('maps Cmd+number to visible tab position without using Shift-reserved macOS shortcuts', () => {
+  it('ignores Cmd+number so task view shortcuts can handle it', () => {
     const controller = makeController()
     const event = makeKeyEvent({ key: '3', code: 'Digit3', metaKey: true })
+
+    expect(handleTerminalShortcutKeydown(event, controller)).toBe(false)
+
+    expect(event.defaultPrevented).toBe(false)
+    expect(controller.switchToTab).not.toHaveBeenCalled()
+  })
+
+  it('maps Cmd+Shift+number to visible tab position', () => {
+    const controller = makeController()
+    const event = makeKeyEvent({ key: '3', code: 'Digit3', metaKey: true, shiftKey: true })
 
     expect(handleTerminalShortcutKeydown(event, controller)).toBe(true)
 

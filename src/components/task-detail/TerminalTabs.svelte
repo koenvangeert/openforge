@@ -135,7 +135,7 @@
               focusTerminal(tab.key)
             }}
          >
-           {tab.label}{#if $commandHeld && tabPosition < 9}<kbd class="kbd kbd-xs opacity-50">⌘{tabPosition + 1}</kbd>{/if}
+           {tab.label}{#if $commandHeld && tabPosition < 9}<kbd class="kbd kbd-xs opacity-50">⌘⇧{tabPosition + 1}</kbd>{/if}
          </button>
         <button
           class="pr-2 text-xs leading-none opacity-60 hover:opacity-100"

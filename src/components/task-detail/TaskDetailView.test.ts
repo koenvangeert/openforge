@@ -840,6 +840,48 @@ describe('TaskDetailView', () => {
     vi.mocked(getTaskWorkspace).mockResolvedValue(null)
   })
 
+  it('Cmd+1 switches from an active terminal pane to code without selecting a shell tab', async () => {
+    const { getTaskWorkspace } = await import('../../lib/ipc')
+    const { focusTerminal } = await import('../../lib/terminalPool')
+    const { createTerminalShortcutController } = await import('../../lib/terminalShortcutController')
+    vi.mocked(getTaskWorkspace).mockResolvedValue(createTaskWorkspaceInfo({ workspace_path: '/path/to/worktree', repo_path: '/repo', branch_name: 'branch' }))
+
+    const switchToTab = vi.fn()
+    const terminalShortcuts = createTerminalShortcutController()
+    terminalShortcuts.terminalTabsRef = {
+      addTab: vi.fn(),
+      closeActiveTab: vi.fn().mockResolvedValue(undefined),
+      focusActiveTab: vi.fn(),
+      switchToTab,
+    }
+    const unregisterTerminalShortcuts = terminalShortcuts.registerWindowKeydown()
+
+    try {
+      render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+      await waitFor(() => expect(screen.getByRole('button', { name: /^terminal\b/i })).toBeTruthy())
+
+      await fireEvent.click(screen.getByRole('button', { name: /^terminal\b/i }))
+
+      await waitFor(() => {
+        expect(get(taskActiveView).get(baseTask.id)).toBe(TERMINAL_VIEW_ID)
+      })
+
+      vi.mocked(focusTerminal).mockClear()
+      await fireEvent.keyDown(window, { key: '1', code: 'Digit1', metaKey: true, shiftKey: false })
+
+      await waitFor(() => {
+        const breadcrumb = screen.getByText('$ cd board').closest('div')
+        expect(breadcrumb?.textContent).toContain('code')
+        expect(get(taskActiveView).get(baseTask.id)).toBe('code')
+      })
+      expect(switchToTab).not.toHaveBeenCalled()
+      expect(vi.mocked(focusTerminal)).not.toHaveBeenCalled()
+    } finally {
+      unregisterTerminalShortcuts()
+      vi.mocked(getTaskWorkspace).mockResolvedValue(null)
+    }
+  })
+
   it('breadcrumb shows terminal when terminal tab active', async () => {
     const { getTaskWorkspace } = await import('../../lib/ipc')
     vi.mocked(getTaskWorkspace).mockResolvedValue(createTaskWorkspaceInfo({ workspace_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' }))
