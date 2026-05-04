@@ -3,7 +3,6 @@ import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { app, BrowserWindow, ipcMain, shell } from 'electron'
 import { createMainWindowOptions } from './windowConfig.js'
-import { openDevToolsForDevelopment } from './devTools.js'
 import { createPreloadPath } from './preloadPath.js'
 import { loadAndRevealMainWindow } from './windowStartup.js'
 import { asChildProcessLike, createSidecarLaunchConfig, startSidecar } from './sidecar.js'
@@ -30,9 +29,6 @@ async function createMainWindow(): Promise<BrowserWindow> {
   await loadAndRevealMainWindow(window, rendererUrl
     ? { rendererUrl }
     : { filePath: join(currentDir(), '..', 'dist', 'index.html') })
-  if (openDevToolsForDevelopment(window)) {
-    console.log('[electron] Opened renderer DevTools (set OPENFORGE_ELECTRON_DEVTOOLS=0 to disable)')
-  }
   return window
 }
 
