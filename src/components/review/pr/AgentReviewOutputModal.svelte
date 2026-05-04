@@ -1,7 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte'
-  import { listen } from '@tauri-apps/api/event'
-  import type { UnlistenFn } from '@tauri-apps/api/event'
+  import { listenDesktopEvent, type DesktopUnlistenFn } from '../../../lib/desktopIpc'
   import type { AgentEvent } from '../../../lib/types'
   import Modal from '../../shared/ui/Modal.svelte'
 
@@ -15,7 +14,7 @@
   let output = $state('')
   let status = $state<'running' | 'completed' | 'error'>('running')
   let scrollContainer: HTMLDivElement | undefined = $state()
-  let unlisten: UnlistenFn | undefined = $state()
+  let unlisten: DesktopUnlistenFn | undefined = $state()
 
   $effect(() => {
     const _output = output
@@ -25,7 +24,7 @@
 
   onMount(async () => {
     console.log('[AgentReviewOutput] Mounted, listening for sessionKey:', sessionKey)
-    unlisten = await listen<AgentEvent>('agent-event', (event) => {
+    unlisten = await listenDesktopEvent<AgentEvent>('agent-event', (event) => {
       const { task_id, event_type, data } = event.payload
       if (task_id !== sessionKey) return
 

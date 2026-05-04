@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte'
-  import type { UnlistenFn } from '@tauri-apps/api/event'
+  import type { DesktopUnlistenFn } from '../../lib/desktopIpc'
   import { activeSessions } from '../../lib/stores'
   import { writePty, killPty, abortImplementation } from '../../lib/ipc'
   import '@xterm/xterm/css/xterm.css'
@@ -16,7 +16,7 @@
   let { taskId, isStarting = false }: Props = $props()
 
   let terminalEl: HTMLDivElement
-  let unlisteners: UnlistenFn[] = []
+  let unlisteners: DesktopUnlistenFn[] = []
   let poolEntry: PoolEntry | null = null
   let status = $state<AgentPanelStatus>('idle')
   let terminalActive = $state(false)

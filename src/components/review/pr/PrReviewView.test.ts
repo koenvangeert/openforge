@@ -52,10 +52,18 @@ vi.mock('../../../lib/ipc', () => ({
   abortAgentReview: vi.fn().mockResolvedValue(undefined),
 }))
 
+vi.mock('../../../lib/desktopIpc', async () => {
+  const actual = await vi.importActual<typeof import('../../../lib/desktopIpc')>('../../../lib/desktopIpc')
+  return {
+    ...actual,
+    listenDesktopEvent: vi.fn().mockResolvedValue(vi.fn()),
+  }
+})
+
 import PrReviewView from './PrReviewView.svelte'
 import { reviewPrs, selectedReviewPr, prFileDiffs, reviewComments, pendingManualComments, reviewRequestCount, agentReviewComments, agentReviewLoading, agentReviewError, authoredPrs, authoredPrCount, activeProjectId } from '../../../lib/stores'
 import { getReviewPrs, fetchReviewPrs, getAuthoredPrs, getPrFileDiffs, getReviewComments, markReviewPrViewed, getProjectConfig, setProjectConfig } from '../../../lib/ipc'
-import { listen } from '@tauri-apps/api/event'
+import { listenDesktopEvent } from '../../../lib/desktopIpc'
 
 const basePr: ReviewPullRequest = {
   id: 12345,
@@ -740,7 +748,7 @@ describe('PrReviewView', () => {
 
   describe('background sync events', () => {
     function getListenCallback(eventName: string): ((event?: unknown) => void) | undefined {
-      const calls = vi.mocked(listen).mock.calls
+      const calls = vi.mocked(listenDesktopEvent).mock.calls
       const match = calls.find(([name]) => name === eventName)
       return match ? (match[1] as (event?: unknown) => void) : undefined
     }
