@@ -1,6 +1,7 @@
 src-tauri/target/
 .cargo-target/
 dist/
+dist-electron/
 node_modules/
 package-lock.json
 bun.lock

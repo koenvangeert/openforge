@@ -1,4 +1,4 @@
-import { listen, type UnlistenFn } from '@tauri-apps/api/event'
+import { listenDesktopEvent, type DesktopUnlistenFn } from './desktopIpc'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import { WebglAddon } from '@xterm/addon-webgl'
@@ -16,7 +16,7 @@ export interface PoolEntry {
   hostDiv: HTMLDivElement
   ptyActive: boolean
   needsClear: boolean
-  unlisteners: UnlistenFn[]
+  unlisteners: DesktopUnlistenFn[]
   resizeObserver: ResizeObserver | null
   visibilityObserver: IntersectionObserver | null
   resizeTimeout: ReturnType<typeof setTimeout> | null
@@ -204,7 +204,7 @@ export async function acquire(taskId: string): Promise<PoolEntry> {
   }
 
   // Persistent PTY output listener (survives component unmount)
-  entry.unlisteners.push(await listen<PtyEvent>(`pty-output-${taskId}`, (event) => {
+  entry.unlisteners.push(await listenDesktopEvent<PtyEvent>(`pty-output-${taskId}`, (event) => {
     const instanceId = event.payload.instance_id
     if (instanceId != null && entry.currentPtyInstance != null && instanceId !== entry.currentPtyInstance) {
       return
@@ -220,7 +220,7 @@ export async function acquire(taskId: string): Promise<PoolEntry> {
   }))
 
   // Persistent PTY exit listener
-  entry.unlisteners.push(await listen<PtyEvent>(`pty-exit-${taskId}`, (event) => {
+  entry.unlisteners.push(await listenDesktopEvent<PtyEvent>(`pty-exit-${taskId}`, (event) => {
     const instanceId = event.payload.instance_id
     if (instanceId != null && entry.currentPtyInstance != null && instanceId !== entry.currentPtyInstance) {
       return

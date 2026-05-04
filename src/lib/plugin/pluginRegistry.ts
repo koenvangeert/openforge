@@ -1,4 +1,4 @@
-import { listen } from '@tauri-apps/api/event'
+import { listenDesktopEvent } from '../desktopIpc'
 import type { PluginManifest } from './types'
 import { MAX_SUPPORTED_API_VERSION } from './types'
 import { isPluginViewKey } from './types'
@@ -89,7 +89,7 @@ type PluginHostContextSnapshot = {
 
 type PluginHostListener = (payload: unknown) => void
 
-type TauriEventSubscription = {
+type DesktopEventSubscription = {
   listeners: Set<PluginHostListener>
   ready: Promise<void>
   unlisten: (() => void) | null
@@ -98,7 +98,7 @@ type TauriEventSubscription = {
 
 const HOST_EVENT_NAMES = new Set(['context-changed', 'navigation-changed', 'selection-changed'])
 const pluginHostListeners = new Map<PluginHostEventName, Set<PluginHostListener>>()
-const tauriEventSubscriptions = new Map<string, TauriEventSubscription>()
+const desktopEventSubscriptions = new Map<string, DesktopEventSubscription>()
 const pluginHostUnsubscribers = new Map<string, Set<() => void>>()
 const activationPromises = new Map<string, Promise<boolean>>()
 const pluginCommandHandlers = new Map<string, PluginActivatedCommandContribution['execute']>()
@@ -278,38 +278,38 @@ async function deactivateLoadedPluginModule(pluginId: string): Promise<void> {
   await deactivatePluginLoader(pluginId)
 }
 
-function ensureTauriEventSubscription(event: string): TauriEventSubscription {
-  const existing = tauriEventSubscriptions.get(event)
+function ensureDesktopEventSubscription(event: string): DesktopEventSubscription {
+  const existing = desktopEventSubscriptions.get(event)
   if (existing) return existing
 
-  const subscription: TauriEventSubscription = {
+  const subscription: DesktopEventSubscription = {
     listeners: new Set(),
     ready: Promise.resolve(),
     unlisten: null,
     disposed: false,
   }
 
-  subscription.ready = listen(event, (tauriEvent) => {
+  subscription.ready = listenDesktopEvent(event, (desktopEvent) => {
     for (const listener of Array.from(subscription.listeners)) {
-      listener(tauriEvent.payload)
+      listener(desktopEvent.payload)
     }
   }).then((unlisten) => {
     subscription.unlisten = unlisten
     if (subscription.disposed || subscription.listeners.size === 0) {
       unlisten()
-      tauriEventSubscriptions.delete(event)
+      desktopEventSubscriptions.delete(event)
     }
   }).catch((error) => {
-    tauriEventSubscriptions.delete(event)
+    desktopEventSubscriptions.delete(event)
     console.error(`[pluginRegistry] Failed to subscribe to host event ${event}:`, error)
   })
 
-  tauriEventSubscriptions.set(event, subscription)
+  desktopEventSubscriptions.set(event, subscription)
   return subscription
 }
 
-function removeTauriEventListener(event: string, handler: PluginHostListener): void {
-  const subscription = tauriEventSubscriptions.get(event)
+function removeDesktopEventListener(event: string, handler: PluginHostListener): void {
+  const subscription = desktopEventSubscriptions.get(event)
   if (!subscription) return
 
   subscription.listeners.delete(handler)
@@ -317,15 +317,15 @@ function removeTauriEventListener(event: string, handler: PluginHostListener): v
 
   if (subscription.unlisten) {
     subscription.unlisten()
-    tauriEventSubscriptions.delete(event)
+    desktopEventSubscriptions.delete(event)
     return
   }
 
   subscription.disposed = true
 }
 
-async function waitForTauriEventSubscription(event: string): Promise<void> {
-  await tauriEventSubscriptions.get(event)?.ready
+async function waitForDesktopEventSubscription(event: string): Promise<void> {
+  await desktopEventSubscriptions.get(event)?.ready
 }
 
 async function waitForTerminalEventSubscriptions(commandPayload: Record<string, unknown> | undefined): Promise<void> {
@@ -335,8 +335,8 @@ async function waitForTerminalEventSubscriptions(commandPayload: Record<string, 
 
   const terminalKey = `${taskId}-shell-${terminalIndex}`
   await Promise.all([
-    waitForTauriEventSubscription(`pty-output-${terminalKey}`),
-    waitForTauriEventSubscription(`pty-exit-${terminalKey}`),
+    waitForDesktopEventSubscription(`pty-output-${terminalKey}`),
+    waitForDesktopEventSubscription(`pty-exit-${terminalKey}`),
   ])
 }
 
@@ -357,9 +357,9 @@ function subscribeToPluginHostEvent(pluginId: string, event: string, handler: Pl
       }
     }
   } else {
-    const subscription = ensureTauriEventSubscription(event)
+    const subscription = ensureDesktopEventSubscription(event)
     subscription.listeners.add(handler)
-    unsubscribe = () => removeTauriEventListener(event, handler)
+    unsubscribe = () => removeDesktopEventListener(event, handler)
   }
 
   const cleanup = () => {

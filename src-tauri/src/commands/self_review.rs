@@ -37,17 +37,10 @@ pub fn parse_git_log_output(output: &str) -> Vec<CommitInfo> {
         .collect()
 }
 
-#[tauri::command]
-pub async fn get_task_diff(
-    task_id: String,
+pub async fn get_task_diff_for_workspace(
+    worktree_path: &str,
     include_uncommitted: bool,
-    db: State<'_, Arc<Mutex<db::Database>>>,
 ) -> Result<Vec<diff_parser::TaskFileDiff>, String> {
-    let worktree_path = {
-        let db = crate::db::acquire_db(&db);
-        resolve_workspace_path(&db, &task_id)?
-    };
-
     let merge_base_output = tokio::process::Command::new("git")
         .arg("-C")
         .arg(&worktree_path)
@@ -156,6 +149,19 @@ pub async fn get_task_diff(
     Ok(diffs)
 }
 
+#[tauri::command]
+pub async fn get_task_diff(
+    task_id: String,
+    include_uncommitted: bool,
+    db: State<'_, Arc<Mutex<db::Database>>>,
+) -> Result<Vec<diff_parser::TaskFileDiff>, String> {
+    let worktree_path = {
+        let db = crate::db::acquire_db(&db);
+        resolve_workspace_path(&db, &task_id)?
+    };
+    get_task_diff_for_workspace(&worktree_path, include_uncommitted).await
+}
+
 // ============================================================================
 // File content helpers
 // ============================================================================
@@ -241,20 +247,13 @@ async fn fetch_file_contents(
 // Single-file command
 // ============================================================================
 
-#[tauri::command]
-pub async fn get_task_file_contents(
-    task_id: String,
-    path: String,
-    old_path: Option<String>,
-    status: String,
+pub async fn get_task_file_contents_for_workspace(
+    worktree_path: &str,
+    path: &str,
+    old_path: Option<&str>,
+    status: &str,
     include_uncommitted: bool,
-    db: State<'_, Arc<Mutex<db::Database>>>,
 ) -> Result<(String, String), String> {
-    let worktree_path = {
-        let db = crate::db::acquire_db(&db);
-        resolve_workspace_path(&db, &task_id)?
-    };
-
     let merge_base_output = tokio::process::Command::new("git")
         .arg("-C")
         .arg(&worktree_path)
@@ -275,6 +274,29 @@ pub async fn get_task_file_contents(
     fetch_file_contents(
         &worktree_path,
         &merge_base,
+        path,
+        old_path,
+        status,
+        include_uncommitted,
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn get_task_file_contents(
+    task_id: String,
+    path: String,
+    old_path: Option<String>,
+    status: String,
+    include_uncommitted: bool,
+    db: State<'_, Arc<Mutex<db::Database>>>,
+) -> Result<(String, String), String> {
+    let worktree_path = {
+        let db = crate::db::acquire_db(&db);
+        resolve_workspace_path(&db, &task_id)?
+    };
+    get_task_file_contents_for_workspace(
+        &worktree_path,
         &path,
         old_path.as_deref(),
         &status,
@@ -294,18 +316,11 @@ pub struct FileContentRequest {
     pub status: String,
 }
 
-#[tauri::command]
-pub async fn get_task_batch_file_contents(
-    task_id: String,
-    files: Vec<FileContentRequest>,
+pub async fn get_task_batch_file_contents_for_workspace(
+    worktree_path: &str,
+    files: &[FileContentRequest],
     include_uncommitted: bool,
-    db: State<'_, Arc<Mutex<db::Database>>>,
 ) -> Result<Vec<(String, String)>, String> {
-    let worktree_path = {
-        let db = crate::db::acquire_db(&db);
-        resolve_workspace_path(&db, &task_id)?
-    };
-
     let merge_base_output = tokio::process::Command::new("git")
         .arg("-C")
         .arg(&worktree_path)
@@ -325,7 +340,7 @@ pub async fn get_task_batch_file_contents(
 
     // Fetch each file using the single pre-computed merge-base.
     let mut results = Vec::with_capacity(files.len());
-    for file in &files {
+    for file in files {
         let contents = fetch_file_contents(
             &worktree_path,
             &merge_base,
@@ -339,6 +354,20 @@ pub async fn get_task_batch_file_contents(
     }
 
     Ok(results)
+}
+
+#[tauri::command]
+pub async fn get_task_batch_file_contents(
+    task_id: String,
+    files: Vec<FileContentRequest>,
+    include_uncommitted: bool,
+    db: State<'_, Arc<Mutex<db::Database>>>,
+) -> Result<Vec<(String, String)>, String> {
+    let worktree_path = {
+        let db = crate::db::acquire_db(&db);
+        resolve_workspace_path(&db, &task_id)?
+    };
+    get_task_batch_file_contents_for_workspace(&worktree_path, &files, include_uncommitted).await
 }
 
 #[tauri::command]
@@ -401,16 +430,9 @@ pub async fn archive_self_review_comments(
         .map_err(|e| format!("Failed to archive self review comments: {}", e))
 }
 
-#[tauri::command]
-pub async fn get_task_commits(
-    task_id: String,
-    db: State<'_, Arc<Mutex<db::Database>>>,
+pub async fn get_task_commits_for_workspace(
+    worktree_path: &str,
 ) -> Result<Vec<CommitInfo>, String> {
-    let worktree_path = {
-        let db = crate::db::acquire_db(&db);
-        resolve_workspace_path(&db, &task_id)?
-    };
-
     let merge_base_output = tokio::process::Command::new("git")
         .arg("-C")
         .arg(&worktree_path)
@@ -450,6 +472,18 @@ pub async fn get_task_commits(
 
     let output_str = String::from_utf8_lossy(&log_output.stdout);
     Ok(parse_git_log_output(&output_str))
+}
+
+#[tauri::command]
+pub async fn get_task_commits(
+    task_id: String,
+    db: State<'_, Arc<Mutex<db::Database>>>,
+) -> Result<Vec<CommitInfo>, String> {
+    let worktree_path = {
+        let db = crate::db::acquire_db(&db);
+        resolve_workspace_path(&db, &task_id)?
+    };
+    get_task_commits_for_workspace(&worktree_path).await
 }
 
 // ============================================================================
@@ -527,23 +561,16 @@ async fn fetch_commit_file_contents(
 // Per-commit diff commands
 // ============================================================================
 
-#[tauri::command]
-pub async fn get_commit_diff(
-    task_id: String,
-    commit_sha: String,
-    db: State<'_, Arc<Mutex<db::Database>>>,
+pub async fn get_commit_diff_for_workspace(
+    worktree_path: &str,
+    commit_sha: &str,
 ) -> Result<Vec<diff_parser::TaskFileDiff>, String> {
-    let worktree_path = {
-        let db = crate::db::acquire_db(&db);
-        resolve_workspace_path(&db, &task_id)?
-    };
-
-    let parent_sha = get_parent_sha(&worktree_path, &commit_sha).await?;
+    let parent_sha = get_parent_sha(worktree_path, commit_sha).await?;
 
     let diff_output = tokio::process::Command::new("git")
         .arg("-C")
         .arg(&worktree_path)
-        .args(["diff", &parent_sha, &commit_sha])
+        .args(["diff", &parent_sha, commit_sha])
         .output()
         .await
         .map_err(|e| format!("Failed to run git diff: {}", e))?;
@@ -555,6 +582,39 @@ pub async fn get_commit_diff(
 
     let output_str = String::from_utf8_lossy(&diff_output.stdout);
     Ok(diff_parser::parse_unified_diff(&output_str, true))
+}
+
+#[tauri::command]
+pub async fn get_commit_diff(
+    task_id: String,
+    commit_sha: String,
+    db: State<'_, Arc<Mutex<db::Database>>>,
+) -> Result<Vec<diff_parser::TaskFileDiff>, String> {
+    let worktree_path = {
+        let db = crate::db::acquire_db(&db);
+        resolve_workspace_path(&db, &task_id)?
+    };
+    get_commit_diff_for_workspace(&worktree_path, &commit_sha).await
+}
+
+pub async fn get_commit_file_contents_for_workspace(
+    worktree_path: &str,
+    commit_sha: &str,
+    path: &str,
+    old_path: Option<&str>,
+    status: &str,
+) -> Result<(String, String), String> {
+    let parent_sha = get_parent_sha(worktree_path, commit_sha).await?;
+
+    fetch_commit_file_contents(
+        &worktree_path,
+        &parent_sha,
+        commit_sha,
+        path,
+        old_path,
+        status,
+    )
+    .await
 }
 
 #[tauri::command]
@@ -570,18 +630,38 @@ pub async fn get_commit_file_contents(
         let db = crate::db::acquire_db(&db);
         resolve_workspace_path(&db, &task_id)?
     };
-
-    let parent_sha = get_parent_sha(&worktree_path, &commit_sha).await?;
-
-    fetch_commit_file_contents(
+    get_commit_file_contents_for_workspace(
         &worktree_path,
-        &parent_sha,
         &commit_sha,
         &path,
         old_path.as_deref(),
         &status,
     )
     .await
+}
+
+pub async fn get_commit_batch_file_contents_for_workspace(
+    worktree_path: &str,
+    commit_sha: &str,
+    files: &[FileContentRequest],
+) -> Result<Vec<(String, String)>, String> {
+    let parent_sha = get_parent_sha(worktree_path, commit_sha).await?;
+
+    let mut results = Vec::with_capacity(files.len());
+    for file in files {
+        let contents = fetch_commit_file_contents(
+            &worktree_path,
+            &parent_sha,
+            commit_sha,
+            &file.path,
+            file.old_path.as_deref(),
+            &file.status,
+        )
+        .await?;
+        results.push(contents);
+    }
+
+    Ok(results)
 }
 
 #[tauri::command]
@@ -595,24 +675,7 @@ pub async fn get_commit_batch_file_contents(
         let db = crate::db::acquire_db(&db);
         resolve_workspace_path(&db, &task_id)?
     };
-
-    let parent_sha = get_parent_sha(&worktree_path, &commit_sha).await?;
-
-    let mut results = Vec::with_capacity(files.len());
-    for file in &files {
-        let contents = fetch_commit_file_contents(
-            &worktree_path,
-            &parent_sha,
-            &commit_sha,
-            &file.path,
-            file.old_path.as_deref(),
-            &file.status,
-        )
-        .await?;
-        results.push(contents);
-    }
-
-    Ok(results)
+    get_commit_batch_file_contents_for_workspace(&worktree_path, &commit_sha, &files).await
 }
 
 pub fn resolve_workspace_path(db: &crate::db::Database, task_id: &str) -> Result<String, String> {

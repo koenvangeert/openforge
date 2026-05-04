@@ -1,7 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte'
-  import { listen } from '@tauri-apps/api/event'
-  import type { UnlistenFn } from '@tauri-apps/api/event'
+  import { listenDesktopEvent, type DesktopUnlistenFn } from '../../lib/desktopIpc'
   import { spawnShellPty, killPty } from '../../lib/ipc'
   import '@xterm/xterm/css/xterm.css'
   import { acquire, attach, detach, recoverActiveTerminal, markPtySpawnPending, clearPtySpawnPending, shouldSpawnPty, setCurrentPtyInstance, getShellLifecycleState, updateShellLifecycleState, type PoolEntry } from '../../lib/terminalPool'
@@ -18,7 +17,7 @@
   let { taskId, workspacePath, terminalKey, terminalIndex, isActive, onExit }: Props = $props()
 
   let terminalEl: HTMLDivElement
-  let unlisteners: UnlistenFn[] = []
+  let unlisteners: DesktopUnlistenFn[] = []
   let poolEntry: PoolEntry | null = null
   let mounted = false
   let lifecycle = $state({ ptyActive: false, shellExited: false, currentPtyInstance: null as number | null })
@@ -72,7 +71,7 @@
     previousIsActive = isActive
 
     // Listen for shell exit event
-    unlisteners.push(await listen(`pty-exit-${terminalKey}`, (event) => {
+    unlisteners.push(await listenDesktopEvent(`pty-exit-${terminalKey}`, (event) => {
       if (!poolEntry) return
       const exitInstance = (event.payload as { instance_id?: number } | null)?.instance_id
       if (exitInstance != null && lifecycle.currentPtyInstance != null && exitInstance !== lifecycle.currentPtyInstance) {

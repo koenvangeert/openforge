@@ -36,7 +36,8 @@ impl PiProvider {
                 false,
                 80,
                 24,
-                app.clone(),
+                Some(app.clone()),
+                None,
             )
             .await
             .map_err(|e| e.to_string())?;
@@ -75,7 +76,8 @@ impl PiProvider {
                 continue_session,
                 80,
                 24,
-                app.clone(),
+                Some(app.clone()),
+                None,
             )
             .await
             .map_err(|e| e.to_string())?;

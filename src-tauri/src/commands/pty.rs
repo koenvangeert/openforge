@@ -12,7 +12,15 @@ pub async fn pty_spawn(
     rows: u16,
 ) -> Result<u64, String> {
     pty_mgr
-        .spawn_pty(&task_id, server_port, &opencode_session_id, cols, rows, app)
+        .spawn_pty(
+            &task_id,
+            server_port,
+            &opencode_session_id,
+            cols,
+            rows,
+            Some(app),
+            None,
+        )
         .await
         .map_err(|e| format!("Failed to spawn PTY: {}", e))
 }
@@ -82,7 +90,8 @@ pub async fn pty_spawn_shell(
             cols,
             rows,
             terminal_index,
-            app,
+            Some(app),
+            None,
         )
         .await
         .map_err(|e| format!("Failed to spawn shell PTY: {}", e))

@@ -2,10 +2,14 @@ use serde_json::{json, Value};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-/// Get the HTTP server port from the AI_COMMAND_CENTER_PORT environment variable.
-/// Defaults to 17422 if not set or invalid.
+/// Get the HTTP server port used by local agent hooks.
+///
+/// Electron sidecar mode exposes its authenticated backend on
+/// OPENFORGE_BACKEND_PORT, while legacy Tauri hooks use AI_COMMAND_CENTER_PORT.
+/// Defaults to 17422 if neither is set or valid.
 pub fn get_http_server_port() -> u16 {
-    std::env::var("AI_COMMAND_CENTER_PORT")
+    std::env::var("OPENFORGE_BACKEND_PORT")
+        .or_else(|_| std::env::var("AI_COMMAND_CENTER_PORT"))
         .ok()
         .and_then(|s| s.parse().ok())
         .unwrap_or(17422)
@@ -334,7 +338,9 @@ mod tests {
 
     #[test]
     fn test_get_http_server_port_variants() {
-        let env_guard = EnvVarGuard::remove("AI_COMMAND_CENTER_PORT");
+        let backend_guard = EnvVarGuard::remove("OPENFORGE_BACKEND_PORT");
+        let original_ai_port = std::env::var_os("AI_COMMAND_CENTER_PORT");
+        std::env::remove_var("AI_COMMAND_CENTER_PORT");
 
         // Test 1: Default (env var not set)
         let port = get_http_server_port();
@@ -343,18 +349,29 @@ mod tests {
             "Should return default 17422 when env var is not set"
         );
 
-        // Test 2: Valid value from env
-        env_guard.set("9999");
+        // Test 2: Valid legacy Tauri value from env
+        std::env::set_var("AI_COMMAND_CENTER_PORT", "9999");
         let port = get_http_server_port();
-        assert_eq!(port, 9999, "Should return 9999 when env var is set to 9999");
+        assert_eq!(port, 9999, "Should return 9999 when AI_COMMAND_CENTER_PORT is set to 9999");
 
-        // Test 3: Invalid value in env
-        env_guard.set("invalid");
+        // Test 3: Electron sidecar backend port has precedence
+        backend_guard.set("17642");
+        let port = get_http_server_port();
+        assert_eq!(port, 17642, "Should prefer OPENFORGE_BACKEND_PORT in sidecar mode");
+
+        // Test 4: Invalid sidecar value falls back to default because env fallback only applies to lookup errors.
+        backend_guard.set("invalid");
         let port = get_http_server_port();
         assert_eq!(
             port, 17422,
-            "Should return default 17422 when env var is invalid"
+            "Should return default 17422 when selected env var is invalid"
         );
+
+        if let Some(value) = original_ai_port {
+            std::env::set_var("AI_COMMAND_CENTER_PORT", value);
+        } else {
+            std::env::remove_var("AI_COMMAND_CENTER_PORT");
+        }
     }
 
     #[test]

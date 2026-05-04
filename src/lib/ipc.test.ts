@@ -13,6 +13,8 @@ import {
 	createTask,
 	fsSearchFiles,
 	getAllTasks,
+	getCommitBatchFileContents,
+	getTaskBatchFileContents,
 	installPlugin,
 	spawnShellPty,
 	updateTask,
@@ -111,6 +113,26 @@ describe("ipc spawnShellPty", () => {
 		expect(invokeMock).toHaveBeenCalledWith("update_task_summary", {
 			id: "T-42",
 			summary: "Done",
+		});
+	});
+
+	it("preserves snake_case nested file payload keys for task batch contents", async () => {
+		await getTaskBatchFileContents("T-42", [{ path: "src/App.svelte", oldPath: "src/Old.svelte", status: "renamed" }], true);
+
+		expect(invokeMock).toHaveBeenCalledWith("get_task_batch_file_contents", {
+			taskId: "T-42",
+			files: [{ path: "src/App.svelte", old_path: "src/Old.svelte", status: "renamed" }],
+			includeUncommitted: true,
+		});
+	});
+
+	it("preserves snake_case nested file payload keys for commit batch contents", async () => {
+		await getCommitBatchFileContents("T-42", "abc123", [{ path: "src/App.svelte", oldPath: null, status: "added" }]);
+
+		expect(invokeMock).toHaveBeenCalledWith("get_commit_batch_file_contents", {
+			taskId: "T-42",
+			commitSha: "abc123",
+			files: [{ path: "src/App.svelte", old_path: null, status: "added" }],
 		});
 	});
 

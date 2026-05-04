@@ -1,9 +1,10 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte'
-  import type { UnlistenFn } from '@tauri-apps/api/event'
-  import { getCurrentWindow } from '@tauri-apps/api/window'
+  import type { DesktopUnlistenFn } from './lib/desktopIpc'
+  import { createDesktopWindow } from './lib/desktopWindow'
+  import type { DesktopWindowTarget } from './lib/desktopWindow'
   import { tasks, pendingTask, selectedTaskId, activeSessions, ticketPrs, error, isLoading, projects, activeProjectId, currentView, reviewRequestCount, authoredPrCount, projectAttention, startingTasks, codeCleanupTasksEnabled, taskRuntimeInfo, focusBoardFilters, setTaskMerging } from './lib/stores'
-  import { getProjects, getTasksForProject, getPullRequests, startImplementation, getSessionStatus, getLatestSessions, forceGithubSync, deleteTask, getProjectAttention, getAppMode, getConfig, getProjectConfig, getReviewPrs, getAuthoredPrs, mergePullRequest } from './lib/ipc'
+  import { getProjects, getTasksForProject, getPullRequests, startImplementation, getSessionStatus, getLatestSessions, forceGithubSync, deleteTask, getProjectAttention, getAppMode, getConfig, getProjectConfig, getReviewPrs, getAuthoredPrs, mergePullRequest, resumeStartupSessions } from './lib/ipc'
   import { writePtyWithSubmit } from './lib/ptySubmit'
   import { applyProjectOrder } from './lib/projectOrder'
   import { hasMergeConflicts, preservePullRequestState, isQueuedForMerge, isReadyToMerge } from './lib/types'
@@ -46,7 +47,7 @@
   import { registerAppTauriEventListeners } from './lib/appTauriEventListeners'
   import { loadAppStartupData } from './lib/appStartup'
   
-  let unlisteners: UnlistenFn[] = []
+  let unlisteners: DesktopUnlistenFn[] = []
   let showAddDialog = $state(false)
   let isSyncing = $state(false)
   let editingTask = $state<Task | null>(null)
@@ -67,7 +68,7 @@
   let registeredPluginShortcuts = new Set<string>()
   const globalShortcutHelpEntries = getGlobalShortcutHelpEntries()
   let previousPluginProjectId = $state<string | null>(null)
-  let appWindow: ReturnType<typeof getCurrentWindow> | null = null
+  let appWindow: DesktopWindowTarget | null = null
 
   useCommandHeld()
 
@@ -564,7 +565,7 @@
   }
 
   onMount(async () => {
-    appWindow = getCurrentWindow()
+    appWindow = createDesktopWindow()
     shortcuts = useShortcutRegistry()
 
     window.addEventListener('keydown', handleKeydown)
@@ -603,6 +604,12 @@
       loadProjectAttention,
       refreshPrCounts,
     }))
+
+    try {
+      await resumeStartupSessions()
+    } catch (e) {
+      console.error('[App] Failed to resume startup sessions:', e)
+    }
 
     await loadAppStartupData({
       initializePluginRuntime,
