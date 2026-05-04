@@ -4,6 +4,7 @@ use crate::{
     opencode_client::OpenCodeClient,
     pty_manager::PtyManager,
     server_manager::ServerManager,
+    sse_bridge::SseBridgeManager,
 };
 use axum::{
     extract::{Json, Path, Query, State},
@@ -33,6 +34,7 @@ pub struct AppState {
     pub backend_token: Option<String>,
     pub pty_manager: Option<PtyManager>,
     pub server_manager: Option<ServerManager>,
+    pub sse_bridge_manager: Option<SseBridgeManager>,
     pub app_event_tx: Option<AppEventSender>,
 }
 
@@ -872,6 +874,32 @@ fn publish_startup_resume_complete(state: &AppState) {
     }
 }
 
+async fn start_opencode_sse_bridge_for_app(
+    state: &AppState,
+    task_id: &str,
+    opencode_session_id: Option<String>,
+    port: u16,
+) -> Result<(), (StatusCode, String)> {
+    let Some(sse_bridge_manager) = state.sse_bridge_manager.as_ref() else {
+        return Err((
+            StatusCode::SERVICE_UNAVAILABLE,
+            "SSE bridge manager is not available".to_string(),
+        ));
+    };
+
+    sse_bridge_manager
+        .start_bridge_with_app_events(
+            state.app.clone(),
+            state.db.clone(),
+            state.app_event_tx.clone(),
+            task_id.to_string(),
+            opencode_session_id,
+            port,
+        )
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
+}
+
 async fn cleanup_task_runtime_for_app(
     state: &AppState,
     task_id: &str,
@@ -880,6 +908,9 @@ async fn cleanup_task_runtime_for_app(
     if let Some(pty_manager) = state.pty_manager.as_ref() {
         let _ = pty_manager.kill_pty(task_id).await;
         pty_manager.kill_shells_for_task(task_id).await;
+    }
+    if let Some(sse_bridge_manager) = state.sse_bridge_manager.as_ref() {
+        sse_bridge_manager.stop_bridge(task_id).await;
     }
     if let Some(server_manager) = state.server_manager.as_ref() {
         let _ = server_manager.stop_server(task_id).await;
@@ -1112,6 +1143,24 @@ async fn handle_app_resume_startup_sessions_command(
                         continue;
                     }
                 };
+                if let Some(opencode_session_id) = session_ref.opencode_session_id.clone() {
+                    if let Err((_, e)) = start_opencode_sse_bridge_for_app(
+                        state,
+                        &target.task_id,
+                        Some(opencode_session_id),
+                        port,
+                    )
+                    .await
+                    {
+                        error!(
+                            "[startup] Failed to resume OpenCode SSE bridge for task {}: {}",
+                            target.task_id, e
+                        );
+                        let _ = server_manager.stop_server(&target.task_id).await;
+                        publish_server_resumed(state, &target.task_id, 0, &target.workspace_path);
+                        continue;
+                    }
+                }
                 crate::providers::ProviderSessionResult {
                     port,
                     opencode_session_id: session_ref.opencode_session_id.clone(),
@@ -1291,13 +1340,15 @@ async fn handle_app_abort_implementation_command(
     if let Some(session) = session {
         match session.provider.as_str() {
             "opencode" => {
-                if let (Some(server_manager), Some(opencode_session_id)) = (
-                    state.server_manager.as_ref(),
-                    session.opencode_session_id.as_ref(),
-                ) {
-                    if let Some(port) = server_manager.get_server_port(&task_id).await {
-                        let client = OpenCodeClient::with_base_url(format!("http://127.0.0.1:{port}"));
-                        let _ = client.abort_session(opencode_session_id).await;
+                if let Some(server_manager) = state.server_manager.as_ref() {
+                    if let Some(opencode_session_id) = session.opencode_session_id.as_ref() {
+                        if let Some(port) = server_manager.get_server_port(&task_id).await {
+                            let client = OpenCodeClient::with_base_url(format!("http://127.0.0.1:{port}"));
+                            let _ = client.abort_session(opencode_session_id).await;
+                        }
+                    }
+                    if let Some(sse_bridge_manager) = state.sse_bridge_manager.as_ref() {
+                        sse_bridge_manager.stop_bridge(&task_id).await;
                     }
                     let _ = server_manager.stop_server(&task_id).await;
                 }
@@ -1437,6 +1488,7 @@ async fn handle_app_start_implementation_command(
         additional_instructions.as_deref(),
         code_cleanup_enabled,
     );
+    let mut deferred_opencode_prompt: Option<(String, u16, Option<String>)> = None;
 
     let provider_result = match provider_name.as_str() {
         "opencode" => {
@@ -1460,20 +1512,7 @@ async fn handle_app_start_implementation_command(
                         format!("Failed to create session: {e}"),
                     )
                 })?;
-            client
-                .prompt_async(
-                    &opencode_session_id,
-                    prompt,
-                    task.agent.clone(),
-                    None,
-                )
-                .await
-                .map_err(|e| {
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        format!("Failed to send prompt: {e}"),
-                    )
-                })?;
+            deferred_opencode_prompt = Some((opencode_session_id.clone(), port, task.agent.clone()));
             crate::providers::ProviderSessionResult {
                 port,
                 opencode_session_id: Some(opencode_session_id),
@@ -1581,6 +1620,26 @@ async fn handle_app_start_implementation_command(
         &provider_name,
     )
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
+
+    if let Some((opencode_session_id, port, agent)) = deferred_opencode_prompt {
+        start_opencode_sse_bridge_for_app(
+            state,
+            &task_id,
+            Some(opencode_session_id.clone()),
+            port,
+        )
+        .await?;
+        let client = OpenCodeClient::with_base_url(format!("http://127.0.0.1:{port}"));
+        client
+            .prompt_async(&opencode_session_id, prompt, agent, None)
+            .await
+            .map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Failed to send prompt: {e}"),
+                )
+            })?;
+    }
 
     if task.status == "backlog" {
         let db = crate::db::acquire_db(&state.db);
@@ -3055,7 +3114,16 @@ pub async fn start_http_server(
     ready_tx: tokio::sync::oneshot::Sender<()>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let server_manager = app.state::<ServerManager>().inner().clone();
-    start_http_server_with_app_state(Some(app), db, pty_manager, server_manager, ready_tx).await
+    let sse_bridge_manager = app.state::<SseBridgeManager>().inner().clone();
+    start_http_server_with_app_state(
+        Some(app),
+        db,
+        pty_manager,
+        server_manager,
+        sse_bridge_manager,
+        ready_tx,
+    )
+    .await
 }
 
 pub async fn start_http_sidecar_server(
@@ -3064,7 +3132,15 @@ pub async fn start_http_sidecar_server(
     server_manager: ServerManager,
     ready_tx: tokio::sync::oneshot::Sender<()>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    start_http_server_with_app_state(None, db, pty_manager, server_manager, ready_tx).await
+    start_http_server_with_app_state(
+        None,
+        db,
+        pty_manager,
+        server_manager,
+        SseBridgeManager::new(),
+        ready_tx,
+    )
+    .await
 }
 
 async fn start_http_server_with_app_state(
@@ -3072,6 +3148,7 @@ async fn start_http_server_with_app_state(
     db: std::sync::Arc<Mutex<db::Database>>,
     pty_manager: PtyManager,
     server_manager: ServerManager,
+    sse_bridge_manager: SseBridgeManager,
     ready_tx: tokio::sync::oneshot::Sender<()>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let port = resolve_http_server_port(
@@ -3087,6 +3164,7 @@ async fn start_http_server_with_app_state(
         backend_token: std::env::var("OPENFORGE_BACKEND_TOKEN").ok(),
         pty_manager: Some(pty_manager),
         server_manager: Some(server_manager),
+        sse_bridge_manager: Some(sse_bridge_manager),
         app_event_tx: Some(app_event_tx),
     };
     let router = create_router(state);
@@ -3133,6 +3211,7 @@ mod tests {
                 backend_token: Some("test-token".to_string()),
                 pty_manager: Some(PtyManager::new()),
                 server_manager: Some(ServerManager::new()),
+                sse_bridge_manager: Some(SseBridgeManager::new()),
                 app_event_tx: Some(app_event_tx),
             },
             path,
@@ -3166,6 +3245,100 @@ mod tests {
             .expect("sse data should be valid JSON");
         assert_eq!(data["eventName"], "pty-output-T-1-shell-2");
         assert_eq!(data["payload"]["instance_id"], 7);
+    }
+
+    #[tokio::test]
+    async fn test_start_opencode_sse_bridge_for_app_publishes_sidecar_events() {
+        let (state, path) = test_state("app_opencode_bridge_sidecar_events");
+        let task_id = {
+            let db = state.db.lock().expect("db lock");
+            let task = db
+                .create_task("OpenCode sidecar bridge", "doing", None, None, None, None)
+                .expect("create task");
+            db.create_agent_session(
+                "agent-session-1",
+                &task.id,
+                Some("oc-session-1"),
+                "implementing",
+                "running",
+                "opencode",
+            )
+            .expect("create session");
+            task.id
+        };
+        let mut events = state
+            .app_event_tx
+            .as_ref()
+            .expect("app event sender")
+            .subscribe();
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind test OpenCode SSE server");
+        let port = listener.local_addr().expect("local addr").port();
+        let router = axum::Router::new().route(
+            "/event",
+            axum::routing::get(|| async {
+                let payload = serde_json::json!({
+                    "type": "permission.asked",
+                    "properties": {
+                        "sessionID": "oc-session-1",
+                        "description": "Allow file write?"
+                    }
+                })
+                .to_string();
+                axum::response::sse::Sse::new(futures::stream::iter([Ok::<
+                    _,
+                    std::convert::Infallible,
+                >(
+                    axum::response::sse::Event::default()
+                        .event("message")
+                        .data(payload),
+                )]))
+            }),
+        );
+        tokio::spawn(async move {
+            let _ = axum::serve(listener, router).await;
+        });
+
+        start_opencode_sse_bridge_for_app(
+            &state,
+            &task_id,
+            Some("oc-session-1".to_string()),
+            port,
+        )
+        .await
+        .expect("start bridge through app state");
+
+        let event = tokio::time::timeout(std::time::Duration::from_secs(3), events.recv())
+            .await
+            .expect("app event timeout")
+            .expect("app event");
+
+        assert_eq!(event.event_name, "agent-event");
+        assert_eq!(event.payload["task_id"], task_id);
+        assert_eq!(event.payload["event_type"], "permission.asked");
+
+        let session = state
+            .db
+            .lock()
+            .expect("db lock")
+            .get_agent_session("agent-session-1")
+            .expect("get session")
+            .expect("session exists");
+        assert_eq!(session.status, "paused");
+        assert_eq!(
+            session.checkpoint_data.as_deref().unwrap_or(""),
+            event.payload["data"].as_str().unwrap_or("")
+        );
+
+        state
+            .sse_bridge_manager
+            .as_ref()
+            .expect("bridge manager")
+            .stop_bridge(&task_id)
+            .await;
+        let _ = std::fs::remove_file(path);
     }
 
     #[tokio::test]
