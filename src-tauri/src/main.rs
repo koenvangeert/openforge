@@ -12,6 +12,7 @@ mod diff_parser;
 mod git_worktree;
 mod github_client;
 mod github_poller;
+mod github_runtime;
 mod http_server;
 mod migration;
 mod opencode_client;

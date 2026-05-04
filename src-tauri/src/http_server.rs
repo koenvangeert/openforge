@@ -1874,145 +1874,40 @@ fn payload_optional_usize(
     }
 }
 
-fn github_token() -> Result<String, (StatusCode, String)> {
-    crate::secure_store::get_secret("github_token")
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to get config: {e}"),
-            )
-        })?
-        .ok_or_else(|| {
-            (
-                StatusCode::UNPROCESSABLE_ENTITY,
-                "github_token not configured".to_string(),
-            )
-        })
-}
-
-async fn github_username_for_state(state: &AppState) -> Result<String, (StatusCode, String)> {
-    let cached_username = {
-        let db = crate::db::acquire_db(&state.db);
-        db.get_config("github_username").map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to get config: {e}"),
-            )
-        })?
-    };
-
-    if let Some(username) = cached_username {
-        return Ok(username);
-    }
-
-    let token = github_token()?;
-    let username = state
-        .github_client
-        .get_authenticated_user(&token)
-        .await
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to get authenticated user: {e}"),
-            )
-        })?;
-
-    let db = crate::db::acquire_db(&state.db);
-    db.set_config("github_username", &username).map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Failed to cache username: {e}"),
-        )
-    })?;
-
-    Ok(username)
-}
-
-async fn refresh_live_pr_caches(state: &AppState) -> Result<(), (StatusCode, String)> {
-    let _ = github_username_for_state(state).await?;
-    let result = crate::github_poller::poll_github_once_for_sidecar(
-        state.db.clone(),
-        &state.github_client,
-        state.app_event_tx.clone(),
-    )
-    .await;
-
-    if result.errors > 0 {
-        Err((
-            StatusCode::BAD_GATEWAY,
-            format!("GitHub sync reported {} error(s)", result.errors),
-        ))
-    } else {
-        Ok(())
-    }
-}
-
 async fn handle_app_github_review_command(
     state: &AppState,
     request: &AppInvokeRequest,
 ) -> Result<Option<serde_json::Value>, (StatusCode, String)> {
+    let runtime_error = |error: String| (StatusCode::INTERNAL_SERVER_ERROR, error);
     let value = match request.command.as_str() {
         "get_pull_requests" => {
-            let db = crate::db::acquire_db(&state.db);
-            json_value(db.get_all_pull_requests().map_err(|e| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Failed to get pull requests: {e}"),
-                )
-            })?)?
+            json_value(crate::github_runtime::get_pull_requests(&state.db).map_err(runtime_error)?)?
         }
         "get_pr_comments" => {
             let pr_id = payload_i64(&request.payload, "prId")?;
-            let db = crate::db::acquire_db(&state.db);
-            json_value(db.get_comments_for_pr(pr_id).map_err(|e| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Failed to get PR comments: {e}"),
-                )
-            })?)?
+            json_value(
+                crate::github_runtime::get_pr_comments(&state.db, pr_id).map_err(runtime_error)?,
+            )?
         }
         "mark_comment_addressed" => {
             let comment_id = payload_i64(&request.payload, "commentId")?;
-            let db = crate::db::acquire_db(&state.db);
-            db.mark_comment_addressed(comment_id).map_err(|e| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Failed to mark comment addressed: {e}"),
-                )
-            })?;
-            drop(db);
+            crate::github_runtime::mark_comment_addressed(&state.db, comment_id)
+                .map_err(runtime_error)?;
             emit_comment_addressed(state);
             return Ok(Some(serde_json::Value::Null));
         }
         "get_review_prs" => {
-            let db = crate::db::acquire_db(&state.db);
-            json_value(db.get_all_review_prs().map_err(|e| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Failed to get review PRs: {e}"),
-                )
-            })?)?
+            json_value(crate::github_runtime::get_review_prs(&state.db).map_err(runtime_error)?)?
         }
         "mark_review_pr_viewed" => {
             let pr_id = payload_i64(&request.payload, "prId")?;
             let head_sha = payload_string(&request.payload, "headSha")?;
-            let db = crate::db::acquire_db(&state.db);
-            db.mark_review_pr_viewed(pr_id, &head_sha).map_err(|e| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Failed to mark review PR viewed: {e}"),
-                )
-            })?;
+            crate::github_runtime::mark_review_pr_viewed(&state.db, pr_id, &head_sha)
+                .map_err(runtime_error)?;
             serde_json::Value::Null
         }
         "get_authored_prs" => {
-            let db = crate::db::acquire_db(&state.db);
-            json_value(db.get_all_authored_prs().map_err(|e| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Failed to get authored PRs: {e}"),
-                )
-            })?)?
+            json_value(crate::github_runtime::get_authored_prs(&state.db).map_err(runtime_error)?)?
         }
         "force_github_sync" => json_value(
             crate::github_poller::poll_github_once_for_sidecar(
@@ -2026,84 +1921,66 @@ async fn handle_app_github_review_command(
             let owner = payload_string(&request.payload, "owner")?;
             let repo = payload_string(&request.payload, "repo")?;
             let pr_number = payload_i64(&request.payload, "prNumber")?;
-            let token = github_token()?;
-            let response = state
-                .github_client
-                .merge_pr(&owner, &repo, pr_number, &token)
-                .await
-                .map_err(|e| {
-                    (
-                        StatusCode::BAD_GATEWAY,
-                        format!("Failed to merge pull request: {e}"),
-                    )
-                })?;
-            if !response.merged {
-                return Err((
-                    StatusCode::BAD_GATEWAY,
-                    format!("Failed to merge pull request: {}", response.message),
-                ));
-            }
+            crate::github_runtime::merge_pull_request(
+                &state.github_client,
+                &owner,
+                &repo,
+                pr_number,
+            )
+            .await
+            .map_err(runtime_error)?;
             serde_json::Value::Null
         }
-        "get_github_username" => json_value(github_username_for_state(state).await?)?,
-        "fetch_review_prs" => {
-            refresh_live_pr_caches(state).await?;
-            let db = crate::db::acquire_db(&state.db);
-            json_value(db.get_all_review_prs().map_err(|e| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Failed to get review PRs: {e}"),
-                )
-            })?)?
-        }
+        "get_github_username" => json_value(
+            crate::github_runtime::github_username(&state.db, &state.github_client)
+                .await
+                .map_err(runtime_error)?,
+        )?,
+        "fetch_review_prs" => json_value(
+            crate::github_runtime::fetch_review_prs(&state.db, &state.github_client)
+                .await
+                .map_err(runtime_error)?,
+        )?,
         "get_pr_file_diffs" => {
             let owner = payload_string(&request.payload, "owner")?;
             let repo = payload_string(&request.payload, "repo")?;
             let pr_number = payload_i64(&request.payload, "prNumber")?;
-            let token = github_token()?;
             json_value(
-                state
-                    .github_client
-                    .get_pr_files(&owner, &repo, pr_number, &token)
-                    .await
-                    .map_err(|e| {
-                        (
-                            StatusCode::BAD_GATEWAY,
-                            format!("Failed to get PR files: {e}"),
-                        )
-                    })?,
+                crate::github_runtime::get_pr_file_diffs(
+                    &state.github_client,
+                    &owner,
+                    &repo,
+                    pr_number,
+                )
+                .await
+                .map_err(runtime_error)?,
             )?
         }
         "get_file_content" | "get_file_content_base64" => {
             let owner = payload_string(&request.payload, "owner")?;
             let repo = payload_string(&request.payload, "repo")?;
             let sha = payload_string(&request.payload, "sha")?;
-            let token = github_token()?;
             if request.command == "get_file_content" {
                 json_value(
-                    state
-                        .github_client
-                        .get_blob_content(&owner, &repo, &sha, &token)
-                        .await
-                        .map_err(|e| {
-                            (
-                                StatusCode::BAD_GATEWAY,
-                                format!("Failed to get blob content: {e}"),
-                            )
-                        })?,
+                    crate::github_runtime::get_file_content(
+                        &state.github_client,
+                        &owner,
+                        &repo,
+                        &sha,
+                    )
+                    .await
+                    .map_err(runtime_error)?,
                 )?
             } else {
                 json_value(
-                    state
-                        .github_client
-                        .get_blob_content_base64(&owner, &repo, &sha, &token)
-                        .await
-                        .map_err(|e| {
-                            (
-                                StatusCode::BAD_GATEWAY,
-                                format!("Failed to get blob content: {e}"),
-                            )
-                        })?,
+                    crate::github_runtime::get_file_content_base64(
+                        &state.github_client,
+                        &owner,
+                        &repo,
+                        &sha,
+                    )
+                    .await
+                    .map_err(runtime_error)?,
                 )?
             }
         }
@@ -2112,32 +1989,29 @@ async fn handle_app_github_review_command(
             let repo = payload_string(&request.payload, "repo")?;
             let path = payload_string(&request.payload, "path")?;
             let ref_sha = payload_string(&request.payload, "refSha")?;
-            let token = github_token()?;
             if request.command == "get_file_at_ref" {
                 json_value(
-                    state
-                        .github_client
-                        .get_file_at_ref(&owner, &repo, &path, &ref_sha, &token)
-                        .await
-                        .map_err(|e| {
-                            (
-                                StatusCode::BAD_GATEWAY,
-                                format!("Failed to get file at ref: {e}"),
-                            )
-                        })?,
+                    crate::github_runtime::get_file_at_ref(
+                        &state.github_client,
+                        &owner,
+                        &repo,
+                        &path,
+                        &ref_sha,
+                    )
+                    .await
+                    .map_err(runtime_error)?,
                 )?
             } else {
                 json_value(
-                    state
-                        .github_client
-                        .get_file_at_ref_base64(&owner, &repo, &path, &ref_sha, &token)
-                        .await
-                        .map_err(|e| {
-                            (
-                                StatusCode::BAD_GATEWAY,
-                                format!("Failed to get file at ref: {e}"),
-                            )
-                        })?,
+                    crate::github_runtime::get_file_at_ref_base64(
+                        &state.github_client,
+                        &owner,
+                        &repo,
+                        &path,
+                        &ref_sha,
+                    )
+                    .await
+                    .map_err(runtime_error)?,
                 )?
             }
         }
@@ -2145,75 +2019,30 @@ async fn handle_app_github_review_command(
             let owner = payload_string(&request.payload, "owner")?;
             let repo = payload_string(&request.payload, "repo")?;
             let pr_number = payload_i64(&request.payload, "prNumber")?;
-            let token = github_token()?;
-            let comments = state
-                .github_client
-                .get_pr_review_comments(&owner, &repo, pr_number, &token)
-                .await
-                .map_err(|e| {
-                    (
-                        StatusCode::BAD_GATEWAY,
-                        format!("Failed to get review comments: {e}"),
-                    )
-                })?;
             json_value(
-                comments
-                    .into_iter()
-                    .map(|c| crate::commands::review::FrontendReviewComment {
-                        id: c.id,
-                        pr_number,
-                        repo_owner: owner.clone(),
-                        repo_name: repo.clone(),
-                        line: c.line.or_else(|| {
-                            c.extra
-                                .get("original_line")
-                                .and_then(|v| v.as_i64())
-                                .map(|v| v as i32)
-                        }),
-                        side: c.side,
-                        path: c.path,
-                        body: c.body,
-                        author: c.user.login,
-                        created_at: c.created_at,
-                        in_reply_to_id: c.in_reply_to_id,
-                    })
-                    .collect::<Vec<_>>(),
+                crate::github_runtime::get_review_comments(
+                    &state.github_client,
+                    &owner,
+                    &repo,
+                    pr_number,
+                )
+                .await
+                .map_err(runtime_error)?,
             )?
         }
         "get_pr_overview_comments" => {
             let owner = payload_string(&request.payload, "owner")?;
             let repo = payload_string(&request.payload, "repo")?;
             let pr_number = payload_i64(&request.payload, "prNumber")?;
-            let token = github_token()?;
-            let comments = state
-                .github_client
-                .get_pr_comments(&owner, &repo, pr_number, &token, None)
-                .await
-                .map_err(|e| {
-                    (
-                        StatusCode::BAD_GATEWAY,
-                        format!("Failed to get PR overview comments: {e}"),
-                    )
-                })?;
             json_value(
-                comments
-                    .into_iter()
-                    .map(|c| crate::commands::review::FrontendPrOverviewComment {
-                        id: c.id,
-                        body: c.body,
-                        author: c.user.login,
-                        avatar_url: c
-                            .user
-                            .extra
-                            .get("avatar_url")
-                            .and_then(|v| v.as_str())
-                            .map(String::from),
-                        comment_type: c.comment_type,
-                        file_path: c.path,
-                        line_number: c.line,
-                        created_at: c.created_at,
-                    })
-                    .collect::<Vec<_>>(),
+                crate::github_runtime::get_pr_overview_comments(
+                    &state.github_client,
+                    &owner,
+                    &repo,
+                    pr_number,
+                )
+                .await
+                .map_err(runtime_error)?,
             )?
         }
         "submit_pr_review" => {
@@ -2235,31 +2064,25 @@ async fn handle_app_github_review_command(
                         format!("payload.comments is invalid: {e}"),
                     )
                 })?;
-            let token = github_token()?;
-            state
-                .github_client
-                .submit_review(
-                    &owner, &repo, pr_number, &event, &body, comments, &commit_id, &token,
-                )
-                .await
-                .map_err(|e| {
-                    (
-                        StatusCode::BAD_GATEWAY,
-                        format!("Failed to submit review: {e}"),
-                    )
-                })?;
+            crate::github_runtime::submit_pr_review(
+                &state.github_client,
+                &owner,
+                &repo,
+                pr_number,
+                &event,
+                &body,
+                comments,
+                &commit_id,
+            )
+            .await
+            .map_err(runtime_error)?;
             serde_json::Value::Null
         }
-        "fetch_authored_prs" => {
-            refresh_live_pr_caches(state).await?;
-            let db = crate::db::acquire_db(&state.db);
-            json_value(db.get_all_authored_prs().map_err(|e| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Failed to get authored PRs: {e}"),
-                )
-            })?)?
-        }
+        "fetch_authored_prs" => json_value(
+            crate::github_runtime::fetch_authored_prs(&state.db, &state.github_client)
+                .await
+                .map_err(runtime_error)?,
+        )?,
         _ => return Ok(None),
     };
 
