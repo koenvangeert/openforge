@@ -29,6 +29,7 @@ mod review_prompt;
 mod secure_store;
 mod server_manager;
 mod sse_bridge;
+mod user_environment;
 mod whisper_manager;
 use github_client::GitHubClient;
 use log::{debug, error, info, warn};
@@ -542,7 +543,11 @@ fn initialize_database(app_data_dir: &Path) -> db::Database {
     info!(
         "Initializing database at: {:?} (mode: {})",
         db_path,
-        if cfg!(debug_assertions) { "dev" } else { "prod" }
+        if cfg!(debug_assertions) {
+            "dev"
+        } else {
+            "prod"
+        }
     );
 
     db::Database::new(db_path).expect("Failed to initialize database")
@@ -584,13 +589,17 @@ fn run_database_startup_maintenance(database: &db::Database) {
         }
         Ok(_) => {}
         Err(e) => {
-            warn!("[startup] Failed to clear stale task workspace ports: {}", e);
+            warn!(
+                "[startup] Failed to clear stale task workspace ports: {}",
+                e
+            );
         }
     }
 }
 
 fn sidecar_app_data_dir() -> Result<PathBuf, String> {
-    let data_dir = dirs::data_dir().ok_or_else(|| "failed to resolve user data directory".to_string())?;
+    let data_dir =
+        dirs::data_dir().ok_or_else(|| "failed to resolve user data directory".to_string())?;
     let app_data_dir = data_dir.join(APP_IDENTIFIER);
     std::fs::create_dir_all(&app_data_dir).map_err(|error| {
         format!(

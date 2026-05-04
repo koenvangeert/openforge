@@ -1,4 +1,5 @@
 use crate::app_events::{publish_app_event, AppEventSender};
+use crate::user_environment::user_environment;
 use log::{error, info, warn};
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use std::collections::HashMap;
@@ -484,8 +485,7 @@ impl PtyManager {
         cmd.arg(opencode_session_id);
 
         // Get user environment (especially PATH on macOS)
-        let user_env = get_user_environment();
-        for (key, value) in user_env {
+        for (key, value) in user_environment() {
             cmd.env(key, value);
         }
 
@@ -655,8 +655,7 @@ impl PtyManager {
         }
         cmd.cwd(cwd);
 
-        let user_env = get_user_environment();
-        for (key, value) in user_env {
+        for (key, value) in user_environment() {
             cmd.env(key, value);
         }
 
@@ -802,8 +801,7 @@ impl PtyManager {
         }
         cmd.cwd(cwd);
 
-        let user_env = get_user_environment();
-        for (key, value) in user_env {
+        for (key, value) in user_environment() {
             cmd.env(key, value);
         }
 
@@ -935,9 +933,8 @@ impl PtyManager {
         let mut cmd = CommandBuilder::new(&shell_path);
         cmd.cwd(cwd);
 
-        let user_env = get_user_environment();
-        for (k, v) in user_env {
-            cmd.env(k, v);
+        for (key, value) in user_environment() {
+            cmd.env(key, value);
         }
 
         cmd.env("TERM", "xterm-256color");
@@ -1387,65 +1384,6 @@ fn find_utf8_boundary(bytes: &[u8]) -> usize {
         .unwrap_or(len)
 }
 
-// ============================================================================
-// Environment Helpers
-// ============================================================================
-
-/// Gets the user's full environment by running their shell with -ilc env.
-/// This ensures PATH and other environment variables are properly set on macOS.
-fn get_user_environment() -> HashMap<String, String> {
-    let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string());
-
-    let output = std::process::Command::new(&shell)
-        .arg("-ilc")
-        .arg("env")
-        .output();
-
-    let mut env_map = HashMap::new();
-
-    match output {
-        Ok(output) if output.status.success() => {
-            let env_str = String::from_utf8_lossy(&output.stdout);
-            for line in env_str.lines() {
-                if let Some(pos) = line.find('=') {
-                    let key = line[..pos].to_string();
-                    let value = line[pos + 1..].to_string();
-                    env_map.insert(key, value);
-                }
-            }
-        }
-        _ => {
-            warn!("Failed to get user environment from shell, using fallbacks");
-        }
-    }
-
-    // Ensure critical environment variables have fallbacks
-    if !env_map.contains_key("HOME") {
-        if let Ok(home) = std::env::var("HOME") {
-            env_map.insert("HOME".to_string(), home);
-        }
-    }
-
-    if !env_map.contains_key("USER") {
-        if let Ok(user) = std::env::var("USER") {
-            env_map.insert("USER".to_string(), user);
-        }
-    }
-
-    if !env_map.contains_key("PATH") {
-        env_map.insert(
-            "PATH".to_string(),
-            "/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin".to_string(),
-        );
-    }
-
-    if !env_map.contains_key("LANG") {
-        env_map.insert("LANG".to_string(), "en_US.UTF-8".to_string());
-    }
-
-    env_map
-}
-
 fn shell_session_key(task_id: &str, terminal_index: Option<u32>) -> String {
     if let Some(idx) = terminal_index {
         format!("{}-shell-{}", task_id, idx)
@@ -1627,8 +1565,8 @@ mod tests {
     }
 
     #[test]
-    fn test_get_user_environment() {
-        let env = get_user_environment();
+    fn test_user_environment_helper_has_fallbacks() {
+        let env = user_environment();
         // Should at least have fallback values
         assert!(env.contains_key("PATH"));
         assert!(env.contains_key("LANG"));
