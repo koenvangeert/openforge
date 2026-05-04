@@ -41,7 +41,7 @@ type TerminalPoolEntry = Awaited<ReturnType<typeof acquire>>;
 const listenCallbacks = new Map<string, ListenCallback>();
 const unlistenFns: UnlistenMock[] = [];
 let webLinksHandler: ((event: MouseEvent, uri: string) => void) | null = null;
-let webglContextLossHandler: (() => void) | null = null;
+let webglAddonConstructionCount = 0;
 let fontLoadMock: Mock;
 const originalDocumentFonts = document.fonts;
 
@@ -97,13 +97,6 @@ function getWebLinksHandler(): (event: MouseEvent, uri: string) => void {
 	);
 }
 
-function getWebglContextLossHandler(): () => void {
-	return requireValue(
-		webglContextLossHandler,
-		"Expected WebGL context loss handler to be registered",
-	);
-}
-
 function getTerminalMocks(entry: TerminalPoolEntry) {
 	return {
 		open: vi.mocked(entry.terminal.open),
@@ -120,23 +113,6 @@ function getFitAddonMocks(entry: TerminalPoolEntry) {
 	return {
 		fit: vi.mocked(entry.fitAddon.fit),
 	};
-}
-
-function isDisposableAddon(value: unknown): value is { dispose: () => void } {
-	return (
-		typeof value === "object" &&
-		value !== null &&
-		"dispose" in value &&
-		typeof value.dispose === "function"
-	);
-}
-
-function getDisposableAddon(value: unknown): { dispose: () => void } {
-	if (!isDisposableAddon(value)) {
-		throw new Error("Expected addon with dispose() mock");
-	}
-
-	return value;
 }
 
 vi.mock("./desktopIpc", () => ({
@@ -191,10 +167,11 @@ vi.mock("@xterm/addon-web-links", () => {
 
 vi.mock("@xterm/addon-webgl", () => {
 	class WebglAddon {
-		onContextLoss = vi.fn((handler: () => void) => {
-			webglContextLossHandler = handler;
-			return { dispose: vi.fn() };
-		});
+		constructor() {
+			webglAddonConstructionCount++;
+		}
+
+		onContextLoss = vi.fn(() => ({ dispose: vi.fn() }));
 		activate = vi.fn();
 		dispose = vi.fn();
 	}
@@ -254,7 +231,7 @@ describe("terminalPool", () => {
 		listenCallbacks.clear();
 		unlistenFns.length = 0;
 		webLinksHandler = null;
-		webglContextLossHandler = null;
+		webglAddonConstructionCount = 0;
 		fontLoadMock = vi.fn().mockResolvedValue([]);
 		Object.defineProperty(document, "fonts", {
 			configurable: true,
@@ -357,22 +334,7 @@ describe("terminalPool", () => {
 		expect(entry.attached).toBe(true);
 	});
 
-	it("attach attempts WebGL after terminal.open and tolerates WebGL setup failure", async () => {
-		const entry = await acquire("task-webgl");
-		const wrapper = document.createElement("div");
-
-		await attach(entry, wrapper);
-
-		const { open: openSpy, loadAddon: loadAddonSpy } = getTerminalMocks(entry);
-
-		expect(openSpy).toHaveBeenCalledWith(entry.hostDiv);
-		expect(loadAddonSpy).toHaveBeenCalledTimes(3);
-		expect(openSpy.mock.invocationCallOrder[0]).toBeLessThan(
-			loadAddonSpy.mock.invocationCallOrder[2],
-		);
-	});
-
-	it("attach loads the WebGL renderer for both agent and shell terminal keys", async () => {
+	it("attach keeps xterm on the stable default renderer for both agent and shell terminal keys", async () => {
 		const agentEntry = await acquire("T-50");
 		const shellEntry = await acquire("T-50-shell-0");
 		const agentWrapper = document.createElement("div");
@@ -388,98 +350,26 @@ describe("terminalPool", () => {
 
 		expect(agentOpenSpy).toHaveBeenCalledWith(agentEntry.hostDiv);
 		expect(shellOpenSpy).toHaveBeenCalledWith(shellEntry.hostDiv);
-		expect(agentLoadAddonSpy).toHaveBeenCalledTimes(3);
-		expect(shellLoadAddonSpy).toHaveBeenCalledTimes(3);
-		expect(agentOpenSpy.mock.invocationCallOrder[0]).toBeLessThan(
-			agentLoadAddonSpy.mock.invocationCallOrder[2],
-		);
-		expect(shellOpenSpy.mock.invocationCallOrder[0]).toBeLessThan(
-			shellLoadAddonSpy.mock.invocationCallOrder[2],
-		);
+		expect(agentLoadAddonSpy).toHaveBeenCalledTimes(2);
+		expect(shellLoadAddonSpy).toHaveBeenCalledTimes(2);
+		expect(webglAddonConstructionCount).toBe(0);
 	});
 
-	it("attach disposes the WebGL addon on context loss", async () => {
-		const entry = await acquire("task-webgl-context-loss");
-		const wrapper = document.createElement("div");
-
-		await attach(entry, wrapper);
-
-		const { loadAddon: loadAddonSpy } = getTerminalMocks(entry);
-		const webglAddon = getDisposableAddon(loadAddonSpy.mock.calls.at(2)?.[0]);
-		const disposeSpy = vi.mocked(webglAddon.dispose);
-
-		expect(webglContextLossHandler).not.toBeNull();
-
-		getWebglContextLossHandler()();
-
-		expect(disposeSpy).toHaveBeenCalledTimes(1);
-	});
-
-	it("recoverActiveTerminal reloads the WebGL renderer after context loss", async () => {
-		const entry = await acquire("task-webgl-recover-context");
+	it("recoverActiveTerminal refits without enabling the WebGL renderer", async () => {
+		const entry = await acquire("task-stable-renderer-recover");
 		const wrapper = document.createElement("div");
 
 		await attach(entry, wrapper);
 
 		const { loadAddon: loadAddonSpy, refresh: refreshSpy } = getTerminalMocks(entry);
-		getWebglContextLossHandler()();
 		loadAddonSpy.mockClear();
 		refreshSpy.mockClear();
 
 		await recoverActiveTerminal(entry);
 
-		expect(loadAddonSpy).toHaveBeenCalledTimes(1);
+		expect(loadAddonSpy).not.toHaveBeenCalled();
 		expect(refreshSpy).toHaveBeenCalled();
-	});
-
-	it("reattach reloads the WebGL renderer after context loss while switching views", async () => {
-		const entry = await acquire("task-webgl-reattach-context");
-		const wrapper1 = document.createElement("div");
-		const wrapper2 = document.createElement("div");
-
-		await attach(entry, wrapper1);
-
-		const { loadAddon: loadAddonSpy, refresh: refreshSpy } = getTerminalMocks(entry);
-		getWebglContextLossHandler()();
-		detach(entry);
-		loadAddonSpy.mockClear();
-		refreshSpy.mockClear();
-
-		await attach(entry, wrapper2);
-
-		expect(loadAddonSpy).toHaveBeenCalledTimes(1);
-		expect(wrapper2.contains(entry.hostDiv)).toBe(true);
-		expect(refreshSpy).toHaveBeenCalled();
-	});
-
-	it("automatic WebGL context recovery does not steal focus from another terminal", async () => {
-		const entry = await acquire("task-webgl-hidden-context");
-		const wrapper = document.createElement("div");
-
-		await attach(entry, wrapper);
-
-		const originalRaf = globalThis.requestAnimationFrame;
-		let rafCallback: FrameRequestCallback = () => {
-			throw new Error("Expected context-loss recovery to schedule an animation frame");
-		};
-		globalThis.requestAnimationFrame = vi.fn((callback: FrameRequestCallback) => {
-			rafCallback = callback;
-			return 1;
-		});
-
-		try {
-			const { loadAddon: loadAddonSpy, focus: focusSpy } = getTerminalMocks(entry);
-			getWebglContextLossHandler()();
-			loadAddonSpy.mockClear();
-			focusSpy.mockClear();
-
-			rafCallback(16);
-
-			expect(loadAddonSpy).toHaveBeenCalledTimes(1);
-			expect(focusSpy).not.toHaveBeenCalled();
-		} finally {
-			globalThis.requestAnimationFrame = originalRaf;
-		}
+		expect(webglAddonConstructionCount).toBe(0);
 	});
 
 	it("attach is idempotent", async () => {
