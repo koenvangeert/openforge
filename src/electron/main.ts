@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
-import { app, BrowserWindow, ipcMain, shell } from 'electron'
+import { app, BrowserWindow, ipcMain, protocol, session, shell } from 'electron'
 import { createMainWindowOptions } from './windowConfig.js'
 import { openDevToolsForDevelopment } from './devTools.js'
 import { createPreloadPath } from './preloadPath.js'
@@ -11,6 +11,13 @@ import { handleElectronInvoke } from './backendBridge.js'
 import { createAppEventForwarder } from './eventForwarder.js'
 import { trustedRendererUrlFromEnv } from './rendererUrl.js'
 import { resolveElectronSidecarPath } from './sidecarPath.js'
+import {
+  applyElectronRendererCsp,
+  createElectronRendererCsp,
+  registerPluginProtocolHandler,
+  registerPluginProtocolSchemeAsPrivileged,
+  resolveHostRuntimeRoot,
+} from './pluginProtocol.js'
 import type { AppEventForwarder } from './eventForwarder.js'
 import type { SidecarHandle } from './sidecar.js'
 
@@ -19,6 +26,10 @@ let appEventForwarder: AppEventForwarder | null = null
 
 function currentDir(): string {
   return dirname(fileURLToPath(import.meta.url))
+}
+
+function workspaceRoot(): string {
+  return join(currentDir(), '..')
 }
 
 async function createMainWindow(): Promise<BrowserWindow> {
@@ -72,10 +83,18 @@ async function bootSidecar(): Promise<void> {
   console.log(`[electron] Rust sidecar is ready at ${config.healthUrl}`)
 }
 
+registerPluginProtocolSchemeAsPrivileged(protocol)
 registerSkeletonIpc()
 
 app.whenReady().then(async () => {
   await bootSidecar()
+  registerPluginProtocolHandler(protocol, {
+    workspaceRoot: workspaceRoot(),
+    hostRuntimeRoot: resolveHostRuntimeRoot(currentDir()),
+    sidecarConfig: sidecar?.config ?? null,
+    fetch: (url, init) => fetch(url, init),
+  })
+  applyElectronRendererCsp(session.defaultSession, createElectronRendererCsp(sidecar?.config ?? null))
 
   if (sidecar) {
     appEventForwarder = createAppEventForwarder({
