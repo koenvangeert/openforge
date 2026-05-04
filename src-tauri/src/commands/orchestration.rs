@@ -154,7 +154,6 @@ pub(crate) fn build_start_response(
     serde_json::json!({
         "task_id": task_id,
         "session_id": session_id,
-        "worktree_path": workspace_path,
         "workspace_path": workspace_path,
         "port": port,
     })
@@ -601,13 +600,13 @@ mod tests {
     }
 
     #[test]
-    fn test_build_start_response_contains_all_fields() {
-        let response = build_start_response("T-100", "sess-abc", "/path/to/worktree", 3000);
+    fn test_build_start_response_uses_workspace_path_without_worktree_alias() {
+        let response = build_start_response("T-100", "sess-abc", "/path/to/workspace", 3000);
 
         assert_eq!(response["task_id"], "T-100");
         assert_eq!(response["session_id"], "sess-abc");
-        assert_eq!(response["worktree_path"], "/path/to/worktree");
-        assert_eq!(response["workspace_path"], "/path/to/worktree");
+        assert_eq!(response["workspace_path"], "/path/to/workspace");
+        assert!(response.get("worktree_path").is_none());
         assert_eq!(response["port"], 3000);
     }
 
