@@ -9,7 +9,8 @@ import {
 describe('getOpenForgeChunkGroupName', () => {
   it('matches xterm packages before the generic vendor bucket', () => {
     expect(getOpenForgeChunkGroupName('/repo/node_modules/@xterm/xterm/lib/xterm.js')).toBe('vendor-xterm')
-    expect(getOpenForgeChunkGroupName('/repo/node_modules/@xterm/addon-webgl/lib/index.js')).toBe('vendor-xterm')
+    expect(getOpenForgeChunkGroupName('/repo/node_modules/@xterm/addon-fit/lib/index.js')).toBe('vendor-xterm')
+    expect(getOpenForgeChunkGroupName('/repo/node_modules/@xterm/addon-web-links/lib/index.js')).toBe('vendor-xterm')
   })
 
   it('routes lowlight and highlight.js into the dedicated highlight chunk', () => {
