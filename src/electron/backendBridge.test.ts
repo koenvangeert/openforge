@@ -190,7 +190,28 @@ describe('Electron backend bridge command forwarding', () => {
     })
   })
 
-  it('declares config/projects/tasks, PTY/session, and GitHub/PR review commands as sidecar-backed for this slice', () => {
+  it('forwards Whisper audio commands to the authenticated Rust sidecar route', async () => {
+    const fetch = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ value: { text: 'hello', duration_ms: 12 } }),
+    }))
+
+    await expect(handleElectronInvoke(
+      { command: 'transcribe_audio', payload: { audioData: [0, 0.25, -0.25] } },
+      { sidecarConfig: sidecarConfig(), fetch, openExternal: vi.fn() },
+    )).resolves.toEqual({ text: 'hello', duration_ms: 12 })
+
+    expect(fetch).toHaveBeenCalledWith('http://127.0.0.1:17642/app/invoke', {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer launch-token',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ command: 'transcribe_audio', payload: { audioData: [0, 0.25, -0.25] } }),
+    })
+  })
+
+  it('declares config/projects/tasks, PTY/session, GitHub/PR review, and Whisper commands as sidecar-backed for this slice', () => {
     expect(isSidecarBackedCommand('get_projects')).toBe(true)
     expect(isSidecarBackedCommand('get_project_attention')).toBe(true)
     expect(isSidecarBackedCommand('create_task')).toBe(true)
@@ -257,6 +278,10 @@ describe('Electron backend bridge command forwarding', () => {
     expect(isSidecarBackedCommand('get_plugin_storage')).toBe(true)
     expect(isSidecarBackedCommand('set_plugin_storage')).toBe(true)
     expect(isSidecarBackedCommand('plugin_invoke')).toBe(true)
-    expect(isSidecarBackedCommand('transcribe_audio')).toBe(false)
+    expect(isSidecarBackedCommand('transcribe_audio')).toBe(true)
+    expect(isSidecarBackedCommand('get_whisper_model_status')).toBe(true)
+    expect(isSidecarBackedCommand('download_whisper_model')).toBe(true)
+    expect(isSidecarBackedCommand('get_all_whisper_model_statuses')).toBe(true)
+    expect(isSidecarBackedCommand('set_whisper_model')).toBe(true)
   })
 })

@@ -521,6 +521,21 @@ impl WhisperManager {
         app: AppHandle,
         size: WhisperModelSize,
     ) -> Result<String, WhisperError> {
+        self.download_model_with_progress(size, |progress| {
+            let _ = app.emit("whisper-download-progress", progress);
+        })
+        .await
+    }
+
+    /// Download a Whisper model file and report progress through a caller-provided callback.
+    pub async fn download_model_with_progress<F>(
+        &self,
+        size: WhisperModelSize,
+        mut on_progress: F,
+    ) -> Result<String, WhisperError>
+    where
+        F: FnMut(WhisperDownloadProgress),
+    {
         let spec = size.spec();
 
         // Determine the target path and ensure parent directories exist.
@@ -582,16 +597,12 @@ impl WhisperManager {
                 0.0
             };
 
-            // Emit progress event (best-effort — ignore emit errors).
-            let _ = app.emit(
-                "whisper-download-progress",
-                WhisperDownloadProgress {
-                    model_size: size.as_str().to_string(),
-                    bytes_downloaded,
-                    total_bytes,
-                    percentage,
-                },
-            );
+            on_progress(WhisperDownloadProgress {
+                model_size: size.as_str().to_string(),
+                bytes_downloaded,
+                total_bytes,
+                percentage,
+            });
         }
 
         // Flush and close before hashing.

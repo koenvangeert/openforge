@@ -612,9 +612,17 @@ fn run_electron_sidecar() -> Result<(), Box<dyn std::error::Error>> {
         warn!("[startup] Failed to install OpenForge CLI: {}", e);
     }
 
+    let whisper_model_pref = database
+        .get_config("whisper_model_size")
+        .ok()
+        .flatten()
+        .and_then(|s| WhisperModelSize::from_str(&s))
+        .unwrap_or(WhisperModelSize::Small);
+
     let db_arc = Arc::new(Mutex::new(database));
     let pty_manager = PtyManager::new();
     let server_manager = server_manager::ServerManager::new();
+    let whisper_manager = Arc::new(WhisperManager::with_active_model(whisper_model_pref));
     let (http_ready_tx, _http_ready_rx) = tokio::sync::oneshot::channel::<()>();
 
     println!(
@@ -629,6 +637,7 @@ fn run_electron_sidecar() -> Result<(), Box<dyn std::error::Error>> {
             db_arc,
             pty_manager,
             server_manager,
+            whisper_manager,
             http_ready_tx,
         ))
 }

@@ -6,6 +6,7 @@ use crate::{
     pty_manager::PtyManager,
     server_manager::ServerManager,
     sse_bridge::{SseBridgeError, SseBridgeManager},
+    whisper_manager::{WhisperManager, WhisperModelSize},
 };
 use axum::{
     extract::{Json, Path, Query, State},
@@ -38,6 +39,7 @@ pub struct AppState {
     pub sse_bridge_manager: Option<SseBridgeManager>,
     pub github_client: GitHubClient,
     pub app_event_tx: Option<AppEventSender>,
+    pub whisper: Option<std::sync::Arc<WhisperManager>>,
 }
 
 /// Response containing the created task ID
@@ -3153,6 +3155,85 @@ async fn app_events_handler(
     Ok(Sse::new(stream))
 }
 
+async fn handle_app_whisper_command(
+    state: &AppState,
+    request: &AppInvokeRequest,
+) -> Result<Option<serde_json::Value>, (StatusCode, String)> {
+    let Some(whisper) = state.whisper.as_ref() else {
+        return Ok(None);
+    };
+
+    let value = match request.command.as_str() {
+        "transcribe_audio" => {
+            let audio_data: Vec<f32> = payload_field(&request.payload, "audioData")?;
+            json_value(whisper.transcribe(&audio_data).map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Transcription failed: {e}"),
+                )
+            })?)?
+        }
+        "get_whisper_model_status" => json_value(whisper.get_model_status())?,
+        "get_all_whisper_model_statuses" => json_value(whisper.get_all_model_statuses())?,
+        "set_whisper_model" => {
+            let model_size = payload_string(&request.payload, "modelSize")?;
+            let size = WhisperModelSize::from_str(&model_size).ok_or_else(|| {
+                (
+                    StatusCode::BAD_REQUEST,
+                    format!("Invalid model size: {model_size}"),
+                )
+            })?;
+            whisper.set_active_model(size);
+            let db = crate::db::acquire_db(&state.db);
+            db.set_config("whisper_model_size", size.as_str()).map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Failed to save model size to config: {e}"),
+                )
+            })?;
+            serde_json::Value::Null
+        }
+        "download_whisper_model" => {
+            let model_size = payload_string(&request.payload, "modelSize")?;
+            let size = WhisperModelSize::from_str(&model_size).ok_or_else(|| {
+                (
+                    StatusCode::BAD_REQUEST,
+                    format!("Invalid model size: {model_size}"),
+                )
+            })?;
+            let app = state.app.clone();
+            let event_tx = state.app_event_tx.clone();
+            let path = whisper
+                .download_model_with_progress(size, move |progress| {
+                    if let Ok(payload) = serde_json::to_value(&progress) {
+                        publish_app_event(&event_tx, "whisper-download-progress", &payload);
+                        if let Some(app) = app.as_ref() {
+                            let _ = app.emit("whisper-download-progress", payload);
+                        }
+                    }
+                })
+                .await
+                .map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("Model download failed: {e}"),
+                    )
+                })?;
+            let db = crate::db::acquire_db(&state.db);
+            db.set_config("whisper_model_path", &path).map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Failed to save model path to config: {e}"),
+                )
+            })?;
+            serde_json::Value::Null
+        }
+        _ => return Ok(None),
+    };
+
+    Ok(Some(value))
+}
+
 async fn app_invoke_handler(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -3160,6 +3241,9 @@ async fn app_invoke_handler(
 ) -> Result<Json<AppInvokeResponse>, (StatusCode, String)> {
     require_backend_token(&state, &headers)?;
 
+    if let Some(value) = handle_app_whisper_command(&state, &request).await? {
+        return Ok(Json(AppInvokeResponse { value }));
+    }
     if let Some(value) = handle_app_core_task_project_command(&state, &request).await? {
         return Ok(Json(AppInvokeResponse { value }));
     }
@@ -3523,6 +3607,7 @@ pub async fn start_http_server(
         pty_manager,
         server_manager,
         sse_bridge_manager,
+        None,
         ready_tx,
     )
     .await
@@ -3532,6 +3617,7 @@ pub async fn start_http_sidecar_server(
     db: std::sync::Arc<Mutex<db::Database>>,
     pty_manager: PtyManager,
     server_manager: ServerManager,
+    whisper: std::sync::Arc<WhisperManager>,
     ready_tx: tokio::sync::oneshot::Sender<()>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     start_http_server_with_app_state(
@@ -3540,6 +3626,7 @@ pub async fn start_http_sidecar_server(
         pty_manager,
         server_manager,
         SseBridgeManager::new(),
+        Some(whisper),
         ready_tx,
     )
     .await
@@ -3551,6 +3638,7 @@ async fn start_http_server_with_app_state(
     pty_manager: PtyManager,
     server_manager: ServerManager,
     sse_bridge_manager: SseBridgeManager,
+    whisper: Option<std::sync::Arc<WhisperManager>>,
     ready_tx: tokio::sync::oneshot::Sender<()>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let port = resolve_http_server_port(
@@ -3573,6 +3661,7 @@ async fn start_http_server_with_app_state(
         sse_bridge_manager: Some(sse_bridge_manager),
         github_client: github_client.clone(),
         app_event_tx: Some(app_event_tx.clone()),
+        whisper,
     };
 
     if state.app.is_none() {
@@ -3630,6 +3719,9 @@ mod tests {
                 sse_bridge_manager: Some(SseBridgeManager::new()),
                 github_client: GitHubClient::new(),
                 app_event_tx: Some(app_event_tx),
+                whisper: Some(Arc::new(WhisperManager::with_active_model(
+                    WhisperModelSize::Small,
+                ))),
             },
             path,
         )
@@ -3908,6 +4000,96 @@ mod tests {
             .expect("request should succeed");
         assert_eq!(authorized.status(), StatusCode::OK);
         assert_eq!(response_body_json(authorized).await["status"], "ok");
+
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[tokio::test]
+    async fn test_app_invoke_handles_whisper_model_status_and_selection() {
+        let (state, path) = test_state("app_invoke_whisper_status_selection");
+        let router = create_router(state);
+
+        let all_statuses = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/app/invoke")
+                    .method("POST")
+                    .header("authorization", "Bearer test-token")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        r#"{"command":"get_all_whisper_model_statuses","payload":null}"#,
+                    ))
+                    .expect("build request"),
+            )
+            .await
+            .expect("request should succeed");
+        assert_eq!(all_statuses.status(), StatusCode::OK);
+        let statuses = response_body_json(all_statuses).await["value"]
+            .as_array()
+            .expect("whisper statuses")
+            .clone();
+        assert_eq!(statuses.len(), 5);
+        assert!(statuses
+            .iter()
+            .any(|status| status["size"] == "small" && status["is_active"] == true));
+
+        let set_model = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/app/invoke")
+                    .method("POST")
+                    .header("authorization", "Bearer test-token")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        r#"{"command":"set_whisper_model","payload":{"modelSize":"tiny"}}"#,
+                    ))
+                    .expect("build request"),
+            )
+            .await
+            .expect("request should succeed");
+        assert_eq!(set_model.status(), StatusCode::OK);
+
+        let active_status = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/app/invoke")
+                    .method("POST")
+                    .header("authorization", "Bearer test-token")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        r#"{"command":"get_whisper_model_status","payload":null}"#,
+                    ))
+                    .expect("build request"),
+            )
+            .await
+            .expect("request should succeed");
+        assert_eq!(active_status.status(), StatusCode::OK);
+        assert_eq!(response_body_json(active_status).await["value"]["size"], "tiny");
+
+        let missing_model_transcription = router
+            .oneshot(
+                Request::builder()
+                    .uri("/app/invoke")
+                    .method("POST")
+                    .header("authorization", "Bearer test-token")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        r#"{"command":"transcribe_audio","payload":{"audioData":[0.0,0.1,-0.1]}}"#,
+                    ))
+                    .expect("build request"),
+            )
+            .await
+            .expect("request should succeed");
+        assert_eq!(
+            missing_model_transcription.status(),
+            StatusCode::INTERNAL_SERVER_ERROR
+        );
+        assert!(response_body_text(missing_model_transcription)
+            .await
+            .contains("Transcription failed"));
 
         let _ = std::fs::remove_file(path);
     }
@@ -5412,7 +5594,7 @@ mod tests {
                     .header("authorization", "Bearer test-token")
                     .header("content-type", "application/json")
                     .body(Body::from(
-                        r#"{"command":"transcribe_audio","payload":null}"#,
+                        r#"{"command":"unsupported_desktop_command","payload":null}"#,
                     ))
                     .expect("build request"),
             )
@@ -5420,6 +5602,30 @@ mod tests {
             .expect("request should succeed");
 
         assert_eq!(response.status(), StatusCode::NOT_IMPLEMENTED);
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[tokio::test]
+    async fn test_app_invoke_rejects_malformed_whisper_payload_as_bad_request() {
+        let (state, path) = test_state("app_invoke_rejects_malformed_whisper_payload");
+        let router = create_router(state);
+
+        let response = router
+            .oneshot(
+                Request::builder()
+                    .uri("/app/invoke")
+                    .method("POST")
+                    .header("authorization", "Bearer test-token")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        r#"{"command":"transcribe_audio","payload":null}"#,
+                    ))
+                    .expect("build request"),
+            )
+            .await
+            .expect("request should succeed");
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
         let _ = std::fs::remove_file(path);
     }
 

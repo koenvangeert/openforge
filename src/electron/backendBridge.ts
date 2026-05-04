@@ -113,6 +113,11 @@ const SIDECAR_BACKED_COMMANDS = new Set([
   'get_plugin_storage',
   'set_plugin_storage',
   'plugin_invoke',
+  'transcribe_audio',
+  'get_whisper_model_status',
+  'download_whisper_model',
+  'get_all_whisper_model_statuses',
+  'set_whisper_model',
 ])
 
 export function isSidecarBackedCommand(command: string): boolean {
