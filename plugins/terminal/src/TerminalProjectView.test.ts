@@ -2,7 +2,6 @@ import { cleanup, render } from '@testing-library/svelte'
 import { tick } from 'svelte'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import TerminalProjectView from './TerminalProjectView.svelte'
-import { resetActiveProjectTerminalTask } from './lib/projectTerminal'
 
 const { terminalTabsApi, cleanupProjectTerminalTaskMock } = vi.hoisted(() => ({
   terminalTabsApi: {
@@ -55,7 +54,6 @@ function renderProjectTerminalView() {
 describe('TerminalProjectView', () => {
   afterEach(() => {
     cleanup()
-    resetActiveProjectTerminalTask()
     resetMocks()
     vi.restoreAllMocks()
   })
@@ -104,7 +102,7 @@ describe('TerminalProjectView', () => {
     expect(cleanupProjectTerminalTaskMock).not.toHaveBeenCalled()
   })
 
-  it('cleans up the previous project terminal when switching projects after navigating away', async () => {
+  it('keeps the previous project terminal alive when switching projects after navigating away', async () => {
     const first = render(TerminalProjectView, {
       props: {
         projectId: 'P-123',
@@ -116,8 +114,6 @@ describe('TerminalProjectView', () => {
     first.unmount()
     await tick()
 
-    expect(cleanupProjectTerminalTaskMock).not.toHaveBeenCalled()
-
     render(TerminalProjectView, {
       props: {
         projectId: 'P-456',
@@ -127,11 +123,10 @@ describe('TerminalProjectView', () => {
     })
     await tick()
 
-    expect(cleanupProjectTerminalTaskMock).toHaveBeenCalledTimes(1)
-    expect(cleanupProjectTerminalTaskMock).toHaveBeenCalledWith('project-P-123', expect.any(Object))
+    expect(cleanupProjectTerminalTaskMock).not.toHaveBeenCalled()
   })
 
-  it('cleans up the previous project terminal when switching to a different project', async () => {
+  it('keeps the previous project terminal alive when switching to a different project', async () => {
     const { rerender } = render(TerminalProjectView, {
       props: {
         projectId: 'P-123',
@@ -147,7 +142,6 @@ describe('TerminalProjectView', () => {
     })
     await tick()
 
-    expect(cleanupProjectTerminalTaskMock).toHaveBeenCalledTimes(1)
-    expect(cleanupProjectTerminalTaskMock).toHaveBeenCalledWith('project-P-123', expect.any(Object))
+    expect(cleanupProjectTerminalTaskMock).not.toHaveBeenCalled()
   })
 })

@@ -40,10 +40,8 @@ vi.mock('./lib/terminalPool', () => ({
 }))
 
 describe('terminal plugin', () => {
-  afterEach(async () => {
+  afterEach(() => {
     cleanupProjectTerminalTaskMock.mockClear()
-    const { resetActiveProjectTerminalTask } = await import('./lib/projectTerminal')
-    resetActiveProjectTerminalTask()
   })
   it('does not retain stale host PluginContext state in the terminal plugin entry', () => {
     const indexSource = readFileSync(join(terminalSrcDir, 'index.ts'), 'utf8')
@@ -91,7 +89,7 @@ describe('terminal plugin', () => {
     expect(result.contributions.backgroundServices?.[0]?.id).toBe('pty-manager')
   })
 
-  it('cleans up the previous project terminal when project navigation changes while the view is unmounted', async () => {
+  it('keeps previous project terminals alive when project navigation changes while the view is unmounted', async () => {
     const navigationHandlers: Array<(payload: unknown) => void> = []
     const { activate } = await import('./index')
     const result = await activate({
@@ -108,14 +106,10 @@ describe('terminal plugin', () => {
     })
 
     await result.contributions.backgroundServices?.[0]?.start()
-    const { markActiveProjectTerminalTask } = await import('./lib/projectTerminal')
-    markActiveProjectTerminalTask('project-P-123')
-    expect(cleanupProjectTerminalTaskMock).not.toHaveBeenCalled()
 
     navigationHandlers[0]?.({ activeProjectId: 'P-456', currentView: 'board' })
 
-    expect(cleanupProjectTerminalTaskMock).toHaveBeenCalledTimes(1)
-    expect(cleanupProjectTerminalTaskMock).toHaveBeenCalledWith('project-P-123', expect.any(Object))
+    expect(cleanupProjectTerminalTaskMock).not.toHaveBeenCalled()
   })
 
   it('does not clean up a project terminal that was never opened', async () => {
