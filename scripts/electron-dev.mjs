@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 import { spawn } from 'node:child_process'
-import { dirname, join, resolve } from 'node:path'
+import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { connect } from 'node:net'
 import { DEFAULT_DEV_BACKEND_PORT, buildElectronSidecarDevEnv } from './cargo-target-env.mjs'
+import { resolveRustSidecarLayout } from './rust-sidecar-layout.mjs'
 
 export const ELECTRON_RENDERER_URL = 'http://127.0.0.1:1420'
 const VITE_READY_TIMEOUT_MS = 30_000
@@ -85,8 +86,8 @@ export async function resolveElectronDevBackendEnv(options = {}, deps = { isPort
   }
 }
 
-export function electronSidecarPath(cargoTargetDir) {
-  return join(cargoTargetDir, 'debug', process.platform === 'win32' ? 'openforge.exe' : 'openforge')
+export function electronSidecarPath(cargoTargetDir, rustSidecarLayout = resolveRustSidecarLayout({ repoRoot: repoRoot() })) {
+  return rustSidecarLayout.debugSidecarBinaryPath({ cargoTargetDir })
 }
 
 export function buildElectronDevEnv(baseEnv = process.env, sidecarPath = baseEnv.OPENFORGE_SIDECAR_PATH) {
@@ -234,10 +235,11 @@ async function main() {
     logStep('Waiting for Vite readiness ...')
     await waitForVite(ELECTRON_RENDERER_URL, vite)
     const { env: cargoEnv, cargoTargetDir, source } = devBackend
-    const sidecarPath = cargoEnv.OPENFORGE_SIDECAR_PATH ?? electronSidecarPath(cargoTargetDir)
+    const rustSidecarLayout = resolveRustSidecarLayout({ repoRoot: repoRoot() })
+    const sidecarPath = cargoEnv.OPENFORGE_SIDECAR_PATH ?? electronSidecarPath(cargoTargetDir, rustSidecarLayout)
     logStep(`Vite is ready; building Rust sidecar (${source} target dir: ${cargoTargetDir}) ...`)
     await waitForExit(
-      spawnCommand('cargo', ['build'], { cwd: join(repoRoot(), 'src-tauri'), env: cargoEnv }),
+      spawnCommand('cargo', ['build'], { cwd: rustSidecarLayout.backendCrateRootPath, env: cargoEnv }),
       'cargo build',
     )
     logStep('Building Electron main process ...')

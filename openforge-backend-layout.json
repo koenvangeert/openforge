@@ -1,0 +1,7 @@
+{
+  "backendCrateRoot": "src-tauri",
+  "manifestPath": "src-tauri/Cargo.toml",
+  "binaryName": "openforge",
+  "iconPath": "src-tauri/icons/icon.icns",
+  "electronBundleRoot": "src-tauri/target/release/bundle/electron/macos"
+}

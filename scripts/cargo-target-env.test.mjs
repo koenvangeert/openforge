@@ -8,6 +8,18 @@ import {
   resolveGitCommonDir,
   sharedCargoTargetDirFromGitCommonDir,
 } from './cargo-target-env.mjs'
+import { resolveRustSidecarLayout } from './rust-sidecar-layout.mjs'
+
+const defaultTestLayout = resolveRustSidecarLayout({
+  repoRoot: '/repo/openforge',
+  config: {
+    backendCrateRoot: 'src-tauri',
+    manifestPath: 'src-tauri/Cargo.toml',
+    binaryName: 'openforge',
+    iconPath: 'src-tauri/icons/icon.icns',
+    electronBundleRoot: 'src-tauri/target/release/bundle/electron/macos',
+  },
+})
 
 describe('Electron sidecar dev shared Cargo target env', () => {
   it('resolves relative git common dirs from the current worktree', () => {
@@ -53,17 +65,28 @@ describe('Electron sidecar dev shared Cargo target env', () => {
     })
   })
 
-  it('falls back to the existing src-tauri target dir outside git', () => {
+  it('falls back to the layout Module default Cargo target dir outside git', () => {
+    const rustSidecarLayout = resolveRustSidecarLayout({
+      repoRoot: '/repo/openforge',
+      config: {
+        backendCrateRoot: 'crates/openforge-backend',
+        manifestPath: 'crates/openforge-backend/Cargo.toml',
+        binaryName: 'openforge-backend',
+        iconPath: 'assets/icon.icns',
+        electronBundleRoot: 'target/electron/macos',
+      },
+    })
     const result = computeCargoTargetDir({
       cwd: '/repo/openforge',
       env: {},
+      rustSidecarLayout,
       execFileSync: () => {
         throw new Error('not a git checkout')
       },
     })
 
     expect(result).toEqual({
-      cargoTargetDir: path.join('/repo/openforge', 'src-tauri', 'target'),
+      cargoTargetDir: path.join('/repo/openforge', 'crates', 'openforge-backend', 'target'),
       source: 'fallback',
     })
   })
@@ -88,6 +111,7 @@ describe('Electron sidecar dev shared Cargo target env', () => {
     const result = buildElectronSidecarDevEnv({
       cwd: '/repo/openforge',
       env: { OPENFORGE_BACKEND_PORT: '18000' },
+      rustSidecarLayout: defaultTestLayout,
       execFileSync: () => {
         throw new Error('not a git checkout')
       },
@@ -101,6 +125,7 @@ describe('Electron sidecar dev shared Cargo target env', () => {
     const result = buildElectronSidecarDevEnv({
       cwd: '/repo/openforge',
       env: { AI_COMMAND_CENTER_PORT: '17422' },
+      rustSidecarLayout: defaultTestLayout,
       execFileSync: () => {
         throw new Error('not a git checkout')
       },
@@ -114,6 +139,7 @@ describe('Electron sidecar dev shared Cargo target env', () => {
     const result = buildElectronSidecarDevEnv({
       cwd: '/repo/openforge',
       env: { AI_COMMAND_CENTER_PORT: '19000' },
+      rustSidecarLayout: defaultTestLayout,
       execFileSync: () => {
         throw new Error('not a git checkout')
       },
@@ -130,6 +156,7 @@ describe('Electron sidecar dev shared Cargo target env', () => {
         OPENFORGE_BACKEND_PORT: '18000',
         AI_COMMAND_CENTER_PORT: '19000',
       },
+      rustSidecarLayout: defaultTestLayout,
       execFileSync: () => {
         throw new Error('not a git checkout')
       },
@@ -146,6 +173,7 @@ describe('Electron sidecar dev shared Cargo target env', () => {
         OPENFORGE_BACKEND_PORT: '18000',
         OPENFORGE_HTTP_PORT: '18001',
       },
+      rustSidecarLayout: defaultTestLayout,
       execFileSync: () => {
         throw new Error('not a git checkout')
       },

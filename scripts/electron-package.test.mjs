@@ -11,6 +11,15 @@ import {
   updatePlistBooleanValue,
   updatePlistStringValue,
 } from './electron-package.mjs'
+import { BACKEND_LAYOUT_CONFIG_FILE, resolveRustSidecarLayout } from './rust-sidecar-layout.mjs'
+
+const currentLayoutConfig = {
+  backendCrateRoot: 'src-tauri',
+  manifestPath: 'src-tauri/Cargo.toml',
+  binaryName: 'openforge',
+  iconPath: 'src-tauri/icons/icon.icns',
+  electronBundleRoot: 'src-tauri/target/release/bundle/electron/macos',
+}
 
 async function writeExecutable(path, content = '#!/bin/sh\n') {
   await writeFile(path, content, { mode: 0o755 })
@@ -18,7 +27,7 @@ async function writeExecutable(path, content = '#!/bin/sh\n') {
 
 describe('Electron macOS packaging helpers', () => {
   it('places the Electron install bundle in the existing release bundle tree', () => {
-    expect(electronBundlePath('/repo')).toBe('/repo/src-tauri/target/release/bundle/electron/macos/Open Forge.app')
+    expect(resolveRustSidecarLayout({ repoRoot: '/repo', config: currentLayoutConfig }).electronAppPath).toBe('/repo/src-tauri/target/release/bundle/electron/macos/Open Forge.app')
   })
 
   it('creates an app package manifest pointing Electron at the compiled main process', () => {
@@ -49,6 +58,7 @@ describe('Electron macOS packaging helpers', () => {
 
     await buildAndPackageElectronApp({
       repoRoot: '/repo',
+      rustSidecarLayout: resolveRustSidecarLayout({ repoRoot: '/repo', config: currentLayoutConfig }),
       runCommand: async (command, args, options) => {
         commands.push({ command, args, cwd: options.cwd })
       },
@@ -91,11 +101,22 @@ describe('Electron macOS packaging helpers', () => {
     })).resolves.toEqual({ expectedArch: 'arm64', appArchitectures: ['arm64', 'x86_64'], sidecarArchitectures: ['arm64', 'x86_64'] })
   })
 
-  it('builds and packages a configured Rust target sidecar without shell-specific packaging tools', async () => {
+  it('builds and packages a configured Rust target sidecar from the layout Module crate root and artifacts', async () => {
     const commands = []
+    const rustSidecarLayout = resolveRustSidecarLayout({
+      repoRoot: '/repo',
+      config: {
+        backendCrateRoot: 'crates/openforge-backend',
+        manifestPath: 'crates/openforge-backend/Cargo.toml',
+        binaryName: 'openforge-backend',
+        iconPath: 'assets/icon.icns',
+        electronBundleRoot: 'target/electron/macos',
+      },
+    })
 
     await buildAndPackageElectronApp({
       repoRoot: '/repo',
+      rustSidecarLayout,
       cargoBuildTarget: 'aarch64-apple-darwin',
       runCommand: async (command, args, options) => {
         commands.push({ command, args, cwd: options.cwd })
@@ -109,11 +130,11 @@ describe('Electron macOS packaging helpers', () => {
     expect(commands).toContainEqual({
       command: 'cargo',
       args: ['build', '--release', '--target', 'aarch64-apple-darwin'],
-      cwd: '/repo/src-tauri',
+      cwd: '/repo/crates/openforge-backend',
     })
     expect(commands).toContainEqual({
       command: 'packageElectronApp',
-      args: ['/repo/src-tauri/target/aarch64-apple-darwin/release/openforge', 'aarch64-apple-darwin'],
+      args: ['/repo/crates/openforge-backend/target/aarch64-apple-darwin/release/openforge-backend', 'aarch64-apple-darwin'],
       cwd: '/repo',
     })
   })
@@ -121,6 +142,8 @@ describe('Electron macOS packaging helpers', () => {
   it('packages the compiled renderer, Electron main process, and Rust sidecar into a macOS .app bundle', async () => {
     const root = await import('node:os').then(os => os.tmpdir()).then(tmp => join(tmp, `openforge-electron-package-${process.pid}-${Date.now()}`))
     const template = join(root, 'node_modules/electron/dist/Electron.app')
+    await mkdir(root, { recursive: true })
+    await writeFile(join(root, BACKEND_LAYOUT_CONFIG_FILE), JSON.stringify(currentLayoutConfig))
     const output = electronBundlePath(root)
 
     await mkdir(join(template, 'Contents/MacOS'), { recursive: true })

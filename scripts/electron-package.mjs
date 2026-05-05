@@ -4,6 +4,7 @@ import { constants } from 'node:fs'
 import { spawn } from 'node:child_process'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { resolveRustSidecarLayout } from './rust-sidecar-layout.mjs'
 
 export const APP_NAME = 'Open Forge'
 export const ELECTRON_APP_NAME = 'Electron.app'
@@ -73,14 +74,11 @@ async function assertExists(path, label) {
 }
 
 export function electronBundlePath(repoRoot = repoRootFromScript()) {
-  return join(repoRoot, 'src-tauri', 'target', 'release', 'bundle', 'electron', 'macos', `${APP_NAME}.app`)
+  return resolveRustSidecarLayout({ repoRoot, appName: APP_NAME }).electronAppPath
 }
 
 export function sidecarBinaryPathForTarget(repoRoot = repoRootFromScript(), cargoBuildTarget = '') {
-  const binaryName = process.platform === 'win32' ? 'openforge.exe' : 'openforge'
-  return cargoBuildTarget
-    ? join(repoRoot, 'src-tauri', 'target', cargoBuildTarget, 'release', binaryName)
-    : join(repoRoot, 'src-tauri', 'target', 'release', binaryName)
+  return resolveRustSidecarLayout({ repoRoot }).releaseSidecarBinaryPath({ cargoBuildTarget })
 }
 
 export function createElectronAppPackageJson({ version = '0.0.1' } = {}) {
@@ -163,10 +161,9 @@ export function updatePlistBooleanValue(plist, key, value) {
   return plist.replace(pattern, `$1<${boolTag}/>`)
 }
 
-async function copyIcon(repoRoot, resourcesDir) {
-  const iconPath = join(repoRoot, 'src-tauri', 'icons', 'icon.icns')
-  if (!(await pathExists(iconPath))) return
-  await cp(iconPath, join(resourcesDir, 'electron.icns'))
+async function copyIcon(rustSidecarLayout, resourcesDir) {
+  if (!(await pathExists(rustSidecarLayout.iconPath))) return
+  await cp(rustSidecarLayout.iconPath, join(resourcesDir, 'electron.icns'))
 }
 
 async function updateInfoPlist(appPath) {
@@ -182,10 +179,11 @@ async function updateInfoPlist(appPath) {
 
 export async function packageElectronApp({
   repoRoot = repoRootFromScript(),
-  outputAppPath = electronBundlePath(repoRoot),
+  rustSidecarLayout = resolveRustSidecarLayout({ repoRoot, appName: APP_NAME }),
+  outputAppPath = rustSidecarLayout.electronAppPath,
   electronTemplatePath = join(repoRoot, 'node_modules', 'electron', 'dist', ELECTRON_APP_NAME),
-  sidecarBinaryPath = sidecarBinaryPathForTarget(repoRoot),
   cargoBuildTarget = process.env.CARGO_BUILD_TARGET ?? '',
+  sidecarBinaryPath = rustSidecarLayout.releaseSidecarBinaryPath({ cargoBuildTarget }),
   readExecutableArchitectures = readDarwinExecutableArchitectures,
 } = {}) {
   const rendererDist = join(repoRoot, 'dist')
@@ -230,7 +228,7 @@ export async function packageElectronApp({
   await writeFile(join(appResourcesPath, 'package.json'), `${JSON.stringify(createElectronAppPackageJson({ version: rootPackage.version ?? '0.0.1' }), null, 2)}\n`)
 
   await updateInfoPlist(outputAppPath)
-  await copyIcon(repoRoot, resourcesDir)
+  await copyIcon(rustSidecarLayout, resourcesDir)
 
   return { appPath: outputAppPath, sidecarPath: sidecarTargetPath }
 }
@@ -241,6 +239,7 @@ async function runBuildCommand(command, args, options) {
 
 export async function buildAndPackageElectronApp({
   repoRoot = repoRootFromScript(),
+  rustSidecarLayout = resolveRustSidecarLayout({ repoRoot, appName: APP_NAME }),
   cargoBuildTarget = process.env.CARGO_BUILD_TARGET ?? '',
   runCommand = runBuildCommand,
   packageApp = packageElectronApp,
@@ -251,10 +250,11 @@ export async function buildAndPackageElectronApp({
   const cargoArgs = cargoBuildTarget
     ? ['build', '--release', '--target', cargoBuildTarget]
     : ['build', '--release']
-  await runCommand('cargo', cargoArgs, { cwd: join(repoRoot, 'src-tauri') })
+  await runCommand('cargo', cargoArgs, { cwd: rustSidecarLayout.backendCrateRootPath })
   return packageApp({
     repoRoot,
-    sidecarBinaryPath: sidecarBinaryPathForTarget(repoRoot, cargoBuildTarget),
+    rustSidecarLayout,
+    sidecarBinaryPath: rustSidecarLayout.releaseSidecarBinaryPath({ cargoBuildTarget }),
     cargoBuildTarget,
   })
 }
