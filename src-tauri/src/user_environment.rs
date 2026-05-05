@@ -184,15 +184,58 @@ fn merge_user_tool_path(
     add_path_entries(&mut entries, login_shell_path);
 
     if let Some(home_dir) = home_dir {
-        for relative in [".local/bin", ".cargo/bin", ".bun/bin"] {
-            let entry = home_dir.join(relative).to_string_lossy().to_string();
-            add_path_entries(&mut entries, Some(&entry));
-        }
+        add_user_managed_tool_paths(&mut entries, home_dir);
     }
 
     add_path_entries(&mut entries, Some(DEFAULT_TOOL_PATH));
 
     entries.join(":")
+}
+
+fn add_user_managed_tool_paths(entries: &mut Vec<String>, home_dir: &Path) {
+    for relative in [
+        ".local/bin",
+        ".cargo/bin",
+        ".bun/bin",
+        ".claude/local",
+        ".claude/local/bin",
+        ".opencode/bin",
+        ".npm-global/bin",
+        ".volta/bin",
+        ".asdf/shims",
+        "Library/pnpm",
+        ".local/share/pnpm",
+        ".config/yarn/global/node_modules/.bin",
+    ] {
+        let entry = home_dir.join(relative).to_string_lossy().to_string();
+        add_path_entries(entries, Some(&entry));
+    }
+
+    add_existing_node_version_bin_dirs(entries, &home_dir.join(".nvm/versions/node"));
+    add_existing_node_version_bin_dirs(entries, &home_dir.join(".fnm/node-versions"));
+}
+
+fn add_existing_node_version_bin_dirs(entries: &mut Vec<String>, parent_dir: &Path) {
+    let Ok(read_dir) = std::fs::read_dir(parent_dir) else {
+        return;
+    };
+
+    let mut bin_dirs: Vec<String> = read_dir
+        .filter_map(Result::ok)
+        .flat_map(|entry| {
+            [
+                entry.path().join("bin"),
+                entry.path().join("installation/bin"),
+            ]
+        })
+        .filter(|path| path.is_dir())
+        .map(|path| path.to_string_lossy().to_string())
+        .collect();
+    bin_dirs.sort();
+
+    for bin_dir in bin_dirs {
+        add_path_entries(entries, Some(&bin_dir));
+    }
 }
 
 #[cfg(test)]
@@ -231,6 +274,49 @@ mod tests {
             .get("PATH")
             .is_some_and(|path| path.contains("/usr/bin")));
         assert_eq!(env.get("LANG").map(String::as_str), Some(DEFAULT_LANG));
+    }
+
+    #[test]
+    fn user_environment_includes_node_manager_bins_when_shell_path_is_unavailable() {
+        let home_dir = tempfile::tempdir().expect("temp home");
+        let nvm_bin = home_dir.path().join(".nvm/versions/node/v24.14.0/bin");
+        std::fs::create_dir_all(&nvm_bin).expect("create nvm bin");
+        let npm_global_bin = home_dir.path().join(".npm-global/bin");
+        std::fs::create_dir_all(&npm_global_bin).expect("create npm global bin");
+        let fnm_bin = home_dir
+            .path()
+            .join(".fnm/node-versions/v24.14.0/installation/bin");
+        std::fs::create_dir_all(&fnm_bin).expect("create fnm bin");
+        let opencode_bin = home_dir.path().join(".opencode/bin");
+        std::fs::create_dir_all(&opencode_bin).expect("create opencode bin");
+        let pi_executable = nvm_bin.join("pi");
+        std::fs::write(&pi_executable, "#!/bin/sh\n").expect("write pi executable");
+        let opencode_executable = opencode_bin.join("opencode");
+        std::fs::write(&opencode_executable, "#!/bin/sh\n").expect("write opencode executable");
+        for executable in [&pi_executable, &opencode_executable] {
+            let mut permissions = std::fs::metadata(executable)
+                .expect("metadata")
+                .permissions();
+            permissions.set_mode(0o755);
+            std::fs::set_permissions(executable, permissions).expect("chmod executable");
+        }
+
+        let env = build_user_environment(None, &HashMap::new(), Some(home_dir.path()));
+        let path = env.get("PATH").expect("PATH should be populated");
+        let entries: Vec<&str> = path.split(':').collect();
+
+        assert!(entries.contains(&nvm_bin.to_string_lossy().as_ref()));
+        assert!(entries.contains(&npm_global_bin.to_string_lossy().as_ref()));
+        assert!(entries.contains(&fnm_bin.to_string_lossy().as_ref()));
+        assert!(entries.contains(&opencode_bin.to_string_lossy().as_ref()));
+        assert_eq!(
+            find_tool_on_path("pi", path).as_deref(),
+            Some(pi_executable.as_path())
+        );
+        assert_eq!(
+            find_tool_on_path("opencode", path).as_deref(),
+            Some(opencode_executable.as_path())
+        );
     }
 
     #[test]
