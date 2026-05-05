@@ -11,7 +11,7 @@ use crate::{
     whisper_manager::WhisperManager,
 };
 use axum::{
-    extract::{Json, Path, Query, State},
+    extract::{DefaultBodyLimit, Json, Path, Query, State},
     http::{HeaderMap, StatusCode},
     response::sse::{Event, Sse},
     routing::{get, post},
@@ -21,6 +21,8 @@ use futures::Stream;
 use log::{error, info, warn};
 use serde::{Deserialize, Serialize};
 use std::{convert::Infallible, net::SocketAddr, path::PathBuf, sync::Mutex};
+
+const APP_INVOKE_MAX_BODY_BYTES: usize = 96 * 1024 * 1024;
 
 /// Request to create a new task from OpenCode
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -738,7 +740,10 @@ pub fn create_router(state: AppState) -> Router {
     Router::new()
         .route("/app/health", get(app_health_handler))
         .route("/app/events", get(app_events_handler))
-        .route("/app/invoke", post(app_invoke_handler))
+        .route(
+            "/app/invoke",
+            post(app_invoke_handler).layer(DefaultBodyLimit::max(APP_INVOKE_MAX_BODY_BYTES)),
+        )
         .route("/create_task", post(create_task_handler))
         .route("/update_task", post(update_task_handler))
         .route("/task/:id", get(get_task_info_handler))
@@ -1326,6 +1331,44 @@ mod tests {
             StatusCode::INTERNAL_SERVER_ERROR
         );
         assert!(response_body_text(missing_model_transcription)
+            .await
+            .contains("Transcription failed"));
+
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[tokio::test]
+    async fn test_app_invoke_accepts_long_voice_transcription_payloads() {
+        let (state, path) = test_state("app_invoke_long_voice_transcription_payload");
+        let router = create_router(state);
+        let mut body = String::from(r#"{"command":"transcribe_audio","payload":{"audioData":["#);
+        for index in 0..600_000 {
+            if index > 0 {
+                body.push(',');
+            }
+            body.push_str("0.0");
+        }
+        body.push_str("]}}");
+        assert!(
+            body.len() > 2 * 1024 * 1024,
+            "regression payload should exceed axum's default JSON body limit"
+        );
+
+        let response = router
+            .oneshot(
+                Request::builder()
+                    .uri("/app/invoke")
+                    .method("POST")
+                    .header("authorization", "Bearer test-token")
+                    .header("content-type", "application/json")
+                    .body(Body::from(body))
+                    .expect("build request"),
+            )
+            .await
+            .expect("request should succeed");
+
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        assert!(response_body_text(response)
             .await
             .contains("Transcription failed"));
 
