@@ -529,6 +529,38 @@ describe('TerminalTabs', () => {
     expect(onTabChange).toHaveBeenCalledWith(2)
   })
 
+  it('focuses the newly selected terminal tab after switching by visible position', async () => {
+    const { focusTerminal } = await import('../../lib/terminalPool')
+    const { component } = render(TerminalTabs, {
+      props: {
+        taskId: 'T-1',
+        workspacePath: '/path/to/worktree',
+        onTabChange: null,
+        onTabCountChange: null,
+      },
+    })
+
+    await vi.waitFor(() => {
+      expect(screen.getByText('Shell 1')).toBeTruthy()
+    })
+
+    const addButton = screen.getByRole('button', { name: '+' })
+    await fireEvent.click(addButton)
+
+    await vi.waitFor(() => {
+      expect(screen.getByText('Shell 2')).toBeTruthy()
+      expect(vi.mocked(focusTerminal)).toHaveBeenCalledWith('T-1-shell-1')
+    })
+
+    vi.mocked(focusTerminal).mockClear()
+    component.switchToTab(0)
+
+    expect(vi.mocked(focusTerminal)).not.toHaveBeenCalled()
+    await vi.waitFor(() => {
+      expect(vi.mocked(focusTerminal)).toHaveBeenCalledWith('T-1-shell-0')
+    })
+  })
+
   it('does not listen for ⌘T on document directly', async () => {
     render(TerminalTabs, {
       props: {

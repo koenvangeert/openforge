@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte'
+  import { onMount, tick } from 'svelte'
   import { commandHeld } from '../../lib/stores'
   import { killPty } from '../../lib/ipc'
   import { release, focusTerminal, getTaskTerminalTabsSession, updateTaskTerminalTabsSession, type TerminalTab, type TaskTerminalTabsSession } from '../../lib/terminalPool'
@@ -50,6 +50,14 @@
     }
   }
 
+  async function focusTerminalTab(terminalKey: string) {
+    await tick()
+    const activeTab = tabs.find(tab => tab.index === activeTabIndex) ?? tabs[0]
+    if (activeTab?.key === terminalKey) {
+      focusTerminal(terminalKey)
+    }
+  }
+
   export function addTab() {
       const tab = createTab()
       tabs = [...tabs, tab]
@@ -57,7 +65,7 @@
       syncSession()
       onTabChange?.(tab.index)
       onTabCountChange?.(tabs.length)
-      focusTerminal(tab.key)
+      void focusTerminalTab(tab.key)
     }
 
   function switchToTabByPosition(tabPosition: number) {
@@ -66,7 +74,7 @@
         activeTabIndex = tab.index
         syncSession()
         onTabChange?.(tab.index)
-        focusTerminal(tab.key)
+        void focusTerminalTab(tab.key)
       }
    }
 
@@ -76,7 +84,7 @@
 
   export function focusActiveTab() {
     const activeTab = tabs.find(tab => tab.index === activeTabIndex) ?? tabs[0]
-    if (activeTab) focusTerminal(activeTab.key)
+    if (activeTab) void focusTerminalTab(activeTab.key)
   }
 
   export async function closeActiveTab() {
@@ -106,7 +114,7 @@
         if (nextTab) {
           activeTabIndex = nextTab.index
           onTabChange?.(nextTab.index)
-          focusTerminal(nextTab.key)
+          await focusTerminalTab(nextTab.key)
         } else {
           activeTabIndex = 0
         }
@@ -132,7 +140,7 @@
               activeTabIndex = tab.index
               syncSession()
               onTabChange?.(tab.index)
-              focusTerminal(tab.key)
+              void focusTerminalTab(tab.key)
             }}
          >
            {tab.label}{#if $commandHeld && tabPosition < 9}<kbd class="kbd kbd-xs opacity-50">⌘⇧{tabPosition + 1}</kbd>{/if}
