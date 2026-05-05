@@ -11,16 +11,21 @@ use crate::{
 use axum::{
     extract::{DefaultBodyLimit, Json, Path, Query, State},
     http::{HeaderMap, StatusCode},
-    response::sse::{Event, Sse},
+    response::sse::{Event, KeepAlive, Sse},
     routing::{get, post},
     Router,
 };
 use futures::Stream;
 use log::{error, info, warn};
 use serde::{Deserialize, Serialize};
-use std::{convert::Infallible, net::SocketAddr, path::PathBuf, sync::Mutex};
+use std::{convert::Infallible, net::SocketAddr, path::PathBuf, sync::Mutex, time::Duration};
 
 const APP_INVOKE_MAX_BODY_BYTES: usize = 96 * 1024 * 1024;
+const APP_EVENT_KEEPALIVE_TEXT: &str = "openforge-event-stream-keepalive";
+#[cfg(test)]
+const APP_EVENT_KEEPALIVE_INTERVAL: Duration = Duration::from_millis(50);
+#[cfg(not(test))]
+const APP_EVENT_KEEPALIVE_INTERVAL: Duration = Duration::from_secs(15);
 
 /// Request to create a new task from OpenCode
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -641,6 +646,12 @@ fn app_event_sse_data(envelope: &AppEventEnvelope) -> String {
     })
 }
 
+fn app_event_keep_alive() -> KeepAlive {
+    KeepAlive::new()
+        .interval(APP_EVENT_KEEPALIVE_INTERVAL)
+        .text(APP_EVENT_KEEPALIVE_TEXT)
+}
+
 async fn app_health_handler(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -680,7 +691,7 @@ async fn app_events_handler(
         }
     });
 
-    Ok(Sse::new(stream))
+    Ok(Sse::new(stream).keep_alive(app_event_keep_alive()))
 }
 
 async fn app_invoke_handler(

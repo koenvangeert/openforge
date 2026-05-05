@@ -1,4 +1,6 @@
 use super::*;
+use futures::StreamExt as _;
+use std::time::Duration;
 
 #[test]
 fn test_resolve_http_server_port_prefers_electron_sidecar_env() {
@@ -27,6 +29,43 @@ fn test_app_event_sse_data_uses_openforge_event_envelope_shape() {
         .expect("sse data should be valid JSON");
     assert_eq!(data["eventName"], "pty-output-T-1-shell-2");
     assert_eq!(data["payload"]["instance_id"], 7);
+}
+
+#[tokio::test]
+async fn test_app_events_keepalive_during_quiet_periods() {
+    let (state, path) = test_state("app_events_keepalive");
+    let _keep_sender_alive = state
+        .app_event_tx
+        .as_ref()
+        .expect("test state should have app events")
+        .clone();
+    let router = create_router(state);
+
+    let response = router
+        .oneshot(
+            Request::builder()
+                .uri("/app/events")
+                .header("authorization", "Bearer test-token")
+                .body(Body::empty())
+                .expect("build request"),
+        )
+        .await
+        .expect("request should succeed");
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let mut stream = response.into_body().into_data_stream();
+    let chunk = tokio::time::timeout(Duration::from_secs(1), stream.next())
+        .await
+        .expect("keepalive should arrive promptly in tests")
+        .expect("stream should yield a chunk")
+        .expect("chunk should be ok");
+    let text = String::from_utf8_lossy(&chunk);
+    assert!(
+        text.contains("openforge-event-stream-keepalive"),
+        "expected keepalive text in SSE chunk, got: {text}"
+    );
+
+    let _ = std::fs::remove_file(path);
 }
 
 #[tokio::test]

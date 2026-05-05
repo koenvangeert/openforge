@@ -42,9 +42,13 @@ export interface ShellLifecycleState {
   currentPtyInstance: number | null
 }
 
+export const APP_EVENTS_RECONNECTED_EVENT = 'openforge-app-events-reconnected'
+
 const pool = new Map<string, PoolEntry>()
 const taskTabSessions = new Map<string, TaskTerminalTabsSession>()
 const openedTerminals = new WeakSet<Terminal>()
+let appEventsReconnectUnlisten: DesktopUnlistenFn | null = null
+let appEventsReconnectListenerPending: Promise<void> | null = null
 
 function createDefaultTaskTabsSession(taskId: string): TaskTerminalTabsSession {
   return {
@@ -139,6 +143,55 @@ function loadWebLinksAddon(terminal: Terminal): void {
   terminal.loadAddon(webLinksAddon)
 }
 
+async function replayPtyBuffer(entry: PoolEntry): Promise<void> {
+  if (entry.needsClear) return
+
+  try {
+    const buffered = await getPtyBuffer(entry.taskId)
+    if (!buffered) return
+
+    entry.terminal.reset()
+    entry.needsClear = false
+    entry.terminal.write(buffered)
+    entry.ptyActive = true
+    if (entry.attached) refreshTerminal(entry)
+  } catch (e) {
+    console.error('[terminalPool] Failed to replay PTY buffer after app event reconnect:', e)
+  }
+}
+
+export async function replayPtyBuffersForActiveTerminals(): Promise<void> {
+  await Promise.all([...pool.values()].map(entry => replayPtyBuffer(entry)))
+}
+
+async function ensureAppEventsReconnectListener(): Promise<void> {
+  if (appEventsReconnectUnlisten) return
+  if (appEventsReconnectListenerPending) return appEventsReconnectListenerPending
+
+  appEventsReconnectListenerPending = listenDesktopEvent(APP_EVENTS_RECONNECTED_EVENT, () => {
+    void replayPtyBuffersForActiveTerminals()
+  })
+    .then((unlisten) => {
+      if (pool.size === 0) {
+        unlisten()
+        return
+      }
+      appEventsReconnectUnlisten = unlisten
+    })
+    .finally(() => {
+      appEventsReconnectListenerPending = null
+    })
+
+  return appEventsReconnectListenerPending
+}
+
+function releaseAppEventsReconnectListenerIfIdle(): void {
+  if (pool.size > 0) return
+  appEventsReconnectUnlisten?.()
+  appEventsReconnectUnlisten = null
+  appEventsReconnectListenerPending = null
+}
+
 export async function acquire(taskId: string): Promise<PoolEntry> {
   const existing = pool.get(taskId)
   if (existing) return existing
@@ -224,6 +277,7 @@ export async function acquire(taskId: string): Promise<PoolEntry> {
   })
 
   pool.set(taskId, entry)
+  await ensureAppEventsReconnectListener()
   return entry
 }
 
@@ -311,6 +365,7 @@ export function release(taskId: string): void {
   entry.unlisteners.length = 0
   entry.terminal.dispose()
   pool.delete(taskId)
+  releaseAppEventsReconnectListenerIfIdle()
 }
 
 export function shouldSpawnPty(entry: PoolEntry): boolean {
@@ -375,6 +430,7 @@ export function releaseAll(): void {
     release(taskId)
   }
   taskTabSessions.clear()
+  releaseAppEventsReconnectListenerIfIdle()
 }
 
 export function releaseAllForTask(taskId: string): number {

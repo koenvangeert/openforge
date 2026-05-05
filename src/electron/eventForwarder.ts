@@ -1,4 +1,4 @@
-import { OPENFORGE_EVENT_CHANNEL } from './preloadApi.js'
+import { OPENFORGE_APP_EVENTS_RECONNECTED_EVENT, OPENFORGE_EVENT_CHANNEL } from './preloadApi.js'
 import type { SidecarLaunchConfig } from './sidecar.js'
 
 export interface OpenForgeEventEnvelope {
@@ -26,6 +26,8 @@ export interface AppEventForwarderDeps {
   sidecarConfig: SidecarLaunchConfig
   fetch: AppEventFetch
   windows: () => readonly BrowserWindowLike[]
+  sleep?: (ms: number) => Promise<void>
+  reconnectDelayMs?: number
 }
 
 export interface AppEventForwarder {
@@ -34,6 +36,8 @@ export interface AppEventForwarder {
   stop(): void
   acceptChunk(chunk: string): void
 }
+
+const DEFAULT_RECONNECT_DELAY_MS = 1_000
 
 function isEnvelope(value: unknown): value is OpenForgeEventEnvelope {
   return typeof value === 'object'
@@ -102,52 +106,101 @@ export function createAppEventForwarder(deps: AppEventForwarderDeps): AppEventFo
     }
   }
 
+  function lastCompleteFrameBoundaryEnd(text: string): number {
+    let boundaryEnd = -1
+    const boundaryPattern = /\r?\n\r?\n/g
+    let match: RegExpExecArray | null = null
+    while ((match = boundaryPattern.exec(text)) !== null) {
+      boundaryEnd = match.index + match[0].length
+    }
+    return boundaryEnd
+  }
+
   function acceptChunk(chunk: string): void {
     buffer += chunk
-    const lastBoundary = buffer.lastIndexOf('\n\n')
-    if (lastBoundary === -1) return
+    const boundaryEnd = lastCompleteFrameBoundaryEnd(buffer)
+    if (boundaryEnd === -1) return
 
-    const complete = buffer.slice(0, lastBoundary + 2)
-    buffer = buffer.slice(lastBoundary + 2)
+    const complete = buffer.slice(0, boundaryEnd)
+    buffer = buffer.slice(boundaryEnd)
     for (const envelope of parseSseMessages(complete)) {
       forward(envelope)
     }
   }
 
-  async function start(): Promise<void> {
+  function forwardReconnectNotice(attempt: number): void {
+    forward({
+      eventName: OPENFORGE_APP_EVENTS_RECONNECTED_EVENT,
+      payload: {
+        attempt,
+        reconnectedAt: new Date().toISOString(),
+      },
+    })
+  }
+
+  async function readEventStream(body: ReadableStream<Uint8Array>): Promise<void> {
+    const reader = body.getReader()
     try {
-      const response = await deps.fetch(`http://${deps.sidecarConfig.host}:${deps.sidecarConfig.port}/app/events`, {
-        headers: { Authorization: `Bearer ${deps.sidecarConfig.token}` },
-        signal: abortController.signal,
-      })
-
-      if (!response.ok) {
-        const detail = await response.text()
-        throw new Error(`failed to connect to Rust app event stream: ${detail}`)
+      while (!abortController.signal.aborted) {
+        const { done, value } = await reader.read()
+        if (done) break
+        if (value) acceptChunk(decoder.decode(value, { stream: true }))
       }
+    } finally {
+      reader.releaseLock()
+    }
+  }
 
-      markReady()
+  async function waitBeforeReconnect(): Promise<void> {
+    const delay = deps.reconnectDelayMs ?? DEFAULT_RECONNECT_DELAY_MS
+    await (deps.sleep ?? ((ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms))))(delay)
+  }
 
-      if (!response.body) return
+  async function start(): Promise<void> {
+    let hasConnected = false
+    let reconnectAttempt = 0
 
-      const reader = response.body.getReader()
+    while (!abortController.signal.aborted) {
       try {
-        while (!abortController.signal.aborted) {
-          const { done, value } = await reader.read()
-          if (done) break
-          if (value) acceptChunk(decoder.decode(value, { stream: true }))
+        const response = await deps.fetch(`http://${deps.sidecarConfig.host}:${deps.sidecarConfig.port}/app/events`, {
+          headers: { Authorization: `Bearer ${deps.sidecarConfig.token}` },
+          signal: abortController.signal,
+        })
+
+        if (!response.ok) {
+          const detail = await response.text()
+          throw new Error(`failed to connect to Rust app event stream: ${detail}`)
         }
-      } finally {
-        reader.releaseLock()
-      }
-    } catch (error) {
-      if (isIntentionalAbort(error)) {
+
+        const isReconnect = hasConnected
+        hasConnected = true
         markReady()
-        return
+
+        if (isReconnect) {
+          reconnectAttempt += 1
+          forwardReconnectNotice(reconnectAttempt)
+        }
+
+        if (!response.body) return
+
+        await readEventStream(response.body)
+      } catch (error) {
+        if (isIntentionalAbort(error)) {
+          markReady()
+          return
+        }
+
+        if (!readySettled) {
+          failReady(error)
+          throw error
+        }
+
+        console.error('[electron] Rust app event stream disconnected; reconnecting:', error)
       }
 
-      failReady(error)
-      throw error
+      if (!abortController.signal.aborted) {
+        await waitBeforeReconnect()
+      }
     }
   }
 

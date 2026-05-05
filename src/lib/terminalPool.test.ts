@@ -7,7 +7,7 @@ import {
 	type Mock,
 	vi,
 } from "vitest";
-import { openUrl } from "./ipc";
+import { getPtyBuffer, openUrl } from "./ipc";
 import { TERMINAL_FONT_FAMILY } from "./terminalOptions";
 import {
 	_getPool,
@@ -536,6 +536,30 @@ describe("terminalPool", () => {
 		expect(resetSpy).toHaveBeenCalled();
 		expect(writeSpy).toHaveBeenCalledWith("new session output");
 		expect(entry.needsClear).toBe(false);
+	});
+
+	it("replays backend buffers for active terminals after the app event stream reconnects", async () => {
+		vi.mocked(getPtyBuffer).mockImplementation(async (taskId: string) => {
+			if (taskId === "task-reconnect-a") return "latest buffer a";
+			if (taskId === "task-reconnect-b") return "latest buffer b";
+			return null;
+		});
+		const entryA = await acquire("task-reconnect-a");
+		const entryB = await acquire("task-reconnect-b");
+		const { reset: resetA, write: writeA } = getTerminalMocks(entryA);
+		const { reset: resetB, write: writeB } = getTerminalMocks(entryB);
+
+		const reconnectCb = getListenCallback("openforge-app-events-reconnected");
+		reconnectCb({ payload: { attempt: 1 } });
+		await vi.waitFor(() => expect(writeA).toHaveBeenCalledWith("latest buffer a"));
+
+		expect(resetA).toHaveBeenCalled();
+		expect(resetB).toHaveBeenCalled();
+		expect(writeB).toHaveBeenCalledWith("latest buffer b");
+		expect(entryA.ptyActive).toBe(true);
+		expect(entryA.needsClear).toBe(false);
+		expect(entryB.ptyActive).toBe(true);
+		expect(entryB.needsClear).toBe(false);
 	});
 
 	it("terminal survives detach/re-attach cycle", async () => {
