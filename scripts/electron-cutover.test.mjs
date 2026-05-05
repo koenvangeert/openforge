@@ -51,4 +51,46 @@ describe('Electron-only desktop cutover', () => {
     expect(rollback).toContain('openforge.db')
     expect(rollback).toContain('openforge_dev.db')
   })
+
+  it('keeps agent guidance and project profiles aligned with Electron shell plus Rust sidecar architecture', () => {
+    const guidanceFiles = [
+      ['AGENTS.md', readText('AGENTS.md')],
+      ['.a5c/project-profile.md', readText('.a5c/project-profile.md')],
+    ]
+
+    for (const [path, content] of guidanceFiles) {
+      expect(content, path).toContain('Electron')
+      expect(content, path).toContain('Rust sidecar')
+      expect(content, path).toContain('src/lib/ipc.ts')
+      expect(content, path).toContain('pnpm electron:dev')
+      expect(content, path).toContain('pnpm electron:package')
+      expect(content, path).toContain('pnpm electron:install')
+      expect(content, path).not.toMatch(/Tauri v2 desktop app/)
+      expect(content, path).not.toMatch(/pnpm tauri:/)
+      expect(content, path).not.toMatch(/Tauri webview/)
+      expect(content, path).not.toMatch(/Tauri CLI|tauri-action|Tauri\/Rust desktop|tauri-project-setup/)
+    }
+
+    const profile = readJson('.a5c/project-profile.json')
+    expect(profile.description).toContain('Electron')
+    expect(profile.description).toContain('Rust sidecar')
+    expect(profile.techStack.frameworks.map(framework => framework.name)).toContain('Electron')
+    expect(profile.techStack.frameworks.map(framework => framework.name)).not.toContain('Tauri')
+    expect(profile.techStack.buildTools).toEqual(expect.arrayContaining(['pnpm', 'Vite', 'Electron', 'Cargo']))
+    expect(profile.techStack.buildTools).not.toContain('Tauri CLI')
+    expect(profile.techStack.buildTools).not.toContain('tauri-action')
+    expect(profile.architecture.dataFlow).toContain('src/lib/ipc.ts')
+    expect(profile.architecture.dataFlow).toContain('Electron preload')
+    expect(profile.architecture.dataFlow).toContain('Rust sidecar')
+    expect(profile.workflows.find(workflow => workflow.name === 'development')?.steps).toEqual(expect.arrayContaining([
+      'pnpm electron:dev for the full Electron app with Rust sidecar',
+      'pnpm dev for frontend-only Vite',
+    ]))
+    expect(profile.workflows.map(workflow => workflow.name)).toContain('electron-shell-verification')
+    expect(profile.workflows.find(workflow => workflow.name === 'electron-shell-verification')?.steps.join('\n')).toContain('pnpm test -- src/electron')
+    expect(profile.workflows.find(workflow => workflow.name === 'release')?.steps.join('\n')).toContain('pnpm electron:package')
+    expect(profile.bottlenecks.map(bottleneck => bottleneck.location).join('\n')).toContain('src/electron/main.ts')
+    expect(readText('.a5c/project-profile.md')).toContain('### electron-shell-verification')
+    expect(JSON.stringify(profile)).not.toMatch(/pnpm tauri:|Tauri CLI|tauri-action|Tauri v2 desktop app|Tauri webview|tauri-project-setup/)
+  })
 })

@@ -1,6 +1,6 @@
 {
   "projectName": "Open Forge",
-  "description": "A macOS-focused Tauri desktop command center for managing multiple projects and AI coding agents concurrently while keeping the user focused on one active thing at a time. The app coordinates tasks, agent worktrees, embedded terminals, PR/self-review, GitHub status, plugins, and contextual nudges so it interrupts the user only when attention is useful.",
+  "description": "A macOS-focused Electron desktop command center with a Rust sidecar for managing multiple projects and AI coding agents concurrently while keeping the user focused on one active thing at a time. The app coordinates tasks, agent worktrees, embedded terminals, PR/self-review, GitHub status, plugins, and contextual nudges so it interrupts the user only when attention is useful.",
   "goals": [
     {
       "id": "goal-product-1",
@@ -42,7 +42,7 @@
     "languages": [
       {
         "name": "TypeScript",
-        "role": "frontend, plugin SDK, built-in plugins, tests"
+        "role": "frontend, Electron shell, plugin SDK, built-in plugins, tests"
       },
       {
         "name": "Svelte",
@@ -52,7 +52,7 @@
       {
         "name": "Rust",
         "version": "1.77+",
-        "role": "Tauri backend, database, commands, GitHub, PTY, providers"
+        "role": "Rust sidecar backend, database, command handlers, GitHub, PTY, providers"
       },
       {
         "name": "CSS",
@@ -65,9 +65,9 @@
     ],
     "frameworks": [
       {
-        "name": "Tauri",
-        "version": "2.10",
-        "category": "desktop shell and IPC"
+        "name": "Electron",
+        "version": "41",
+        "category": "desktop shell, main process, preload IPC, and macOS packaging"
       },
       {
         "name": "Svelte",
@@ -122,24 +122,28 @@
     "buildTools": [
       "pnpm",
       "Vite",
-      "Tauri CLI",
+      "Electron",
       "Cargo",
       "TypeScript compiler",
-      "GitHub Actions",
-      "tauri-action"
+      "GitHub Actions"
     ],
     "packageManagers": [
-      "pnpm 10.25.0",
+      "pnpm 10.33.2",
       "Cargo"
     ]
   },
   "architecture": {
-    "pattern": "Desktop application monorepo with a Svelte 5/TypeScript frontend, Rust/Tauri v2 backend, SQLite persistence, managed plugin workspace, and AI-provider integrations.",
+    "pattern": "Desktop application monorepo with a Svelte 5/TypeScript renderer, Electron main/preload shell, Rust sidecar backend currently in src-tauri, SQLite persistence, managed plugin workspace, and AI-provider integrations.",
     "modules": [
       {
         "name": "Frontend app",
         "path": "src",
         "description": "Svelte UI for board/task management, settings, PR/self-review diffs, terminals, skills, and typed IPC-facing business logic."
+      },
+      {
+        "name": "Electron shell",
+        "path": "src/electron",
+        "description": "Electron main/preload code for windowing, renderer security, shell-owned IPC, plugin protocol/CSP, app events, and Rust sidecar supervision."
       },
       {
         "name": "Reusable components",
@@ -152,9 +156,14 @@
         "description": "Business logic utilities, stores/composables, typed IPC wrappers, terminalPool lifecycle owner, diff/file helpers, and settings helpers."
       },
       {
-        "name": "Rust commands",
+        "name": "Rust sidecar commands",
         "path": "src-tauri/src/commands",
-        "description": "Tauri command boundary for tasks, projects, config, providers, GitHub, review flows, plugins, PTY, and orchestration."
+        "description": "Rust sidecar command boundary for tasks, projects, config, providers, GitHub, review flows, plugins, PTY, and orchestration."
+      },
+      {
+        "name": "Rust sidecar HTTP/events",
+        "path": "src-tauri/src/http_server.rs",
+        "description": "Authenticated loopback HTTP IPC and app event streaming used by Electron main to reach the Rust sidecar."
       },
       {
         "name": "Database layer",
@@ -175,12 +184,13 @@
     "entryPoints": [
       "src/main.ts",
       "src/App.svelte",
+      "src/electron/main.ts",
+      "src/electron/preload.cts",
       "src-tauri/src/main.rs",
-      "src-tauri/tauri.conf.json",
       "packages/plugin-sdk/src/index.ts",
       "plugins/*/src"
     ],
-    "dataFlow": "Svelte components call typed wrappers in src/lib/ipc.ts. Those wrappers invoke Tauri commands in Rust, which coordinate SQLite domain modules, Git/GitHub clients, PTY managers, agent providers, plugin host/RPC, and local HTTP/MCP services. Agent tasks are launched in isolated git worktrees and reflected back through task lifecycle, terminal output, CI status, and review UI."
+    "dataFlow": "Svelte components call typed wrappers in src/lib/ipc.ts. Those wrappers use the Electron desktop IPC adapter and sandboxed Electron preload bridge to reach Electron main, which handles shell-owned commands such as open_url or forwards backend-owned commands to the authenticated loopback Rust sidecar. The Rust sidecar coordinates SQLite domain modules, Git/GitHub clients, PTY managers, agent providers, plugin host/RPC, Whisper, and local HTTP/MCP services. Sidecar app events stream back through Electron main/preload into frontend listeners. Agent tasks are launched in isolated git worktrees and reflected back through task lifecycle, terminal output, CI status, and review UI."
   },
   "team": [
     {
@@ -189,7 +199,8 @@
       "responsibilities": [
         "product direction",
         "frontend",
-        "Rust backend",
+        "Rust sidecar/backend",
+        "Electron shell",
         "plugin platform",
         "provider integrations",
         "CI/release"
@@ -218,7 +229,7 @@
       "description": "Run and iterate on the app locally.",
       "steps": [
         "pnpm install",
-        "pnpm tauri:dev for full app",
+        "pnpm electron:dev for the full Electron app with Rust sidecar",
         "pnpm dev for frontend-only Vite"
       ],
       "triggers": [
@@ -238,8 +249,20 @@
       ]
     },
     {
+      "name": "electron-shell-verification",
+      "description": "Verify Electron shell, preload, sidecar bridge, and packaging contracts.",
+      "steps": [
+        "pnpm test -- src/electron",
+        "pnpm test -- scripts/electron-cutover.test.mjs scripts/electron-dev.test.mjs scripts/electron-package.test.mjs"
+      ],
+      "triggers": [
+        "local quality gate",
+        "GitHub Actions pull_request/push"
+      ]
+    },
+    {
       "name": "rust-verification",
-      "description": "Verify backend behavior.",
+      "description": "Verify Rust sidecar/backend behavior.",
       "steps": [
         "cd src-tauri",
         "cargo test"
@@ -270,7 +293,8 @@
       "steps": [
         "push v* tag or workflow_dispatch",
         "release workflow updates versions",
-        "tauri-action builds DMGs",
+        "pnpm electron:package builds macOS app bundles with the Rust sidecar",
+        "pnpm electron:install installs a local macOS app build when needed",
         "draft release assets"
       ],
       "triggers": [
@@ -315,6 +339,11 @@
       {
         "name": "Testing Library Svelte",
         "config": "src/test-setup.ts"
+      },
+      {
+        "name": "Electron shell contract tests",
+        "command": "pnpm test -- src/electron && pnpm test -- scripts/electron-cutover.test.mjs scripts/electron-dev.test.mjs scripts/electron-package.test.mjs",
+        "config": "src/electron/*.test.ts, scripts/electron-*.test.mjs"
       },
       {
         "name": "Cargo test",
@@ -406,7 +435,7 @@
         "trigger": "v* tags or manual dispatch",
         "stages": [
           "set version",
-          "build macOS DMGs",
+          "package Electron macOS app with Rust sidecar",
           "draft GitHub release"
         ]
       }
@@ -460,6 +489,13 @@
       "frequency": "highest churn in recent history"
     },
     {
+      "id": "bn-electron-shell-1",
+      "description": "Electron main/preload and backend bridge changes are security-sensitive.",
+      "impact": "Window security, shell-owned commands, sidecar supervision, CSP, and event forwarding can regress if raw Electron/Node/HTTP access leaks into renderer code.",
+      "location": "src/electron/main.ts, src/electron/preload.cts, src/electron/backendBridge.ts",
+      "frequency": "high during Electron migration and shell integration work"
+    },
+    {
       "id": "bn-main-rs-1",
       "description": "Rust main/bootstrap command registration is high-churn.",
       "impact": "Backend additions can conflict around setup and command registration.",
@@ -505,7 +541,7 @@
       "svelte": "Svelte 5 runes only: $state, $derived, $effect, $props() with local Props interfaces; on-prefixed callbacks; no legacy event dispatcher.",
       "typescript": "Use import type under verbatimModuleSyntax; nullable fields use T | null rather than optional.",
       "styling": "Tailwind utilities and daisyUI semantic classes; Tailwind v4 CSS-first config in src/app.css; no hardcoded hex colors.",
-      "rust": "Tauri commands return Result<T, String> with contextual map_err(format!(...)); DB domain files use impl super::Database."
+      "rust": "Rust sidecar command handlers return Result<T, String> with contextual map_err(format!(...)); DB domain files use impl super::Database."
     },
     "importOrder": [
       "framework imports",
@@ -513,11 +549,12 @@
       "local modules/components",
       "type-only imports where required"
     ],
-    "errorHandling": "Rust command boundaries map errors to Result<T, String>; frontend uses typed IPC wrappers and UI state; avoid direct invoke() usage outside src/lib/ipc.ts.",
+    "errorHandling": "Rust sidecar command boundaries map errors to Result<T, String>; frontend uses typed IPC wrappers and UI state; avoid direct desktop transport calls outside src/lib/ipc.ts.",
     "testingConventions": "Use TDD. Write/update tests first, verify failure where practical, then implement. Cover business logic and behavior; do not assert Tailwind/CSS visual classes. Run pnpm test and/or cargo test depending on touched area.",
     "additionalRules": [
-      "All Tauri invoke calls go through src/lib/ipc.ts wrappers.",
-      "External links use openUrl() IPC wrapper.",
+      "All frontend backend calls go through src/lib/ipc.ts wrappers; do not call raw Electron, preload, HTTP sidecar, or invoke-like transport APIs directly from Svelte code.",
+      "External links use openUrl() IPC wrapper so Electron main owns open_url handling.",
+      "Rust sidecar IPC payloads from JS/TS use camelCase keys that match the frontend API shape, even when Rust params are snake_case.",
       "Map-based stores require new Map() assignment for reactivity.",
       "Task context menus use TaskContextMenu; non-task menus use ContextMenu primitives.",
       "Plain-key vim bindings must use useVimNavigation and check isInputFocused().",
@@ -536,14 +573,13 @@
   "claudeMdInstructions": [
     "Open Forge product goal: coordinate multiple projects and AI agents while preserving one-thing-at-a-time focus and low-noise timely nudges.",
     "Use /babysitter:project-install to refresh project profile artifacts after major architecture, workflow, or product-direction changes.",
-    "Prefer TDD-driven iterative convergence for implementation tasks and run the relevant pnpm/cargo verification gates.",
-    "Map code before broad changes touching high-churn integration points: App.svelte, main.rs, ipc/types, github_poller, and terminalPool.",
+    "Prefer TDD-driven iterative convergence for implementation tasks and run the relevant pnpm/electron/cargo verification gates.",
+    "Map code before broad changes touching high-churn integration points: App.svelte, src/electron/main.ts, main.rs, ipc/types, github_poller, and terminalPool.",
     "CI/CD babysitter integration was intentionally skipped; do not add GitHub Actions babysitter automation without a future explicit task."
   ],
   "installedSkills": [
     "rust",
     "ui-ux-pro-max",
-    "specializations/desktop-development/skills/tauri-project-setup/SKILL.md",
     "specializations/web-development/skills/svelte/SKILL.md",
     "specializations/web-development/skills/typescript/SKILL.md",
     "specializations/web-development/skills/vitest/SKILL.md",
@@ -551,7 +587,6 @@
   ],
   "installedAgents": [
     "general-purpose",
-    "specializations/desktop-development/agents/tauri-rust-specialist/AGENT.md",
     "specializations/desktop-development/agents/desktop-ux-analyst/AGENT.md",
     "specializations/desktop-development/agents/desktop-test-architect/AGENT.md"
   ],
@@ -569,6 +604,6 @@
     "attentionModel": "Interrupt only for meaningful decisions, blocked agents, review readiness, CI failures, destructive operations, or workflow handoffs."
   },
   "createdAt": "2026-04-26T15:07:30.000Z",
-  "updatedAt": "2026-04-26T15:24:38.255Z",
+  "updatedAt": "2026-05-05T09:16:03.268Z",
   "version": 1
 }
