@@ -61,7 +61,7 @@ impl PtyManager {
         opencode_session_id: &str,
         cols: u16,
         rows: u16,
-        app_handle: Option<tauri::AppHandle>,
+        app_handle: Option<crate::backend_runtime::AppHandle>,
         app_event_tx: Option<AppEventSender>,
     ) -> Result<u64, PtyError> {
         let mut sessions = self.sessions.lock().await;
@@ -215,7 +215,7 @@ impl PtyManager {
         permission_mode: Option<&str>,
         cols: u16,
         rows: u16,
-        app_handle: Option<tauri::AppHandle>,
+        app_handle: Option<crate::backend_runtime::AppHandle>,
         app_event_tx: Option<AppEventSender>,
     ) -> Result<u64, PtyError> {
         let mut sessions = self.sessions.lock().await;
@@ -371,7 +371,7 @@ impl PtyManager {
         continue_session: bool,
         cols: u16,
         rows: u16,
-        app_handle: Option<tauri::AppHandle>,
+        app_handle: Option<crate::backend_runtime::AppHandle>,
         app_event_tx: Option<AppEventSender>,
     ) -> Result<u64, PtyError> {
         let mut sessions = self.sessions.lock().await;
@@ -508,7 +508,7 @@ impl PtyManager {
         cols: u16,
         rows: u16,
         terminal_index: Option<u32>,
-        app_handle: Option<tauri::AppHandle>,
+        app_handle: Option<crate::backend_runtime::AppHandle>,
         app_event_tx: Option<AppEventSender>,
     ) -> Result<u64, PtyError> {
         let key = shell_session_key(task_id, terminal_index);

@@ -4,7 +4,6 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
-use tauri::Emitter;
 
 use super::session::{LastOutputTimes, PtyOutputBuffers, PtySessions};
 
@@ -249,14 +248,14 @@ pub(super) enum PtyExitAction {
 pub(super) struct PtyEventEmitterConfig {
     pub(super) session_key: String,
     pub(super) instance_id: u64,
-    pub(super) app_handle: Option<tauri::AppHandle>,
+    pub(super) app_handle: Option<crate::backend_runtime::AppHandle>,
     pub(super) app_event_tx: Option<AppEventSender>,
     pub(super) ring_buffer: Arc<std::sync::Mutex<RingBuffer>>,
     pub(super) exit_action: PtyExitAction,
 }
 
-fn emit_tauri_pty_event(
-    app_handle: &tauri::AppHandle,
+fn emit_backend_pty_event(
+    app_handle: &crate::backend_runtime::AppHandle,
     event_name: &str,
     payload: &serde_json::Value,
 ) -> PtyEmitResult {
@@ -291,7 +290,7 @@ pub(super) fn spawn_batched_pty_event_emitter(
         let mut emit_pty_event = |event_name: &str, payload: &serde_json::Value| {
             publish_app_event(&app_event_tx, event_name, payload);
             if let Some(app_handle) = app_handle.as_ref() {
-                emit_tauri_pty_event(app_handle, event_name, payload)
+                emit_backend_pty_event(app_handle, event_name, payload)
             } else {
                 Ok(())
             }

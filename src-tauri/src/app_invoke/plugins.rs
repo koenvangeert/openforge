@@ -286,20 +286,12 @@ pub(super) async fn handle_app_plugin_command(
                 .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
             let backend_path = app_resolve_backend_entry_path(&install_root, &backend_entry)
                 .map_err(|e| (StatusCode::BAD_REQUEST, e))?;
-            let Some(app) = state.app.as_ref() else {
-                return Err((
-                    StatusCode::NOT_IMPLEMENTED,
-                    "app IPC command requires plugin host state before Electron sidecar support: plugin_invoke".to_string(),
-                ));
-            };
-            let plugin_host = app
-                .try_state::<crate::plugin_host::PluginHost>()
-                .ok_or_else(|| {
-                    (
-                        StatusCode::SERVICE_UNAVAILABLE,
-                        "plugin host state is not available".to_string(),
-                    )
-                })?;
+            let plugin_host = state.plugin_host.as_ref().ok_or_else(|| {
+                (
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    "plugin host state is not available".to_string(),
+                )
+            })?;
             plugin_host
                 .invoke_backend(&plugin_id, &command, &backend_path, payload)
                 .await

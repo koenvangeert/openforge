@@ -1,11 +1,10 @@
+use crate::backend_runtime::State;
 use crate::{
     db,
     whisper_manager::{WhisperManager, WhisperModelSize},
 };
 use std::sync::{Arc, Mutex};
-use tauri::State;
 
-#[tauri::command]
 pub async fn transcribe_audio(
     whisper: State<'_, WhisperManager>,
     audio_data: Vec<f32>,
@@ -15,24 +14,21 @@ pub async fn transcribe_audio(
         .map_err(|e| format!("Transcription failed: {}", e))
 }
 
-#[tauri::command]
 pub async fn get_whisper_model_status(
     whisper: State<'_, WhisperManager>,
 ) -> Result<crate::whisper_manager::WhisperModelStatus, String> {
     Ok(whisper.get_model_status())
 }
 
-#[tauri::command]
 pub async fn get_all_whisper_model_statuses(
     whisper: State<'_, WhisperManager>,
 ) -> Result<Vec<crate::whisper_manager::WhisperModelStatus>, String> {
     Ok(whisper.get_all_model_statuses())
 }
 
-#[tauri::command]
 pub async fn download_whisper_model(
     whisper: State<'_, WhisperManager>,
-    app: tauri::AppHandle,
+    app: crate::backend_runtime::AppHandle,
     db: State<'_, Arc<Mutex<db::Database>>>,
     model_size: String,
 ) -> Result<(), String> {
@@ -51,7 +47,6 @@ pub async fn download_whisper_model(
     Ok(())
 }
 
-#[tauri::command]
 pub async fn set_whisper_model(
     whisper: State<'_, WhisperManager>,
     db: State<'_, Arc<Mutex<db::Database>>>,

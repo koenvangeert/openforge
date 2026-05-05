@@ -1,8 +1,8 @@
+use crate::backend_runtime::{AppHandle, State};
 use crate::db;
 use serde::Deserialize;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
-use tauri::{AppHandle, Manager, State};
 
 fn builtin_install_path(plugin_id: &str) -> String {
     crate::builtin_plugins::sentinel_install_path(plugin_id)
@@ -96,7 +96,6 @@ fn resolve_backend_entry_path(
     Ok(canonical_backend_path)
 }
 
-#[tauri::command]
 pub async fn install_plugin(
     db: State<'_, Arc<Mutex<db::Database>>>,
     plugin: InstallPluginRequest,
@@ -107,7 +106,6 @@ pub async fn install_plugin(
         .map_err(|e| format!("Failed to install plugin: {}", e))
 }
 
-#[tauri::command]
 pub async fn uninstall_plugin(
     app_handle: AppHandle,
     db: State<'_, Arc<Mutex<db::Database>>>,
@@ -128,7 +126,6 @@ pub async fn uninstall_plugin(
         .map_err(|e| format!("Failed to uninstall plugin: {}", e))
 }
 
-#[tauri::command]
 pub async fn install_plugin_from_local(
     app_handle: AppHandle,
     db: State<'_, Arc<Mutex<db::Database>>>,
@@ -147,7 +144,6 @@ pub async fn install_plugin_from_local(
     Ok(plugin)
 }
 
-#[tauri::command]
 pub async fn install_plugin_from_npm(
     app_handle: AppHandle,
     db: State<'_, Arc<Mutex<db::Database>>>,
@@ -165,7 +161,6 @@ pub async fn install_plugin_from_npm(
     Ok(plugin)
 }
 
-#[tauri::command]
 pub async fn get_plugin(
     db: State<'_, Arc<Mutex<db::Database>>>,
     plugin_id: String,
@@ -175,7 +170,6 @@ pub async fn get_plugin(
         .map_err(|e| format!("Failed to get plugin: {}", e))
 }
 
-#[tauri::command]
 pub async fn list_plugins(
     db: State<'_, Arc<Mutex<db::Database>>>,
 ) -> Result<Vec<db::PluginRow>, String> {
@@ -184,7 +178,6 @@ pub async fn list_plugins(
         .map_err(|e| format!("Failed to list plugins: {}", e))
 }
 
-#[tauri::command]
 pub async fn set_plugin_enabled(
     db: State<'_, Arc<Mutex<db::Database>>>,
     project_id: String,
@@ -196,7 +189,6 @@ pub async fn set_plugin_enabled(
         .map_err(|e| format!("Failed to set plugin enabled: {}", e))
 }
 
-#[tauri::command]
 pub async fn get_enabled_plugins(
     db: State<'_, Arc<Mutex<db::Database>>>,
     project_id: String,
@@ -206,7 +198,6 @@ pub async fn get_enabled_plugins(
         .map_err(|e| format!("Failed to get enabled plugins: {}", e))
 }
 
-#[tauri::command]
 pub async fn get_plugin_storage(
     db: State<'_, Arc<Mutex<db::Database>>>,
     plugin_id: String,
@@ -217,7 +208,6 @@ pub async fn get_plugin_storage(
         .map_err(|e| format!("Failed to get plugin storage: {}", e))
 }
 
-#[tauri::command]
 pub async fn set_plugin_storage(
     db: State<'_, Arc<Mutex<db::Database>>>,
     plugin_id: String,
@@ -229,7 +219,6 @@ pub async fn set_plugin_storage(
         .map_err(|e| format!("Failed to set plugin storage: {}", e))
 }
 
-#[tauri::command]
 pub async fn plugin_invoke(
     plugin_host: State<'_, crate::plugin_host::PluginHost>,
     db: State<'_, Arc<Mutex<db::Database>>>,

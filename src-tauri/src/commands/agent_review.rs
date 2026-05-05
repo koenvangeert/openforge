@@ -1,17 +1,16 @@
+use crate::backend_runtime::State;
 use crate::{
     db, git_worktree, opencode_client::OpenCodeClient, review_prompt,
     server_manager::ServerManager, sse_bridge::SseBridgeManager,
 };
 use std::sync::{Arc, Mutex};
-use tauri::State;
 
-#[tauri::command]
 #[allow(clippy::too_many_arguments)]
 pub async fn start_agent_review(
     db: State<'_, Arc<Mutex<db::Database>>>,
     server_mgr: State<'_, ServerManager>,
     sse_mgr: State<'_, SseBridgeManager>,
-    app: tauri::AppHandle,
+    app: crate::backend_runtime::AppHandle,
     repo_owner: String,
     repo_name: String,
     pr_number: i64,
@@ -100,7 +99,6 @@ pub async fn start_agent_review(
     }))
 }
 
-#[tauri::command]
 pub async fn get_agent_review_comments(
     db: State<'_, Arc<Mutex<db::Database>>>,
     review_pr_id: i64,
@@ -110,7 +108,6 @@ pub async fn get_agent_review_comments(
         .map_err(|e| format!("Failed to get agent review comments: {}", e))
 }
 
-#[tauri::command]
 pub async fn update_agent_review_comment_status(
     db: State<'_, Arc<Mutex<db::Database>>>,
     comment_id: i64,
@@ -121,7 +118,6 @@ pub async fn update_agent_review_comment_status(
         .map_err(|e| format!("Failed to update comment status: {}", e))
 }
 
-#[tauri::command]
 pub async fn dismiss_all_agent_review_comments(
     db: State<'_, Arc<Mutex<db::Database>>>,
     review_pr_id: i64,
@@ -131,7 +127,6 @@ pub async fn dismiss_all_agent_review_comments(
         .map_err(|e| format!("Failed to dismiss all comments: {}", e))
 }
 
-#[tauri::command]
 pub async fn abort_agent_review(
     server_mgr: State<'_, ServerManager>,
     sse_mgr: State<'_, SseBridgeManager>,

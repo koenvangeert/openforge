@@ -1,7 +1,6 @@
-use crate::{builtin_plugins, db};
+use crate::{backend_runtime::AppHandle, builtin_plugins, db};
 use std::path::{Component, Path, PathBuf};
 use std::sync::{Arc, Mutex};
-use tauri::Manager;
 
 const HOST_RUNTIME_INDEX_HTML: &str = r#"<!doctype html>
 <html lang=\"en\">
@@ -22,27 +21,24 @@ const HOST_RUNTIME_PLUGIN_SDK_INDEX_JS: &str = include_str!("../plugin-host/plug
 const PLUGIN_PROTOCOL_CORS_HEADER: &str = "Access-Control-Allow-Origin";
 const PLUGIN_PROTOCOL_CORS_ALLOW_ORIGIN: &str = "*";
 
-type ProtocolResponse = tauri::http::Response<Vec<u8>>;
+type ProtocolResponse = axum::http::Response<Vec<u8>>;
 type HostRuntimeAsset = (Vec<u8>, &'static str);
 
 trait PluginAssetResolver {
     fn resolve_asset_path(&self, plugin_id: &str, rel_path: &str) -> Result<PathBuf, String>;
 }
 
-struct AppPluginAssetResolver<'a, R: tauri::Runtime> {
-    app_handle: &'a tauri::AppHandle<R>,
+struct AppPluginAssetResolver<'a> {
+    app_handle: &'a AppHandle,
 }
 
-impl<R: tauri::Runtime> PluginAssetResolver for AppPluginAssetResolver<'_, R> {
+impl PluginAssetResolver for AppPluginAssetResolver<'_> {
     fn resolve_asset_path(&self, plugin_id: &str, rel_path: &str) -> Result<PathBuf, String> {
         resolve_plugin_asset_path_for_request(self.app_handle, plugin_id, rel_path)
     }
 }
 
-pub(crate) fn handle_plugin_uri<R: tauri::Runtime>(
-    app_handle: &tauri::AppHandle<R>,
-    uri: &str,
-) -> ProtocolResponse {
+pub(crate) fn handle_plugin_uri(app_handle: &AppHandle, uri: &str) -> ProtocolResponse {
     let resolver = AppPluginAssetResolver { app_handle };
     plugin_protocol_response_for_uri(uri, &resolver)
 }
@@ -110,7 +106,7 @@ fn plugin_protocol_response(
     content_type: Option<&str>,
     body: Vec<u8>,
 ) -> ProtocolResponse {
-    let mut builder = tauri::http::Response::builder().status(status).header(
+    let mut builder = axum::http::Response::builder().status(status).header(
         PLUGIN_PROTOCOL_CORS_HEADER,
         PLUGIN_PROTOCOL_CORS_ALLOW_ORIGIN,
     );
@@ -224,8 +220,8 @@ fn resolve_plugin_asset_path(
     Ok(canonical_candidate)
 }
 
-fn resolve_plugin_asset_path_for_request<R: tauri::Runtime>(
-    app_handle: &tauri::AppHandle<R>,
+fn resolve_plugin_asset_path_for_request(
+    app_handle: &AppHandle,
     plugin_id: &str,
     rel_path: &str,
 ) -> Result<PathBuf, String> {

@@ -2,6 +2,7 @@ use crate::{
     app_events::{publish_app_event, AppEventEnvelope, AppEventSender},
     db,
     github_client::GitHubClient,
+    plugin_host::PluginHost,
     pty_manager::PtyManager,
     server_manager::ServerManager,
     sse_bridge::SseBridgeManager,
@@ -17,8 +18,7 @@ use axum::{
 use futures::Stream;
 use log::{error, info, warn};
 use serde::{Deserialize, Serialize};
-use std::{convert::Infallible, net::SocketAddr, sync::Mutex};
-use tauri::{Emitter, Manager};
+use std::{convert::Infallible, net::SocketAddr, path::PathBuf, sync::Mutex};
 
 /// Request to create a new task from OpenCode
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -30,13 +30,14 @@ pub struct CreateTaskRequest {
 
 #[derive(Clone)]
 pub struct AppState {
-    pub app: Option<tauri::AppHandle>,
+    pub app: Option<crate::backend_runtime::AppHandle>,
     pub db: std::sync::Arc<Mutex<db::Database>>,
     pub backend_token: Option<String>,
     pub pty_manager: Option<PtyManager>,
     pub server_manager: Option<ServerManager>,
     pub sse_bridge_manager: Option<SseBridgeManager>,
     pub github_client: GitHubClient,
+    pub plugin_host: Option<PluginHost>,
     pub app_event_tx: Option<AppEventSender>,
     pub whisper: Option<std::sync::Arc<WhisperManager>>,
 }
@@ -775,7 +776,7 @@ fn resolve_http_server_port(
 /// sidecar contract, or AI_COMMAND_CENTER_PORT for the legacy hook bridge,
 /// defaulting to 17422.
 pub async fn start_http_server(
-    app: tauri::AppHandle,
+    app: crate::backend_runtime::AppHandle,
     db: std::sync::Arc<Mutex<db::Database>>,
     pty_manager: PtyManager,
     ready_tx: tokio::sync::oneshot::Sender<()>,
@@ -789,37 +790,50 @@ pub async fn start_http_server(
         server_manager,
         sse_bridge_manager,
         None,
+        false,
         ready_tx,
     )
     .await
 }
 
+pub fn electron_sidecar_app_handle(
+    app_data_dir: PathBuf,
+    resource_dir: PathBuf,
+) -> crate::backend_runtime::AppHandle {
+    crate::backend_runtime::AppHandle::with_app_paths(app_data_dir, resource_dir)
+}
+
 pub async fn start_http_sidecar_server(
+    app_data_dir: PathBuf,
+    resource_dir: PathBuf,
     db: std::sync::Arc<Mutex<db::Database>>,
     pty_manager: PtyManager,
     server_manager: ServerManager,
     whisper: std::sync::Arc<WhisperManager>,
     ready_tx: tokio::sync::oneshot::Sender<()>,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    let app = electron_sidecar_app_handle(app_data_dir, resource_dir);
     start_http_server_with_app_state(
-        None,
+        Some(app),
         db,
         pty_manager,
         server_manager,
         SseBridgeManager::new(),
         Some(whisper),
+        true,
         ready_tx,
     )
     .await
 }
 
 async fn start_http_server_with_app_state(
-    app: Option<tauri::AppHandle>,
+    app: Option<crate::backend_runtime::AppHandle>,
     db: std::sync::Arc<Mutex<db::Database>>,
     pty_manager: PtyManager,
     server_manager: ServerManager,
     sse_bridge_manager: SseBridgeManager,
     whisper: Option<std::sync::Arc<WhisperManager>>,
+    is_electron_sidecar: bool,
     ready_tx: tokio::sync::oneshot::Sender<()>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let port = resolve_http_server_port(
@@ -831,8 +845,14 @@ async fn start_http_server_with_app_state(
     let (app_event_tx, _) = tokio::sync::broadcast::channel(1024);
     let github_client = app
         .as_ref()
-        .map(|app| app.state::<GitHubClient>().inner().clone())
+        .and_then(|app| app.try_state::<GitHubClient>())
+        .map(|state| state.inner().clone())
         .unwrap_or_else(GitHubClient::new);
+    let plugin_host = Some(PluginHost::with_app_event_sender(
+        app.clone()
+            .unwrap_or_else(crate::backend_runtime::AppHandle::new),
+        Some(app_event_tx.clone()),
+    ));
     let state = AppState {
         app,
         db: db.clone(),
@@ -841,11 +861,12 @@ async fn start_http_server_with_app_state(
         server_manager: Some(server_manager),
         sse_bridge_manager: Some(sse_bridge_manager),
         github_client: github_client.clone(),
+        plugin_host,
         app_event_tx: Some(app_event_tx.clone()),
         whisper,
     };
 
-    if state.app.is_none() {
+    if is_electron_sidecar {
         tokio::spawn(crate::github_poller::start_github_poller_for_sidecar(
             db,
             github_client,
@@ -900,6 +921,7 @@ mod tests {
                 server_manager: Some(ServerManager::new()),
                 sse_bridge_manager: Some(SseBridgeManager::new()),
                 github_client: GitHubClient::new(),
+                plugin_host: Some(PluginHost::new(crate::backend_runtime::AppHandle::new())),
                 app_event_tx: Some(app_event_tx),
                 whisper: Some(Arc::new(WhisperManager::with_active_model(
                     WhisperModelSize::Small,
@@ -907,6 +929,21 @@ mod tests {
             },
             path,
         )
+    }
+
+    fn test_state_with_backend_app(
+        name: &str,
+    ) -> (AppState, std::path::PathBuf, tempfile::TempDir) {
+        let (mut state, db_path) = test_state(name);
+        let app_dir = tempfile::tempdir().expect("app data dir should create");
+        let app =
+            electron_sidecar_app_handle(app_dir.path().to_path_buf(), app_dir.path().to_path_buf());
+        state.plugin_host = Some(PluginHost::with_app_event_sender(
+            app.clone(),
+            state.app_event_tx.clone(),
+        ));
+        state.app = Some(app);
+        (state, db_path, app_dir)
     }
 
     #[test]
@@ -1891,7 +1928,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_app_invoke_handles_pty_spawn_without_tauri_app_emitter() {
+    async fn test_app_invoke_handles_pty_spawn_without_backend_app_emitter() {
         let (state, path) = test_state("app_invoke_pty_spawn_without_app");
         let router = create_router(state.clone());
 
@@ -2074,7 +2111,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_app_invoke_handles_plugin_db_backed_commands() {
-        let (state, path) = test_state("app_invoke_plugin_db_backed");
+        let (state, path, _app_dir) = test_state_with_backend_app("app_invoke_plugin_db_backed");
         let project_id = {
             let db = state.db.lock().expect("db lock");
             db.create_project("Open Forge", "/tmp/openforge")
@@ -2174,7 +2211,7 @@ mod tests {
                 .body(Body::from(r#"{"command":"uninstall_plugin","payload":{"pluginId":"com.example.echo"}}"#))
                 .expect("build request"),
         ).await.expect("request should succeed");
-        assert_eq!(uninstall.status(), StatusCode::NOT_IMPLEMENTED);
+        assert_eq!(uninstall.status(), StatusCode::OK);
 
         let still_installed = router
             .clone()
@@ -2191,10 +2228,56 @@ mod tests {
             )
             .await
             .expect("request should succeed");
-        assert_eq!(
-            response_body_json(still_installed).await["value"]["id"],
-            "com.example.echo"
-        );
+        assert!(response_body_json(still_installed).await["value"].is_null());
+
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[tokio::test]
+    async fn test_app_invoke_installs_local_plugin_with_backend_app_path_state() {
+        let (state, path, _app_dir) =
+            test_state_with_backend_app("app_invoke_local_plugin_backend_paths");
+        let source = tempfile::tempdir().expect("source plugin dir");
+        std::fs::create_dir_all(source.path().join("dist")).expect("dist dir");
+        std::fs::write(source.path().join("dist/index.js"), "export const x = 1;")
+            .expect("frontend entry");
+        std::fs::write(
+            source.path().join("manifest.json"),
+            r#"{
+                "id": "com.example.local-sidecar",
+                "name": "Local Sidecar Plugin",
+                "version": "1.0.0",
+                "apiVersion": 1,
+                "description": "A local plugin",
+                "permissions": [],
+                "contributes": {},
+                "frontend": "dist/index.js",
+                "backend": null
+            }"#,
+        )
+        .expect("manifest");
+        let router = create_router(state);
+        let body = serde_json::json!({
+            "command": "install_plugin_from_local",
+            "payload": { "sourcePath": source.path() }
+        });
+
+        let install = router
+            .oneshot(
+                Request::builder()
+                    .uri("/app/invoke")
+                    .method("POST")
+                    .header("authorization", "Bearer test-token")
+                    .header("content-type", "application/json")
+                    .body(Body::from(body.to_string()))
+                    .expect("build request"),
+            )
+            .await
+            .expect("request should succeed");
+
+        assert_eq!(install.status(), StatusCode::OK);
+        let response = response_body_json(install).await;
+        assert_eq!(response["value"]["id"], "com.example.local-sidecar");
 
         let _ = std::fs::remove_file(path);
     }

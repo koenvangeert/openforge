@@ -24,7 +24,6 @@ use axum::http::StatusCode;
 use log::{error, info, warn};
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
-use tauri::{Emitter, Manager};
 
 type AppResult<T> = Result<T, (StatusCode, String)>;
 

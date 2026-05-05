@@ -1,11 +1,10 @@
+use crate::backend_runtime::State;
 use crate::{
     db, opencode_client::OpenCodeClient, pty_manager::PtyManager, server_manager::ServerManager,
     sse_bridge::SseBridgeManager,
 };
 use std::sync::{Arc, Mutex};
-use tauri::State;
 
-#[tauri::command]
 pub async fn get_session_status(
     db: State<'_, Arc<Mutex<db::Database>>>,
     session_id: String,
@@ -17,13 +16,12 @@ pub async fn get_session_status(
         .ok_or_else(|| format!("Session {} not found", session_id))
 }
 
-#[tauri::command]
 pub async fn abort_session(
     db: State<'_, Arc<Mutex<db::Database>>>,
     server_mgr: State<'_, ServerManager>,
     sse_mgr: State<'_, SseBridgeManager>,
     pty_mgr: State<'_, PtyManager>,
-    _app: tauri::AppHandle,
+    _app: crate::backend_runtime::AppHandle,
     session_id: String,
 ) -> Result<(), String> {
     // 1. Look up the session to get task_id and provider
@@ -75,7 +73,6 @@ pub async fn abort_session(
     Ok(())
 }
 
-#[tauri::command]
 pub async fn get_latest_session(
     db: State<'_, Arc<Mutex<db::Database>>>,
     task_id: String,
@@ -86,7 +83,6 @@ pub async fn get_latest_session(
         .map_err(|e| format!("Failed to get latest session: {}", e))
 }
 
-#[tauri::command]
 pub async fn get_latest_sessions(
     db: State<'_, Arc<Mutex<db::Database>>>,
     task_ids: Vec<String>,
@@ -97,7 +93,6 @@ pub async fn get_latest_sessions(
         .map_err(|e| format!("Failed to get sessions: {}", e))
 }
 
-#[tauri::command]
 pub async fn get_session_output(
     db: State<'_, Arc<Mutex<db::Database>>>,
 

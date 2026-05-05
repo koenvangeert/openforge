@@ -15,16 +15,18 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - platform: macos-latest
-            args: "--target aarch64-apple-darwin --bundles dmg"
+          - platform: macos-14
             target: aarch64-apple-darwin
-          - platform: macos-latest
-            args: "--target x86_64-apple-darwin --bundles dmg"
+            electron_arch: arm64
+          - platform: macos-13
             target: x86_64-apple-darwin
-    timeout-minutes: 10
+            electron_arch: x64
+    timeout-minutes: 20
     runs-on: ${{ matrix.platform }}
     env:
       SOURCE_DATE_EPOCH: "1"
+      CARGO_BUILD_TARGET: ${{ matrix.target }}
+      npm_config_arch: ${{ matrix.electron_arch }}
 
     steps:
       - uses: actions/checkout@v4
@@ -34,12 +36,8 @@ jobs:
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           echo "Updating version to $VERSION"
-          # Update package.json
           jq --arg v "$VERSION" '.version = $v' package.json > package.json.tmp && mv package.json.tmp package.json
-          # Update Cargo.toml
           sed -i '' "s/^version = \".*\"/version = \"$VERSION\"/" src-tauri/Cargo.toml
-          # Update tauri.conf.json
-          jq --arg v "$VERSION" '.version = $v' src-tauri/tauri.conf.json > tauri.conf.json.tmp && mv tauri.conf.json.tmp src-tauri/tauri.conf.json
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
@@ -63,20 +61,33 @@ jobs:
       - name: Install frontend dependencies
         run: pnpm install
 
-      - name: Build and release
-        uses: tauri-apps/tauri-action@v0.5
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Package Electron app
+        run: pnpm electron:package
+
+      - name: Archive Electron app
+        run: |
+          ditto -c -k --sequesterRsrc --keepParent \
+            "src-tauri/target/release/bundle/electron/macos/Open Forge.app" \
+            "openforge-${{ matrix.target }}.zip"
+
+      - name: Upload packaged app artifact
+        uses: actions/upload-artifact@v4
         with:
-          tagName: v__VERSION__
-          releaseName: "AI Command Center v__VERSION__"
-          releaseBody: |
+          name: openforge-${{ matrix.target }}
+          path: openforge-${{ matrix.target }}.zip
+
+      - name: Draft GitHub release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          prerelease: false
+          name: Open Forge ${{ github.ref_name }}
+          body: |
             See the assets to download and install this version.
 
-            **macOS:** If you see _"Open Forge is damaged and can't be opened"_, run this after mounting the DMG and copying the app to Applications:
+            **macOS:** If you see _"Open Forge is damaged and can't be opened"_, run this after copying the app to Applications:
             ```
             xattr -rd com.apple.quarantine /Applications/Open\ Forge.app
             ```
-          releaseDraft: true
-          prerelease: false
-          args: ${{ matrix.args }}
+          files: openforge-${{ matrix.target }}.zip

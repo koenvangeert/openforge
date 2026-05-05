@@ -22,10 +22,16 @@ describe('Electron-only desktop cutover', () => {
     expect(pkg.devDependencies).not.toHaveProperty('@tauri-apps/cli')
   })
 
-  it('removes Tauri shell configuration and build hooks from the Electron sidecar crate', () => {
-    expect(existsSync(join(repoRoot, 'src-tauri/tauri.conf.json'))).toBe(false)
+  it('removes Tauri shell configuration, build hooks, and release packaging from the Electron sidecar crate', () => {
+    expect(existsSync(join(repoRoot, 'src-tauri', 'tauri.conf.json'))).toBe(false)
     expect(existsSync(join(repoRoot, 'src-tauri/capabilities/default.json'))).toBe(false)
-    expect(readText('src-tauri/build.rs')).not.toContain('tauri_build::build')
+    expect(readText('src-tauri/build.rs')).not.toContain('tauri' + '_build::build')
+
+    const releaseWorkflow = readText('.github/workflows/release.yml')
+    expect(releaseWorkflow).not.toContain('tauri' + '-action')
+    expect(releaseWorkflow).not.toContain('tauri' + '.conf.json')
+    expect(releaseWorkflow).toContain('pnpm electron:package')
+    expect(releaseWorkflow).toContain('npm_config_arch: ${{ matrix.electron_arch }}')
   })
 
   it('uses Electron-only renderer IPC/window boundaries with no Tauri package fallback imports', () => {

@@ -1,6 +1,6 @@
+use crate::backend_runtime::State;
 use crate::db;
 use std::sync::{Arc, Mutex};
-use tauri::State;
 
 fn task_workspace_from_legacy(
     workspace: db::WorktreeRow,
@@ -38,7 +38,6 @@ fn legacy_worktree_from_task_workspace(workspace: db::TaskWorkspaceRow) -> db::W
     }
 }
 
-#[tauri::command]
 pub async fn create_project(
     db: State<'_, Arc<Mutex<db::Database>>>,
     name: String,
@@ -49,7 +48,6 @@ pub async fn create_project(
         .map_err(|e| format!("Failed to create project: {}", e))
 }
 
-#[tauri::command]
 pub async fn get_projects(
     db: State<'_, Arc<Mutex<db::Database>>>,
 ) -> Result<Vec<db::ProjectRow>, String> {
@@ -58,7 +56,6 @@ pub async fn get_projects(
         .map_err(|e| format!("Failed to get projects: {}", e))
 }
 
-#[tauri::command]
 pub async fn update_project(
     db: State<'_, Arc<Mutex<db::Database>>>,
     id: String,
@@ -70,7 +67,6 @@ pub async fn update_project(
         .map_err(|e| format!("Failed to update project: {}", e))
 }
 
-#[tauri::command]
 pub async fn delete_project(
     db: State<'_, Arc<Mutex<db::Database>>>,
     id: String,
@@ -80,7 +76,6 @@ pub async fn delete_project(
         .map_err(|e| format!("Failed to delete project: {}", e))
 }
 
-#[tauri::command]
 pub async fn get_project_config(
     db: State<'_, Arc<Mutex<db::Database>>>,
     project_id: String,
@@ -91,7 +86,6 @@ pub async fn get_project_config(
         .map_err(|e| format!("Failed to get project config: {}", e))
 }
 
-#[tauri::command]
 pub async fn set_project_config(
     db: State<'_, Arc<Mutex<db::Database>>>,
     project_id: String,
@@ -103,7 +97,6 @@ pub async fn set_project_config(
         .map_err(|e| format!("Failed to set project config: {}", e))
 }
 
-#[tauri::command]
 pub async fn get_tasks_for_project(
     db: State<'_, Arc<Mutex<db::Database>>>,
     project_id: String,
@@ -113,7 +106,6 @@ pub async fn get_tasks_for_project(
         .map_err(|e| format!("Failed to get tasks for project: {}", e))
 }
 
-#[tauri::command]
 pub async fn get_worktree_for_task(
     db: State<'_, Arc<Mutex<db::Database>>>,
     task_id: String,
@@ -132,7 +124,6 @@ pub async fn get_worktree_for_task(
     Ok(workspace.map(legacy_worktree_from_task_workspace))
 }
 
-#[tauri::command]
 pub async fn get_task_workspace(
     db: State<'_, Arc<Mutex<db::Database>>>,
     task_id: String,
@@ -162,7 +153,6 @@ pub async fn get_task_workspace(
     Ok(worktree.map(|workspace| task_workspace_from_legacy(workspace, provider_name)))
 }
 
-#[tauri::command]
 pub async fn get_project_attention(
     db: State<'_, Arc<Mutex<db::Database>>>,
 ) -> Result<Vec<db::ProjectAttentionRow>, String> {

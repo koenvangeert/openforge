@@ -3,6 +3,7 @@
 
 mod app_events;
 mod app_invoke;
+mod backend_runtime;
 mod builtin_plugins;
 mod claude_hooks;
 mod cli_installer;
@@ -37,7 +38,7 @@ use pty_manager::PtyManager;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
-use tauri::{Emitter, Manager};
+
 use whisper_manager::{WhisperManager, WhisperModelSize};
 
 // ============================================================================
@@ -154,7 +155,7 @@ pub(crate) fn load_resume_targets(db: &db::Database) -> rusqlite::Result<Vec<Res
 }
 
 async fn resume_task_servers(
-    app: tauri::AppHandle,
+    app: crate::backend_runtime::AppHandle,
     http_ready: tokio::sync::oneshot::Receiver<()>,
 ) {
     // Wait for the HTTP server to be listening so Claude Code hooks don't get connection-refused
@@ -365,7 +366,10 @@ fn should_start_project_root_server(
     provider == "opencode" && project_path.is_some() && existing_port.is_none()
 }
 
-async fn start_project_root_server(app: &tauri::AppHandle, project_id: &str) -> Result<(), String> {
+async fn start_project_root_server(
+    app: &crate::backend_runtime::AppHandle,
+    project_id: &str,
+) -> Result<(), String> {
     let (provider, project_path) = {
         let db = app.state::<Arc<Mutex<db::Database>>>();
         let db_lock = db
@@ -585,8 +589,16 @@ fn sidecar_app_data_dir() -> Result<PathBuf, String> {
     Ok(app_data_dir)
 }
 
+fn sidecar_resource_dir() -> Result<PathBuf, String> {
+    std::env::current_exe()
+        .ok()
+        .and_then(|path| path.parent().map(PathBuf::from))
+        .ok_or_else(|| "failed to resolve backend resource directory".to_string())
+}
+
 fn run_electron_sidecar() -> Result<(), Box<dyn std::error::Error>> {
     let app_data_dir = sidecar_app_data_dir().map_err(std::io::Error::other)?;
+    let resource_dir = sidecar_resource_dir().map_err(std::io::Error::other)?;
     let database = initialize_database(&app_data_dir);
     run_database_startup_maintenance(&database);
     if let Err(e) = cli_installer::install_openforge_cli() {
@@ -615,6 +627,8 @@ fn run_electron_sidecar() -> Result<(), Box<dyn std::error::Error>> {
         .enable_all()
         .build()?
         .block_on(http_server::start_http_sidecar_server(
+            app_data_dir,
+            resource_dir,
             db_arc,
             pty_manager,
             server_manager,

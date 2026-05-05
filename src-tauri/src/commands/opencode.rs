@@ -1,3 +1,4 @@
+use crate::backend_runtime::State;
 use crate::command_discovery::{
     find_skill_source_dir, is_supported_skill_source_dir, scan_skill_directories_for_root,
     search_project_files, skill_source_dir, GENERIC_SKILLS_SOURCE_DIR,
@@ -7,7 +8,6 @@ use crate::opencode_client::OpenCodeClient;
 use crate::server_manager;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
-use tauri::State;
 
 fn load_project_context(
     db: &State<'_, Arc<Mutex<db::Database>>>,
@@ -51,7 +51,6 @@ async fn ensure_project_discovery_server(
 }
 
 /// Get list of available agents from OpenCode server
-#[tauri::command]
 pub async fn get_agents(
     client: State<'_, OpenCodeClient>,
 ) -> Result<Vec<crate::opencode_client::AgentInfo>, String> {
@@ -62,7 +61,6 @@ pub async fn get_agents(
 }
 
 /// Create a new OpenCode session
-#[tauri::command]
 pub async fn create_session(
     client: State<'_, OpenCodeClient>,
     title: String,
@@ -74,7 +72,6 @@ pub async fn create_session(
 }
 
 /// Send a prompt to an OpenCode session
-#[tauri::command]
 pub async fn send_prompt(
     client: State<'_, OpenCodeClient>,
     session_id: String,
@@ -87,7 +84,6 @@ pub async fn send_prompt(
 }
 
 /// List available commands from a running OpenCode server for the project
-#[tauri::command]
 pub async fn list_opencode_commands(
     db: State<'_, Arc<Mutex<db::Database>>>,
     server_mgr: State<'_, server_manager::ServerManager>,
@@ -126,7 +122,6 @@ pub async fn list_opencode_commands(
 }
 
 /// Search files in a running OpenCode server for the project
-#[tauri::command]
 pub async fn search_opencode_files(
     db: State<'_, Arc<Mutex<db::Database>>>,
     server_mgr: State<'_, server_manager::ServerManager>,
@@ -160,7 +155,6 @@ pub async fn search_opencode_files(
 }
 
 /// List available agents from a running OpenCode server for the project
-#[tauri::command]
 pub async fn list_opencode_agents(
     db: State<'_, Arc<Mutex<db::Database>>>,
     server_mgr: State<'_, server_manager::ServerManager>,
@@ -198,7 +192,6 @@ pub async fn list_opencode_agents(
         .map_err(|e| format!("Failed to list agents: {}", e))
 }
 
-#[tauri::command]
 pub async fn list_opencode_models(
     db: State<'_, Arc<Mutex<db::Database>>>,
     server_mgr: State<'_, server_manager::ServerManager>,
@@ -219,7 +212,6 @@ pub async fn list_opencode_models(
 /// List skills from OpenCode API + filesystem.
 /// Prefers the generic `.agents/skills/` path while keeping legacy skill directories discoverable.
 /// Merges results, deduplicating by name (API skills take precedence).
-#[tauri::command]
 pub async fn list_opencode_skills(
     db: State<'_, Arc<Mutex<db::Database>>>,
     server_mgr: State<'_, server_manager::ServerManager>,
@@ -300,7 +292,6 @@ pub async fn list_opencode_skills(
 
 /// Save a skill's SKILL.md content to disk.
 /// New/generic skills use `.agents/skills`; legacy skills are written back to their discovered source dir.
-#[tauri::command]
 pub async fn save_skill_content(
     db: State<'_, Arc<Mutex<db::Database>>>,
     project_id: String,

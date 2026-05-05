@@ -1,6 +1,6 @@
+use crate::backend_runtime::AppHandle;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
-use tauri::AppHandle;
 
 use super::ProviderSessionResult;
 use crate::db::AgentSessionRow;

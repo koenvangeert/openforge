@@ -1,8 +1,8 @@
+use crate::backend_runtime::State;
 use crate::db;
 use serde::Serialize;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
-use tauri::State;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -229,7 +229,6 @@ async fn read_file_preview(full_path: &Path) -> Result<FileContent, String> {
     }
 }
 
-#[tauri::command]
 pub async fn fs_read_dir(
     db: State<'_, Arc<Mutex<db::Database>>>,
     project_id: String,
@@ -318,7 +317,6 @@ pub async fn fs_read_dir(
     Ok(entries)
 }
 
-#[tauri::command]
 pub async fn fs_read_file(
     db: State<'_, Arc<Mutex<db::Database>>>,
     project_id: String,
@@ -340,7 +338,6 @@ pub async fn fs_read_file(
     read_file_preview(full_path.as_path()).await
 }
 
-#[tauri::command]
 pub async fn fs_search_files(
     db: State<'_, Arc<Mutex<db::Database>>>,
     project_id: String,

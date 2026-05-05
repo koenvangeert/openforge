@@ -1,9 +1,9 @@
+use crate::backend_runtime::State;
 use crate::{
     db, git_worktree, pty_manager::PtyManager, server_manager::ServerManager,
     sse_bridge::SseBridgeManager,
 };
 use std::sync::{Arc, Mutex};
-use tauri::{Emitter, State};
 
 pub fn build_task_prompt(
     task: &db::TaskRow,
@@ -131,7 +131,7 @@ fn activate_task_status_update(
 
 pub(crate) fn activate_task(
     db: &std::sync::Arc<std::sync::Mutex<crate::db::Database>>,
-    app: &tauri::AppHandle,
+    app: &crate::backend_runtime::AppHandle,
     task_id: &str,
     current_status: &str,
 ) -> Result<(), String> {
@@ -213,13 +213,12 @@ pub(crate) async fn abort_task_agent(
     Ok(())
 }
 
-#[tauri::command]
 pub async fn start_implementation(
     db: State<'_, Arc<Mutex<db::Database>>>,
     server_mgr: State<'_, ServerManager>,
     sse_mgr: State<'_, SseBridgeManager>,
     pty_mgr: State<'_, PtyManager>,
-    app: tauri::AppHandle,
+    app: crate::backend_runtime::AppHandle,
     task_id: String,
     repo_path: String,
 ) -> Result<serde_json::Value, String> {
@@ -355,13 +354,12 @@ pub async fn start_implementation(
     ))
 }
 
-#[tauri::command]
 pub async fn abort_implementation(
     db: State<'_, Arc<Mutex<db::Database>>>,
     server_mgr: State<'_, ServerManager>,
     sse_mgr: State<'_, SseBridgeManager>,
     pty_mgr: State<'_, PtyManager>,
-    app: tauri::AppHandle,
+    app: crate::backend_runtime::AppHandle,
     task_id: String,
 ) -> Result<(), String> {
     abort_task_agent(&db, &server_mgr, &sse_mgr, &pty_mgr, &task_id).await?;
@@ -372,10 +370,9 @@ pub async fn abort_implementation(
     Ok(())
 }
 
-#[tauri::command]
 pub async fn finalize_claude_session(
     db: State<'_, Arc<Mutex<db::Database>>>,
-    app: tauri::AppHandle,
+    app: crate::backend_runtime::AppHandle,
     task_id: String,
     success: bool,
 ) -> Result<(), String> {

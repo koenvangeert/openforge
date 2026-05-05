@@ -1,3 +1,7 @@
+use crate::{
+    app_events::{publish_app_event, AppEventSender},
+    backend_runtime::AppHandle,
+};
 use log::{error, info, warn};
 use serde::Serialize;
 use serde_json::{json, Value};
@@ -6,7 +10,6 @@ use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use tauri::{AppHandle, Emitter, Manager, Runtime};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, Command};
 use tokio::sync::{oneshot, Notify};
@@ -95,31 +98,41 @@ impl HostRuntime {
     }
 }
 
-pub struct PluginHost<R: Runtime = tauri::Wry> {
+pub struct PluginHost {
     runtime: Arc<Mutex<HostRuntime>>,
     transport: Arc<Mutex<PluginTransportState>>,
     state_change: Arc<Notify>,
-    app_handle: AppHandle<R>,
+    app_handle: AppHandle,
+    app_event_tx: Option<AppEventSender>,
 }
 
-impl<R: Runtime> Clone for PluginHost<R> {
+impl Clone for PluginHost {
     fn clone(&self) -> Self {
         Self {
             runtime: Arc::clone(&self.runtime),
             transport: Arc::clone(&self.transport),
             state_change: Arc::clone(&self.state_change),
             app_handle: self.app_handle.clone(),
+            app_event_tx: self.app_event_tx.clone(),
         }
     }
 }
 
-impl<R: Runtime + 'static> PluginHost<R> {
-    pub fn new(app_handle: AppHandle<R>) -> Self {
+impl PluginHost {
+    pub fn new(app_handle: AppHandle) -> Self {
+        Self::with_app_event_sender(app_handle, None)
+    }
+
+    pub fn with_app_event_sender(
+        app_handle: AppHandle,
+        app_event_tx: Option<AppEventSender>,
+    ) -> Self {
         Self {
             runtime: Arc::new(Mutex::new(HostRuntime::default())),
             transport: Arc::new(Mutex::new(PluginTransportState::default())),
             state_change: Arc::new(Notify::new()),
             app_handle,
+            app_event_tx,
         }
     }
 
@@ -648,9 +661,7 @@ impl<R: Runtime + 'static> PluginHost<R> {
             retry_attempts,
         };
 
-        if let Err(error) = self.app_handle.emit(SIDECAR_EXITED_EVENT, payload) {
-            warn!("[plugin_host] failed to emit sidecar exit event: {}", error);
-        }
+        self.publish_sidecar_event(SIDECAR_EXITED_EVENT, &payload);
     }
 
     fn emit_sidecar_failed(&self, error: Option<String>) {
@@ -666,11 +677,16 @@ impl<R: Runtime + 'static> PluginHost<R> {
             retry_attempts,
         };
 
-        if let Err(emit_error) = self.app_handle.emit(SIDECAR_FAILED_EVENT, payload) {
-            warn!(
-                "[plugin_host] failed to emit sidecar failure event: {}",
-                emit_error
-            );
+        self.publish_sidecar_event(SIDECAR_FAILED_EVENT, &payload);
+    }
+
+    fn publish_sidecar_event<T: Serialize>(&self, event_name: &str, payload: &T) {
+        match serde_json::to_value(payload) {
+            Ok(value) => publish_app_event(&self.app_event_tx, event_name, &value),
+            Err(error) => warn!(
+                "[plugin_host] failed to serialize sidecar event {}: {}",
+                event_name, error
+            ),
         }
     }
 
@@ -785,7 +801,7 @@ fn resolve_bun_binary() -> Result<PathBuf, String> {
     which::which("bun").map_err(|error| format!("failed to locate bun in PATH: {error}"))
 }
 
-fn resolve_entrypoint<R: Runtime>(app_handle: &AppHandle<R>) -> Result<PathBuf, String> {
+fn resolve_entrypoint(app_handle: &AppHandle) -> Result<PathBuf, String> {
     if let Ok(path) = std::env::var(ENTRYPOINT_ENV) {
         let trimmed = path.trim();
         if !trimmed.is_empty() {
@@ -876,17 +892,13 @@ mod tests {
     use super::*;
     use serde_json::json;
     use std::fs;
-    use tauri::test::{mock_builder, mock_context, noop_assets};
     use tempfile::tempdir;
 
     #[cfg(unix)]
     use std::os::unix::fs::PermissionsExt;
 
-    fn build_plugin_host() -> PluginHost<tauri::test::MockRuntime> {
-        let app = mock_builder()
-            .build(mock_context(noop_assets()))
-            .expect("mock app should build");
-        PluginHost::new(app.handle().clone())
+    fn build_plugin_host() -> PluginHost {
+        PluginHost::new(AppHandle::new())
     }
 
     #[test]
@@ -953,6 +965,25 @@ mod tests {
         host.mark_running_for_test(1234);
 
         assert!(host.is_sidecar_running());
+    }
+
+    #[test]
+    fn sidecar_lifecycle_events_publish_to_backend_app_event_stream() {
+        let (sender, mut receiver) = tokio::sync::broadcast::channel(8);
+        let host = PluginHost::with_app_event_sender(AppHandle::new(), Some(sender));
+
+        host.mark_running_for_test(4321);
+        host.emit_sidecar_exited(Some(1), None, Some(4321));
+        host.emit_sidecar_failed(Some("boom".to_string()));
+
+        let exited = receiver.try_recv().expect("exit event should publish");
+        assert_eq!(exited.event_name, SIDECAR_EXITED_EVENT);
+        assert_eq!(exited.payload["code"], 1);
+        assert_eq!(exited.payload["pid"], 4321);
+
+        let failed = receiver.try_recv().expect("failure event should publish");
+        assert_eq!(failed.event_name, SIDECAR_FAILED_EVENT);
+        assert_eq!(failed.payload["error"], "boom");
     }
 
     #[tokio::test]

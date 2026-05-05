@@ -14,6 +14,7 @@
 //! 3. Call `download_model()` to fetch and verify a model file.
 //! 4. Call `transcribe()` with 16 kHz mono f32 PCM audio data.
 
+use crate::backend_runtime::AppHandle;
 use log::info;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -24,7 +25,6 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::sync::RwLock;
 use std::time::Instant;
-use tauri::{AppHandle, Emitter};
 use tokio_stream::StreamExt;
 use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
 

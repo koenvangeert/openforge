@@ -1,3 +1,4 @@
+use crate::backend_runtime::State;
 use crate::{
     db::{self, BoardStatus},
     git_worktree,
@@ -7,9 +8,7 @@ use crate::{
 };
 use log::error;
 use std::sync::{Arc, Mutex};
-use tauri::{Emitter, State};
 
-#[tauri::command]
 pub async fn get_tasks(
     db: State<'_, Arc<Mutex<db::Database>>>,
 ) -> Result<Vec<db::TaskRow>, String> {
@@ -18,7 +17,6 @@ pub async fn get_tasks(
         .map_err(|e| format!("Failed to get tasks: {}", e))
 }
 
-#[tauri::command]
 pub async fn get_task_detail(
     db: State<'_, Arc<Mutex<db::Database>>>,
     task_id: String,
@@ -29,11 +27,10 @@ pub async fn get_task_detail(
         .ok_or_else(|| format!("Task {} not found", task_id))
 }
 
-#[tauri::command]
 #[allow(clippy::too_many_arguments)]
 pub async fn create_task(
     db: State<'_, Arc<Mutex<db::Database>>>,
-    app: tauri::AppHandle,
+    app: crate::backend_runtime::AppHandle,
     initial_prompt: String,
     status: BoardStatus,
     project_id: Option<String>,
@@ -59,10 +56,9 @@ pub async fn create_task(
     Ok(task)
 }
 
-#[tauri::command]
 pub async fn update_task(
     db: State<'_, Arc<Mutex<db::Database>>>,
-    app: tauri::AppHandle,
+    app: crate::backend_runtime::AppHandle,
     id: String,
     prompt: String,
 ) -> Result<(), String> {
@@ -76,10 +72,9 @@ pub async fn update_task(
     Ok(())
 }
 
-#[tauri::command]
 pub async fn update_task_summary(
     db: State<'_, Arc<Mutex<db::Database>>>,
-    app: tauri::AppHandle,
+    app: crate::backend_runtime::AppHandle,
     id: String,
     summary: String,
 ) -> Result<(), String> {
@@ -93,13 +88,12 @@ pub async fn update_task_summary(
     Ok(())
 }
 
-#[tauri::command]
 pub async fn update_task_status(
     db: State<'_, Arc<Mutex<db::Database>>>,
     server_mgr: State<'_, ServerManager>,
     sse_mgr: State<'_, SseBridgeManager>,
     pty_mgr: State<'_, PtyManager>,
-    app: tauri::AppHandle,
+    app: crate::backend_runtime::AppHandle,
     id: String,
     status: BoardStatus,
 ) -> Result<(), String> {
@@ -152,13 +146,12 @@ pub async fn update_task_status(
     Ok(())
 }
 
-#[tauri::command]
 pub async fn delete_task(
     db: State<'_, Arc<Mutex<db::Database>>>,
     server_mgr: State<'_, ServerManager>,
     sse_mgr: State<'_, SseBridgeManager>,
     pty_mgr: State<'_, PtyManager>,
-    app: tauri::AppHandle,
+    app: crate::backend_runtime::AppHandle,
     id: String,
 ) -> Result<(), String> {
     let _ = pty_mgr.kill_pty(&id).await;
@@ -201,13 +194,12 @@ pub async fn delete_task(
     Ok(())
 }
 
-#[tauri::command]
 pub async fn clear_done_tasks(
     db: State<'_, Arc<Mutex<db::Database>>>,
     server_mgr: State<'_, ServerManager>,
     sse_mgr: State<'_, SseBridgeManager>,
     pty_mgr: State<'_, PtyManager>,
-    app: tauri::AppHandle,
+    app: crate::backend_runtime::AppHandle,
     project_id: String,
 ) -> Result<u32, String> {
     let task_ids = {

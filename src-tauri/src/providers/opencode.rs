@@ -1,5 +1,5 @@
+use crate::backend_runtime::AppHandle;
 use std::path::Path;
-use tauri::AppHandle;
 
 use super::ProviderSessionResult;
 use crate::db::AgentSessionRow;
