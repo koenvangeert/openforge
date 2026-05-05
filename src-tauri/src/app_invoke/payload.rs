@@ -164,3 +164,23 @@ pub(crate) fn optional_usize(
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn optional_u32_reports_typed_bad_request_errors() {
+        let payload = json!({ "terminalIndex": "not-a-number" });
+
+        let err = optional_u32(&payload, "terminalIndex")
+            .expect_err("invalid terminalIndex should be rejected before PTY dispatch");
+
+        assert_eq!(err.status, StatusCode::BAD_REQUEST);
+        assert_eq!(
+            err.message,
+            "payload.terminalIndex must be an unsigned integer or null"
+        );
+    }
+}

@@ -9,6 +9,11 @@ mod pty;
 mod runtime;
 mod whisper;
 
+#[cfg(test)]
+pub(crate) mod test_support;
+#[cfg(test)]
+mod tests;
+
 use lifecycle::cleanup_task_runtime_for_app;
 #[cfg(test)]
 pub(crate) use lifecycle::{start_opencode_sse_bridge_for_app, ExistingSseBridge};
@@ -182,6 +187,44 @@ pub(crate) async fn handle_unmatched_command(
     request: &AppInvokeRequest,
 ) -> AppResult<serde_json::Value> {
     core::handle_app_unmatched_command(state, request).await
+}
+
+pub(crate) async fn handle_command(
+    state: &AppState,
+    request: &AppInvokeRequest,
+) -> AppResult<serde_json::Value> {
+    if let Some(value) = handle_whisper_command(state, request).await? {
+        return Ok(value);
+    }
+    if let Some(value) = handle_core_task_project_command(state, request).await? {
+        return Ok(value);
+    }
+    if let Some(value) = handle_resume_startup_sessions_command(state, request).await? {
+        return Ok(value);
+    }
+    if let Some(value) = handle_start_implementation_command(state, request).await? {
+        return Ok(value);
+    }
+    if let Some(value) = handle_abort_implementation_command(state, request).await? {
+        return Ok(value);
+    }
+    if let Some(value) = handle_pty_command(state, request).await? {
+        return Ok(value);
+    }
+    if let Some(value) = handle_github_review_command(state, request).await? {
+        return Ok(value);
+    }
+    if let Some(value) = handle_plugin_command(state, request).await? {
+        return Ok(value);
+    }
+    if let Some(value) = handle_files_review_command(state, request).await? {
+        return Ok(value);
+    }
+    if let Some(value) = handle_runtime_command(state, request).await? {
+        return Ok(value);
+    }
+
+    handle_unmatched_command(state, request).await
 }
 
 pub(crate) async fn handle_whisper_command(
