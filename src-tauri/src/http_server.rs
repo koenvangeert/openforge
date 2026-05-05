@@ -2065,6 +2065,28 @@ mod tests {
         let _ = std::fs::remove_file(path);
     }
 
+    async fn app_invoke_task_workspace_value(task_id: &str, state: AppState) -> serde_json::Value {
+        let router = create_router(state);
+        let response = router
+            .oneshot(
+                Request::builder()
+                    .uri("/app/invoke")
+                    .method("POST")
+                    .header("authorization", "Bearer test-token")
+                    .header("content-type", "application/json")
+                    .body(Body::from(format!(
+                        r#"{{"command":"get_task_workspace","payload":{{"taskId":"{}"}}}}"#,
+                        task_id
+                    )))
+                    .expect("build request"),
+            )
+            .await
+            .expect("request should succeed");
+
+        assert_eq!(response.status(), StatusCode::OK);
+        response_body_json(response).await["value"].clone()
+    }
+
     #[tokio::test]
     async fn test_app_invoke_get_task_workspace_preserves_legacy_worktree_fallback() {
         let (state, path) = test_state("app_invoke_task_workspace_legacy_fallback");
@@ -2104,30 +2126,63 @@ mod tests {
             .expect("create session");
             task.id
         };
-        let router = create_router(state);
 
-        let response = router
-            .oneshot(
-                Request::builder()
-                    .uri("/app/invoke")
-                    .method("POST")
-                    .header("authorization", "Bearer test-token")
-                    .header("content-type", "application/json")
-                    .body(Body::from(format!(
-                        r#"{{"command":"get_task_workspace","payload":{{"taskId":"{}"}}}}"#,
-                        task_id
-                    )))
-                    .expect("build request"),
-            )
-            .await
-            .expect("request should succeed");
-
-        assert_eq!(response.status(), StatusCode::OK);
-        let workspace = response_body_json(response).await["value"].clone();
+        let workspace = app_invoke_task_workspace_value(&task_id, state).await;
         assert_eq!(workspace["task_id"], task_id);
         assert_eq!(workspace["workspace_path"], "/tmp/openforge-worktree");
         assert_eq!(workspace["provider_name"], "opencode");
         assert_eq!(workspace["opencode_port"], 4096);
+        assert_eq!(workspace["kind"], "git_worktree");
+        assert_eq!(workspace["branch_name"], "feature/electron");
+
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[tokio::test]
+    async fn test_app_invoke_get_task_workspace_prefers_task_workspace_over_legacy_worktree() {
+        let (state, path) = test_state("app_invoke_task_workspace_prefers_new_model");
+        let task_id = {
+            let db = state.db.lock().expect("db lock");
+            let project = db
+                .create_project("Open Forge", "/tmp/openforge")
+                .expect("create project");
+            let task = db
+                .create_task(
+                    "Task workspace task",
+                    "doing",
+                    Some(&project.id),
+                    None,
+                    None,
+                    None,
+                )
+                .expect("create task");
+            db.create_worktree_record(
+                &task.id,
+                &project.id,
+                "/tmp/openforge",
+                "/tmp/legacy-worktree",
+                "feature/legacy",
+            )
+            .expect("create worktree");
+            db.create_task_workspace_record(
+                &task.id,
+                &project.id,
+                "/tmp/task-workspace",
+                "/tmp/openforge",
+                "repository",
+                None,
+                "pi",
+            )
+            .expect("create task workspace");
+            task.id
+        };
+
+        let workspace = app_invoke_task_workspace_value(&task_id, state).await;
+        assert_eq!(workspace["task_id"], task_id);
+        assert_eq!(workspace["workspace_path"], "/tmp/task-workspace");
+        assert_eq!(workspace["provider_name"], "pi");
+        assert_eq!(workspace["kind"], "repository");
+        assert_eq!(workspace["branch_name"], serde_json::Value::Null);
 
         let _ = std::fs::remove_file(path);
     }

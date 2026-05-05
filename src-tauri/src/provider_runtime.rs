@@ -307,7 +307,6 @@ pub(crate) fn legacy_worktree_from_task_workspace(
     }
 }
 
-#[cfg(test)]
 pub(crate) fn task_workspace_from_legacy(
     workspace: db::WorktreeRow,
     provider_name: String,
@@ -345,7 +344,6 @@ pub(crate) fn get_worktree_for_task(
     Ok(workspace.map(legacy_worktree_from_task_workspace))
 }
 
-#[cfg(test)]
 pub(crate) fn get_task_workspace(
     db: &db::Database,
     task_id: &str,
