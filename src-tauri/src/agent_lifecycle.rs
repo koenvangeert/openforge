@@ -8,21 +8,21 @@ pub fn build_task_prompt(
     let mut prompt = String::new();
 
     prompt.push_str(&format!(r#"<openforge_task_management>
-This task is {task_id}. You MUST call `openforge_update_task` at both points below — the task is not complete without these updates.
+This task is {task_id}. You MUST update the OpenForge task at both points below — the task is not complete without these updates.
 
 <analysis_update trigger="after_initial_analysis">
-Once you understand the scope, call: openforge_update_task(task_id="{task_id}", summary="...")
+Once you understand the scope, run: openforge update-task --task-id "{task_id}" --summary "..."
 Write a concise initial-analysis status reflecting the actual work, not the original request verbatim.
 Good: "Scoped JWT refresh token rotation in auth middleware" — Bad: "implement the auth thing"
 </analysis_update>
 
 <summary_update trigger="before_finalizing">
-Before reporting completion, call: openforge_update_task(task_id="{task_id}", summary="...")
+Before reporting completion, run: openforge update-task --task-id "{task_id}" --summary "..."
 Cover: what changed, key decisions, and anything needing attention.
 </summary_update>
 
 <completeness_check>
-Task is incomplete unless both summary updates were made. If blocked or abandoned, still update the summary with status and what remains.
+Task is incomplete unless both summary updates were made. If the openforge CLI is unavailable, use the equivalent OpenForge task-update mechanism with the same task id and summary fields. If blocked or abandoned, still update the summary with status and what remains.
 </completeness_check>
 </openforge_task_management>
 
@@ -30,7 +30,7 @@ Task is incomplete unless both summary updates were made. If blocked or abandone
 
     if code_cleanup_enabled {
         prompt.push_str(r#"<openforge_code_cleanup>
-As you work on this task, watch for code that doesn't meet project standards or that should be split into separate concerns. When you encounter such code — whether in files you're modifying or adjacent code you're reading — create a new task for it using openforge_create_task.
+As you work on this task, watch for code that doesn't meet project standards or that should be split into separate concerns. When you encounter such code — whether in files you're modifying or adjacent code you're reading — create a new task for it using the OpenForge CLI or the equivalent task-creation mechanism available in your environment.
 
 Create a task when you find:
 - Code that violates the project's established patterns or conventions
@@ -41,7 +41,7 @@ Create a task when you find:
 - Dead code, unused imports, or stale abstractions that should be cleaned up
 
 How to create a cleanup task:
-- Call: openforge_create_task(initial_prompt="...")
+- Run: openforge create-task --initial-prompt "..." --worktree "$PWD"
 - Write a clear, actionable prompt (e.g. "Extract shared validation logic from UserForm and AdminForm")
 - Do NOT fix these issues yourself — just log them as tasks and stay focused on your current task
 
@@ -151,8 +151,8 @@ mod tests {
 
         assert!(prompt.contains("Test Task"));
         assert!(prompt.contains("<openforge_task_management>"));
-        assert!(prompt.contains("openforge_update_task"));
-        assert!(prompt.contains("summary=\"...\""));
+        assert!(prompt.contains("openforge update-task --task-id \"T-123\" --summary \"...\""));
+        assert!(!prompt.contains("openforge_update_task"));
         assert!(prompt.contains("T-123"));
         assert!(!prompt.contains("initial_prompt=\"...\""));
         assert!(!prompt.contains("External ticket:"));
@@ -165,7 +165,8 @@ mod tests {
         let prompt = build_task_prompt(&task, None, false);
 
         assert!(prompt.contains("<analysis_update trigger=\"after_initial_analysis\">"));
-        assert!(prompt.contains("openforge_update_task(task_id=\"T-124\", summary=\"...\")"));
+        assert!(prompt.contains("openforge update-task --task-id \"T-124\" --summary \"...\""));
+        assert!(!prompt.contains("openforge_update_task"));
         assert!(!prompt.contains("<initial_prompt_update"));
         assert!(!prompt.contains("initial_prompt=\"...\""));
     }
@@ -336,7 +337,8 @@ mod tests {
 
         assert!(!prompt.contains("<openforge_code_cleanup>"));
         assert!(!prompt.contains("openforge_create_task"));
-        assert!(prompt.contains("openforge_update_task"));
+        assert!(!prompt.contains("openforge_update_task"));
+        assert!(prompt.contains("openforge update-task --task-id \"T-800\" --summary \"...\""));
     }
 
     #[test]
@@ -347,8 +349,12 @@ mod tests {
 
         assert!(prompt.contains("<openforge_code_cleanup>"));
         assert!(prompt.contains("</openforge_code_cleanup>"));
-        assert!(prompt.contains("openforge_create_task"));
-        assert!(prompt.contains("openforge_update_task"));
+        assert!(
+            prompt.contains("openforge create-task --initial-prompt \"...\" --worktree \"$PWD\"")
+        );
+        assert!(prompt.contains("openforge update-task --task-id \"T-801\" --summary \"...\""));
+        assert!(!prompt.contains("openforge_create_task"));
+        assert!(!prompt.contains("openforge_update_task"));
     }
 
     #[test]
