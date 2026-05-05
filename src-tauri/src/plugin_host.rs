@@ -120,20 +120,22 @@ impl Clone for PluginHost {
 
 impl PluginHost {
     pub fn new(app_handle: AppHandle) -> Self {
-        Self::with_app_event_sender(app_handle, None)
+        Self {
+            runtime: Arc::new(Mutex::new(HostRuntime::default())),
+            transport: Arc::new(Mutex::new(PluginTransportState::default())),
+            state_change: Arc::new(Notify::new()),
+            app_handle,
+            app_event_tx: None,
+        }
     }
 
     pub fn with_app_event_sender(
         app_handle: AppHandle,
         app_event_tx: Option<AppEventSender>,
     ) -> Self {
-        Self {
-            runtime: Arc::new(Mutex::new(HostRuntime::default())),
-            transport: Arc::new(Mutex::new(PluginTransportState::default())),
-            state_change: Arc::new(Notify::new()),
-            app_handle,
-            app_event_tx,
-        }
+        let mut host = Self::new(app_handle);
+        host.app_event_tx = app_event_tx;
+        host
     }
 
     pub async fn invoke_backend(

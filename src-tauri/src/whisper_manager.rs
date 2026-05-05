@@ -11,10 +11,9 @@
 //! ## Usage
 //! 1. Call `get_all_model_statuses()` to check which models are present on disk.
 //! 2. Call `set_active_model()` to select the desired model size.
-//! 3. Call `download_model()` to fetch and verify a model file.
+//! 3. Call `download_model_with_progress()` to fetch and verify a model file.
 //! 4. Call `transcribe()` with 16 kHz mono f32 PCM audio data.
 
-use crate::backend_runtime::AppHandle;
 use log::info;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -499,32 +498,6 @@ impl WhisperManager {
             text: text.trim().to_string(),
             duration_ms,
         })
-    }
-
-    /// Download a Whisper model file with SHA1 verification.
-    ///
-    /// Emits `whisper-download-progress` Tauri events throughout the download.
-    /// On completion, verifies the SHA1 hash and returns the path to the downloaded model.
-    ///
-    /// # Arguments
-    /// * `app` — Tauri `AppHandle` used to emit progress events.
-    /// * `size` — Which model size to download.
-    ///
-    /// # Returns
-    /// The absolute path to the downloaded model file on success.
-    ///
-    /// # Errors
-    /// - `WhisperError::ModelDownloadFailed` on network or I/O errors.
-    /// - `WhisperError::HashMismatch` if the downloaded file's SHA1 differs from expected.
-    pub async fn download_model(
-        &self,
-        app: AppHandle,
-        size: WhisperModelSize,
-    ) -> Result<String, WhisperError> {
-        self.download_model_with_progress(size, |progress| {
-            let _ = app.emit("whisper-download-progress", progress);
-        })
-        .await
     }
 
     /// Download a Whisper model file and report progress through a caller-provided callback.

@@ -157,22 +157,53 @@ pub(super) async fn handle_app_unmatched_command(
     let value = match request.command.as_str() {
         "get_config" => {
             let key = payload_string(&request.payload, "key")?;
-            json_value(db.get_config(&key).map_err(|e| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Failed to get config: {e}"),
-                )
-            })?)?
+            let db_value = || {
+                db.get_config(&key).map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("Failed to get config: {e}"),
+                    )
+                })
+            };
+            if crate::secure_store::is_secret(&key) {
+                let secret = crate::secure_store::get_secret(&key).map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("Failed to get secret config: {e}"),
+                    )
+                })?;
+                json_value(match secret {
+                    Some(value) => Some(value),
+                    None => db_value()?,
+                })?
+            } else {
+                json_value(db_value()?)?
+            }
         }
         "set_config" => {
             let key = payload_string(&request.payload, "key")?;
             let value = payload_string(&request.payload, "value")?;
-            db.set_config(&key, &value).map_err(|e| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Failed to set config: {e}"),
-                )
-            })?;
+            if crate::secure_store::is_secret(&key) {
+                crate::secure_store::set_secret(&key, &value).map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("Failed to set secret config: {e}"),
+                    )
+                })?;
+                db.set_config(&key, "").map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("Failed to clear persisted secret config: {e}"),
+                    )
+                })?;
+            } else {
+                db.set_config(&key, &value).map_err(|e| {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("Failed to set config: {e}"),
+                    )
+                })?;
+            }
             serde_json::Value::Null
         }
         "create_project" => {

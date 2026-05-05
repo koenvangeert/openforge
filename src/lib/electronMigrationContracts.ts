@@ -145,6 +145,7 @@ export const ipcCommandContracts = [
   { functionName: 'getPluginStorage', ipcCommand: 'get_plugin_storage', payloadKeys: ['pluginId', 'key'], targetOwner: 'rust-sidecar', domain: 'plugins' },
   { functionName: 'setPluginStorage', ipcCommand: 'set_plugin_storage', payloadKeys: ['pluginId', 'key', 'value'], targetOwner: 'rust-sidecar', domain: 'plugins' },
   { functionName: 'pluginInvoke', ipcCommand: 'plugin_invoke', payloadKeys: ['pluginId', 'command', 'payload'], targetOwner: 'rust-sidecar', domain: 'plugins' },
+  { functionName: 'stopPluginSidecar', ipcCommand: 'stop_plugin_sidecar', payloadKeys: [], targetOwner: 'rust-sidecar', domain: 'plugins' },
 ] as const satisfies readonly IpcCommandContract[]
 
 export const appShellEventContracts = [

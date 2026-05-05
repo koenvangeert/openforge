@@ -94,65 +94,6 @@ impl OpenCodeClient {
         Ok(session_response.id)
     }
 
-    /// Send a prompt to a session
-    ///
-    /// # Arguments
-    /// * `session_id` - Session ID
-    /// * `text` - Prompt text
-    ///
-    /// # Returns
-    /// Response from the API (structure depends on OpenCode version)
-    ///
-    /// # Example
-    /// ```no_run
-    /// # use opencode_client::OpenCodeClient;
-    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let client = OpenCodeClient::new();
-    /// let response = client.send_prompt("session_123", "Hello!".to_string()).await?;
-    /// # Ok(())
-    /// # }
-    /// ```
-    pub async fn send_prompt(
-        &self,
-        session_id: &str,
-        text: String,
-    ) -> Result<serde_json::Value, OpenCodeError> {
-        let url = format!("{}/session/{}/message", self.base_url, session_id);
-        let request = SendPromptRequest {
-            parts: vec![Part {
-                r#type: "text".to_string(),
-                text,
-            }],
-        };
-
-        let response = self
-            .client
-            .post(&url)
-            .json(&request)
-            .send()
-            .await
-            .map_err(|e| OpenCodeError::NetworkError(e.to_string()))?;
-
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response
-                .text()
-                .await
-                .unwrap_or_else(|_| "Unable to read response body".to_string());
-            return Err(OpenCodeError::ApiError {
-                status: status.as_u16(),
-                message: body,
-            });
-        }
-
-        let json_response: serde_json::Value = response
-            .json()
-            .await
-            .map_err(|e| OpenCodeError::ParseError(e.to_string()))?;
-
-        Ok(json_response)
-    }
-
     /// Send a prompt asynchronously (fire-and-forget)
     ///
     /// # Arguments
@@ -539,12 +480,6 @@ pub struct CreateSessionResponse {
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
-/// Request to send a prompt
-#[derive(Debug, Serialize, Deserialize)]
-pub struct SendPromptRequest {
-    pub parts: Vec<Part>,
-}
-
 /// Part of a prompt (text, image, etc.)
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Part {
@@ -693,19 +628,6 @@ mod tests {
         };
         let json = serde_json::to_string(&request).unwrap();
         assert!(json.contains("Test Session"));
-    }
-
-    #[test]
-    fn test_prompt_request_serialization() {
-        let request = SendPromptRequest {
-            parts: vec![Part {
-                r#type: "text".to_string(),
-                text: "Hello".to_string(),
-            }],
-        };
-        let json = serde_json::to_string(&request).unwrap();
-        assert!(json.contains("text"));
-        assert!(json.contains("Hello"));
     }
 
     #[test]

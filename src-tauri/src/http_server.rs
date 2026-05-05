@@ -777,27 +777,6 @@ fn resolve_http_server_port(
 /// The port can be configured via OPENFORGE_BACKEND_PORT for the Electron
 /// sidecar contract, or AI_COMMAND_CENTER_PORT for the legacy hook bridge,
 /// defaulting to 17422.
-pub async fn start_http_server(
-    app: crate::backend_runtime::AppHandle,
-    db: std::sync::Arc<Mutex<db::Database>>,
-    pty_manager: PtyManager,
-    ready_tx: tokio::sync::oneshot::Sender<()>,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let server_manager = app.state::<ServerManager>().inner().clone();
-    let sse_bridge_manager = app.state::<SseBridgeManager>().inner().clone();
-    start_http_server_with_app_state(
-        Some(app),
-        db,
-        pty_manager,
-        server_manager,
-        sse_bridge_manager,
-        None,
-        false,
-        ready_tx,
-    )
-    .await
-}
-
 pub fn electron_sidecar_app_handle(
     app_data_dir: PathBuf,
     resource_dir: PathBuf,
@@ -806,21 +785,20 @@ pub fn electron_sidecar_app_handle(
 }
 
 pub async fn start_http_sidecar_server(
-    app_data_dir: PathBuf,
-    resource_dir: PathBuf,
+    app: crate::backend_runtime::AppHandle,
     db: std::sync::Arc<Mutex<db::Database>>,
     pty_manager: PtyManager,
     server_manager: ServerManager,
+    sse_bridge_manager: SseBridgeManager,
     whisper: std::sync::Arc<WhisperManager>,
     ready_tx: tokio::sync::oneshot::Sender<()>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let app = electron_sidecar_app_handle(app_data_dir, resource_dir);
     start_http_server_with_app_state(
         Some(app),
         db,
         pty_manager,
         server_manager,
-        SseBridgeManager::new(),
+        sse_bridge_manager,
         Some(whisper),
         true,
         ready_tx,
