@@ -17,7 +17,8 @@ vi.mock('../../../lib/audioRecorder', () => ({
   createAudioRecorder: vi.fn(),
 }))
 
-import { getWhisperModelStatus } from '../../../lib/ipc'
+import { getWhisperModelStatus, transcribeAudio } from '../../../lib/ipc'
+import { createAudioRecorder } from '../../../lib/audioRecorder'
 
 describe('VoiceInput', () => {
   const baseProps = {
@@ -68,6 +69,37 @@ describe('VoiceInput', () => {
     expect(svg).toBeTruthy()
   })
 
+  it('passes the recorded Float32Array to the IPC wrapper without expanding it to numbers', async () => {
+    const audioData = new Float32Array([0, 0.25, -0.25])
+    const recorder = {
+      start: vi.fn().mockResolvedValue(undefined),
+      stop: vi.fn().mockResolvedValue(audioData),
+      isRecording: vi.fn().mockReturnValue(true),
+      getDuration: vi.fn().mockReturnValue(0),
+    }
+    vi.mocked(getWhisperModelStatus).mockResolvedValue({
+      size: 'small',
+      display_name: 'Small',
+      downloaded: true,
+      model_path: '/models/ggml-small.bin',
+      model_size_bytes: 1,
+      model_name: 'ggml-small.bin',
+      disk_size_mb: 466,
+      ram_usage_mb: 1000,
+      is_active: true,
+    })
+    vi.mocked(createAudioRecorder).mockReturnValue(recorder)
+    vi.mocked(transcribeAudio).mockResolvedValue({ text: 'hello', duration_ms: 12 })
+
+    render(VoiceInput, { props: baseProps })
+    const startButton = screen.getByRole('button', { name: 'Start voice input' })
+    await fireEvent.click(startButton)
+    const stopButton = await screen.findByRole('button', { name: 'Stop recording' })
+    await fireEvent.click(stopButton)
+
+    expect(transcribeAudio).toHaveBeenCalledWith(audioData)
+    expect(baseProps.onTranscription).toHaveBeenCalledWith('hello')
+  })
 
   it('shows keyboard shortcut hint in tooltip', () => {
     render(VoiceInput, { props: baseProps })

@@ -191,14 +191,14 @@ describe('Electron backend bridge command forwarding', () => {
     })
   })
 
-  it('forwards Whisper audio commands to the authenticated Rust sidecar route', async () => {
+  it('forwards compact Whisper audio payloads to the authenticated Rust sidecar route', async () => {
     const fetch = vi.fn(async () => ({
       ok: true,
       json: async () => ({ value: { text: 'hello', duration_ms: 12 } }),
     }))
 
     await expect(handleElectronInvoke(
-      { command: 'transcribe_audio', payload: { audioData: [0, 0.25, -0.25] } },
+      { command: 'transcribe_audio', payload: { audioPcmBase64: 'AAAAAAAAgD4AAIC+' } },
       { sidecarConfig: sidecarConfig(), fetch, openExternal: vi.fn() },
     )).resolves.toEqual({ text: 'hello', duration_ms: 12 })
 
@@ -208,7 +208,7 @@ describe('Electron backend bridge command forwarding', () => {
         Authorization: 'Bearer launch-token',
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ command: 'transcribe_audio', payload: { audioData: [0, 0.25, -0.25] } }),
+      body: JSON.stringify({ command: 'transcribe_audio', payload: { audioPcmBase64: 'AAAAAAAAgD4AAIC+' } }),
     })
   })
 

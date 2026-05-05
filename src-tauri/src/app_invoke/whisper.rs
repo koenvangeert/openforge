@@ -1,4 +1,27 @@
 use super::*;
+use base64::{engine::general_purpose, Engine as _};
+
+fn payload_float32_pcm_base64(payload: &serde_json::Value) -> AppResult<Vec<f32>> {
+    let encoded = payload_string(payload, "audioPcmBase64")?;
+    let bytes = general_purpose::STANDARD.decode(encoded).map_err(|e| {
+        (
+            StatusCode::BAD_REQUEST,
+            format!("payload.audioPcmBase64 must be valid base64: {e}"),
+        )
+    })?;
+
+    if bytes.len() % std::mem::size_of::<f32>() != 0 {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "payload.audioPcmBase64 decoded byte length must be divisible by 4".to_string(),
+        ));
+    }
+
+    Ok(bytes
+        .chunks_exact(std::mem::size_of::<f32>())
+        .map(|chunk| f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]))
+        .collect())
+}
 
 pub(super) async fn handle_app_whisper_command(
     state: &AppState,
@@ -10,7 +33,7 @@ pub(super) async fn handle_app_whisper_command(
 
     let value = match request.command.as_str() {
         "transcribe_audio" => {
-            let audio_data: Vec<f32> = payload_field(&request.payload, "audioData")?;
+            let audio_data = payload_float32_pcm_base64(&request.payload)?;
             json_value(whisper.transcribe(&audio_data).map_err(|e| {
                 (
                     StatusCode::INTERNAL_SERVER_ERROR,
@@ -78,4 +101,43 @@ pub(super) async fn handle_app_whisper_command(
     };
 
     Ok(Some(value))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn decodes_base64_little_endian_float32_pcm() {
+        let payload = json!({ "audioPcmBase64": "AAAAAAAAgD4AAIC+" });
+
+        let decoded = payload_float32_pcm_base64(&payload).expect("decode pcm payload");
+
+        assert_eq!(decoded, vec![0.0, 0.25, -0.25]);
+    }
+
+    #[test]
+    fn rejects_base64_payloads_not_aligned_to_float32_samples() {
+        let payload = json!({ "audioPcmBase64": "AAA=" });
+
+        let error = payload_float32_pcm_base64(&payload).expect_err("reject unaligned payload");
+
+        assert_eq!(error.0, StatusCode::BAD_REQUEST);
+        assert!(error
+            .1
+            .contains("payload.audioPcmBase64 decoded byte length must be divisible by 4"));
+    }
+
+    #[test]
+    fn rejects_invalid_base64_pcm_payloads() {
+        let payload = json!({ "audioPcmBase64": "not valid base64" });
+
+        let error = payload_float32_pcm_base64(&payload).expect_err("reject invalid base64");
+
+        assert_eq!(error.0, StatusCode::BAD_REQUEST);
+        assert!(error
+            .1
+            .contains("payload.audioPcmBase64 must be valid base64"));
+    }
 }

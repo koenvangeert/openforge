@@ -123,7 +123,7 @@ export const ipcCommandContracts = [
   { functionName: 'searchOpenCodeFiles', ipcCommand: 'search_opencode_files', payloadKeys: ['projectId', 'query'], targetOwner: 'rust-sidecar', domain: 'files-review' },
   { functionName: 'listOpenCodeAgents', ipcCommand: 'list_opencode_agents', payloadKeys: ['projectId'], targetOwner: 'rust-sidecar', domain: 'agent-session-pty' },
   { functionName: 'listOpenCodeModels', ipcCommand: 'list_opencode_models', payloadKeys: ['projectId'], targetOwner: 'rust-sidecar', domain: 'agent-session-pty' },
-  { functionName: 'transcribeAudio', ipcCommand: 'transcribe_audio', payloadKeys: ['audioData'], targetOwner: 'rust-sidecar', domain: 'whisper-audio' },
+  { functionName: 'transcribeAudio', ipcCommand: 'transcribe_audio', payloadKeys: ['audioPcmBase64'], targetOwner: 'rust-sidecar', domain: 'whisper-audio' },
   { functionName: 'getWhisperModelStatus', ipcCommand: 'get_whisper_model_status', payloadKeys: [], targetOwner: 'rust-sidecar', domain: 'whisper-audio' },
   { functionName: 'downloadWhisperModel', ipcCommand: 'download_whisper_model', payloadKeys: ['modelSize'], targetOwner: 'rust-sidecar', domain: 'whisper-audio' },
   { functionName: 'getAllWhisperModelStatuses', ipcCommand: 'get_all_whisper_model_statuses', payloadKeys: [], targetOwner: 'rust-sidecar', domain: 'whisper-audio' },

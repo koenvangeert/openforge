@@ -18,6 +18,7 @@ import {
 	getTaskBatchFileContents,
 	installPlugin,
 	spawnShellPty,
+	transcribeAudio,
 	updateTask,
 	updateTaskSummary,
 } from "./ipc";
@@ -168,6 +169,14 @@ describe("ipc spawnShellPty", () => {
 				installedAt: 1234,
 				isBuiltin: false,
 			},
+		});
+	});
+
+	it("encodes voice audio as base64 little-endian Float32 PCM instead of a JSON number array", async () => {
+		await transcribeAudio(new Float32Array([0, 0.25, -0.25]));
+
+		expect(invokeMock).toHaveBeenCalledWith("transcribe_audio", {
+			audioPcmBase64: "AAAAAAAAgD4AAIC+",
 		});
 	});
 });
