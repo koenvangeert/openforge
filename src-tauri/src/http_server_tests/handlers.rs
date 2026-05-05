@@ -1,0 +1,308 @@
+use super::*;
+
+#[tokio::test]
+async fn test_get_projects_handler_returns_all_projects() {
+    let (state, path) = test_state("http_get_projects_handler_returns_projects");
+    {
+        let db = state.db.lock().expect("lock db");
+        db.create_project("Project A", "/tmp/project-a")
+            .expect("create project a");
+        db.create_project("Project B", "/tmp/project-b")
+            .expect("create project b");
+    }
+
+    let router = create_router(state);
+    let response = router
+        .oneshot(
+            Request::builder()
+                .uri("/projects")
+                .method("GET")
+                .body(Body::empty())
+                .expect("build request"),
+        )
+        .await
+        .expect("request should succeed");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let json = response_body_json(response).await;
+    let projects = json.as_array().expect("array response");
+    assert_eq!(projects.len(), 2);
+    assert!(projects.iter().any(|project| {
+        project["id"] == "P-1"
+            && project["name"] == "Project A"
+            && project["path"] == "/tmp/project-a"
+    }));
+    assert!(projects.iter().any(|project| {
+        project["id"] == "P-2"
+            && project["name"] == "Project B"
+            && project["path"] == "/tmp/project-b"
+    }));
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
+async fn test_get_tasks_handler_returns_tasks_for_project() {
+    let (state, path) = test_state("http_get_tasks_handler_returns_tasks");
+    {
+        let db = state.db.lock().expect("lock db");
+        let project = db
+            .create_project("Project", "/tmp/project")
+            .expect("create project");
+        db.create_task("Task A", "backlog", Some(&project.id), None, None, None)
+            .expect("create task a");
+        db.create_task("Task B", "doing", Some(&project.id), None, None, None)
+            .expect("create task b");
+    }
+
+    let router = create_router(state);
+    let response = router
+        .oneshot(
+            Request::builder()
+                .uri("/tasks?project_id=P-1")
+                .method("GET")
+                .body(Body::empty())
+                .expect("build request"),
+        )
+        .await
+        .expect("request should succeed");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let json = response_body_json(response).await;
+    let tasks = json.as_array().expect("array response");
+    assert_eq!(tasks.len(), 2);
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
+async fn test_get_tasks_handler_filters_by_state() {
+    let (state, path) = test_state("http_get_tasks_handler_filters_by_state");
+    {
+        let db = state.db.lock().expect("lock db");
+        let project = db
+            .create_project("Project", "/tmp/project")
+            .expect("create project");
+        db.create_task(
+            "Task backlog",
+            "backlog",
+            Some(&project.id),
+            None,
+            None,
+            None,
+        )
+        .expect("create backlog task");
+        db.create_task("Task doing", "doing", Some(&project.id), None, None, None)
+            .expect("create doing task");
+    }
+
+    let router = create_router(state);
+    let response = router
+        .oneshot(
+            Request::builder()
+                .uri("/tasks?project_id=P-1&state=doing")
+                .method("GET")
+                .body(Body::empty())
+                .expect("build request"),
+        )
+        .await
+        .expect("request should succeed");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let json = response_body_json(response).await;
+    let tasks = json.as_array().expect("array response");
+    assert_eq!(tasks.len(), 1);
+    assert_eq!(tasks[0]["status"], "doing");
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
+async fn test_get_tasks_handler_rejects_invalid_state() {
+    let (state, path) = test_state("http_get_tasks_handler_rejects_invalid_state");
+    {
+        let db = state.db.lock().expect("lock db");
+        let _ = db
+            .create_project("Project", "/tmp/project")
+            .expect("create project");
+    }
+
+    let router = create_router(state);
+    let response = router
+        .oneshot(
+            Request::builder()
+                .uri("/tasks?project_id=P-1&state=blocked")
+                .method("GET")
+                .body(Body::empty())
+                .expect("build request"),
+        )
+        .await
+        .expect("request should succeed");
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
+async fn test_update_task_handler_updates_summary_without_changing_initial_prompt() {
+    let (state, path) = test_state("http_update_task_summary_only");
+    let task_id = {
+        let db = state.db.lock().expect("lock db");
+        let project = db
+            .create_project("Project", "/tmp/project")
+            .expect("create project");
+        db.create_task(
+            "Original prompt",
+            "backlog",
+            Some(&project.id),
+            None,
+            None,
+            None,
+        )
+        .expect("create task")
+        .id
+    };
+
+    let router = create_router(state.clone());
+    let response = router
+        .oneshot(
+            Request::builder()
+                .uri("/update_task")
+                .method("POST")
+                .header("content-type", "application/json")
+                .body(Body::from(format!(
+                    r#"{{"task_id":"{}","summary":"New Summary"}}"#,
+                    task_id
+                )))
+                .expect("build request"),
+        )
+        .await
+        .expect("request should succeed");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let json = response_body_json(response).await;
+    assert_eq!(json["task_id"], task_id);
+    assert_eq!(json["status"], "updated");
+
+    let task = state
+        .db
+        .lock()
+        .expect("lock db")
+        .get_task(&task_id)
+        .expect("get task")
+        .expect("task exists");
+    assert_eq!(task.initial_prompt, "Original prompt");
+    assert_eq!(task.summary, Some("New Summary".to_string()));
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
+async fn test_update_task_handler_rejects_initial_prompt_and_preserves_task() {
+    let (state, path) = test_state("http_update_task_rejects_initial_prompt");
+    let task_id = {
+        let db = state.db.lock().expect("lock db");
+        let project = db
+            .create_project("Project", "/tmp/project")
+            .expect("create project");
+        let task = db
+            .create_task(
+                "Original prompt",
+                "backlog",
+                Some(&project.id),
+                None,
+                None,
+                None,
+            )
+            .expect("create task");
+        db.update_task_summary(&task.id, "Existing Summary")
+            .expect("seed summary");
+        task.id
+    };
+
+    let router = create_router(state.clone());
+    let response = router
+        .oneshot(
+            Request::builder()
+                .uri("/update_task")
+                .method("POST")
+                .header("content-type", "application/json")
+                .body(Body::from(format!(
+                    r#"{{"task_id":"{}","initial_prompt":"New prompt","summary":"New Summary"}}"#,
+                    task_id
+                )))
+                .expect("build request"),
+        )
+        .await
+        .expect("request should succeed");
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+    let task = state
+        .db
+        .lock()
+        .expect("lock db")
+        .get_task(&task_id)
+        .expect("get task")
+        .expect("task exists");
+    assert_eq!(task.initial_prompt, "Original prompt");
+    assert_eq!(task.summary, Some("Existing Summary".to_string()));
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
+async fn test_get_project_attention_handler_returns_zeroed_row_when_no_attention() {
+    let (state, path) = test_state("http_get_project_attention_handler_zeroed_row");
+    {
+        let db = state.db.lock().expect("lock db");
+        let _ = db
+            .create_project("Project", "/tmp/project")
+            .expect("create project");
+    }
+
+    let router = create_router(state);
+    let response = router
+        .oneshot(
+            Request::builder()
+                .uri("/project/P-1/attention")
+                .method("GET")
+                .body(Body::empty())
+                .expect("build request"),
+        )
+        .await
+        .expect("request should succeed");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let json = response_body_json(response).await;
+    assert_eq!(json["project_id"], "P-1");
+    assert_eq!(json["needs_input"], 0);
+    assert_eq!(json["running_agents"], 0);
+    assert_eq!(json["ci_failures"], 0);
+    assert_eq!(json["unaddressed_comments"], 0);
+    assert_eq!(json["completed_agents"], 0);
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
+async fn test_get_project_attention_handler_returns_not_found_for_unknown_project() {
+    let (state, path) = test_state("http_get_project_attention_handler_not_found");
+
+    let router = create_router(state);
+    let response = router
+        .oneshot(
+            Request::builder()
+                .uri("/project/P-999/attention")
+                .method("GET")
+                .body(Body::empty())
+                .expect("build request"),
+        )
+        .await
+        .expect("request should succeed");
+
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+
+    let _ = std::fs::remove_file(path);
+}

@@ -21,3 +21,20 @@ pub fn publish_app_event(
         });
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_publish_app_event_fans_out_to_app_event_stream_sender() {
+        let (sender, mut receiver) = tokio::sync::broadcast::channel(16);
+        let payload = serde_json::json!({ "instance_id": 42 });
+
+        publish_app_event(&Some(sender), "pty-exit-T-1-shell-2", &payload);
+
+        let received = receiver.try_recv().expect("event should be published");
+        assert_eq!(received.event_name, "pty-exit-T-1-shell-2");
+        assert_eq!(received.payload["instance_id"], 42);
+    }
+}
