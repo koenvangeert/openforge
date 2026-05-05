@@ -1,9 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import TerminalTabs from './TerminalTabs.svelte'
-  import { killPty } from './lib/ipc'
-  import { cleanupProjectTerminalTask, getProjectTerminalTaskId, markActiveProjectTerminalTask } from './lib/projectTerminal'
-  import { clearTaskTerminalTabsSession, getTaskTerminalTabsSession, releaseAllForTask } from './lib/terminalPool'
+  import { getProjectTerminalTaskId } from './lib/projectTerminal'
   import { createTerminalShortcutController } from './terminalShortcutController'
 
   interface Props {
@@ -17,26 +15,6 @@
   const terminalTaskId = $derived(projectId ? getProjectTerminalTaskId(projectId) : null)
 
   const terminalShortcuts = createTerminalShortcutController({ ignoreWhenDetached: true })
-
-  function cleanupTerminalTask(taskId: string) {
-    void cleanupProjectTerminalTask(taskId, {
-      getTaskTerminalTabsSession,
-      killPty,
-      releaseAllForTask,
-      clearTaskTerminalTabsSession,
-    }).then((result) => {
-      for (const failure of result.killFailures) {
-        console.error(`[TerminalProjectView] Failed to kill project terminal ${failure.key}:`, failure.error)
-      }
-    })
-  }
-
-  $effect(() => {
-    const taskIdToCleanup = markActiveProjectTerminalTask(terminalTaskId)
-    if (taskIdToCleanup !== null) {
-      cleanupTerminalTask(taskIdToCleanup)
-    }
-  })
 
   onMount(() => terminalShortcuts.registerWindowKeydown())
 </script>
