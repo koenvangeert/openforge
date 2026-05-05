@@ -1,6 +1,7 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod agent_lifecycle;
 mod app_events;
 mod app_invoke;
 mod backend_runtime;
@@ -8,7 +9,6 @@ mod builtin_plugins;
 mod claude_hooks;
 mod cli_installer;
 pub mod command_discovery;
-mod commands;
 mod db;
 mod diff_parser;
 mod git_worktree;
@@ -27,7 +27,9 @@ pub mod providers;
 mod pty_manager;
 pub mod review_parser;
 mod review_prompt;
+mod runtime_checks;
 mod secure_store;
+mod self_review_runtime;
 mod server_manager;
 mod sse_bridge;
 mod user_environment;

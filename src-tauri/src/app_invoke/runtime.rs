@@ -539,17 +539,17 @@ pub(super) async fn handle_app_runtime_command(
 ) -> AppResult<Option<serde_json::Value>> {
     let value = match request.command.as_str() {
         "check_opencode_installed" => json_value(
-            crate::commands::config::check_opencode_installed()
+            crate::runtime_checks::check_opencode_installed()
                 .await
                 .map_err(string_error)?,
         )?,
         "check_pi_installed" => json_value(
-            crate::commands::config::check_pi_installed()
+            crate::runtime_checks::check_pi_installed()
                 .await
                 .map_err(string_error)?,
         )?,
         "check_claude_installed" => json_value(
-            crate::commands::config::check_claude_installed()
+            crate::runtime_checks::check_claude_installed()
                 .await
                 .map_err(string_error)?,
         )?,

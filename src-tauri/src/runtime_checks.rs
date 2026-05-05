@@ -1,7 +1,4 @@
-use crate::backend_runtime::State;
-use crate::db;
 use serde::Serialize;
-use std::sync::{Arc, Mutex};
 
 #[derive(Serialize)]
 pub struct OpenCodeInstallStatus {
@@ -124,55 +121,6 @@ pub async fn check_pi_installed() -> Result<PiInstallStatus, String> {
             path: None,
             version: None,
         }),
-    }
-}
-
-pub async fn get_config(
-    db: State<'_, Arc<Mutex<db::Database>>>,
-    key: String,
-) -> Result<Option<String>, String> {
-    if crate::secure_store::is_secret(&key) {
-        return crate::secure_store::get_secret(&key);
-    }
-    let db_lock = crate::db::acquire_db(&db);
-    db_lock
-        .get_config(&key)
-        .map_err(|e| format!("Failed to get config: {}", e))
-}
-
-pub async fn set_config(
-    db: State<'_, Arc<Mutex<db::Database>>>,
-
-    key: String,
-    value: String,
-) -> Result<(), String> {
-    if crate::secure_store::is_secret(&key) {
-        return crate::secure_store::set_secret(&key, &value);
-    }
-    let db_lock = crate::db::acquire_db(&db);
-    db_lock
-        .set_config(&key, &value)
-        .map_err(|e| format!("Failed to set config: {}", e))
-}
-
-pub async fn get_app_mode() -> Result<String, String> {
-    if cfg!(debug_assertions) {
-        Ok("dev".to_string())
-    } else {
-        Ok("prod".to_string())
-    }
-}
-
-pub async fn get_git_branch() -> Result<String, String> {
-    let output = std::process::Command::new("git")
-        .args(["rev-parse", "--abbrev-ref", "HEAD"])
-        .output()
-        .map_err(|e| format!("Failed to run git: {}", e))?;
-
-    if output.status.success() {
-        Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
-    } else {
-        Err("Not a git repository".to_string())
     }
 }
 

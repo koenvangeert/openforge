@@ -1,3 +1,5 @@
+#[cfg(test)]
+use crate::whisper_manager::WhisperModelSize;
 use crate::{
     app_events::{publish_app_event, AppEventEnvelope, AppEventSender},
     db,
@@ -6,7 +8,7 @@ use crate::{
     pty_manager::PtyManager,
     server_manager::ServerManager,
     sse_bridge::SseBridgeManager,
-    whisper_manager::{WhisperManager, WhisperModelSize},
+    whisper_manager::WhisperManager,
 };
 use axum::{
     extract::{Json, Path, Query, State},

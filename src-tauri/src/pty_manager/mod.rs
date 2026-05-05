@@ -11,6 +11,7 @@ use tokio::sync::Mutex;
 
 #[cfg(test)]
 use commands::resolve_shell_path;
+#[cfg(test)]
 pub(crate) use commands::{build_claude_args, build_pi_args, get_shell_path};
 #[cfg(test)]
 use events::{
