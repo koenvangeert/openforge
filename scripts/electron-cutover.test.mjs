@@ -22,9 +22,11 @@ describe('Electron-only desktop cutover', () => {
     expect(pkg.devDependencies).not.toHaveProperty('@tauri-apps/cli')
   })
 
-  it('removes Tauri shell configuration, build hooks, and release packaging from the Electron sidecar crate', () => {
+  it('removes Tauri shell configuration, generated schemas, build hooks, and release packaging from the Electron sidecar crate', () => {
     expect(existsSync(join(repoRoot, 'src-tauri', 'tauri.conf.json'))).toBe(false)
     expect(existsSync(join(repoRoot, 'src-tauri/capabilities/default.json'))).toBe(false)
+    expect(existsSync(join(repoRoot, 'src-tauri/gen/schemas'))).toBe(false)
+    expect(existsSync(join(repoRoot, 'src-tauri/gen/schemas/desktop-schema.json'))).toBe(false)
     expect(readText('src-tauri/build.rs')).not.toContain('tauri' + '_build::build')
 
     const releaseWorkflow = readText('.github/workflows/release.yml')
