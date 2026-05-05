@@ -2,7 +2,6 @@ use super::{json_value, payload_field, payload_i64, payload_string, AppResult};
 use crate::{app_events::publish_app_event, http_server::AppInvokeRequest, http_server::AppState};
 use axum::http::StatusCode;
 use serde::Serialize;
-use tauri::Emitter;
 
 fn runtime_error(error: String) -> (StatusCode, String) {
     (StatusCode::INTERNAL_SERVER_ERROR, error)

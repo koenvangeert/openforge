@@ -1,7 +1,7 @@
+use crate::backend_runtime::State;
 use crate::db;
 use serde::Serialize;
 use std::sync::{Arc, Mutex};
-use tauri::State;
 
 #[derive(Serialize)]
 pub struct OpenCodeInstallStatus {
@@ -25,7 +25,6 @@ pub struct PiInstallStatus {
     pub version: Option<String>,
 }
 
-#[tauri::command]
 pub async fn check_opencode_installed() -> Result<OpenCodeInstallStatus, String> {
     let output = std::process::Command::new("which").arg("opencode").output();
 
@@ -57,7 +56,6 @@ pub async fn check_opencode_installed() -> Result<OpenCodeInstallStatus, String>
     }
 }
 
-#[tauri::command]
 pub async fn check_claude_installed() -> Result<ClaudeInstallStatus, String> {
     let output = std::process::Command::new("which").arg("claude").output();
 
@@ -104,7 +102,6 @@ fn version_from_output(output: std::process::Output) -> Option<String> {
     }
 }
 
-#[tauri::command]
 pub async fn check_pi_installed() -> Result<PiInstallStatus, String> {
     let output = std::process::Command::new("which").arg("pi").output();
 
@@ -130,7 +127,6 @@ pub async fn check_pi_installed() -> Result<PiInstallStatus, String> {
     }
 }
 
-#[tauri::command]
 pub async fn get_config(
     db: State<'_, Arc<Mutex<db::Database>>>,
     key: String,
@@ -144,7 +140,6 @@ pub async fn get_config(
         .map_err(|e| format!("Failed to get config: {}", e))
 }
 
-#[tauri::command]
 pub async fn set_config(
     db: State<'_, Arc<Mutex<db::Database>>>,
 
@@ -160,7 +155,6 @@ pub async fn set_config(
         .map_err(|e| format!("Failed to set config: {}", e))
 }
 
-#[tauri::command]
 pub async fn get_app_mode() -> Result<String, String> {
     if cfg!(debug_assertions) {
         Ok("dev".to_string())
@@ -169,7 +163,6 @@ pub async fn get_app_mode() -> Result<String, String> {
     }
 }
 
-#[tauri::command]
 pub async fn get_git_branch() -> Result<String, String> {
     let output = std::process::Command::new("git")
         .args(["rev-parse", "--abbrev-ref", "HEAD"])

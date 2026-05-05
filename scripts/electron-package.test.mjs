@@ -2,9 +2,11 @@ import { mkdir, readFile, readlink, stat, symlink, writeFile } from 'node:fs/pro
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
+  assertPackageArchitectureCompatibility,
   buildAndPackageElectronApp,
   createElectronAppPackageJson,
   electronBundlePath,
+  expectedDarwinArchForTarget,
   packageElectronApp,
   updatePlistBooleanValue,
   updatePlistStringValue,
@@ -63,6 +65,57 @@ describe('Electron macOS packaging helpers', () => {
       { command: 'cargo', args: ['build', '--release'], cwd: '/repo/src-tauri' },
       { command: 'packageElectronApp', args: [], cwd: '/repo' },
     ])
+  })
+
+  it('maps Rust target triples to Mach-O architecture names used by Electron packaging', () => {
+    expect(expectedDarwinArchForTarget('aarch64-apple-darwin')).toBe('arm64')
+    expect(expectedDarwinArchForTarget('x86_64-apple-darwin')).toBe('x86_64')
+    expect(expectedDarwinArchForTarget('')).toBe(null)
+  })
+
+  it('rejects target packages whose Electron runtime architecture does not match the Rust sidecar', async () => {
+    await expect(assertPackageArchitectureCompatibility({
+      cargoBuildTarget: 'x86_64-apple-darwin',
+      appExecutablePath: '/app/Contents/MacOS/Open Forge',
+      sidecarPath: '/app/Contents/MacOS/openforge-sidecar',
+      readExecutableArchitectures: async path => (path.includes('Open Forge') ? ['arm64'] : ['x86_64']),
+    })).rejects.toThrow(/Electron runtime architecture.*x86_64/)
+  })
+
+  it('accepts packages when Electron runtime and Rust sidecar both include the target architecture', async () => {
+    await expect(assertPackageArchitectureCompatibility({
+      cargoBuildTarget: 'aarch64-apple-darwin',
+      appExecutablePath: '/app/Contents/MacOS/Open Forge',
+      sidecarPath: '/app/Contents/MacOS/openforge-sidecar',
+      readExecutableArchitectures: async () => ['arm64', 'x86_64'],
+    })).resolves.toEqual({ expectedArch: 'arm64', appArchitectures: ['arm64', 'x86_64'], sidecarArchitectures: ['arm64', 'x86_64'] })
+  })
+
+  it('builds and packages a configured Rust target sidecar without shell-specific packaging tools', async () => {
+    const commands = []
+
+    await buildAndPackageElectronApp({
+      repoRoot: '/repo',
+      cargoBuildTarget: 'aarch64-apple-darwin',
+      runCommand: async (command, args, options) => {
+        commands.push({ command, args, cwd: options.cwd })
+      },
+      packageApp: async ({ repoRoot, sidecarBinaryPath, cargoBuildTarget }) => {
+        commands.push({ command: 'packageElectronApp', args: [sidecarBinaryPath, cargoBuildTarget], cwd: repoRoot })
+        return { appPath: `${repoRoot}/app`, sidecarPath: sidecarBinaryPath }
+      },
+    })
+
+    expect(commands).toContainEqual({
+      command: 'cargo',
+      args: ['build', '--release', '--target', 'aarch64-apple-darwin'],
+      cwd: '/repo/src-tauri',
+    })
+    expect(commands).toContainEqual({
+      command: 'packageElectronApp',
+      args: ['/repo/src-tauri/target/aarch64-apple-darwin/release/openforge', 'aarch64-apple-darwin'],
+      cwd: '/repo',
+    })
   })
 
   it('packages the compiled renderer, Electron main process, and Rust sidecar into a macOS .app bundle', async () => {

@@ -1,4 +1,5 @@
 use crate::app_events::{publish_app_event, AppEventSender};
+use crate::backend_runtime::AppHandle;
 use crate::db;
 use crate::opencode_client::{OpenCodeClient, OpenCodeError, SessionInfo, SessionStatusInfo};
 use eventsource_client::{self as es, Client};
@@ -7,7 +8,6 @@ use log::{debug, error, info, warn};
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::Mutex;
 
 // ============================================================================

@@ -1,11 +1,10 @@
+use crate::backend_runtime::State;
 use crate::github_client::GitHubClient;
 use crate::{db, github_poller, github_runtime};
 use std::sync::{Arc, Mutex};
-use tauri::{Emitter, State};
 
-#[tauri::command]
 pub async fn force_github_sync(
-    app: tauri::AppHandle,
+    app: crate::backend_runtime::AppHandle,
     github_client: State<'_, GitHubClient>,
 ) -> Result<github_poller::PollResult, String> {
     let result = github_poller::poll_github_once(&app, github_client.inner()).await;
@@ -32,7 +31,6 @@ fn validate_url_scheme(url: &str) -> Result<(), String> {
     }
 }
 
-#[tauri::command]
 pub async fn open_url(url: String) -> Result<(), String> {
     validate_url_scheme(&url)?;
 
@@ -50,14 +48,12 @@ pub async fn open_url(url: String) -> Result<(), String> {
     Ok(())
 }
 
-#[tauri::command]
 pub async fn get_pull_requests(
     db: State<'_, Arc<Mutex<db::Database>>>,
 ) -> Result<Vec<db::PrRow>, String> {
     github_runtime::get_pull_requests(&db)
 }
 
-#[tauri::command]
 pub async fn get_pr_comments(
     db: State<'_, Arc<Mutex<db::Database>>>,
     pr_id: i64,
@@ -66,9 +62,8 @@ pub async fn get_pr_comments(
 }
 
 /// Mark a PR comment as addressed
-#[tauri::command]
 pub async fn mark_comment_addressed(
-    app: tauri::AppHandle,
+    app: crate::backend_runtime::AppHandle,
     db: State<'_, Arc<Mutex<db::Database>>>,
 
     comment_id: i64,
@@ -78,7 +73,6 @@ pub async fn mark_comment_addressed(
     Ok(())
 }
 
-#[tauri::command]
 pub async fn merge_pull_request(
     github_client: State<'_, GitHubClient>,
     owner: String,
@@ -91,8 +85,6 @@ pub async fn merge_pull_request(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tauri::test::{mock_builder, mock_context, noop_assets};
-    use tauri::Manager;
 
     #[test]
     fn test_valid_http_url() {
@@ -160,10 +152,8 @@ mod tests {
     #[test]
     fn test_force_sync_uses_managed_github_client() {
         let managed_client = GitHubClient::new();
-        let app = mock_builder()
-            .manage(managed_client.clone())
-            .build(mock_context(noop_assets()))
-            .expect("mock app should build");
+        let app = crate::backend_runtime::AppHandle::new();
+        app.manage(managed_client.clone());
 
         let state_client = app.state::<GitHubClient>();
         let state_instance = state_client.inner();

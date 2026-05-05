@@ -2,8 +2,8 @@ pub mod claude_code;
 pub mod opencode;
 pub mod pi;
 
+use crate::backend_runtime::AppHandle;
 use std::path::Path;
-use tauri::AppHandle;
 
 use crate::db::AgentSessionRow;
 use claude_code::ClaudeCodeProvider;

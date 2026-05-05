@@ -25,6 +25,28 @@ function waitForExit(child, label) {
   })
 }
 
+function captureCommand(command, args) {
+  return new Promise((resolvePromise, reject) => {
+    const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'] })
+    let stdout = ''
+    let stderr = ''
+    child.stdout?.on('data', chunk => {
+      stdout += chunk.toString()
+    })
+    child.stderr?.on('data', chunk => {
+      stderr += chunk.toString()
+    })
+    child.once('error', reject)
+    child.once('exit', (code, signal) => {
+      if (code === 0) {
+        resolvePromise(stdout.trim())
+        return
+      }
+      reject(new Error(`${command} ${args.join(' ')} exited with ${signal ?? `code ${code}`}: ${stderr.trim()}`))
+    })
+  })
+}
+
 function spawnCommand(command, args, options = {}) {
   return spawn(command, args, {
     stdio: 'inherit',
@@ -54,6 +76,13 @@ export function electronBundlePath(repoRoot = repoRootFromScript()) {
   return join(repoRoot, 'src-tauri', 'target', 'release', 'bundle', 'electron', 'macos', `${APP_NAME}.app`)
 }
 
+export function sidecarBinaryPathForTarget(repoRoot = repoRootFromScript(), cargoBuildTarget = '') {
+  const binaryName = process.platform === 'win32' ? 'openforge.exe' : 'openforge'
+  return cargoBuildTarget
+    ? join(repoRoot, 'src-tauri', 'target', cargoBuildTarget, 'release', binaryName)
+    : join(repoRoot, 'src-tauri', 'target', 'release', binaryName)
+}
+
 export function createElectronAppPackageJson({ version = '0.0.1' } = {}) {
   return {
     name: 'openforge-electron-app',
@@ -62,6 +91,55 @@ export function createElectronAppPackageJson({ version = '0.0.1' } = {}) {
     main: 'dist-electron/main.js',
     private: true,
   }
+}
+
+export function expectedDarwinArchForTarget(cargoBuildTarget = '') {
+  if (!cargoBuildTarget) return null
+  if (cargoBuildTarget.startsWith('aarch64-apple-darwin')) return 'arm64'
+  if (cargoBuildTarget.startsWith('x86_64-apple-darwin')) return 'x86_64'
+  return null
+}
+
+function normalizeArchitectures(output) {
+  return output
+    .replace(/^.*are:\s*/i, '')
+    .replace(/^.*is architecture:\s*/i, '')
+    .split(/\s+/)
+    .map(arch => arch.trim())
+    .filter(Boolean)
+}
+
+export async function readDarwinExecutableArchitectures(binaryPath) {
+  if (process.platform !== 'darwin') return []
+  try {
+    return normalizeArchitectures(await captureCommand('lipo', ['-archs', binaryPath]))
+  } catch {
+    return normalizeArchitectures(await captureCommand('file', [binaryPath]))
+  }
+}
+
+export async function assertPackageArchitectureCompatibility({
+  cargoBuildTarget = '',
+  appExecutablePath,
+  sidecarPath,
+  readExecutableArchitectures = readDarwinExecutableArchitectures,
+} = {}) {
+  const expectedArch = expectedDarwinArchForTarget(cargoBuildTarget)
+  if (!expectedArch) return null
+
+  const [appArchitectures, sidecarArchitectures] = await Promise.all([
+    readExecutableArchitectures(appExecutablePath),
+    readExecutableArchitectures(sidecarPath),
+  ])
+
+  if (!appArchitectures.includes(expectedArch)) {
+    throw new Error(`Electron runtime architecture must include ${expectedArch} for ${cargoBuildTarget}; found ${appArchitectures.join(', ') || 'unknown'}`)
+  }
+  if (!sidecarArchitectures.includes(expectedArch)) {
+    throw new Error(`Rust sidecar architecture must include ${expectedArch} for ${cargoBuildTarget}; found ${sidecarArchitectures.join(', ') || 'unknown'}`)
+  }
+
+  return { expectedArch, appArchitectures, sidecarArchitectures }
 }
 
 function escapeRegExp(value) {
@@ -106,7 +184,9 @@ export async function packageElectronApp({
   repoRoot = repoRootFromScript(),
   outputAppPath = electronBundlePath(repoRoot),
   electronTemplatePath = join(repoRoot, 'node_modules', 'electron', 'dist', ELECTRON_APP_NAME),
-  sidecarBinaryPath = join(repoRoot, 'src-tauri', 'target', 'release', process.platform === 'win32' ? 'openforge.exe' : 'openforge'),
+  sidecarBinaryPath = sidecarBinaryPathForTarget(repoRoot),
+  cargoBuildTarget = process.env.CARGO_BUILD_TARGET ?? '',
+  readExecutableArchitectures = readDarwinExecutableArchitectures,
 } = {}) {
   const rendererDist = join(repoRoot, 'dist')
   const electronDist = join(repoRoot, 'dist-electron')
@@ -133,6 +213,13 @@ export async function packageElectronApp({
   await cp(sidecarBinaryPath, sidecarTargetPath)
   await chmod(sidecarTargetPath, 0o755)
 
+  await assertPackageArchitectureCompatibility({
+    cargoBuildTarget,
+    appExecutablePath: openForgeExecutablePath,
+    sidecarPath: sidecarTargetPath,
+    readExecutableArchitectures,
+  })
+
   const appResourcesPath = join(resourcesDir, 'app')
   await rm(appResourcesPath, { recursive: true, force: true })
   await mkdir(appResourcesPath, { recursive: true })
@@ -154,14 +241,22 @@ async function runBuildCommand(command, args, options) {
 
 export async function buildAndPackageElectronApp({
   repoRoot = repoRootFromScript(),
+  cargoBuildTarget = process.env.CARGO_BUILD_TARGET ?? '',
   runCommand = runBuildCommand,
   packageApp = packageElectronApp,
 } = {}) {
   await runCommand('pnpm', ['build:plugins'], { cwd: repoRoot })
   await runCommand('pnpm', ['build'], { cwd: repoRoot })
   await runCommand('pnpm', ['electron:build'], { cwd: repoRoot })
-  await runCommand('cargo', ['build', '--release'], { cwd: join(repoRoot, 'src-tauri') })
-  return packageApp({ repoRoot })
+  const cargoArgs = cargoBuildTarget
+    ? ['build', '--release', '--target', cargoBuildTarget]
+    : ['build', '--release']
+  await runCommand('cargo', cargoArgs, { cwd: join(repoRoot, 'src-tauri') })
+  return packageApp({
+    repoRoot,
+    sidecarBinaryPath: sidecarBinaryPathForTarget(repoRoot, cargoBuildTarget),
+    cargoBuildTarget,
+  })
 }
 
 async function main() {

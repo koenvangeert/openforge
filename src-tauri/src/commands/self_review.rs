@@ -1,8 +1,8 @@
+use crate::backend_runtime::State;
 use crate::{db, diff_parser};
 use base64::{engine::general_purpose, Engine as _};
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
-use tauri::State;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct CommitInfo {
@@ -149,7 +149,6 @@ pub async fn get_task_diff_for_workspace(
     Ok(diffs)
 }
 
-#[tauri::command]
 pub async fn get_task_diff(
     task_id: String,
     include_uncommitted: bool,
@@ -282,7 +281,6 @@ pub async fn get_task_file_contents_for_workspace(
     .await
 }
 
-#[tauri::command]
 pub async fn get_task_file_contents(
     task_id: String,
     path: String,
@@ -356,7 +354,6 @@ pub async fn get_task_batch_file_contents_for_workspace(
     Ok(results)
 }
 
-#[tauri::command]
 pub async fn get_task_batch_file_contents(
     task_id: String,
     files: Vec<FileContentRequest>,
@@ -370,7 +367,6 @@ pub async fn get_task_batch_file_contents(
     get_task_batch_file_contents_for_workspace(&worktree_path, &files, include_uncommitted).await
 }
 
-#[tauri::command]
 pub async fn add_self_review_comment(
     task_id: String,
     comment_type: String,
@@ -390,7 +386,6 @@ pub async fn add_self_review_comment(
     .map_err(|e| format!("Failed to add self review comment: {}", e))
 }
 
-#[tauri::command]
 pub async fn get_active_self_review_comments(
     task_id: String,
     db: State<'_, Arc<Mutex<db::Database>>>,
@@ -400,7 +395,6 @@ pub async fn get_active_self_review_comments(
         .map_err(|e| format!("Failed to get active self review comments: {}", e))
 }
 
-#[tauri::command]
 pub async fn get_archived_self_review_comments(
     task_id: String,
     db: State<'_, Arc<Mutex<db::Database>>>,
@@ -410,7 +404,6 @@ pub async fn get_archived_self_review_comments(
         .map_err(|e| format!("Failed to get archived self review comments: {}", e))
 }
 
-#[tauri::command]
 pub async fn delete_self_review_comment(
     comment_id: i64,
     db: State<'_, Arc<Mutex<db::Database>>>,
@@ -420,7 +413,6 @@ pub async fn delete_self_review_comment(
         .map_err(|e| format!("Failed to delete self review comment: {}", e))
 }
 
-#[tauri::command]
 pub async fn archive_self_review_comments(
     task_id: String,
     db: State<'_, Arc<Mutex<db::Database>>>,
@@ -474,7 +466,6 @@ pub async fn get_task_commits_for_workspace(
     Ok(parse_git_log_output(&output_str))
 }
 
-#[tauri::command]
 pub async fn get_task_commits(
     task_id: String,
     db: State<'_, Arc<Mutex<db::Database>>>,
@@ -584,7 +575,6 @@ pub async fn get_commit_diff_for_workspace(
     Ok(diff_parser::parse_unified_diff(&output_str, true))
 }
 
-#[tauri::command]
 pub async fn get_commit_diff(
     task_id: String,
     commit_sha: String,
@@ -617,7 +607,6 @@ pub async fn get_commit_file_contents_for_workspace(
     .await
 }
 
-#[tauri::command]
 pub async fn get_commit_file_contents(
     task_id: String,
     commit_sha: String,
@@ -664,7 +653,6 @@ pub async fn get_commit_batch_file_contents_for_workspace(
     Ok(results)
 }
 
-#[tauri::command]
 pub async fn get_commit_batch_file_contents(
     task_id: String,
     commit_sha: String,

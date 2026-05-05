@@ -28,6 +28,7 @@
 //! - Skips projects with missing GitHub config
 
 use crate::app_events::{publish_app_event, AppEventSender};
+use crate::backend_runtime::AppHandle;
 use crate::db::{Database, PrRow};
 use crate::github_client::{
     aggregate_ci_status, aggregate_review_status, deduplicate_check_runs, filter_to_required,
@@ -41,7 +42,6 @@ use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
-use tauri::{AppHandle, Emitter, Manager};
 use tokio::time::{sleep, Duration};
 
 const DEFAULT_GITHUB_POLL_INTERVAL_SECS: u64 = 60;
@@ -55,7 +55,7 @@ pub struct GitHubEventTarget {
 }
 
 impl GitHubEventTarget {
-    pub fn tauri(app: AppHandle) -> Self {
+    pub fn app(app: AppHandle) -> Self {
         Self {
             app: Some(app),
             app_event_tx: None,
@@ -132,7 +132,7 @@ fn parse_poll_interval_seconds(raw: Option<String>) -> u64 {
 /// * `github_client` - Shared GitHub API client (caller owns lifetime)
 pub async fn poll_github_once(app: &AppHandle, github_client: &GitHubClient) -> PollResult {
     let db = app.state::<Arc<Mutex<Database>>>().inner().clone();
-    let events = GitHubEventTarget::tauri(app.clone());
+    let events = GitHubEventTarget::app(app.clone());
     poll_github_once_with_state(db, github_client, &events).await
 }
 
@@ -404,7 +404,7 @@ async fn poll_github_once_with_state(
 pub async fn start_github_poller(app: AppHandle) {
     let db = app.state::<Arc<Mutex<Database>>>().inner().clone();
     let github_client = app.state::<GitHubClient>().inner().clone();
-    let events = GitHubEventTarget::tauri(app);
+    let events = GitHubEventTarget::app(app);
     start_github_poller_with_state(db, github_client, events).await;
 }
 
@@ -1572,7 +1572,6 @@ mod tests {
     use super::*;
     use crate::db::test_helpers::{insert_test_task, make_test_db};
     use crate::github_client::GitHubClient;
-    use tauri::test::{mock_builder, mock_context, noop_assets};
 
     #[test]
     fn test_poll_result_construction() {
@@ -1872,10 +1871,8 @@ mod tests {
     #[test]
     fn test_poller_uses_managed_github_client() {
         let managed_client = GitHubClient::new();
-        let app = mock_builder()
-            .manage(managed_client.clone())
-            .build(mock_context(noop_assets()))
-            .expect("mock app should build");
+        let app = AppHandle::new();
+        app.manage(managed_client.clone());
 
         let state_client = app.state::<GitHubClient>();
         let poller_client = state_client.inner();

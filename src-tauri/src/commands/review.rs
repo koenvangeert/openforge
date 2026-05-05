@@ -1,10 +1,9 @@
+use crate::backend_runtime::State;
 use crate::{db, github_client::GitHubClient, github_runtime};
 use std::sync::{Arc, Mutex};
-use tauri::State;
 
 pub use crate::github_runtime::{FrontendPrOverviewComment, FrontendReviewComment};
 
-#[tauri::command]
 pub async fn get_github_username(
     db: State<'_, Arc<Mutex<db::Database>>>,
     github_client: State<'_, GitHubClient>,
@@ -12,7 +11,6 @@ pub async fn get_github_username(
     github_runtime::github_username(&db, github_client.inner()).await
 }
 
-#[tauri::command]
 pub async fn fetch_review_prs(
     db: State<'_, Arc<Mutex<db::Database>>>,
     github_client: State<'_, GitHubClient>,
@@ -20,14 +18,12 @@ pub async fn fetch_review_prs(
     github_runtime::fetch_review_prs(&db, github_client.inner()).await
 }
 
-#[tauri::command]
 pub async fn get_review_prs(
     db: State<'_, Arc<Mutex<db::Database>>>,
 ) -> Result<Vec<db::ReviewPrRow>, String> {
     github_runtime::get_review_prs(&db)
 }
 
-#[tauri::command]
 pub async fn get_pr_file_diffs(
     _db: State<'_, Arc<Mutex<db::Database>>>,
     github_client: State<'_, GitHubClient>,
@@ -38,7 +34,6 @@ pub async fn get_pr_file_diffs(
     github_runtime::get_pr_file_diffs(github_client.inner(), &owner, &repo, pr_number).await
 }
 
-#[tauri::command]
 pub async fn get_file_content(
     _db: State<'_, Arc<Mutex<db::Database>>>,
     github_client: State<'_, GitHubClient>,
@@ -49,7 +44,6 @@ pub async fn get_file_content(
     github_runtime::get_file_content(github_client.inner(), &owner, &repo, &sha).await
 }
 
-#[tauri::command]
 pub async fn get_file_content_base64(
     _db: State<'_, Arc<Mutex<db::Database>>>,
     github_client: State<'_, GitHubClient>,
@@ -60,7 +54,6 @@ pub async fn get_file_content_base64(
     github_runtime::get_file_content_base64(github_client.inner(), &owner, &repo, &sha).await
 }
 
-#[tauri::command]
 pub async fn get_file_at_ref(
     _db: State<'_, Arc<Mutex<db::Database>>>,
     github_client: State<'_, GitHubClient>,
@@ -72,7 +65,6 @@ pub async fn get_file_at_ref(
     github_runtime::get_file_at_ref(github_client.inner(), &owner, &repo, &path, &ref_sha).await
 }
 
-#[tauri::command]
 pub async fn get_file_at_ref_base64(
     _db: State<'_, Arc<Mutex<db::Database>>>,
     github_client: State<'_, GitHubClient>,
@@ -85,7 +77,6 @@ pub async fn get_file_at_ref_base64(
         .await
 }
 
-#[tauri::command]
 pub async fn get_review_comments(
     _db: State<'_, Arc<Mutex<db::Database>>>,
     github_client: State<'_, GitHubClient>,
@@ -96,7 +87,6 @@ pub async fn get_review_comments(
     github_runtime::get_review_comments(github_client.inner(), &owner, &repo, pr_number).await
 }
 
-#[tauri::command]
 pub async fn get_pr_overview_comments(
     _db: State<'_, Arc<Mutex<db::Database>>>,
     github_client: State<'_, GitHubClient>,
@@ -107,7 +97,6 @@ pub async fn get_pr_overview_comments(
     github_runtime::get_pr_overview_comments(github_client.inner(), &owner, &repo, pr_number).await
 }
 
-#[tauri::command]
 #[allow(clippy::too_many_arguments)]
 pub async fn submit_pr_review(
     _db: State<'_, Arc<Mutex<db::Database>>>,
@@ -133,7 +122,6 @@ pub async fn submit_pr_review(
     .await
 }
 
-#[tauri::command]
 pub async fn mark_review_pr_viewed(
     db: State<'_, Arc<Mutex<db::Database>>>,
     pr_id: i64,
