@@ -23,6 +23,7 @@ mod plugin_host;
 mod plugin_installation;
 mod plugin_protocol;
 mod plugin_rpc;
+mod provider_runtime;
 pub mod providers;
 mod pty_manager;
 pub mod review_parser;

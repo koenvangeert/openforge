@@ -1,139 +1,43 @@
 use super::*;
-use crate::command_discovery::{
-    find_skill_source_dir, is_supported_skill_source_dir, scan_skill_directories_for_root,
-    search_project_files, skill_source_dir, GENERIC_SKILLS_SOURCE_DIR,
-};
 use crate::opencode_client::OpenCodeClient;
-use crate::providers::{claude_code::ClaudeCodeProvider, pi::PiProvider, Provider};
-use crate::server_manager::discovery_server_task_id;
-use std::path::Path;
+use crate::provider_runtime;
+use crate::providers::Provider;
 
 fn string_error(error: String) -> (StatusCode, String) {
     (StatusCode::INTERNAL_SERVER_ERROR, error)
 }
 
-fn legacy_worktree_from_task_workspace(workspace: db::TaskWorkspaceRow) -> db::WorktreeRow {
-    db::WorktreeRow {
-        id: workspace.id,
-        task_id: workspace.task_id,
-        project_id: workspace.project_id,
-        repo_path: workspace.repo_path,
-        worktree_path: workspace.workspace_path,
-        branch_name: workspace.branch_name.unwrap_or_default(),
-        opencode_port: workspace.opencode_port,
-        opencode_pid: None,
-        status: workspace.status,
-        created_at: workspace.created_at,
-        updated_at: workspace.updated_at,
-    }
-}
-
-fn load_project_context(state: &AppState, project_id: &str) -> AppResult<(String, Option<String>)> {
-    let db = crate::db::acquire_db(&state.db);
-    let provider = db.resolve_ai_provider(project_id);
-    let project_path = db
-        .get_project(project_id)
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to get project: {e}"),
-            )
-        })?
-        .map(|project| project.path);
-
-    Ok((provider, project_path))
-}
-
-async fn ensure_project_discovery_server(
+fn project_runtime_context(
     state: &AppState,
     project_id: &str,
-) -> AppResult<Option<u16>> {
-    let (provider, project_path) = load_project_context(state, project_id)?;
-    if provider != "opencode" {
-        return Ok(None);
-    }
-
-    let Some(server_manager) = state.server_manager.as_ref() else {
-        return Err((
-            StatusCode::SERVICE_UNAVAILABLE,
-            "Server manager is not available".to_string(),
-        ));
-    };
-
-    let discovery_task_id = discovery_server_task_id(project_id);
-    if let Some(port) = server_manager.get_server_port(&discovery_task_id).await {
-        return Ok(Some(port));
-    }
-
-    let Some(project_path) = project_path else {
-        return Ok(None);
-    };
-
-    let port = server_manager
-        .spawn_server(&discovery_task_id, Path::new(&project_path))
-        .await
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to start discovery server: {e}"),
-            )
-        })?;
-
-    Ok(Some(port))
+) -> AppResult<provider_runtime::ProjectRuntimeContext> {
+    let db = crate::db::acquire_db(&state.db);
+    provider_runtime::load_project_runtime_context(&db, project_id).map_err(string_error)
 }
 
-fn provider_commands(
-    provider: &str,
-    project_path: Option<&str>,
-) -> Option<Vec<crate::opencode_client::CommandInfo>> {
-    match provider {
-        "pi" => {
-            Some(PiProvider::new(crate::pty_manager::PtyManager::new()).list_commands(project_path))
-        }
-        "claude-code" => Some(
-            ClaudeCodeProvider::new(crate::pty_manager::PtyManager::new())
-                .list_commands(project_path),
-        ),
-        _ => None,
-    }
-}
-
-fn provider_agents(
-    provider: &str,
-    project_path: Option<&str>,
-) -> Option<Vec<crate::opencode_client::AgentInfo>> {
-    match provider {
-        "pi" => {
-            Some(PiProvider::new(crate::pty_manager::PtyManager::new()).list_agents(project_path))
-        }
-        "claude-code" => Some(
-            ClaudeCodeProvider::new(crate::pty_manager::PtyManager::new())
-                .list_agents(project_path),
-        ),
-        _ => None,
-    }
+fn runtime_error(error: String) -> (StatusCode, String) {
+    let status = if error == "Server manager is not available" {
+        StatusCode::SERVICE_UNAVAILABLE
+    } else {
+        StatusCode::INTERNAL_SERVER_ERROR
+    };
+    (status, error)
 }
 
 async fn list_opencode_commands(
     state: &AppState,
     project_id: &str,
 ) -> AppResult<serde_json::Value> {
-    let (provider, project_path) = load_project_context(state, project_id)?;
-    if let Some(commands) = provider_commands(&provider, project_path.as_deref()) {
-        return json_value(commands);
-    }
-
-    let Some(port) = ensure_project_discovery_server(state, project_id).await? else {
-        return json_value(Vec::<crate::opencode_client::CommandInfo>::new());
-    };
-
-    let client = OpenCodeClient::with_base_url(format!("http://127.0.0.1:{port}"));
-    json_value(client.list_commands().await.map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Failed to list commands: {e}"),
+    let context = project_runtime_context(state, project_id)?;
+    json_value(
+        provider_runtime::list_runtime_commands(
+            state.server_manager.as_ref(),
+            project_id,
+            &context,
         )
-    })?)
+        .await
+        .map_err(runtime_error)?,
+    )
 }
 
 async fn search_opencode_files(
@@ -141,125 +45,44 @@ async fn search_opencode_files(
     project_id: &str,
     query: &str,
 ) -> AppResult<serde_json::Value> {
-    let (provider, project_path) = load_project_context(state, project_id)?;
-    if matches!(provider.as_str(), "claude-code" | "pi") {
-        return json_value(
-            project_path
-                .as_deref()
-                .map(|path| search_project_files(path, query, 10))
-                .unwrap_or_default(),
-        );
-    }
-
-    let Some(port) = ensure_project_discovery_server(state, project_id).await? else {
-        return json_value(Vec::<String>::new());
-    };
-
-    let client = OpenCodeClient::with_base_url(format!("http://127.0.0.1:{port}"));
-    json_value(client.find_files(query, true, 10).await.map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Failed to search files: {e}"),
+    let context = project_runtime_context(state, project_id)?;
+    json_value(
+        provider_runtime::search_runtime_files(
+            state.server_manager.as_ref(),
+            project_id,
+            &context,
+            query,
         )
-    })?)
+        .await
+        .map_err(runtime_error)?,
+    )
 }
 
 async fn list_opencode_agents(state: &AppState, project_id: &str) -> AppResult<serde_json::Value> {
-    let (provider, project_path) = load_project_context(state, project_id)?;
-    if let Some(agents) = provider_agents(&provider, project_path.as_deref()) {
-        return json_value(agents);
-    }
-
-    let Some(port) = ensure_project_discovery_server(state, project_id).await? else {
-        return json_value(Vec::<crate::opencode_client::AgentInfo>::new());
-    };
-
-    let client = OpenCodeClient::with_base_url(format!("http://127.0.0.1:{port}"));
-    json_value(client.list_agents().await.map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Failed to list agents: {e}"),
-        )
-    })?)
+    let context = project_runtime_context(state, project_id)?;
+    json_value(
+        provider_runtime::list_runtime_agents(state.server_manager.as_ref(), project_id, &context)
+            .await
+            .map_err(runtime_error)?,
+    )
 }
 
 async fn list_opencode_models(state: &AppState, project_id: &str) -> AppResult<serde_json::Value> {
-    let Some(port) = ensure_project_discovery_server(state, project_id).await? else {
-        return json_value(Vec::<crate::opencode_client::ProviderModelInfo>::new());
-    };
-
-    let client = OpenCodeClient::with_base_url(format!("http://127.0.0.1:{port}"));
-    json_value(client.list_providers().await.map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Failed to list models: {e}"),
-        )
-    })?)
+    let context = project_runtime_context(state, project_id)?;
+    json_value(
+        provider_runtime::list_runtime_models(state.server_manager.as_ref(), project_id, &context)
+            .await
+            .map_err(runtime_error)?,
+    )
 }
 
 async fn list_opencode_skills(state: &AppState, project_id: &str) -> AppResult<serde_json::Value> {
-    let (_, project_path) = load_project_context(state, project_id)?;
-    let mut skills_map =
-        std::collections::HashMap::<String, crate::opencode_client::SkillInfo>::new();
-
-    if let Some(port) = ensure_project_discovery_server(state, project_id).await? {
-        let client = OpenCodeClient::with_base_url(format!("http://127.0.0.1:{port}"));
-        if let Ok(commands) = client.list_commands().await {
-            for command in commands {
-                if command.source.as_deref() != Some("skill") {
-                    continue;
-                }
-                let template = command
-                    .extra
-                    .get("template")
-                    .and_then(|value| value.as_str())
-                    .map(str::to_string);
-                let (level, source_dir) = if let Some(ref project_path) = project_path {
-                    let project_path = Path::new(project_path);
-                    if let Some(source_dir) = find_skill_source_dir(project_path, &command.name) {
-                        ("project".to_string(), source_dir.to_string())
-                    } else if let Some(source_dir) = dirs::home_dir()
-                        .as_deref()
-                        .and_then(|home| find_skill_source_dir(home, &command.name))
-                    {
-                        ("user".to_string(), source_dir.to_string())
-                    } else {
-                        ("user".to_string(), GENERIC_SKILLS_SOURCE_DIR.to_string())
-                    }
-                } else {
-                    ("user".to_string(), GENERIC_SKILLS_SOURCE_DIR.to_string())
-                };
-
-                skills_map.insert(
-                    command.name.clone(),
-                    crate::opencode_client::SkillInfo {
-                        name: command.name,
-                        description: command.description,
-                        agent: command.agent,
-                        template,
-                        level,
-                        source_dir,
-                    },
-                );
-            }
-        }
-    }
-
-    if let Some(ref project_path) = project_path {
-        for skill in scan_skill_directories_for_root(Path::new(project_path), "project") {
-            skills_map.entry(skill.name.clone()).or_insert(skill);
-        }
-    }
-
-    if let Some(home) = dirs::home_dir() {
-        for skill in scan_skill_directories_for_root(&home, "user") {
-            skills_map.entry(skill.name.clone()).or_insert(skill);
-        }
-    }
-
-    let mut skills: Vec<_> = skills_map.into_values().collect();
-    skills.sort_by(|left, right| left.name.cmp(&right.name));
-    json_value(skills)
+    let context = project_runtime_context(state, project_id)?;
+    json_value(
+        provider_runtime::list_runtime_skills(state.server_manager.as_ref(), project_id, &context)
+            .await
+            .map_err(runtime_error)?,
+    )
 }
 
 fn save_skill_content(
@@ -272,47 +95,24 @@ fn save_skill_content(
     let source_dir = payload_string(&request.payload, "sourceDir")?;
     let content = payload_string(&request.payload, "content")?;
 
-    if !is_supported_skill_source_dir(&source_dir) {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            format!("Unsupported skill source directory: {source_dir}"),
-        ));
-    }
-
-    let skill_root = if level == "project" {
-        let db = crate::db::acquire_db(&state.db);
-        let project_path = db
-            .get_project(&project_id)
-            .map_err(|e| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Failed to get project: {e}"),
-                )
-            })?
-            .map(|project| project.path)
-            .ok_or_else(|| (StatusCode::NOT_FOUND, "Project not found".to_string()))?;
-        std::path::PathBuf::from(project_path)
-    } else {
-        dirs::home_dir().ok_or_else(|| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Cannot determine home directory".to_string(),
-            )
-        })?
-    };
-
-    let skill_dir = skill_source_dir(&skill_root, &source_dir).join(&skill_name);
-    std::fs::create_dir_all(&skill_dir).map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Failed to create skill directory: {e}"),
-        )
-    })?;
-    std::fs::write(skill_dir.join("SKILL.md"), content).map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Failed to write skill file: {e}"),
-        )
+    let db = crate::db::acquire_db(&state.db);
+    provider_runtime::save_skill_content(
+        &db,
+        &project_id,
+        &skill_name,
+        &level,
+        &source_dir,
+        &content,
+    )
+    .map_err(|error| {
+        let status = if error.starts_with("Unsupported skill source directory") {
+            StatusCode::BAD_REQUEST
+        } else if error == "Project not found" {
+            StatusCode::NOT_FOUND
+        } else {
+            StatusCode::INTERNAL_SERVER_ERROR
+        };
+        (status, error)
     })?;
 
     Ok(serde_json::Value::Null)
@@ -359,31 +159,33 @@ async fn abort_session(
         ));
     };
 
-    if let Ok(provider) = Provider::from_name(
+    let policy = provider_runtime::app_invoke_abort_session_policy(&session.provider);
+    match Provider::from_name(
         &session.provider,
         pty_manager.clone(),
         server_manager.clone(),
         sse_bridge_manager.clone(),
     ) {
-        let _ = provider.abort(&session.ticket_id, &session).await;
+        Ok(provider) => {
+            let _ = provider.abort(&session.ticket_id, &session).await;
+        }
+        Err(error) if !policy.ignore_unknown_provider => return Err(string_error(error)),
+        Err(_) => {}
     }
 
-    let abort_status = if matches!(session.provider.as_str(), "claude-code" | "pi") {
-        "interrupted"
-    } else {
-        "failed"
-    };
     {
         let db = crate::db::acquire_db(&state.db);
         let _ = db.update_agent_session(
             &session.id,
             "implementing",
-            abort_status,
+            policy.session_status,
             None,
             Some("Aborted by user"),
         );
-        if session.provider != "claude-code" {
+        if policy.update_worktree_status {
             let _ = db.update_worktree_status(&session.ticket_id, "stopped");
+        }
+        if policy.update_task_workspace_status {
             let _ = db.update_task_workspace_status(&session.ticket_id, "stopped");
         }
     }
@@ -397,44 +199,18 @@ async fn get_session_output(
     request: &AppInvokeRequest,
 ) -> AppResult<serde_json::Value> {
     let task_id = payload_string(&request.payload, "taskId")?;
-    let (opencode_session_id, workspace_path) = {
+    let context = {
         let db = crate::db::acquire_db(&state.db);
-        let session = db
-            .get_latest_session_for_ticket(&task_id)
-            .map_err(|e| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Failed to get session: {e}"),
-                )
-            })?
-            .ok_or_else(|| {
-                (
-                    StatusCode::NOT_FOUND,
-                    format!("No session found for task {task_id}"),
-                )
-            })?;
-        let opencode_session_id = session.opencode_session_id.ok_or_else(|| {
-            (
-                StatusCode::BAD_REQUEST,
-                "Session has no OpenCode session ID".to_string(),
-            )
-        })?;
-        let workspace_path = db
-            .get_task_workspace_for_task(&task_id)
-            .map_err(|e| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Failed to get task workspace: {e}"),
-                )
-            })?
-            .map(|workspace| workspace.workspace_path)
-            .or_else(|| {
-                db.get_worktree_for_task(&task_id)
-                    .ok()
-                    .flatten()
-                    .map(|workspace| workspace.worktree_path)
-            });
-        (opencode_session_id, workspace_path)
+        provider_runtime::session_output_context(&db, &task_id).map_err(|error| {
+            let status = if error.starts_with("No session found") {
+                StatusCode::NOT_FOUND
+            } else if error == "Session has no OpenCode session ID" {
+                StatusCode::BAD_REQUEST
+            } else {
+                StatusCode::INTERNAL_SERVER_ERROR
+            };
+            (status, error)
+        })?
     };
 
     let Some(server_manager) = state.server_manager.as_ref() else {
@@ -444,32 +220,24 @@ async fn get_session_output(
         ));
     };
 
-    let existing_port = server_manager.get_server_port(&task_id).await;
-    let spawned_server = existing_port.is_none();
-    let port = match existing_port {
-        Some(port) => port,
-        None => {
-            let workspace_path = workspace_path.ok_or_else(|| {
-                (
-                    StatusCode::NOT_FOUND,
-                    "No workspace found for this task".to_string(),
-                )
-            })?;
-            server_manager
-                .spawn_server(&task_id, Path::new(&workspace_path))
-                .await
-                .map_err(|e| {
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        format!("Failed to start OpenCode server: {e}"),
-                    )
-                })?
-        }
-    };
+    let (port, spawned_server) = provider_runtime::session_output_server_port(
+        server_manager,
+        &task_id,
+        context.workspace_path.as_deref(),
+    )
+    .await
+    .map_err(|error| {
+        let status = if error == "No workspace found for this task" {
+            StatusCode::NOT_FOUND
+        } else {
+            StatusCode::INTERNAL_SERVER_ERROR
+        };
+        (status, error)
+    })?;
 
     let client = OpenCodeClient::with_base_url(format!("http://127.0.0.1:{port}"));
     let messages = client
-        .get_session_messages(&opencode_session_id)
+        .get_session_messages(&context.opencode_session_id)
         .await
         .map_err(|e| {
             (
@@ -478,29 +246,7 @@ async fn get_session_output(
             )
         })?;
 
-    let mut output = String::new();
-    for message in &messages {
-        let role = message
-            .get("role")
-            .and_then(|role| role.as_str())
-            .unwrap_or("");
-        if role != "assistant" {
-            continue;
-        }
-        if let Some(parts) = message.get("parts").and_then(|parts| parts.as_array()) {
-            for part in parts {
-                let part_type = part
-                    .get("type")
-                    .and_then(|value| value.as_str())
-                    .unwrap_or("");
-                if part_type == "text" {
-                    if let Some(text) = part.get("text").and_then(|value| value.as_str()) {
-                        output.push_str(text);
-                    }
-                }
-            }
-        }
-    }
+    let output = provider_runtime::assistant_text_from_messages(&messages);
 
     if spawned_server {
         let _ = server_manager.stop_server(&task_id).await;
@@ -515,22 +261,7 @@ fn get_worktree_for_task(
 ) -> AppResult<serde_json::Value> {
     let task_id = payload_string(&request.payload, "taskId")?;
     let db = crate::db::acquire_db(&state.db);
-    if let Some(worktree) = db.get_worktree_for_task(&task_id).map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Failed to get worktree for task: {e}"),
-        )
-    })? {
-        return json_value(Some(worktree));
-    }
-
-    let workspace = db.get_task_workspace_for_task(&task_id).map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Failed to get task workspace for task: {e}"),
-        )
-    })?;
-    json_value(workspace.map(legacy_worktree_from_task_workspace))
+    json_value(provider_runtime::get_worktree_for_task(&db, &task_id).map_err(string_error)?)
 }
 
 pub(super) async fn handle_app_runtime_command(
