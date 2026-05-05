@@ -493,7 +493,7 @@
       "description": "Electron main/preload and backend bridge changes are security-sensitive.",
       "impact": "Window security, shell-owned commands, sidecar supervision, CSP, and event forwarding can regress if raw Electron/Node/HTTP access leaks into renderer code.",
       "location": "src/electron/main.ts, src/electron/preload.cts, src/electron/backendBridge.ts",
-      "frequency": "high during Electron migration and shell integration work"
+      "frequency": "high for Electron shell and sidecar bridge maintenance"
     },
     {
       "id": "bn-main-rs-1",
@@ -552,7 +552,7 @@
     "errorHandling": "Rust sidecar command boundaries map errors to Result<T, String>; frontend uses typed IPC wrappers and UI state; avoid direct desktop transport calls outside src/lib/ipc.ts.",
     "testingConventions": "Use TDD. Write/update tests first, verify failure where practical, then implement. Cover business logic and behavior; do not assert Tailwind/CSS visual classes. Run pnpm test and/or cargo test depending on touched area.",
     "additionalRules": [
-      "All frontend backend calls go through src/lib/ipc.ts wrappers; do not call raw Electron, preload, HTTP sidecar, or invoke-like transport APIs directly from Svelte code.",
+      "All frontend backend calls go through src/lib/ipc.ts wrappers; do not call raw Electron, preload, HTTP sidecar endpoints, or other command/sidecar transport APIs directly from Svelte code.",
       "External links use openUrl() IPC wrapper so Electron main owns open_url handling.",
       "Rust sidecar IPC payloads from JS/TS use camelCase keys that match the frontend API shape, even when Rust params are snake_case.",
       "Map-based stores require new Map() assignment for reactivity.",
@@ -604,6 +604,6 @@
     "attentionModel": "Interrupt only for meaningful decisions, blocked agents, review readiness, CI failures, destructive operations, or workflow handoffs."
   },
   "createdAt": "2026-04-26T15:07:30.000Z",
-  "updatedAt": "2026-05-05T09:16:03.268Z",
+  "updatedAt": "2026-05-05T21:06:17.658Z",
   "version": 1
 }

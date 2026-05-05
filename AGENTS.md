@@ -1,6 +1,6 @@
 Electron desktop app: Svelte 5 + TypeScript renderer (`src/`), Electron main/preload shell (`src/electron/`), Rust sidecar backend currently in `src-tauri/`, SQLite.
 Commands: `pnpm dev` (Vite-only renderer), `pnpm electron:dev` (full Electron app with Rust sidecar), `pnpm electron:build`, `pnpm electron:package`, `pnpm electron:install`, `pnpm test` (vitest), `pnpm exec tsc --noEmit`, `cargo test` (from `src-tauri/`).
-All frontend backend calls go through typed wrappers in `src/lib/ipc.ts`; Svelte code must not call raw Electron, preload, HTTP sidecar, or invoke-like transport APIs directly.
+All frontend backend calls go through typed wrappers in `src/lib/ipc.ts`; Svelte code must not call raw Electron, preload, HTTP sidecar endpoints, or other command/sidecar transport APIs directly.
 Electron main owns shell-level IPC, windowing, external URL opening, renderer security, and Rust sidecar supervision. External links must use the `openUrl()` IPC wrapper so Electron main handles `open_url` consistently.
 Svelte 5 runes only: `$state`, `$derived`, `$effect`, `$props()` with a local `Props` interface. Use `on`-prefixed callback props, never the legacy event dispatcher.
 Styling: daisyUI v5 + Tailwind CSS v4 (CSS-first config in `src/app.css`, no `tailwind.config.js`). Prefer Tailwind utilities and daisyUI semantic classes for layout and styling. `<style>` blocks are allowed for component-scoped `@keyframes` animations and `:global()` resets for rendered HTML content. No hardcoded hex colors.
