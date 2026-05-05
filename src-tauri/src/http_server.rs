@@ -1320,7 +1320,7 @@ mod tests {
                     .header("authorization", "Bearer test-token")
                     .header("content-type", "application/json")
                     .body(Body::from(
-                        r#"{"command":"transcribe_audio","payload":{"audioData":[0.0,0.1,-0.1]}}"#,
+                        r#"{"command":"transcribe_audio","payload":{"audioPcmBase64":"AAAAAM3MzD3Nzcy9"}}"#,
                     ))
                     .expect("build request"),
             )
@@ -1338,20 +1338,22 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_app_invoke_accepts_long_voice_transcription_payloads() {
-        let (state, path) = test_state("app_invoke_long_voice_transcription_payload");
+    async fn test_app_invoke_accepts_compact_voice_transcription_payloads() {
+        let (state, path) = test_state("app_invoke_compact_voice_transcription_payload");
         let router = create_router(state);
-        let mut body = String::from(r#"{"command":"transcribe_audio","payload":{"audioData":["#);
-        for index in 0..600_000 {
-            if index > 0 {
-                body.push(',');
-            }
-            body.push_str("0.0");
-        }
-        body.push_str("]}}");
+        let samples = 120_000;
+        let raw_pcm_bytes = vec![0_u8; samples * 4];
+        let audio_pcm_base64 =
+            base64::Engine::encode(&base64::engine::general_purpose::STANDARD, raw_pcm_bytes);
+        let body = format!(
+            r#"{{"command":"transcribe_audio","payload":{{"audioPcmBase64":"{audio_pcm_base64}"}}}}"#
+        );
+        let json_number_array_len = r#"{"command":"transcribe_audio","payload":{"audioData":[]}}"#
+            .len()
+            + samples * "-0.12345678901234568,".len();
         assert!(
-            body.len() > 2 * 1024 * 1024,
-            "regression payload should exceed axum's default JSON body limit"
+            body.len() * 2 < json_number_array_len,
+            "base64 PCM payload should be materially smaller than decimal JSON samples"
         );
 
         let response = router
@@ -3117,6 +3119,33 @@ mod tests {
             .expect("request should succeed");
 
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[tokio::test]
+    async fn test_app_invoke_rejects_non_float_aligned_whisper_payload_as_bad_request() {
+        let (state, path) = test_state("app_invoke_rejects_non_float_aligned_whisper_payload");
+        let router = create_router(state);
+
+        let response = router
+            .oneshot(
+                Request::builder()
+                    .uri("/app/invoke")
+                    .method("POST")
+                    .header("authorization", "Bearer test-token")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        r#"{"command":"transcribe_audio","payload":{"audioPcmBase64":"AAA="}}"#,
+                    ))
+                    .expect("build request"),
+            )
+            .await
+            .expect("request should succeed");
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        assert!(response_body_text(response)
+            .await
+            .contains("payload.audioPcmBase64 decoded byte length must be divisible by 4"));
         let _ = std::fs::remove_file(path);
     }
 

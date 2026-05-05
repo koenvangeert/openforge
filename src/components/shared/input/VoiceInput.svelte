@@ -71,7 +71,7 @@
 
     try {
       const audioData = await currentRecorder.stop()
-      const result = await transcribeAudio(Array.from(audioData))
+      const result = await transcribeAudio(audioData)
       onTranscription(result.text)
       voiceState = 'idle'
     } catch (e) {
