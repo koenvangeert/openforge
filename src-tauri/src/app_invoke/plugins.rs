@@ -297,6 +297,19 @@ pub(super) async fn handle_app_plugin_command(
                 .await
                 .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?
         }
+        "stop_plugin_sidecar" => {
+            let plugin_host = state.plugin_host.as_ref().ok_or_else(|| {
+                (
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    "plugin host state is not available".to_string(),
+                )
+            })?;
+            plugin_host
+                .stop_sidecar()
+                .await
+                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
+            serde_json::Value::Null
+        }
         _ => return Ok(None),
     };
 

@@ -1,11 +1,11 @@
 //! GitHub PR Comment Poller
 //!
 //! Background Tokio task that polls GitHub at a configurable interval for new PR comments,
-//! inserts them into SQLite, and emits Tauri events.
+//! inserts them into SQLite, and emits app events.
 //!
 //! ## Architecture
-//! - Spawned as background task in main.rs setup hook
-//! - Reads GitHub token from global config table
+//! - Spawned as background task by the Electron sidecar HTTP runtime
+//! - Reads GitHub token from secure storage
 //! - Iterates all projects and reads per-project github_default_repo
 //! - For each project with GitHub config:
 //!   - Gets all open PRs from pull_requests table
@@ -28,7 +28,6 @@
 //! - Skips projects with missing GitHub config
 
 use crate::app_events::{publish_app_event, AppEventSender};
-use crate::backend_runtime::AppHandle;
 use crate::db::{Database, PrRow};
 use crate::github_client::{
     aggregate_ci_status, aggregate_review_status, deduplicate_check_runs, filter_to_required,
@@ -50,30 +49,16 @@ const MAX_GITHUB_POLL_INTERVAL_SECS: u64 = 300;
 
 #[derive(Clone, Default)]
 pub struct GitHubEventTarget {
-    app: Option<AppHandle>,
     app_event_tx: Option<AppEventSender>,
 }
 
 impl GitHubEventTarget {
-    pub fn app(app: AppHandle) -> Self {
-        Self {
-            app: Some(app),
-            app_event_tx: None,
-        }
-    }
-
     pub fn sidecar(app_event_tx: Option<AppEventSender>) -> Self {
-        Self {
-            app: None,
-            app_event_tx,
-        }
+        Self { app_event_tx }
     }
 
     fn emit(&self, event_name: &str, payload: serde_json::Value) -> Result<(), String> {
         publish_app_event(&self.app_event_tx, event_name, &payload);
-        if let Some(app) = &self.app {
-            app.emit(event_name, payload).map_err(|e| e.to_string())?;
-        }
         Ok(())
     }
 }
@@ -118,7 +103,7 @@ fn parse_poll_interval_seconds(raw: Option<String>) -> u64 {
 
 /// Execute a single GitHub polling cycle.
 ///
-/// Reads the GitHub token from the database, iterates all projects, syncs open
+/// Reads the GitHub token from secure storage, iterates all projects, syncs open
 /// PRs, polls comments and CI status for each PR, and polls review-requested
 /// PRs. All event emissions happen inside this function exactly as they did in
 /// the original loop body.
@@ -128,14 +113,7 @@ fn parse_poll_interval_seconds(raw: Option<String>) -> u64 {
 /// while still allowing a fresh client to be used from a Tauri command.
 ///
 /// # Arguments
-/// * `app` - Tauri AppHandle for accessing managed state and emitting events
 /// * `github_client` - Shared GitHub API client (caller owns lifetime)
-pub async fn poll_github_once(app: &AppHandle, github_client: &GitHubClient) -> PollResult {
-    let db = app.state::<Arc<Mutex<Database>>>().inner().clone();
-    let events = GitHubEventTarget::app(app.clone());
-    poll_github_once_with_state(db, github_client, &events).await
-}
-
 pub async fn poll_github_once_for_sidecar(
     db: Arc<Mutex<Database>>,
     github_client: &GitHubClient,
@@ -396,18 +374,9 @@ async fn poll_github_once_with_state(
 /// Start the GitHub poller background task.
 ///
 /// Runs indefinitely: reads the poll interval from the database, calls
-/// `poll_github_once()`, then sleeps. The `GitHubClient` is created once and
-/// reused across cycles so that ETag caching (Task 2) persists.
+/// `poll_github_once_for_sidecar()`, then sleeps. The `GitHubClient` is created once and
+/// reused across cycles so that ETag caching persists.
 ///
-/// # Arguments
-/// * `app` - Tauri AppHandle for accessing managed state and emitting events
-pub async fn start_github_poller(app: AppHandle) {
-    let db = app.state::<Arc<Mutex<Database>>>().inner().clone();
-    let github_client = app.state::<GitHubClient>().inner().clone();
-    let events = GitHubEventTarget::app(app);
-    start_github_poller_with_state(db, github_client, events).await;
-}
-
 pub async fn start_github_poller_for_sidecar(
     db: Arc<Mutex<Database>>,
     github_client: GitHubClient,
@@ -1570,6 +1539,7 @@ fn mergeability_after_pr_details(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::backend_runtime::AppHandle;
     use crate::db::test_helpers::{insert_test_task, make_test_db};
     use crate::github_client::GitHubClient;
 

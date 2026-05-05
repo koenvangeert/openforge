@@ -18,7 +18,6 @@ use tokio::sync::Mutex;
 pub enum GitWorktreeError {
     WorktreeAddFailed(String),
     WorktreeRemoveFailed(String),
-    CommandFailed(String),
     IoError(io::Error),
 }
 
@@ -30,9 +29,6 @@ impl fmt::Display for GitWorktreeError {
             }
             GitWorktreeError::WorktreeRemoveFailed(msg) => {
                 write!(f, "Failed to remove worktree: {}", msg)
-            }
-            GitWorktreeError::CommandFailed(msg) => {
-                write!(f, "Git command failed: {}", msg)
             }
             GitWorktreeError::IoError(e) => {
                 write!(f, "IO error: {}", e)
@@ -192,128 +188,6 @@ async fn try_create_worktree_inner(
         .arg("--unset-upstream")
         .output()
         .await;
-
-    Ok(())
-}
-
-/// Computes the standard worktree path for a PR review.
-/// Convention: ~/.openforge/worktrees/{repo_name}/review-pr-{pr_number}
-pub fn review_worktree_path(
-    repo_path: &Path,
-    pr_number: i64,
-) -> Result<std::path::PathBuf, GitWorktreeError> {
-    let home = dirs::home_dir().ok_or(GitWorktreeError::CommandFailed(
-        "Failed to get home directory".into(),
-    ))?;
-    let repo_name = repo_path
-        .file_name()
-        .and_then(|n| n.to_str())
-        .ok_or(GitWorktreeError::CommandFailed("Invalid repo path".into()))?;
-    Ok(home
-        .join(".openforge")
-        .join("worktrees")
-        .join(repo_name)
-        .join(format!("review-pr-{}", pr_number)))
-}
-
-/// Creates a git worktree that checks out an existing remote branch for PR review.
-/// Unlike `create_worktree()`, this does NOT create a new branch — it checks out
-/// the existing remote branch in detached HEAD mode.
-///
-/// If the worktree already exists at the path, it's considered a successful reuse
-/// (worktrees are kept indefinitely for fastest re-reviews).
-pub async fn create_review_worktree(
-    repo_path: &Path,
-    worktree_path: &Path,
-    remote_branch: &str,
-) -> Result<(), GitWorktreeError> {
-    let lock = acquire_lock(repo_path);
-    let _guard = lock.lock().await;
-
-    let prune_output = git_command()
-        .arg("-C")
-        .arg(repo_path)
-        .arg("worktree")
-        .arg("prune")
-        .output()
-        .await?;
-
-    if !prune_output.status.success() {
-        let stderr = String::from_utf8_lossy(&prune_output.stderr);
-        warn!("Warning: worktree prune failed: {}", stderr);
-    }
-
-    // Fetch the specific branch so origin/{remote_branch} is up to date
-    let fetch_output = git_command()
-        .arg("-C")
-        .arg(repo_path)
-        .arg("fetch")
-        .arg("origin")
-        .arg(remote_branch)
-        .output()
-        .await?;
-
-    if !fetch_output.status.success() {
-        let stderr = String::from_utf8_lossy(&fetch_output.stderr);
-        warn!(
-            "Warning: git fetch origin {} failed: {}",
-            remote_branch, stderr
-        );
-    }
-
-    if worktree_path.exists() {
-        return Ok(());
-    }
-
-    let result = try_create_review_worktree_inner(repo_path, worktree_path, remote_branch).await;
-
-    if result.is_err() {
-        info!("Review worktree creation failed, attempting cleanup and retry...");
-
-        let _ = git_command()
-            .arg("-C")
-            .arg(repo_path)
-            .arg("worktree")
-            .arg("remove")
-            .arg("--force")
-            .arg(worktree_path)
-            .output()
-            .await;
-
-        let _ = git_command()
-            .arg("-C")
-            .arg(repo_path)
-            .arg("worktree")
-            .arg("prune")
-            .output()
-            .await;
-
-        return try_create_review_worktree_inner(repo_path, worktree_path, remote_branch).await;
-    }
-
-    result
-}
-
-async fn try_create_review_worktree_inner(
-    repo_path: &Path,
-    worktree_path: &Path,
-    remote_branch: &str,
-) -> Result<(), GitWorktreeError> {
-    let remote_ref = format!("origin/{}", remote_branch);
-    let add_output = git_command()
-        .arg("-C")
-        .arg(repo_path)
-        .arg("worktree")
-        .arg("add")
-        .arg(worktree_path)
-        .arg(&remote_ref)
-        .output()
-        .await?;
-
-    if !add_output.status.success() {
-        let stderr = String::from_utf8_lossy(&add_output.stderr);
-        return Err(GitWorktreeError::WorktreeAddFailed(stderr.to_string()));
-    }
 
     Ok(())
 }
@@ -497,21 +371,4 @@ mod tests {
         let result = slugify_branch_name("T-7", "Add 日本語 support");
         assert_eq!(result, "T-7/add-support");
     }
-}
-
-#[test]
-fn test_review_worktree_path() {
-    let repo_path = std::path::Path::new("/some/path/my-repo");
-    let result = review_worktree_path(repo_path, 42).unwrap();
-    let path_str = result.to_string_lossy();
-    assert!(path_str.ends_with("/.openforge/worktrees/my-repo/review-pr-42"));
-}
-
-#[test]
-fn test_review_worktree_path_extracts_repo_name() {
-    let repo_path = std::path::Path::new("/Users/user/projects/awesome-project");
-    let result = review_worktree_path(repo_path, 123).unwrap();
-    let path_str = result.to_string_lossy();
-    assert!(path_str.contains("awesome-project"));
-    assert!(path_str.ends_with("/review-pr-123"));
 }

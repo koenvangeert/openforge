@@ -517,3 +517,7 @@ export async function setPluginStorage(pluginId: string, key: string, value: str
 export async function pluginInvoke(pluginId: string, command: string, payload: unknown): Promise<unknown> {
   return invoke("plugin_invoke", { pluginId, command, payload: payload ?? null })
 }
+
+export async function stopPluginSidecar(): Promise<void> {
+  return invoke('stop_plugin_sidecar', {})
+}

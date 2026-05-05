@@ -50,7 +50,6 @@ impl AppHandle {
         }
     }
 
-    #[cfg(test)]
     pub fn manage<T>(&self, state: T)
     where
         T: Any + Send + Sync + 'static,

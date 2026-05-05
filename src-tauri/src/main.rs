@@ -21,13 +21,11 @@ mod opencode_client;
 mod pi_extension;
 mod plugin_host;
 mod plugin_installation;
-mod plugin_protocol;
 mod plugin_rpc;
 mod provider_runtime;
 pub mod providers;
 mod pty_manager;
 pub mod review_parser;
-mod review_prompt;
 mod runtime_checks;
 mod secure_store;
 mod self_review_runtime;
@@ -535,7 +533,52 @@ fn initialize_database(app_data_dir: &Path) -> db::Database {
     db::Database::new(db_path).expect("Failed to initialize database")
 }
 
+fn migrate_github_token_to_secure_store(database: &db::Database) {
+    let db_token = match database.get_config("github_token") {
+        Ok(Some(token)) if !token.is_empty() => token,
+        Ok(_) => return,
+        Err(error) => {
+            warn!("[startup] Failed to read persisted GitHub token: {}", error);
+            return;
+        }
+    };
+
+    match secure_store::get_secret("github_token") {
+        Ok(Some(existing)) if !existing.is_empty() => {
+            if let Err(error) = database.set_config("github_token", "") {
+                warn!(
+                    "[startup] Failed to clear migrated GitHub token from SQLite: {}",
+                    error
+                );
+            }
+            return;
+        }
+        Ok(_) => {}
+        Err(error) => {
+            warn!("[startup] Failed to check secure GitHub token: {}", error);
+            return;
+        }
+    }
+
+    match secure_store::set_secret("github_token", &db_token) {
+        Ok(()) => {
+            if let Err(error) = database.set_config("github_token", "") {
+                warn!(
+                    "[startup] Failed to clear migrated GitHub token from SQLite: {}",
+                    error
+                );
+            }
+        }
+        Err(error) => warn!(
+            "[startup] Failed to migrate GitHub token to secure storage: {}",
+            error
+        ),
+    }
+}
+
 fn run_database_startup_maintenance(database: &db::Database) {
+    migrate_github_token_to_secure_store(database);
+
     match database.mark_running_sessions_interrupted() {
         Ok(count) if count > 0 => {
             info!(
@@ -618,8 +661,15 @@ fn run_electron_sidecar() -> Result<(), Box<dyn std::error::Error>> {
     let db_arc = Arc::new(Mutex::new(database));
     let pty_manager = PtyManager::new();
     let server_manager = server_manager::ServerManager::new();
+    let sse_bridge_manager = sse_bridge::SseBridgeManager::new();
     let whisper_manager = Arc::new(WhisperManager::with_active_model(whisper_model_pref));
-    let (http_ready_tx, _http_ready_rx) = tokio::sync::oneshot::channel::<()>();
+    let (http_ready_tx, http_ready_rx) = tokio::sync::oneshot::channel::<()>();
+    let app = http_server::electron_sidecar_app_handle(app_data_dir.clone(), resource_dir.clone());
+    app.manage(db_arc.clone());
+    app.manage(pty_manager.clone());
+    app.manage(server_manager.clone());
+    app.manage(sse_bridge_manager.clone());
+    app.manage(github_client::GitHubClient::new());
 
     println!(
         "[electron-sidecar] using database {}",
@@ -629,15 +679,38 @@ fn run_electron_sidecar() -> Result<(), Box<dyn std::error::Error>> {
     tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()?
-        .block_on(http_server::start_http_sidecar_server(
-            app_data_dir,
-            resource_dir,
-            db_arc,
-            pty_manager,
-            server_manager,
-            whisper_manager,
-            http_ready_tx,
-        ))
+        .block_on(async move {
+            tokio::spawn(resume_task_servers(app.clone(), http_ready_rx));
+
+            let startup_project_id = {
+                let db_lock = db_arc
+                    .lock()
+                    .map_err(|e| std::io::Error::other(format!("database lock error: {e}")))?;
+                resolve_startup_project_id(&db_lock).map_err(std::io::Error::other)?
+            };
+            if let Some(project_id) = startup_project_id {
+                let root_server_app = app.clone();
+                tokio::spawn(async move {
+                    if let Err(error) = start_project_root_server(&root_server_app, &project_id).await {
+                        warn!(
+                            "[startup] Failed to start project root server for {}: {}",
+                            project_id, error
+                        );
+                    }
+                });
+            }
+
+            http_server::start_http_sidecar_server(
+                app,
+                db_arc,
+                pty_manager,
+                server_manager,
+                sse_bridge_manager,
+                whisper_manager,
+                http_ready_tx,
+            )
+            .await
+        })
 }
 
 fn main() {
