@@ -18,7 +18,6 @@ mod task_workspaces;
 mod tasks;
 mod worktrees;
 
-pub use agent_review::AgentReviewCommentRow;
 pub use agents::AgentSessionRow;
 pub use authored_prs::AuthoredPrRow;
 pub use board_status::BoardStatus;
@@ -26,7 +25,6 @@ pub use plugins::PluginRow;
 pub use projects::{ProjectAttentionRow, ProjectRow};
 pub use pull_requests::{PrCommentRow, PrRow};
 pub use review::ReviewPrRow;
-pub use self_review::SelfReviewCommentRow;
 pub use task_workspaces::TaskWorkspaceRow;
 pub use tasks::TaskRow;
 pub use worktrees::WorktreeRow;

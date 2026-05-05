@@ -24,7 +24,7 @@ fn app_task_workspace_path(
     task_id: &str,
 ) -> Result<String, (StatusCode, String)> {
     let db = crate::db::acquire_db(&state.db);
-    crate::commands::self_review::resolve_workspace_path(&db, task_id)
+    crate::self_review_runtime::resolve_workspace_path(&db, task_id)
         .map_err(|e| (StatusCode::NOT_FOUND, e))
 }
 
@@ -417,7 +417,7 @@ pub(super) async fn handle_app_files_review_command(
             let include_uncommitted = payload_bool(&request.payload, "includeUncommitted")?;
             let worktree_path = app_task_workspace_path(state, &task_id)?;
             json_value(
-                crate::commands::self_review::get_task_diff_for_workspace(
+                crate::self_review_runtime::get_task_diff_for_workspace(
                     &worktree_path,
                     include_uncommitted,
                 )
@@ -433,7 +433,7 @@ pub(super) async fn handle_app_files_review_command(
             let include_uncommitted = payload_bool(&request.payload, "includeUncommitted")?;
             let worktree_path = app_task_workspace_path(state, &task_id)?;
             json_value(
-                crate::commands::self_review::get_task_file_contents_for_workspace(
+                crate::self_review_runtime::get_task_file_contents_for_workspace(
                     &worktree_path,
                     &path,
                     old_path.as_deref(),
@@ -446,14 +446,14 @@ pub(super) async fn handle_app_files_review_command(
         }
         "get_task_batch_file_contents" => {
             let task_id = payload_string(&request.payload, "taskId")?;
-            let files = payload_field::<Vec<crate::commands::self_review::FileContentRequest>>(
+            let files = payload_field::<Vec<crate::self_review_runtime::FileContentRequest>>(
                 &request.payload,
                 "files",
             )?;
             let include_uncommitted = payload_bool(&request.payload, "includeUncommitted")?;
             let worktree_path = app_task_workspace_path(state, &task_id)?;
             json_value(
-                crate::commands::self_review::get_task_batch_file_contents_for_workspace(
+                crate::self_review_runtime::get_task_batch_file_contents_for_workspace(
                     &worktree_path,
                     &files,
                     include_uncommitted,
@@ -466,7 +466,7 @@ pub(super) async fn handle_app_files_review_command(
             let task_id = payload_string(&request.payload, "taskId")?;
             let worktree_path = app_task_workspace_path(state, &task_id)?;
             json_value(
-                crate::commands::self_review::get_task_commits_for_workspace(&worktree_path)
+                crate::self_review_runtime::get_task_commits_for_workspace(&worktree_path)
                     .await
                     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?,
             )?
@@ -476,7 +476,7 @@ pub(super) async fn handle_app_files_review_command(
             let commit_sha = payload_string(&request.payload, "commitSha")?;
             let worktree_path = app_task_workspace_path(state, &task_id)?;
             json_value(
-                crate::commands::self_review::get_commit_diff_for_workspace(
+                crate::self_review_runtime::get_commit_diff_for_workspace(
                     &worktree_path,
                     &commit_sha,
                 )
@@ -492,7 +492,7 @@ pub(super) async fn handle_app_files_review_command(
             let status = payload_string(&request.payload, "status")?;
             let worktree_path = app_task_workspace_path(state, &task_id)?;
             json_value(
-                crate::commands::self_review::get_commit_file_contents_for_workspace(
+                crate::self_review_runtime::get_commit_file_contents_for_workspace(
                     &worktree_path,
                     &commit_sha,
                     &path,
@@ -506,13 +506,13 @@ pub(super) async fn handle_app_files_review_command(
         "get_commit_batch_file_contents" => {
             let task_id = payload_string(&request.payload, "taskId")?;
             let commit_sha = payload_string(&request.payload, "commitSha")?;
-            let files = payload_field::<Vec<crate::commands::self_review::FileContentRequest>>(
+            let files = payload_field::<Vec<crate::self_review_runtime::FileContentRequest>>(
                 &request.payload,
                 "files",
             )?;
             let worktree_path = app_task_workspace_path(state, &task_id)?;
             json_value(
-                crate::commands::self_review::get_commit_batch_file_contents_for_workspace(
+                crate::self_review_runtime::get_commit_batch_file_contents_for_workspace(
                     &worktree_path,
                     &commit_sha,
                     &files,

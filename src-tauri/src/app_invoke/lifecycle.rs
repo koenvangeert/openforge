@@ -548,7 +548,7 @@ pub(super) async fn handle_app_start_implementation_command(
         (std::path::PathBuf::from(&repo_path), "project_dir", None)
     };
 
-    let prompt = crate::commands::orchestration::build_task_prompt(
+    let prompt = crate::agent_lifecycle::build_task_prompt(
         &task,
         additional_instructions.as_deref(),
         code_cleanup_enabled,
@@ -679,7 +679,7 @@ pub(super) async fn handle_app_start_implementation_command(
             .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     }
 
-    let agent_session_id = crate::commands::orchestration::create_and_record_session(
+    let agent_session_id = crate::agent_lifecycle::create_and_record_session(
         &state.db,
         &task_id,
         &provider_result,
@@ -720,7 +720,7 @@ pub(super) async fn handle_app_start_implementation_command(
         publish_task_changed(state, &task_id);
     }
 
-    Ok(Some(crate::commands::orchestration::build_start_response(
+    Ok(Some(crate::agent_lifecycle::build_start_response(
         &task_id,
         &agent_session_id,
         working_dir.to_str().ok_or_else(|| {

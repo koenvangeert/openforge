@@ -10,6 +10,7 @@ mod runtime;
 mod whisper;
 
 use lifecycle::cleanup_task_runtime_for_app;
+#[cfg(test)]
 pub(crate) use lifecycle::{start_opencode_sse_bridge_for_app, ExistingSseBridge};
 
 use crate::{

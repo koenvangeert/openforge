@@ -1,8 +1,6 @@
-use crate::backend_runtime::State;
-use crate::{db, diff_parser};
+use crate::diff_parser;
 use base64::{engine::general_purpose, Engine as _};
 use serde::{Deserialize, Serialize};
-use std::sync::{Arc, Mutex};
 
 #[derive(Debug, Clone, Serialize)]
 pub struct CommitInfo {
@@ -149,18 +147,6 @@ pub async fn get_task_diff_for_workspace(
     Ok(diffs)
 }
 
-pub async fn get_task_diff(
-    task_id: String,
-    include_uncommitted: bool,
-    db: State<'_, Arc<Mutex<db::Database>>>,
-) -> Result<Vec<diff_parser::TaskFileDiff>, String> {
-    let worktree_path = {
-        let db = crate::db::acquire_db(&db);
-        resolve_workspace_path(&db, &task_id)?
-    };
-    get_task_diff_for_workspace(&worktree_path, include_uncommitted).await
-}
-
 // ============================================================================
 // File content helpers
 // ============================================================================
@@ -281,28 +267,6 @@ pub async fn get_task_file_contents_for_workspace(
     .await
 }
 
-pub async fn get_task_file_contents(
-    task_id: String,
-    path: String,
-    old_path: Option<String>,
-    status: String,
-    include_uncommitted: bool,
-    db: State<'_, Arc<Mutex<db::Database>>>,
-) -> Result<(String, String), String> {
-    let worktree_path = {
-        let db = crate::db::acquire_db(&db);
-        resolve_workspace_path(&db, &task_id)?
-    };
-    get_task_file_contents_for_workspace(
-        &worktree_path,
-        &path,
-        old_path.as_deref(),
-        &status,
-        include_uncommitted,
-    )
-    .await
-}
-
 // ============================================================================
 // Batch command — computes merge-base ONCE, then fetches N files
 // ============================================================================
@@ -354,74 +318,6 @@ pub async fn get_task_batch_file_contents_for_workspace(
     Ok(results)
 }
 
-pub async fn get_task_batch_file_contents(
-    task_id: String,
-    files: Vec<FileContentRequest>,
-    include_uncommitted: bool,
-    db: State<'_, Arc<Mutex<db::Database>>>,
-) -> Result<Vec<(String, String)>, String> {
-    let worktree_path = {
-        let db = crate::db::acquire_db(&db);
-        resolve_workspace_path(&db, &task_id)?
-    };
-    get_task_batch_file_contents_for_workspace(&worktree_path, &files, include_uncommitted).await
-}
-
-pub async fn add_self_review_comment(
-    task_id: String,
-    comment_type: String,
-    file_path: Option<String>,
-    line_number: Option<i32>,
-    body: String,
-    db: State<'_, Arc<Mutex<db::Database>>>,
-) -> Result<i64, String> {
-    let db = crate::db::acquire_db(&db);
-    db.insert_self_review_comment(
-        &task_id,
-        &comment_type,
-        file_path.as_deref(),
-        line_number,
-        &body,
-    )
-    .map_err(|e| format!("Failed to add self review comment: {}", e))
-}
-
-pub async fn get_active_self_review_comments(
-    task_id: String,
-    db: State<'_, Arc<Mutex<db::Database>>>,
-) -> Result<Vec<db::SelfReviewCommentRow>, String> {
-    let db = crate::db::acquire_db(&db);
-    db.get_active_self_review_comments(&task_id)
-        .map_err(|e| format!("Failed to get active self review comments: {}", e))
-}
-
-pub async fn get_archived_self_review_comments(
-    task_id: String,
-    db: State<'_, Arc<Mutex<db::Database>>>,
-) -> Result<Vec<db::SelfReviewCommentRow>, String> {
-    let db = crate::db::acquire_db(&db);
-    db.get_archived_self_review_comments(&task_id)
-        .map_err(|e| format!("Failed to get archived self review comments: {}", e))
-}
-
-pub async fn delete_self_review_comment(
-    comment_id: i64,
-    db: State<'_, Arc<Mutex<db::Database>>>,
-) -> Result<(), String> {
-    let db = crate::db::acquire_db(&db);
-    db.delete_self_review_comment(comment_id)
-        .map_err(|e| format!("Failed to delete self review comment: {}", e))
-}
-
-pub async fn archive_self_review_comments(
-    task_id: String,
-    db: State<'_, Arc<Mutex<db::Database>>>,
-) -> Result<(), String> {
-    let db = crate::db::acquire_db(&db);
-    db.archive_self_review_comments(&task_id)
-        .map_err(|e| format!("Failed to archive self review comments: {}", e))
-}
-
 pub async fn get_task_commits_for_workspace(
     worktree_path: &str,
 ) -> Result<Vec<CommitInfo>, String> {
@@ -464,17 +360,6 @@ pub async fn get_task_commits_for_workspace(
 
     let output_str = String::from_utf8_lossy(&log_output.stdout);
     Ok(parse_git_log_output(&output_str))
-}
-
-pub async fn get_task_commits(
-    task_id: String,
-    db: State<'_, Arc<Mutex<db::Database>>>,
-) -> Result<Vec<CommitInfo>, String> {
-    let worktree_path = {
-        let db = crate::db::acquire_db(&db);
-        resolve_workspace_path(&db, &task_id)?
-    };
-    get_task_commits_for_workspace(&worktree_path).await
 }
 
 // ============================================================================
@@ -575,18 +460,6 @@ pub async fn get_commit_diff_for_workspace(
     Ok(diff_parser::parse_unified_diff(&output_str, true))
 }
 
-pub async fn get_commit_diff(
-    task_id: String,
-    commit_sha: String,
-    db: State<'_, Arc<Mutex<db::Database>>>,
-) -> Result<Vec<diff_parser::TaskFileDiff>, String> {
-    let worktree_path = {
-        let db = crate::db::acquire_db(&db);
-        resolve_workspace_path(&db, &task_id)?
-    };
-    get_commit_diff_for_workspace(&worktree_path, &commit_sha).await
-}
-
 pub async fn get_commit_file_contents_for_workspace(
     worktree_path: &str,
     commit_sha: &str,
@@ -603,28 +476,6 @@ pub async fn get_commit_file_contents_for_workspace(
         path,
         old_path,
         status,
-    )
-    .await
-}
-
-pub async fn get_commit_file_contents(
-    task_id: String,
-    commit_sha: String,
-    path: String,
-    old_path: Option<String>,
-    status: String,
-    db: State<'_, Arc<Mutex<db::Database>>>,
-) -> Result<(String, String), String> {
-    let worktree_path = {
-        let db = crate::db::acquire_db(&db);
-        resolve_workspace_path(&db, &task_id)?
-    };
-    get_commit_file_contents_for_workspace(
-        &worktree_path,
-        &commit_sha,
-        &path,
-        old_path.as_deref(),
-        &status,
     )
     .await
 }
@@ -651,19 +502,6 @@ pub async fn get_commit_batch_file_contents_for_workspace(
     }
 
     Ok(results)
-}
-
-pub async fn get_commit_batch_file_contents(
-    task_id: String,
-    commit_sha: String,
-    files: Vec<FileContentRequest>,
-    db: State<'_, Arc<Mutex<db::Database>>>,
-) -> Result<Vec<(String, String)>, String> {
-    let worktree_path = {
-        let db = crate::db::acquire_db(&db);
-        resolve_workspace_path(&db, &task_id)?
-    };
-    get_commit_batch_file_contents_for_workspace(&worktree_path, &commit_sha, &files).await
 }
 
 pub fn resolve_workspace_path(db: &crate::db::Database, task_id: &str) -> Result<String, String> {
