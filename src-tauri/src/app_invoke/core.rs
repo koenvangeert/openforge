@@ -95,60 +95,6 @@ pub(super) async fn handle_app_core_task_project_command(
     Ok(Some(value))
 }
 
-fn task_workspace_from_legacy(
-    workspace: db::WorktreeRow,
-    provider_name: String,
-) -> db::TaskWorkspaceRow {
-    db::TaskWorkspaceRow {
-        id: workspace.id,
-        task_id: workspace.task_id,
-        project_id: workspace.project_id,
-        workspace_path: workspace.worktree_path,
-        repo_path: workspace.repo_path,
-        kind: "git_worktree".to_string(),
-        branch_name: Some(workspace.branch_name),
-        provider_name,
-        opencode_port: workspace.opencode_port,
-        status: workspace.status,
-        created_at: workspace.created_at,
-        updated_at: workspace.updated_at,
-    }
-}
-
-fn get_task_workspace_with_legacy_fallback(
-    db: &db::Database,
-    task_id: &str,
-) -> Result<Option<db::TaskWorkspaceRow>, (StatusCode, String)> {
-    if let Some(workspace) = db.get_task_workspace_for_task(task_id).map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Failed to get task workspace: {e}"),
-        )
-    })? {
-        return Ok(Some(workspace));
-    }
-
-    let provider_name = db
-        .get_latest_session_for_ticket(task_id)
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to get latest session for task workspace fallback: {e}"),
-            )
-        })?
-        .map(|session| session.provider)
-        .unwrap_or_else(|| "unknown".to_string());
-
-    let worktree = db.get_worktree_for_task(task_id).map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Failed to get worktree for task workspace fallback: {e}"),
-        )
-    })?;
-
-    Ok(worktree.map(|workspace| task_workspace_from_legacy(workspace, provider_name)))
-}
-
 pub(super) async fn handle_app_unmatched_command(
     state: &AppState,
     request: &AppInvokeRequest,
@@ -449,7 +395,9 @@ pub(super) async fn handle_app_unmatched_command(
         }
         "get_task_workspace" => {
             let task_id = payload_string(&request.payload, "taskId")?;
-            json_value(get_task_workspace_with_legacy_fallback(&db, &task_id)?)?
+            let workspace = crate::provider_runtime::get_task_workspace(&db, &task_id)
+                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
+            json_value(workspace)?
         }
         command => {
             return Err((

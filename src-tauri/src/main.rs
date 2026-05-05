@@ -691,7 +691,9 @@ fn run_electron_sidecar() -> Result<(), Box<dyn std::error::Error>> {
             if let Some(project_id) = startup_project_id {
                 let root_server_app = app.clone();
                 tokio::spawn(async move {
-                    if let Err(error) = start_project_root_server(&root_server_app, &project_id).await {
+                    if let Err(error) =
+                        start_project_root_server(&root_server_app, &project_id).await
+                    {
                         warn!(
                             "[startup] Failed to start project root server for {}: {}",
                             project_id, error
