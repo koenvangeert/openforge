@@ -1,3 +1,4 @@
+use crate::user_environment::{find_tool_on_path, user_tool_path};
 use serde::Serialize;
 
 #[derive(Serialize)]
@@ -23,33 +24,29 @@ pub struct PiInstallStatus {
 }
 
 pub async fn check_opencode_installed() -> Result<OpenCodeInstallStatus, String> {
-    let output = std::process::Command::new("which").arg("opencode").output();
+    Ok(check_opencode_installed_with_path(&user_tool_path()))
+}
 
-    match output {
-        Ok(out) if out.status.success() => {
-            let path = String::from_utf8_lossy(&out.stdout).trim().to_string();
-            let version = std::process::Command::new("opencode")
-                .arg("--version")
-                .output()
-                .ok()
-                .and_then(|v| {
-                    if v.status.success() {
-                        Some(String::from_utf8_lossy(&v.stdout).trim().to_string())
-                    } else {
-                        None
-                    }
-                });
-            Ok(OpenCodeInstallStatus {
-                installed: true,
-                path: Some(path),
-                version,
-            })
-        }
-        _ => Ok(OpenCodeInstallStatus {
+fn check_opencode_installed_with_path(path: &str) -> OpenCodeInstallStatus {
+    let Some(executable) = find_tool_on_path("opencode", path) else {
+        return OpenCodeInstallStatus {
             installed: false,
             path: None,
             version: None,
-        }),
+        };
+    };
+
+    let version = std::process::Command::new(&executable)
+        .arg("--version")
+        .env("PATH", path)
+        .output()
+        .ok()
+        .and_then(version_from_output);
+
+    OpenCodeInstallStatus {
+        installed: true,
+        path: Some(executable.to_string_lossy().to_string()),
+        version,
     }
 }
 
@@ -127,6 +124,7 @@ pub async fn check_pi_installed() -> Result<PiInstallStatus, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::os::unix::fs::PermissionsExt;
     use std::os::unix::process::ExitStatusExt;
     use std::process::Output;
 
@@ -162,5 +160,36 @@ mod tests {
         assert!(status.installed);
         assert_eq!(status.path.as_deref(), Some("/usr/local/bin/pi"));
         assert_eq!(status.version.as_deref(), Some("pi version 1.2.3"));
+    }
+
+    #[test]
+    fn check_opencode_installed_with_path_finds_tool_outside_process_path() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let executable = temp_dir.path().join("opencode");
+        std::fs::write(&executable, "#!/bin/sh\nprintf 'opencode 1.2.3\\n'\n")
+            .expect("write fake opencode");
+        let mut permissions = std::fs::metadata(&executable)
+            .expect("metadata")
+            .permissions();
+        permissions.set_mode(0o755);
+        std::fs::set_permissions(&executable, permissions).expect("chmod executable");
+
+        let status = check_opencode_installed_with_path(&temp_dir.path().to_string_lossy());
+
+        assert!(status.installed);
+        assert_eq!(
+            status.path.as_deref(),
+            Some(executable.to_string_lossy().as_ref())
+        );
+        assert_eq!(status.version.as_deref(), Some("opencode 1.2.3"));
+    }
+
+    #[test]
+    fn check_opencode_installed_with_path_reports_missing_when_not_on_effective_path() {
+        let status = check_opencode_installed_with_path("/definitely/missing");
+
+        assert!(!status.installed);
+        assert_eq!(status.path, None);
+        assert_eq!(status.version, None);
     }
 }

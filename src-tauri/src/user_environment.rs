@@ -23,6 +23,26 @@ pub(crate) fn user_tool_path() -> String {
         .unwrap_or_else(|| DEFAULT_TOOL_PATH.to_string())
 }
 
+pub(crate) fn find_tool_on_path(tool_name: &str, path: &str) -> Option<std::path::PathBuf> {
+    std::env::split_paths(path)
+        .map(|dir| dir.join(tool_name))
+        .find(|candidate| is_executable_file(candidate))
+}
+
+#[cfg(unix)]
+fn is_executable_file(path: &Path) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+
+    path.metadata()
+        .map(|metadata| metadata.is_file() && metadata.permissions().mode() & 0o111 != 0)
+        .unwrap_or(false)
+}
+
+#[cfg(not(unix))]
+fn is_executable_file(path: &Path) -> bool {
+    path.is_file()
+}
+
 fn resolve_user_environment() -> HashMap<String, String> {
     let current_env: HashMap<String, String> = std::env::vars().collect();
     let shell = current_env
@@ -178,6 +198,7 @@ fn merge_user_tool_path(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::os::unix::fs::PermissionsExt;
     use std::time::Instant;
 
     #[test]
@@ -238,6 +259,33 @@ mod tests {
         assert!(entries.contains(&"/Users/test/.cargo/bin"));
         assert_eq!(env.get("SHELL_ONLY").map(String::as_str), Some("present"));
         assert_eq!(env.get("USER").map(String::as_str), Some("test"));
+    }
+
+    #[test]
+    fn find_tool_on_path_resolves_executable_from_effective_user_path() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let executable = temp_dir.path().join("opencode");
+        std::fs::write(&executable, "#!/bin/sh\n").expect("write executable");
+        let mut permissions = std::fs::metadata(&executable)
+            .expect("metadata")
+            .permissions();
+        permissions.set_mode(0o755);
+        std::fs::set_permissions(&executable, permissions).expect("chmod executable");
+
+        let path = format!("/not/here:{}", temp_dir.path().display());
+
+        assert_eq!(find_tool_on_path("opencode", &path), Some(executable));
+    }
+
+    #[test]
+    fn find_tool_on_path_ignores_non_executable_files() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        std::fs::write(temp_dir.path().join("opencode"), "not executable").expect("write file");
+
+        assert_eq!(
+            find_tool_on_path("opencode", &temp_dir.path().to_string_lossy()),
+            None
+        );
     }
 
     #[test]

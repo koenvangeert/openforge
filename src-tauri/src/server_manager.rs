@@ -1,3 +1,4 @@
+use crate::user_environment::{find_tool_on_path, user_environment};
 use log::{debug, error, info};
 use regex::Regex;
 use std::collections::HashMap;
@@ -82,6 +83,39 @@ pub fn discovery_server_task_id(project_id: &str) -> String {
     format!("opencode-discovery-{}", project_id)
 }
 
+fn opencode_executable_from_environment(
+    environment: &HashMap<String, String>,
+) -> Result<PathBuf, ServerError> {
+    let path = environment
+        .get("PATH")
+        .map(String::as_str)
+        .unwrap_or_default();
+    find_tool_on_path("opencode", path).ok_or_else(|| {
+        ServerError::SpawnFailed(format!(
+            "opencode executable not found on effective PATH: {}",
+            path
+        ))
+    })
+}
+
+fn opencode_serve_command(
+    executable: &Path,
+    environment: HashMap<String, String>,
+    worktree_path: &Path,
+) -> Command {
+    let mut command = Command::new(executable);
+    command
+        .arg("serve")
+        .arg("--port")
+        .arg("0")
+        .current_dir(worktree_path)
+        .envs(environment)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true);
+    command
+}
+
 impl ServerManager {
     /// Creates a new ServerManager with an empty server map
     pub fn new() -> Self {
@@ -112,11 +146,21 @@ impl ServerManager {
             return Ok(server.port);
         }
 
+        if !worktree_path.is_dir() {
+            return Err(ServerError::SpawnFailed(format!(
+                "working directory does not exist: {}",
+                worktree_path.display()
+            )));
+        }
+
         info!(
             "Spawning OpenCode server for task {} in {:?}",
             task_id, worktree_path
         );
-        debug!("Spawning command: opencode");
+        let environment = user_environment();
+        let opencode_executable = opencode_executable_from_environment(&environment)?;
+
+        debug!("Spawning command: {}", opencode_executable.display());
         debug!(
             "OpenCode server working directory: {}",
             worktree_path.display()
@@ -125,14 +169,7 @@ impl ServerManager {
         let pid_dir = self.get_pid_dir()?;
         std::fs::create_dir_all(&pid_dir)?;
 
-        let mut child = Command::new("opencode")
-            .arg("serve")
-            .arg("--port")
-            .arg("0") // Dynamic port allocation
-            .current_dir(worktree_path)
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .kill_on_drop(true)
+        let mut child = opencode_serve_command(&opencode_executable, environment, worktree_path)
             .spawn()
             .map_err(|e| ServerError::SpawnFailed(e.to_string()))?;
 
@@ -438,6 +475,7 @@ impl ServerManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::os::unix::fs::PermissionsExt;
 
     #[test]
     fn test_server_error_display() {
@@ -460,6 +498,60 @@ mod tests {
     #[test]
     fn test_discovery_server_task_id() {
         assert_eq!(discovery_server_task_id("P-1"), "opencode-discovery-P-1");
+    }
+
+    #[test]
+    fn opencode_executable_from_environment_uses_effective_user_path() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let executable = temp_dir.path().join("opencode");
+        std::fs::write(&executable, "#!/bin/sh\n").expect("write fake opencode");
+        let mut permissions = std::fs::metadata(&executable)
+            .expect("metadata")
+            .permissions();
+        permissions.set_mode(0o755);
+        std::fs::set_permissions(&executable, permissions).expect("chmod executable");
+
+        let mut environment = HashMap::new();
+        environment.insert(
+            "PATH".to_string(),
+            format!("/missing:{}", temp_dir.path().display()),
+        );
+
+        assert_eq!(
+            opencode_executable_from_environment(&environment).expect("resolve opencode"),
+            executable
+        );
+    }
+
+    #[test]
+    fn opencode_executable_from_environment_reports_missing_effective_path() {
+        let mut environment = HashMap::new();
+        environment.insert("PATH".to_string(), "/definitely/missing".to_string());
+
+        let error =
+            opencode_executable_from_environment(&environment).expect_err("missing opencode");
+
+        assert!(error
+            .to_string()
+            .contains("opencode executable not found on effective PATH"));
+    }
+
+    #[tokio::test]
+    async fn spawn_server_reports_missing_worktree_before_spawning_opencode() {
+        let manager = ServerManager::new();
+        let missing_worktree = tempfile::tempdir()
+            .expect("temp dir")
+            .path()
+            .join("missing");
+
+        let error = manager
+            .spawn_server("missing-worktree", &missing_worktree)
+            .await
+            .expect_err("missing worktree should fail before spawn");
+
+        assert!(error
+            .to_string()
+            .contains("working directory does not exist"));
     }
 
     #[tokio::test]
