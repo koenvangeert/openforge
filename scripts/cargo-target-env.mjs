@@ -1,7 +1,7 @@
 import { execFileSync as defaultExecFileSync } from 'node:child_process'
 import path from 'node:path'
+import { resolveRustSidecarLayout } from './rust-sidecar-layout.mjs'
 
-const FALLBACK_RUST_TARGET_DIR = path.join('src-tauri', 'target')
 const SHARED_TARGET_DIR_NAME = '.cargo-target'
 const NON_STANDARD_COMMON_DIR_TARGET_NAME = 'openforge-cargo-target'
 const DEFAULT_PRODUCTION_BACKEND_PORT = '17422'
@@ -25,6 +25,7 @@ export function computeCargoTargetDir({
   cwd = process.cwd(),
   env = process.env,
   execFileSync = defaultExecFileSync,
+  rustSidecarLayout = null,
 } = {}) {
   if (env.CARGO_TARGET_DIR) {
     return { cargoTargetDir: env.CARGO_TARGET_DIR, source: 'env' }
@@ -47,8 +48,9 @@ export function computeCargoTargetDir({
       source: 'git-common-dir',
     }
   } catch {
+    const layout = rustSidecarLayout ?? resolveRustSidecarLayout({ repoRoot: cwd })
     return {
-      cargoTargetDir: path.resolve(cwd, FALLBACK_RUST_TARGET_DIR),
+      cargoTargetDir: layout.defaultCargoTargetDir,
       source: 'fallback',
     }
   }

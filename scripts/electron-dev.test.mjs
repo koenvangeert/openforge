@@ -1,6 +1,18 @@
 import { EventEmitter } from 'node:events'
 import { describe, expect, it, vi } from 'vitest'
 import { ELECTRON_RENDERER_URL, assertBackendPortAvailable, assertVitePortAvailable, buildElectronDevEnv, cleanupDevProcesses, electronSidecarPath, resolveElectronDevBackendEnv, stopProcess, waitForVite } from './electron-dev.mjs'
+import { resolveRustSidecarLayout } from './rust-sidecar-layout.mjs'
+
+const defaultTestLayout = resolveRustSidecarLayout({
+  repoRoot: '/repo/openforge',
+  config: {
+    backendCrateRoot: 'src-tauri',
+    manifestPath: 'src-tauri/Cargo.toml',
+    binaryName: 'openforge',
+    iconPath: 'src-tauri/icons/icon.icns',
+    electronBundleRoot: 'src-tauri/target/release/bundle/electron/macos',
+  },
+})
 
 function createChildProcessMock() {
   const events = new EventEmitter()
@@ -75,8 +87,19 @@ describe('electron dev script environment', () => {
     expect(env.OPENFORGE_ELECTRON_DEV_DISABLE_SIDECAR).toBeUndefined()
   })
 
-  it('derives the Electron sidecar executable from the shared Cargo target dir', () => {
-    expect(electronSidecarPath('/tmp/openforge-target')).toContain('/tmp/openforge-target/debug/openforge')
+  it('derives the Electron sidecar executable from the shared Cargo target dir and layout Module binary name', () => {
+    const rustSidecarLayout = resolveRustSidecarLayout({
+      repoRoot: '/repo/openforge',
+      config: {
+        backendCrateRoot: 'crates/openforge-backend',
+        manifestPath: 'crates/openforge-backend/Cargo.toml',
+        binaryName: 'openforge-backend',
+        iconPath: 'assets/icon.icns',
+        electronBundleRoot: 'target/electron/macos',
+      },
+    })
+
+    expect(electronSidecarPath('/tmp/openforge-target', rustSidecarLayout)).toBe('/tmp/openforge-target/debug/openforge-backend')
   })
 
   it('uses one canonical loopback URL for Electron and Vite readiness', () => {
@@ -96,6 +119,7 @@ describe('electron dev script environment', () => {
       {
         cwd: '/repo/openforge',
         env: { PATH: '/usr/bin' },
+        rustSidecarLayout: defaultTestLayout,
         execFileSync: () => {
           throw new Error('not a git checkout')
         },
@@ -116,6 +140,7 @@ describe('electron dev script environment', () => {
       {
         cwd: '/repo/openforge',
         env: { AI_COMMAND_CENTER_PORT: '17422' },
+        rustSidecarLayout: defaultTestLayout,
         execFileSync: () => {
           throw new Error('not a git checkout')
         },
@@ -135,6 +160,7 @@ describe('electron dev script environment', () => {
           OPENFORGE_BACKEND_PORT: '17642',
           OPENFORGE_HTTP_PORT: '17642',
         },
+        rustSidecarLayout: defaultTestLayout,
         execFileSync: () => {
           throw new Error('not a git checkout')
         },
@@ -151,6 +177,7 @@ describe('electron dev script environment', () => {
       {
         cwd: '/repo/openforge',
         env: { OPENFORGE_HTTP_PORT: '19000' },
+        rustSidecarLayout: defaultTestLayout,
         execFileSync: () => {
           throw new Error('not a git checkout')
         },
@@ -167,6 +194,7 @@ describe('electron dev script environment', () => {
       {
         cwd: '/repo/openforge',
         env: { OPENFORGE_BACKEND_PORT: '18000' },
+        rustSidecarLayout: defaultTestLayout,
         execFileSync: () => {
           throw new Error('not a git checkout')
         },
@@ -180,6 +208,7 @@ describe('electron dev script environment', () => {
       {
         cwd: '/repo/openforge',
         env: { AI_COMMAND_CENTER_PORT: '19000' },
+        rustSidecarLayout: defaultTestLayout,
         execFileSync: () => {
           throw new Error('not a git checkout')
         },

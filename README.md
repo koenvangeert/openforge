@@ -103,7 +103,7 @@ pnpm electron:dev
 pnpm dev
 ```
 
-`pnpm electron:dev` starts Vite, builds the Rust sidecar, builds the Electron main/preload bundle, then launches Electron. It shares Rust build artifacts through the checkout's Git common directory by setting `CARGO_TARGET_DIR` to `.cargo-target` beside the primary `.git` directory. Set `CARGO_TARGET_DIR` yourself to override it.
+`pnpm electron:dev` starts Vite, builds the Rust sidecar, builds the Electron main/preload bundle, then launches Electron. Rust sidecar layout facts live in `openforge-backend-layout.json` and are resolved by `scripts/rust-sidecar-layout.mjs`. It shares Rust build artifacts through the checkout's Git common directory by setting `CARGO_TARGET_DIR` to `.cargo-target` beside the primary `.git` directory. Set `CARGO_TARGET_DIR` yourself to override it.
 
 ## Testing
 
@@ -111,10 +111,10 @@ pnpm dev
 # Frontend tests
 pnpm test
 
-# Rust tests (from src-tauri/)
-cd src-tauri && cargo test
+# Rust tests
+cd "$(node scripts/rust-sidecar-layout.mjs backend-crate-root)" && cargo test
 
-# Rust-only backend validation (from src-tauri/)
+# Rust-only backend validation (from the backend crate root)
 cargo check
 cargo build
 cargo clippy
@@ -132,7 +132,7 @@ pnpm electron:package
 pnpm electron:install
 ```
 
-`pnpm electron:install` builds the Svelte renderer, Electron main/preload files, and the Rust sidecar, packages them into `src-tauri/target/release/bundle/electron/macos/Open Forge.app`, then copies the app to `/Applications`.
+`pnpm electron:install` builds the Svelte renderer, Electron main/preload files, and the Rust sidecar, packages them into the Electron app path resolved from `openforge-backend-layout.json` (currently `src-tauri/target/release/bundle/electron/macos/Open Forge.app`), then copies the app to `/Applications`.
 
 ## First-run setup
 

@@ -2,7 +2,6 @@
 set -euo pipefail
 
 APP_NAME="Open Forge"
-BUNDLE_DIR="src-tauri/target/release/bundle/electron/macos"
 INSTALL_DIR="/Applications"
 
 stop_running_app() {
@@ -45,7 +44,7 @@ EOF
 echo "Building Electron ${APP_NAME}..."
 pnpm electron:package
 
-APP_PATH="${BUNDLE_DIR}/${APP_NAME}.app"
+APP_PATH="$(node scripts/rust-sidecar-layout.mjs electron-app-path)"
 
 if [ ! -d "$APP_PATH" ]; then
   echo "ERROR: Build artifact not found at ${APP_PATH}" >&2

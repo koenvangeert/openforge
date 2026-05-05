@@ -90,17 +90,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Resolve backend layout
+        id: backend-layout
+        run: echo "backend-crate-root=$(node scripts/rust-sidecar-layout.mjs backend-crate-root)" >> "$GITHUB_OUTPUT"
+
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2
         with:
-          workspaces: src-tauri -> target
+          workspaces: ${{ steps.backend-layout.outputs.backend-crate-root }} -> target
 
       - name: Run tests
         id: tests
-        working-directory: src-tauri
+        working-directory: ${{ steps.backend-layout.outputs.backend-crate-root }}
         run: |
           set +e -o pipefail
           cargo test 2>&1 | tee /tmp/rust-tests.log
