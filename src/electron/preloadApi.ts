@@ -1,5 +1,6 @@
 export const OPENFORGE_INVOKE_CHANNEL = 'openforge:invoke'
 export const OPENFORGE_EVENT_CHANNEL = 'openforge:event'
+export const OPENFORGE_APP_EVENTS_RECONNECTED_EVENT = 'openforge-app-events-reconnected'
 
 export interface PreloadIpcRenderer {
   invoke(channel: string, payload: unknown): Promise<unknown>
