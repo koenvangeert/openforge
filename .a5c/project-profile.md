@@ -2,7 +2,7 @@
 
 A macOS-focused Electron desktop command center with a Rust sidecar for managing multiple projects and AI coding agents concurrently while keeping the user focused on one active thing at a time. The app coordinates tasks, agent worktrees, embedded terminals, PR/self-review, GitHub status, plugins, and contextual nudges so it interrupts the user only when attention is useful.
 
-> Last updated: 2026-05-05T09:16:03.268Z | Version: 1
+> Last updated: 2026-05-05T21:06:17.658Z | Version: 1
 
 ## Goals
 
@@ -188,7 +188,7 @@ Build and draft macOS releases.
 ## Bottlenecks
 
 - Top-level app routing/state orchestration is high-churn at `src/App.svelte`, `src/App.test.ts`.
-- Electron main/preload and backend bridge changes are security-sensitive at `src/electron/main.ts`, `src/electron/preload.cts`, `src/electron/backendBridge.ts`.
+- Electron shell and sidecar bridge maintenance is security-sensitive at `src/electron/main.ts`, `src/electron/preload.cts`, `src/electron/backendBridge.ts`.
 - Rust main/bootstrap command registration is high-churn at `src-tauri/src/main.rs`.
 - Frontend shared types and IPC wrappers are tightly coupled to Rust sidecar command payloads at `src/lib/types.ts`, `src/lib/ipc.ts`, `src-tauri/src/commands`.
 - GitHub polling/comment ingestion combines async external API data with local persistence at `src-tauri/src/github_poller.rs`.
@@ -218,7 +218,7 @@ Build and draft macOS releases.
 
 ### Additional Rules
 
-- All frontend backend calls go through `src/lib/ipc.ts` wrappers; do not call raw Electron, preload, HTTP sidecar, or invoke-like transport APIs directly from Svelte code.
+- All frontend backend calls go through `src/lib/ipc.ts` wrappers; do not call raw Electron, preload, HTTP sidecar endpoints, or other command/sidecar transport APIs directly from Svelte code.
 - External links use `openUrl()` IPC wrapper so Electron main owns `open_url` handling.
 - Rust sidecar IPC payloads from JS/TS use camelCase keys that match the frontend API shape, even when Rust params are snake_case.
 - Map-based stores require `new Map()` assignment for reactivity.
