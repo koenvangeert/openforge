@@ -1,4 +1,6 @@
 import { render, screen, fireEvent } from '@testing-library/svelte'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { describe, it, expect, vi } from 'vitest'
 import { requireElement } from '../../test-utils/dom'
 import SettingsGeneralCard from './SettingsGeneralCard.svelte'
@@ -32,6 +34,13 @@ describe('SettingsGeneralCard', () => {
     render(SettingsGeneralCard, { props: defaultProps() })
 
     expect(screen.getByText('General')).toBeTruthy()
+  })
+
+  it('uses the shared default project color token for the default swatch', () => {
+    const source = readFileSync(join(process.cwd(), 'src/components/settings/SettingsGeneralCard.svelte'), 'utf8')
+
+    expect(source).toContain('DEFAULT_PROJECT_COLOR')
+    expect(source).not.toContain('background-color: #9ca3af')
   })
 
   describe('git worktrees toggle', () => {
