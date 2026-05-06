@@ -1,0 +1,119 @@
+{
+  "valid": [
+    {
+      "name": "spawn_agent_pty",
+      "command": "pty_spawn",
+      "payload": {
+        "taskId": "T-pty",
+        "serverPort": 4096,
+        "opencodeSessionId": "ses-pty",
+        "cols": 80,
+        "rows": 24
+      }
+    },
+    {
+      "name": "spawn_shell_with_index",
+      "command": "pty_spawn_shell",
+      "payload": {
+        "taskId": "T-pty",
+        "cwd": "/tmp/openforge-worktree",
+        "cols": 80,
+        "rows": 24,
+        "terminalIndex": 2
+      }
+    },
+    {
+      "name": "spawn_shell_with_null_index",
+      "command": "pty_spawn_shell",
+      "payload": {
+        "taskId": "T-pty",
+        "cwd": "/tmp/openforge-worktree",
+        "cols": 80,
+        "rows": 24,
+        "terminalIndex": null
+      }
+    },
+    {
+      "name": "write_pty",
+      "command": "pty_write",
+      "payload": {
+        "taskId": "T-pty",
+        "data": "echo ready\n"
+      }
+    },
+    {
+      "name": "resize_pty",
+      "command": "pty_resize",
+      "payload": {
+        "taskId": "T-pty",
+        "cols": 120,
+        "rows": 40
+      }
+    },
+    {
+      "name": "kill_pty",
+      "command": "pty_kill",
+      "payload": {
+        "taskId": "T-pty"
+      }
+    },
+    {
+      "name": "kill_shells_for_task",
+      "command": "pty_kill_shells_for_task",
+      "payload": {
+        "taskId": "T-pty"
+      }
+    },
+    {
+      "name": "get_pty_buffer",
+      "command": "get_pty_buffer",
+      "payload": {
+        "taskId": "T-pty"
+      }
+    }
+  ],
+  "invalid": [
+    {
+      "name": "snake_case_terminal_index_is_rejected",
+      "command": "pty_spawn_shell",
+      "payload": {
+        "taskId": "T-pty",
+        "cwd": "/tmp/openforge-worktree",
+        "cols": 80,
+        "rows": 24,
+        "terminal_index": 2
+      },
+      "errorContains": "terminal_index"
+    },
+    {
+      "name": "missing_task_id_is_rejected",
+      "command": "pty_write",
+      "payload": {
+        "data": "echo ready\n"
+      },
+      "errorContains": "taskId"
+    },
+    {
+      "name": "out_of_range_cols_is_rejected",
+      "command": "pty_resize",
+      "payload": {
+        "taskId": "T-pty",
+        "cols": 70000,
+        "rows": 24
+      },
+      "errorContains": "u16"
+    },
+    {
+      "name": "non_integer_terminal_index_is_rejected",
+      "command": "pty_spawn_shell",
+      "payload": {
+        "taskId": "T-pty",
+        "cwd": "/tmp/openforge-worktree",
+        "cols": 80,
+        "rows": 24,
+        "terminalIndex": "2"
+      },
+      "errorContains": "expected u32"
+    }
+  ]
+}

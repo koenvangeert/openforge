@@ -1,3 +1,6 @@
+use super::pty_payload::{
+    PtyResizePayload, PtySpawnPayload, PtySpawnShellPayload, PtyTaskPayload, PtyWritePayload,
+};
 use super::*;
 
 pub(super) async fn handle_app_pty_command(
@@ -14,18 +17,14 @@ pub(super) async fn handle_app_pty_command(
     let value = match request.command.as_str() {
         "pty_spawn" => {
             let app = state.app.clone();
-            let task_id = payload_string(&request.payload, "taskId")?;
-            let server_port = payload_u16(&request.payload, "serverPort")?;
-            let opencode_session_id = payload_string(&request.payload, "opencodeSessionId")?;
-            let cols = payload_u16(&request.payload, "cols")?;
-            let rows = payload_u16(&request.payload, "rows")?;
+            let payload = PtySpawnPayload::decode(&request.command, &request.payload)?;
             let instance_id = pty_manager
                 .spawn_pty(
-                    &task_id,
-                    server_port,
-                    &opencode_session_id,
-                    cols,
-                    rows,
+                    &payload.task_id,
+                    payload.server_port,
+                    &payload.opencode_session_id,
+                    payload.cols,
+                    payload.rows,
                     app,
                     state.app_event_tx.clone(),
                 )
@@ -40,18 +39,14 @@ pub(super) async fn handle_app_pty_command(
         }
         "pty_spawn_shell" => {
             let app = state.app.clone();
-            let task_id = payload_string(&request.payload, "taskId")?;
-            let cwd = payload_string(&request.payload, "cwd")?;
-            let cols = payload_u16(&request.payload, "cols")?;
-            let rows = payload_u16(&request.payload, "rows")?;
-            let terminal_index = payload_optional_u32(&request.payload, "terminalIndex")?;
+            let payload = PtySpawnShellPayload::decode(&request.command, &request.payload)?;
             let instance_id = pty_manager
                 .spawn_shell_pty(
-                    &task_id,
-                    std::path::Path::new(&cwd),
-                    cols,
-                    rows,
-                    terminal_index,
+                    &payload.task_id,
+                    std::path::Path::new(&payload.cwd),
+                    payload.cols,
+                    payload.rows,
+                    payload.terminal_index,
                     app,
                     state.app_event_tx.clone(),
                 )
@@ -65,10 +60,9 @@ pub(super) async fn handle_app_pty_command(
             json_value(instance_id)?
         }
         "pty_write" => {
-            let task_id = payload_string(&request.payload, "taskId")?;
-            let data = payload_string(&request.payload, "data")?;
+            let payload = PtyWritePayload::decode(&request.command, &request.payload)?;
             pty_manager
-                .write_pty(&task_id, data.as_bytes())
+                .write_pty(&payload.task_id, payload.data.as_bytes())
                 .await
                 .map_err(|e| {
                     (
@@ -79,11 +73,9 @@ pub(super) async fn handle_app_pty_command(
             serde_json::Value::Null
         }
         "pty_resize" => {
-            let task_id = payload_string(&request.payload, "taskId")?;
-            let cols = payload_u16(&request.payload, "cols")?;
-            let rows = payload_u16(&request.payload, "rows")?;
+            let payload = PtyResizePayload::decode(&request.command, &request.payload)?;
             pty_manager
-                .resize_pty(&task_id, cols, rows)
+                .resize_pty(&payload.task_id, payload.cols, payload.rows)
                 .await
                 .map_err(|e| {
                     (
@@ -94,8 +86,8 @@ pub(super) async fn handle_app_pty_command(
             serde_json::Value::Null
         }
         "pty_kill" => {
-            let task_id = payload_string(&request.payload, "taskId")?;
-            pty_manager.kill_pty(&task_id).await.map_err(|e| {
+            let payload = PtyTaskPayload::decode(&request.command, &request.payload)?;
+            pty_manager.kill_pty(&payload.task_id).await.map_err(|e| {
                 (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     format!("Failed to kill PTY: {e}"),
@@ -104,13 +96,13 @@ pub(super) async fn handle_app_pty_command(
             serde_json::Value::Null
         }
         "pty_kill_shells_for_task" => {
-            let task_id = payload_string(&request.payload, "taskId")?;
-            pty_manager.kill_shells_for_task(&task_id).await;
+            let payload = PtyTaskPayload::decode(&request.command, &request.payload)?;
+            pty_manager.kill_shells_for_task(&payload.task_id).await;
             serde_json::Value::Null
         }
         "get_pty_buffer" => {
-            let task_id = payload_string(&request.payload, "taskId")?;
-            json_value(pty_manager.get_pty_buffer(&task_id).await)?
+            let payload = PtyTaskPayload::decode(&request.command, &request.payload)?;
+            json_value(pty_manager.get_pty_buffer(&payload.task_id).await)?
         }
         _ => return Ok(None),
     };
