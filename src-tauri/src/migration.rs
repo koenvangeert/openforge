@@ -123,22 +123,38 @@ fn rewrite_db_paths(app_data_dir: &Path, home_dir: Option<&Path>) {
             }
         };
 
+        let like_pattern = format!("{}%", old_prefix);
+
         let has_worktrees = conn
             .prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='worktrees'")
             .and_then(|mut s| s.exists([]))
             .unwrap_or(false);
 
-        if !has_worktrees {
-            continue;
+        if has_worktrees {
+            match conn.execute(
+                "UPDATE worktrees SET worktree_path = REPLACE(worktree_path, ?1, ?2) WHERE worktree_path LIKE ?3",
+                rusqlite::params![old_prefix, new_prefix, like_pattern],
+            ) {
+                Ok(n) if n > 0 => info!("[migration] Rewrote {} worktree path(s) in {:?}", n, db_name),
+                Ok(_) => {}
+                Err(e) => error!("[migration] Failed to rewrite worktree paths in {:?}: {}", db_name, e),
+            }
         }
 
-        match conn.execute(
-            "UPDATE worktrees SET worktree_path = REPLACE(worktree_path, ?1, ?2) WHERE worktree_path LIKE ?3",
-            rusqlite::params![old_prefix, new_prefix, format!("{}%", old_prefix)],
-        ) {
-            Ok(n) if n > 0 => info!("[migration] Rewrote {} worktree path(s) in {:?}", n, db_name),
-            Ok(_) => {}
-            Err(e) => error!("[migration] Failed to rewrite worktree paths in {:?}: {}", db_name, e),
+        let has_task_workspaces = conn
+            .prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='task_workspaces'")
+            .and_then(|mut s| s.exists([]))
+            .unwrap_or(false);
+
+        if has_task_workspaces {
+            match conn.execute(
+                "UPDATE task_workspaces SET workspace_path = REPLACE(workspace_path, ?1, ?2) WHERE workspace_path LIKE ?3",
+                rusqlite::params![old_prefix, new_prefix, like_pattern],
+            ) {
+                Ok(n) if n > 0 => info!("[migration] Rewrote {} task workspace path(s) in {:?}", n, db_name),
+                Ok(_) => {}
+                Err(e) => error!("[migration] Failed to rewrite task workspace paths in {:?}: {}", db_name, e),
+            }
         }
     }
 }
@@ -332,7 +348,7 @@ mod tests {
     }
 
     #[test]
-    fn rewrites_worktree_paths_in_db() {
+    fn rewrites_openforge_managed_workspace_paths_in_db() {
         let (base, home, _data, new_app) = setup_temp_dirs("rewrite_paths");
         fs::create_dir_all(&new_app).unwrap();
 
@@ -345,6 +361,20 @@ mod tests {
                 worktree_path TEXT NOT NULL,
                 branch_name TEXT, opencode_port INTEGER, opencode_pid INTEGER,
                 status TEXT, created_at INTEGER, updated_at INTEGER
+            );
+            CREATE TABLE task_workspaces (
+                id INTEGER PRIMARY KEY,
+                task_id TEXT NOT NULL UNIQUE,
+                project_id TEXT NOT NULL,
+                workspace_path TEXT NOT NULL,
+                repo_path TEXT NOT NULL,
+                kind TEXT NOT NULL,
+                branch_name TEXT,
+                provider_name TEXT NOT NULL,
+                opencode_port INTEGER,
+                status TEXT NOT NULL DEFAULT 'active',
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL
             )",
         )
         .unwrap();
@@ -361,6 +391,23 @@ mod tests {
         conn.execute(
             "INSERT INTO worktrees (task_id, worktree_path, status) VALUES (?1, ?2, 'active')",
             rusqlite::params!["T-2", "/unrelated/path/somewhere"],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO task_workspaces (task_id, project_id, workspace_path, repo_path, kind, provider_name, status, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, 'git_worktree', 'opencode', 'active', 1, 1)",
+            rusqlite::params![
+                "T-1",
+                "P-1",
+                format!("{}/worktrees/repo/review-pr-42", old_base.display()),
+                "/source/repo"
+            ],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO task_workspaces (task_id, project_id, workspace_path, repo_path, kind, provider_name, status, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, 'local', 'opencode', 'active', 1, 1)",
+            rusqlite::params!["T-2", "P-2", "/unrelated/path/somewhere", "/unrelated/repo"],
         )
         .unwrap();
         drop(conn);
@@ -390,6 +437,30 @@ mod tests {
             )
             .unwrap();
         assert_eq!(path2, "/unrelated/path/somewhere");
+
+        let (task_id, project_id, workspace_path, repo_path): (String, String, String, String) = conn
+            .query_row(
+                "SELECT task_id, project_id, workspace_path, repo_path FROM task_workspaces WHERE task_id = 'T-1'",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+            )
+            .unwrap();
+        assert_eq!(task_id, "T-1");
+        assert_eq!(project_id, "P-1");
+        assert_eq!(
+            workspace_path,
+            format!("{}/worktrees/repo/review-pr-42", new_base.display())
+        );
+        assert_eq!(repo_path, "/source/repo");
+
+        let unrelated_workspace_path: String = conn
+            .query_row(
+                "SELECT workspace_path FROM task_workspaces WHERE task_id = 'T-2'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(unrelated_workspace_path, "/unrelated/path/somewhere");
 
         cleanup(&base);
     }
