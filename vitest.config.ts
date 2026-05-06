@@ -6,6 +6,11 @@ export default defineConfig({
   plugins: [svelte(), svelteTesting()],
   test: {
     environment: 'jsdom',
+    // The task-detail/SelfReviewView Svelte/jsdom suites can leave the default
+    // worker pool waiting on teardown in some local runs. Forked workers finish
+    // these suites reliably and keep `pnpm test` aligned with the known-good
+    // `pnpm exec vitest --pool=forks` path.
+    pool: 'forks',
     globals: true,
     setupFiles: ['src/test-setup.ts'],
     include: ['src/**/*.test.ts', 'scripts/**/*.test.mjs', 'src-tauri/src/openforge-cli/**/*.test.js'],
