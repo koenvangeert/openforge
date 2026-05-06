@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte'
+  import { onMount, onDestroy, tick } from 'svelte'
   import { get } from 'svelte/store'
   import { selfReviewDiffFiles, selfReviewGeneralComments } from '../../lib/stores'
   import { getTaskFileContents, getTaskBatchFileContents, getCommitFileContents, getCommitBatchFileContents, openUrl } from '../../lib/ipc'
@@ -7,6 +7,7 @@
   import { createDiffLoader } from '../../lib/useDiffLoader.svelte'
   import { createCommentSelection } from '../../lib/useCommentSelection.svelte'
   import { prCommentsToReviewComments } from '../../lib/diffComments'
+  import { getTaskReviewPaneState, updateTaskReviewPaneState } from '../../lib/taskReviewPaneState'
   import type { Task, PrFileDiff } from '../../lib/types'
   import type { FileContents } from '../../lib/diffAdapter'
   import FileTree from '../review/shared/FileTree.svelte'
@@ -33,9 +34,19 @@
   let sidebarVisible = $state(false)
   let sidebarTab = $state<'pr' | 'notes'>('pr')
 
+  let hasRestoredScroll = false
+
+  function getInitialSelectedCommitSha() {
+    return getTaskReviewPaneState(task.id).selectedCommitSha
+  }
+
   const diffLoader = createDiffLoader({
     getTaskId: () => task.id,
     getIncludeUncommitted: () => includeUncommitted,
+    initialSelectedCommitSha: getInitialSelectedCommitSha(),
+    onSelectedCommitShaChange: (sha) => {
+      updateTaskReviewPaneState(task.id, { selectedCommitSha: sha })
+    },
   })
 
   const commentSelection = createCommentSelection({
@@ -101,6 +112,21 @@
     await diffLoader.selectCommit(sha)
   }
 
+  async function restoreDiffScroll() {
+    if (hasRestoredScroll || diffLoader.isLoading) return
+    await tick()
+    if (hasRestoredScroll || !diffViewer) return
+    hasRestoredScroll = true
+    const { diffScrollTop } = getTaskReviewPaneState(task.id)
+    if (diffScrollTop <= 0) return
+    diffViewer.setScrollTop(diffScrollTop)
+  }
+
+  $effect(() => {
+    if (!diffViewer || diffLoader.isLoading) return
+    void restoreDiffScroll()
+  })
+
   onMount(async () => {
     await diffLoader.loadDiff()
     if (get(selfReviewDiffFiles).length === 0 && !includeUncommitted) {
@@ -108,9 +134,16 @@
       await diffLoader.refresh()
     }
     await diffLoader.loadCommits()
+    await restoreDiffScroll()
   })
 
   onDestroy(() => {
+    const savedPaneState = getTaskReviewPaneState(task.id)
+    const currentScrollTop = diffViewer?.getScrollTop() ?? savedPaneState.diffScrollTop
+    updateTaskReviewPaneState(task.id, {
+      selectedCommitSha: diffLoader.selectedCommitSha,
+      diffScrollTop: currentScrollTop > 0 ? currentScrollTop : savedPaneState.diffScrollTop,
+    })
     diffLoader.cleanup()
   })
 </script>
@@ -221,6 +254,8 @@
               fetchFileContents={fetchTaskFileContents}
               batchFetchFileContents={batchFetchTaskFileContents}
               {includeUncommitted}
+              initialScrollTop={getTaskReviewPaneState(task.id).diffScrollTop}
+              onScrollTopChange={(diffScrollTop) => updateTaskReviewPaneState(task.id, { diffScrollTop })}
             >
               {#snippet toolbarExtra()}
                 <div class="w-px h-5 bg-base-300 mx-1 self-center"></div>

@@ -41,13 +41,15 @@ export interface DiffLoaderState {
 export function createDiffLoader(deps: {
 	getTaskId: () => string;
 	getIncludeUncommitted: () => boolean;
+	initialSelectedCommitSha?: string | null;
+	onSelectedCommitShaChange?: (sha: string | null) => void;
 }): DiffLoaderState {
 	let isLoading = $state(false);
 	let error = $state<string | null>(null);
 	let prComments = $state<PrComment[]>([]);
 	let linkedPr = $state<PullRequestInfo | null>(null);
 	let commits = $state<CommitInfo[]>([]);
-	let selectedCommitSha = $state<string | null>(null);
+	let selectedCommitSha = $state<string | null>(deps.initialSelectedCommitSha ?? null);
 	let loadGeneration = 0;
 
 	function beginLoad(): number {
@@ -136,6 +138,7 @@ export function createDiffLoader(deps: {
 
 	async function selectCommit(sha: string | null): Promise<void> {
 		selectedCommitSha = sha;
+		deps.onSelectedCommitShaChange?.(sha);
 		selfReviewDiffFiles.set([]);
 		await refresh();
 	}
