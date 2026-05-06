@@ -1,11 +1,11 @@
 # Angry Oracle Code-Change Process
 
-Purpose: make `/call`-style implementation work converge through normal TDD/verification and then force an adversarial post-change review before completion.
+Purpose: make `/call`-style implementation work converge through context-appropriate verification and then force an adversarial post-change review before completion.
 
 ## High-level flow
 
 1. Map project context and conventions from `AGENTS.md`, `.a5c/project-profile.md`, and `.a5c/quality-gates.json`.
-2. Implement the requested code change using TDD.
+2. Implement the requested code change with TDD when it applies, or with lighter targeted verification for documentation-only, configuration-only, planning, metadata, process-only, or similarly low-risk changes.
 3. Inventory the actual git changes.
 4. Run verification commands, defaulting to:
    - `pnpm exec tsc --noEmit`
@@ -25,7 +25,7 @@ Purpose: make `/call`-style implementation work converge through normal TDD/veri
 - The oracle is intentionally adversarial and must validate that the code makes architectural sense for this codebase.
 - Required fixes and critical/high findings are hard blockers.
 - The process is generic: callers can override `verificationCommands`, `targetOracleScore`, and `maxOracleIterations` per task.
-- The implementation and fix steps are still constrained by OpenForge project conventions and TDD.
+- The implementation and fix steps are still constrained by OpenForge project conventions: use TDD for feature, bugfix, business-logic, and product-behavior implementation, but do not invent failing product tests for docs/config/process-only work where targeted verification is more appropriate.
 
 ## Inputs
 

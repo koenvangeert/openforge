@@ -3,7 +3,7 @@
 ```mermaid
 flowchart TD
     A[Start /call request] --> B[Map project context and quality gates]
-    B --> C[Implement requested change with TDD]
+    B --> C[Implement with TDD or targeted verification as appropriate]
     C --> D[Inventory git changes]
     D --> E[Run verification commands]
     E --> F{Running-app manual verification applicable?}

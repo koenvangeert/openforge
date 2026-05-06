@@ -60,6 +60,28 @@ describe('angry oracle code-change process', () => {
     assert.ok(task.agent.prompt.instructions.some((instruction) => /blocking review/i.test(instruction)));
   });
 
+  it('applies TDD conditionally instead of mandating failing tests for every workflow change', async () => {
+    const implementation = await implementationTask.build({}, { effectId: 'effect-1' });
+    const fix = await oracleFixTask.build({ iteration: 1 }, { effectId: 'effect-2' });
+
+    assert.match(implementation.title, /appropriate verification/i);
+    assert.ok(
+      implementation.agent.prompt.instructions.some((instruction) =>
+        /TDD.*feature.*bugfix.*business-logic/i.test(instruction)
+      )
+    );
+    assert.ok(
+      implementation.agent.prompt.instructions.some((instruction) =>
+        /documentation-only.*configuration-only.*process-only/i.test(instruction)
+      )
+    );
+    assert.ok(
+      fix.agent.prompt.instructions.some((instruction) =>
+        /Do not invent failing product tests/i.test(instruction)
+      )
+    );
+  });
+
   it('builds an adversarial post-change oracle prompt that requires architectural review and actionable fixes', () => {
     const prompt = buildOracleReviewPrompt({
       request: 'Add token rotation',

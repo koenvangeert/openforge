@@ -8,7 +8,7 @@ Map-based stores require `new Map()` to trigger Svelte reactivity — direct `.s
 Types in `src/lib/types.ts`. `import type` enforced by `verbatimModuleSyntax`. Nullable fields use `T | null`, not optional.
 Rust sidecar command boundaries return `Result<T, String>` with `.map_err(|e| format!(...))`. DB domain files use `impl super::Database`.
 `T-<number>` references (e.g. T-438) are this app's own task IDs. Do not use any external issue tracker tooling to look them up.
-Always use TDD: write or update tests first, verify they fail, then implement the code to make them pass.
+Use TDD for feature work, bugfixes, and business-logic or product-behavior implementation: write or update focused tests first, verify they fail where practical, then implement the code to make them pass. For documentation-only, configuration-only, planning, metadata, process-only, or similarly low-risk changes, do not invent failing product tests; use targeted verification that fits the artifact instead.
 Tests must cover business logic only — do not assert on CSS classes, Tailwind utilities, or visual styling. Keep visual aspects out of unit tests.
 Task context menus must use `TaskContextMenu` (`src/components/TaskContextMenu.svelte`) which provides Start Task, Move to, and Delete actions. For non-task context menus, use the lower-level `ContextMenu` + `ContextMenuItem` primitives — never build inline context menu markup.
 Vim navigation uses `useVimNavigation` composable from `src/lib/useVimNavigation.svelte.ts` for j/k/G/gg/Enter/Escape/q/x/h/l. All plain-key vim bindings must check `isInputFocused()` from `src/lib/domUtils.ts`. View navigation uses CMD+letter shortcuts handled in App.svelte: ⌘H (Board), ⌘G (PR Review), ⌘L (Skills), ⌘, (Settings). Hold ⌘ to see inline shortcut hints next to navigation icons. Visual focus uses `ring-2 ring-primary rounded` (daisyUI semantic, no hex).
@@ -32,7 +32,7 @@ Project profile: Open Forge is an Electron desktop command center with a Rust si
 
 Recommended local Babysitter usage:
 - Use `/babysitter:project-install` to refresh `.a5c/project-profile.json` and `.a5c/project-profile.md` after major architecture, workflow, or product-direction changes.
-- Use TDD-driven iterative convergence for implementation work: write/update focused business-logic tests first, implement incrementally, run the relevant checks, then refine.
+- Use TDD-driven iterative convergence for feature, bugfix, business-logic, and product-behavior implementation work. For documentation-only, configuration-only, planning, metadata, process-only, or similarly low-risk changes, use a lighter verification-first workflow instead of inventing failing product tests.
 - Use repo mapping before broad changes touching high-churn integration points such as `src/App.svelte`, `src/electron/main.ts`, `src-tauri/src/main.rs`, `src/lib/ipc.ts`, `src/lib/types.ts`, `src-tauri/src/github_poller.rs`, or `src/lib/terminalPool.ts`.
 
 Recommended verification gates:
@@ -44,6 +44,6 @@ Recommended verification gates:
 Recommended specialties/processes:
 - `rust` skill for Rust sidecar/backend work.
 - `ui-ux-pro-max` for focus-mode, attention queue, notification/nudge, and low-distraction UX decisions.
-- Electron desktop, Rust sidecar, Svelte/TypeScript/Vitest, and iterative TDD processes for most implementation tasks.
+- Electron desktop, Rust sidecar, Svelte/TypeScript/Vitest, and iterative TDD processes for implementation tasks where product behavior or business logic changes.
 
 CI/CD note: Babysitter GitHub Actions integration was intentionally skipped during project install. Do not add CI babysitter automation unless a future task explicitly asks for a focused workflow such as PR failure diagnosis or scheduled project health checks.
