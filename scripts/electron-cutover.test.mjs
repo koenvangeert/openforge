@@ -44,6 +44,7 @@ describe('Electron-only desktop cutover', () => {
   it('documents Electron-only commands plus rollback and data backup guidance', () => {
     const readme = readText('README.md')
     const rollback = readText('docs/electron-cutover-rollback.md')
+    const identity = readJson('openforge-data-identity.json')
 
     expect(readme).toContain('pnpm electron:dev')
     expect(readme).toContain('pnpm electron:install')
@@ -52,6 +53,10 @@ describe('Electron-only desktop cutover', () => {
     expect(rollback).toMatch(/rollback/i)
     expect(rollback).toContain('openforge.db')
     expect(rollback).toContain('openforge_dev.db')
+    expect(rollback).toContain('openforge-data-identity.json')
+    expect(identity.dataIdentity.appDataIdentifier).toBe('com.opencode.openforge')
+    expect(identity.packageIdentity.bundleIdentifier).toBe('com.openforge.app.electron')
+    expect(identity.packageIdentity.bundleIdentifier).not.toBe(identity.dataIdentity.appDataIdentifier)
   })
 
   it('keeps agent guidance and project profiles aligned with Electron shell plus Rust sidecar architecture', () => {

@@ -2,6 +2,9 @@ import { mkdir, readFile, readlink, stat, symlink, writeFile } from 'node:fs/pro
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
+  APP_NAME,
+  ELECTRON_APP_PACKAGE_NAME,
+  ELECTRON_BUNDLE_IDENTIFIER,
   assertPackageArchitectureCompatibility,
   buildAndPackageElectronApp,
   createElectronAppPackageJson,
@@ -30,9 +33,12 @@ describe('Electron macOS packaging helpers', () => {
     expect(resolveRustSidecarLayout({ repoRoot: '/repo', config: currentLayoutConfig }).electronAppPath).toBe('/repo/src-tauri/target/release/bundle/electron/macos/Open Forge.app')
   })
 
-  it('creates an app package manifest pointing Electron at the compiled main process', () => {
+  it('creates app package identity from the shared data identity manifest', () => {
+    expect(APP_NAME).toBe('Open Forge')
+    expect(ELECTRON_APP_PACKAGE_NAME).toBe('openforge-electron-app')
+    expect(ELECTRON_BUNDLE_IDENTIFIER).toBe('com.openforge.app.electron')
     expect(createElectronAppPackageJson()).toEqual({
-      name: 'openforge-electron-app',
+      name: ELECTRON_APP_PACKAGE_NAME,
       version: '0.0.1',
       type: 'module',
       main: 'dist-electron/main.js',
@@ -171,6 +177,7 @@ describe('Electron macOS packaging helpers', () => {
     await expect(readlink(join(output, 'Contents/Frameworks/Electron Framework.framework/Resources'))).resolves.toBe('Versions/Current/Resources')
     await expect(readFile(join(output, 'Contents/Resources/app/package.json'), 'utf8').then(JSON.parse)).resolves.toMatchObject({ main: 'dist-electron/main.js' })
     await expect(readFile(join(output, 'Contents/Info.plist'), 'utf8')).resolves.toContain('<key>CFBundleExecutable</key><string>Open Forge</string>')
+    await expect(readFile(join(output, 'Contents/Info.plist'), 'utf8')).resolves.toMatch(/<key>CFBundleIdentifier<\/key>\s*<string>com\.openforge\.app\.electron<\/string>/)
     await expect(readFile(join(output, 'Contents/Info.plist'), 'utf8')).resolves.toMatch(/<key>ApplePressAndHoldEnabled<\/key>\s*<false\/>/)
   })
 })

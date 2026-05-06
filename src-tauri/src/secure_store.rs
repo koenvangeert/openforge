@@ -1,15 +1,9 @@
-const SECRET_KEYS: &[&str] = &["github_token"];
-
 fn service_name() -> &'static str {
-    if cfg!(debug_assertions) {
-        "openforge-dev"
-    } else {
-        "openforge"
-    }
+    crate::data_identity::keychain_service_name()
 }
 
 pub fn is_secret(key: &str) -> bool {
-    SECRET_KEYS.contains(&key)
+    crate::data_identity::is_secret_account(key)
 }
 
 pub fn get_secret(key: &str) -> Result<Option<String>, String> {

@@ -9,6 +9,7 @@ mod builtin_plugins;
 mod claude_hooks;
 mod cli_installer;
 pub mod command_discovery;
+mod data_identity;
 mod db;
 mod diff_parser;
 mod git_worktree;
@@ -506,15 +507,8 @@ pub(crate) fn restore_resumed_session_state(
 // Main
 // ============================================================================
 
-const APP_IDENTIFIER: &str = "com.opencode.openforge";
-const OPENFORGE_APP_DATA_DIR_ENV: &str = "OPENFORGE_APP_DATA_DIR";
-
 fn database_filename() -> &'static str {
-    if cfg!(debug_assertions) {
-        "openforge_dev.db"
-    } else {
-        "openforge.db"
-    }
+    data_identity::database_filename()
 }
 
 fn initialize_database(app_data_dir: &Path) -> db::Database {
@@ -624,7 +618,7 @@ fn run_database_startup_maintenance(database: &db::Database) {
 }
 
 fn sidecar_app_data_dir() -> Result<PathBuf, String> {
-    let override_dir = std::env::var_os(OPENFORGE_APP_DATA_DIR_ENV);
+    let override_dir = std::env::var_os(data_identity::app_data_dir_env());
     sidecar_app_data_dir_from_override(override_dir)
 }
 
@@ -636,7 +630,7 @@ fn sidecar_app_data_dir_from_override(
         Some(_) | None => {
             let data_dir = dirs::data_dir()
                 .ok_or_else(|| "failed to resolve user data directory".to_string())?;
-            data_dir.join(APP_IDENTIFIER)
+            data_dir.join(data_identity::app_data_identifier())
         }
     };
     std::fs::create_dir_all(&app_data_dir).map_err(|error| {

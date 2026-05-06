@@ -1,6 +1,6 @@
 # Electron cutover rollback and data backup
 
-Open Forge is now launched and packaged through Electron. The Rust backend still stores user data in the same Open Forge application data directory, so rollback planning is mostly about preserving SQLite data and generated workspace state before replacing an app bundle.
+Open Forge is now launched and packaged through Electron. The Rust backend still stores user data in the same Open Forge application data directory, so rollback planning is mostly about preserving SQLite data and generated workspace state before replacing an app bundle. The shared `openforge-data-identity.json` manifest is the source of truth for this split: Electron package identity is `com.openforge.app.electron`, while durable app data identity remains `com.opencode.openforge` for data preservation.
 
 ## Before installing a new Electron build
 

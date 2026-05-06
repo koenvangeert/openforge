@@ -5,9 +5,16 @@ import { spawn } from 'node:child_process'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { resolveRustSidecarLayout } from './rust-sidecar-layout.mjs'
+import {
+  ELECTRON_APP_NAME as MANIFEST_APP_NAME,
+  ELECTRON_APP_PACKAGE_NAME,
+  ELECTRON_BUNDLE_IDENTIFIER,
+  ELECTRON_TEMPLATE_APP_NAME,
+} from './data-identity.mjs'
 
-export const APP_NAME = 'Open Forge'
-export const ELECTRON_APP_NAME = 'Electron.app'
+export const APP_NAME = MANIFEST_APP_NAME
+export { ELECTRON_APP_PACKAGE_NAME, ELECTRON_BUNDLE_IDENTIFIER }
+export const ELECTRON_APP_NAME = ELECTRON_TEMPLATE_APP_NAME
 
 function repoRootFromScript() {
   return resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -83,7 +90,7 @@ export function sidecarBinaryPathForTarget(repoRoot = repoRootFromScript(), carg
 
 export function createElectronAppPackageJson({ version = '0.0.1' } = {}) {
   return {
-    name: 'openforge-electron-app',
+    name: ELECTRON_APP_PACKAGE_NAME,
     version,
     type: 'module',
     main: 'dist-electron/main.js',
@@ -172,7 +179,7 @@ async function updateInfoPlist(appPath) {
   plist = updatePlistStringValue(plist, 'CFBundleExecutable', APP_NAME)
   plist = updatePlistStringValue(plist, 'CFBundleName', APP_NAME)
   plist = updatePlistStringValue(plist, 'CFBundleDisplayName', APP_NAME)
-  plist = updatePlistStringValue(plist, 'CFBundleIdentifier', 'com.openforge.app.electron')
+  plist = updatePlistStringValue(plist, 'CFBundleIdentifier', ELECTRON_BUNDLE_IDENTIFIER)
   plist = updatePlistBooleanValue(plist, 'ApplePressAndHoldEnabled', false)
   await writeFile(plistPath, plist)
 }
