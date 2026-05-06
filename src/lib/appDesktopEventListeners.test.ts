@@ -9,6 +9,7 @@ import type { DesktopUnlistenFn } from './desktopIpc'
 
 vi.mock('./terminalPool', () => ({
   release: vi.fn(),
+  replayPtyBuffersForActiveTerminals: vi.fn(async () => undefined),
 }))
 
 vi.mock('./ipc', async (importOriginal) => {
@@ -21,7 +22,7 @@ vi.mock('./ipc', async (importOriginal) => {
   }
 })
 
-import { release } from './terminalPool'
+import { release, replayPtyBuffersForActiveTerminals } from './terminalPool'
 import { getLatestSession } from './ipc'
 
 function createSession(overrides: Partial<AgentSession> = {}): AgentSession {
@@ -105,6 +106,22 @@ describe('registerAppDesktopEventListeners', () => {
     expect(get(checkpointNotification)).toBeNull()
     expect(deps.loadTasks).toHaveBeenCalledOnce()
     expect(deps.loadProjectAttention).toHaveBeenCalledOnce()
+  })
+
+  it('reloads authoritative state when the app event stream reports a delivery gap', async () => {
+    const { deps, handlers } = createHarness()
+
+    await registerAppDesktopEventListeners(deps)
+    await handlers.get('openforge-app-events-gap')?.({
+      payload: { requestedAfter: 'epoch-1:1', oldestAvailable: 'epoch-1:4', newestAvailable: 'epoch-1:8' },
+    })
+
+    expect(deps.loadTasks).toHaveBeenCalledOnce()
+    expect(deps.loadSessions).toHaveBeenCalledOnce()
+    expect(deps.loadPullRequests).toHaveBeenCalledOnce()
+    expect(deps.loadProjectAttention).toHaveBeenCalledOnce()
+    expect(deps.refreshPrCounts).toHaveBeenCalledOnce()
+    expect(replayPtyBuffersForActiveTerminals).toHaveBeenCalledOnce()
   })
 
   it('applies sidecar-forwarded OpenCode checkpoint events to active sessions', async () => {
