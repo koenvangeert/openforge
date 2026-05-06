@@ -1070,6 +1070,111 @@ mod tests {
         assert_eq!(key_2, "t1-shell-2");
     }
 
+    fn test_pty_session() -> PtySession {
+        let pty_system = native_pty_system();
+        let size = PtySize {
+            rows: 24,
+            cols: 80,
+            pixel_width: 0,
+            pixel_height: 0,
+        };
+        let pair = pty_system.openpty(size).expect("openpty should succeed");
+
+        let shell = get_shell_path();
+        let mut cmd = CommandBuilder::new(&shell);
+        cmd.arg("-lc");
+        cmd.arg("true");
+        let child = pair
+            .slave
+            .spawn_command(cmd)
+            .expect("spawn command should succeed");
+        drop(pair.slave);
+
+        let writer = pair
+            .master
+            .take_writer()
+            .expect("take writer should succeed");
+
+        PtySession {
+            child,
+            master: pair.master,
+            writer,
+            instance_id: 1,
+        }
+    }
+
+    #[tokio::test]
+    async fn test_kill_shells_for_task_removes_indexed_shell_pid_files() {
+        let mut manager = PtyManager::new();
+        let tmp_dir = tempfile::tempdir().expect("tempdir should succeed");
+        manager.set_pid_dir(tmp_dir.path().to_path_buf());
+
+        let task_id = "task-1";
+        let shell0_key = shell_session_key(task_id, Some(0));
+        let shell1_key = shell_session_key(task_id, Some(1));
+        let unrelated_key = shell_session_key("task-2", Some(0));
+
+        {
+            let mut sessions = manager.sessions.lock().await;
+            sessions.insert(shell0_key.clone(), test_pty_session());
+            sessions.insert(shell1_key.clone(), test_pty_session());
+            sessions.insert(unrelated_key.clone(), test_pty_session());
+        }
+
+        let shell0_pid_file = tmp_dir.path().join(shell_pid_file_name(task_id, Some(0)));
+        let shell1_pid_file = tmp_dir.path().join(shell_pid_file_name(task_id, Some(1)));
+        let unrelated_pid_file = tmp_dir.path().join(shell_pid_file_name("task-2", Some(0)));
+        std::fs::write(&shell0_pid_file, "1234").expect("shell 0 pid file should write");
+        std::fs::write(&shell1_pid_file, "5678").expect("shell 1 pid file should write");
+        std::fs::write(&unrelated_pid_file, "9012").expect("unrelated pid file should write");
+
+        let ring = Arc::new(std::sync::Mutex::new(RingBuffer::new(128)));
+        {
+            let mut buffers = manager.output_buffers.lock().await;
+            buffers.insert(shell0_key.clone(), Arc::clone(&ring));
+            buffers.insert(shell1_key.clone(), Arc::clone(&ring));
+            buffers.insert(unrelated_key.clone(), Arc::clone(&ring));
+        }
+        {
+            let mut times = manager.last_output.lock().await;
+            times.insert(shell0_key.clone(), Arc::new(AtomicU64::new(123)));
+            times.insert(shell1_key.clone(), Arc::new(AtomicU64::new(456)));
+            times.insert(unrelated_key.clone(), Arc::new(AtomicU64::new(789)));
+        }
+
+        manager.kill_shells_for_task(task_id).await;
+
+        assert!(
+            !shell0_pid_file.exists(),
+            "shell 0 pid file should be removed"
+        );
+        assert!(
+            !shell1_pid_file.exists(),
+            "shell 1 pid file should be removed"
+        );
+        assert!(
+            unrelated_pid_file.exists(),
+            "unrelated shell pid file should not be removed"
+        );
+
+        let sessions = manager.sessions.lock().await;
+        assert!(!sessions.contains_key(&shell0_key));
+        assert!(!sessions.contains_key(&shell1_key));
+        assert!(sessions.contains_key(&unrelated_key));
+        drop(sessions);
+
+        let buffers = manager.output_buffers.lock().await;
+        assert!(!buffers.contains_key(&shell0_key));
+        assert!(!buffers.contains_key(&shell1_key));
+        assert!(buffers.contains_key(&unrelated_key));
+        drop(buffers);
+
+        let times = manager.last_output.lock().await;
+        assert!(!times.contains_key(&shell0_key));
+        assert!(!times.contains_key(&shell1_key));
+        assert!(times.contains_key(&unrelated_key));
+    }
+
     #[test]
     fn test_kill_shells_for_task_key_matching() {
         let task_id = "t1";

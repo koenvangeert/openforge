@@ -741,6 +741,10 @@ impl PtyManager {
             }
             drop(sessions);
 
+            if let Ok(pid_dir) = self.get_pid_dir() {
+                let _ = std::fs::remove_file(pid_dir.join(format!("{}.pid", key)));
+            }
+
             {
                 let mut buffers = self.output_buffers.lock().await;
                 buffers.remove(&key);
