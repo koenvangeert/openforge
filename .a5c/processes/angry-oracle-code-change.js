@@ -4,14 +4,34 @@
  * @skill rust .agents/skills/rust/SKILL.md
  * @skill ui-ux-pro-max .agents/skills/ui-ux-pro-max/SKILL.md
  * @skill openforge /Users/koen/.pi/agent/skills/openforge/SKILL.md
+ * @skill openforge-app-operator .agents/skills/openforge-app-operator/SKILL.md
  * @inputs { request: string, maxOracleIterations: number, targetOracleScore: number, verificationCommands: string[] }
- * @outputs { success: boolean, oracleApproved: boolean, iterations: number, changedFiles: string[], finalOracleReview: object }
+ * @outputs { success: boolean, oracleApproved: boolean, iterations: number, changedFiles: string[], finalOracleReview: object, manualVerification: object }
  */
 
 import { defineTask } from '@a5c-ai/babysitter-sdk';
 
 export const ORACLE_BLOCKING_SEVERITIES = ['critical', 'high'];
 export const DEFAULT_VERIFICATION_COMMANDS = ['pnpm exec tsc --noEmit', 'pnpm test'];
+
+export const MANUAL_APP_VERIFICATION_PATH_PREFIXES = [
+  'src/',
+  'src-tauri/',
+  'plugins/',
+  'packages/plugin-sdk/',
+  'packages/terminal-shared/'
+];
+
+export const MANUAL_APP_VERIFICATION_EXACT_FILES = [
+  'package.json',
+  'pnpm-lock.yaml',
+  'pnpm-workspace.yaml',
+  'vite.config.ts',
+  'svelte.config.js',
+  'tsconfig.json',
+  'tsconfig.electron.json',
+  'vitest.config.ts'
+];
 
 export function hasBlockingOracleFindings(review = {}) {
   const verdict = String(review.verdict || '').toLowerCase();
@@ -50,7 +70,29 @@ export function mergeChangedFiles(existing = [], update = {}) {
   return ordered;
 }
 
-export function buildOracleReviewPrompt({ request, changedFiles = [], verificationResults = [], iteration = 1 }) {
+function normalizeChangedPath(path) {
+  return typeof path === 'string' ? path.trim().replace(/^\.\//, '') : '';
+}
+
+export function shouldRequestManualAppVerification(changedFiles = []) {
+  return changedFiles.some((path) => {
+    const normalized = normalizeChangedPath(path);
+    return MANUAL_APP_VERIFICATION_EXACT_FILES.includes(normalized) ||
+      MANUAL_APP_VERIFICATION_PATH_PREFIXES.some((prefix) => normalized.startsWith(prefix));
+  });
+}
+
+export function buildManualVerificationSkip(changedFiles = [], iteration = 1) {
+  return {
+    status: 'skipped',
+    applicable: false,
+    iteration,
+    summary: 'Manual OpenForge app smoke verification was skipped because the changed files do not affect app UI, Electron shell, Rust sidecar/runtime, plugins, IPC, terminal, settings, navigation, or other running-app behavior.',
+    changedFiles
+  };
+}
+
+export function buildOracleReviewPrompt({ request, changedFiles = [], verificationResults = [], manualVerification = null, iteration = 1 }) {
   return {
     role: 'angry principal engineer oracle',
     task: 'Review the completed code changes after implementation, including whether the solution has sound architectural fit for this codebase. Be adversarial: do not rubber-stamp the work, and assume subtle bugs, convention violations, missing tests, over-engineering, and misplaced responsibilities are present until proven otherwise.',
@@ -58,6 +100,7 @@ export function buildOracleReviewPrompt({ request, changedFiles = [], verificati
       request,
       changedFiles,
       verificationResults,
+      manualVerification,
       iteration,
       architectureReviewCriteria: [
         'The change belongs in the right module/layer and preserves established ownership boundaries',
@@ -77,7 +120,7 @@ export function buildOracleReviewPrompt({ request, changedFiles = [], verificati
       ]
     },
     instructions: [
-      'Inspect the diff, tests, and verification output against the original request.',
+      'Inspect the diff, tests, verification output, and manual app verification result or skip rationale against the original request.',
       'Check project conventions from AGENTS.md and the project profile before judging readiness.',
       'Validate architecture and architectural fit: module boundaries, ownership, separation of concerns, cohesion, coupling, and whether the design makes sense for the requested scope.',
       'Flag any missing test coverage, business logic regressions, race conditions, stale lifecycle state, direct invoke usage, Svelte/Rust convention violations, misplaced responsibilities, or over-engineering.',
@@ -109,6 +152,7 @@ export async function process(inputs, ctx) {
   const oracleAttempts = [];
   let verificationResults = [];
   let finalOracleReview = null;
+  let manualVerification = null;
   let oracleApproved = false;
 
   for (let iteration = 1; iteration <= maxOracleIterations; iteration++) {
@@ -121,18 +165,23 @@ export async function process(inputs, ctx) {
       verificationResults.push({ command, ...result });
     }
 
+    manualVerification = shouldRequestManualAppVerification(changedFiles)
+      ? await ctx.task(manualAppVerificationTask, { request, changedFiles, verificationResults, iteration })
+      : buildManualVerificationSkip(changedFiles, iteration);
+
     finalOracleReview = await ctx.task(angryOracleReviewTask, {
       request,
       changedFiles,
       implementation,
       verificationResults,
+      manualVerification,
       iteration,
       targetOracleScore
     });
 
     const blocking = hasBlockingOracleFindings(finalOracleReview);
     const score = Number(finalOracleReview?.score ?? 0);
-    oracleAttempts.push({ iteration, review: finalOracleReview, blocking, score });
+    oracleAttempts.push({ iteration, review: finalOracleReview, blocking, score, manualVerification });
 
     if (!blocking && score >= targetOracleScore) {
       oracleApproved = true;
@@ -147,7 +196,8 @@ export async function process(inputs, ctx) {
           runId: ctx.runId,
           oracleReview: finalOracleReview,
           changedFiles,
-          verificationResults
+          verificationResults,
+          manualVerification
         },
         tags: ['oracle', 'quality-gate', 'manual-decision']
       });
@@ -158,6 +208,7 @@ export async function process(inputs, ctx) {
       request,
       changedFiles,
       verificationResults,
+      manualVerification,
       oracleReview: finalOracleReview,
       iteration
     });
@@ -172,6 +223,7 @@ export async function process(inputs, ctx) {
     iterations: oracleAttempts.length,
     changedFiles,
     verificationResults,
+    manualVerification,
     finalOracleReview,
     oracleAttempts,
     metadata: {
@@ -276,6 +328,34 @@ export const runVerificationCommandTask = defineTask('verification-command', (ar
     cwd: '.'
   },
   labels: ['shell', 'verification', `oracle-iteration-${args.iteration}`]
+}));
+
+export const manualAppVerificationTask = defineTask('manual-app-verification', (args, taskCtx) => ({
+  kind: 'skill',
+  title: `Manual OpenForge app verification (iteration ${args.iteration})`,
+  description: 'Use the OpenForge app operator skill for read-only manual smoke checks when app behavior changed',
+  skill: {
+    name: 'openforge-app-operator',
+    context: {
+      request: args.request,
+      changedFiles: args.changedFiles,
+      verificationResults: args.verificationResults,
+      iteration: args.iteration,
+      instructions: [
+        'Perform manual app smoke verification only for the changed OpenForge UI, Electron shell, Rust sidecar/runtime, plugin, IPC, terminal, settings, navigation, or other running-app behavior.',
+        'Follow the openforge-app-operator skill instructions and keep checks read-only by default.',
+        'Use the CLI bridge check and targeted click-through guidance from the skill where applicable.',
+        'Do not create, update, delete, move, start, or stop tasks/agents unless the original request explicitly requires it or the user approved it.',
+        'Return status, applicability, commands run, app sections checked, observations, screenshot paths if any, cleanup performed, skipped gates, and open risks.'
+      ],
+      expectedOutput: 'JSON with status (passed|failed|skipped), applicable, summary, commandsRun, appSectionsChecked, observations, screenshots, cleanup, skippedGates, and openRisks'
+    }
+  },
+  io: {
+    inputJsonPath: `tasks/${taskCtx.effectId}/input.json`,
+    outputJsonPath: `tasks/${taskCtx.effectId}/output.json`
+  },
+  labels: ['skill', 'manual-verification', 'openforge-app-operator', `oracle-iteration-${args.iteration}`]
 }));
 
 export const angryOracleReviewTask = defineTask('angry-oracle-review', (args, taskCtx) => ({

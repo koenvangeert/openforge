@@ -3,11 +3,19 @@ import { describe, it } from 'node:test';
 
 import {
   ORACLE_BLOCKING_SEVERITIES,
+  buildManualVerificationSkip,
   buildOracleReviewPrompt,
   changeInventoryTask,
+  angryOracleReviewTask,
   hasBlockingOracleFindings,
+  implementationTask,
+  manualAppVerificationTask,
   mergeChangedFiles,
-  oracleFixTask
+  oracleFixTask,
+  process as runProcess,
+  projectContextTask,
+  runVerificationCommandTask,
+  shouldRequestManualAppVerification
 } from './angry-oracle-code-change.js';
 
 describe('angry oracle code-change process', () => {
@@ -57,6 +65,7 @@ describe('angry oracle code-change process', () => {
       request: 'Add token rotation',
       changedFiles: ['src/auth.ts'],
       verificationResults: [{ command: 'pnpm test', status: 'ok' }],
+      manualVerification: { status: 'passed', applicable: true, summary: 'Board smoke checked' },
       iteration: 1
     });
 
@@ -67,6 +76,114 @@ describe('angry oracle code-change process', () => {
     assert.ok(prompt.instructions.some((instruction) => /actionable fix/i.test(instruction)));
     assert.ok(prompt.instructions.some((instruction) => /project conventions/i.test(instruction)));
     assert.ok(prompt.instructions.some((instruction) => /architecture/i.test(instruction)));
+    assert.ok(prompt.instructions.some((instruction) => /manual app verification/i.test(instruction)));
     assert.deepEqual(prompt.context.changedFiles, ['src/auth.ts']);
+    assert.deepEqual(prompt.context.manualVerification, { status: 'passed', applicable: true, summary: 'Board smoke checked' });
+  });
+
+  it('requests manual app verification for app-facing and runtime-sensitive changes', () => {
+    assert.equal(shouldRequestManualAppVerification(['src/App.svelte']), true);
+    assert.equal(shouldRequestManualAppVerification(['src/electron/main.ts']), true);
+    assert.equal(shouldRequestManualAppVerification(['src-tauri/src/commands/tasks.rs']), true);
+    assert.equal(shouldRequestManualAppVerification(['plugins/skills-viewer/src/SkillsView.svelte']), true);
+    assert.equal(shouldRequestManualAppVerification(['packages/plugin-sdk/src/index.ts']), true);
+  });
+
+  it('skips manual app verification for process-only changes with an explicit rationale', () => {
+    assert.equal(shouldRequestManualAppVerification(['.a5c/processes/angry-oracle-code-change.js']), false);
+
+    assert.deepEqual(
+      buildManualVerificationSkip(['.a5c/processes/angry-oracle-code-change.js'], 2),
+      {
+        status: 'skipped',
+        applicable: false,
+        iteration: 2,
+        summary: 'Manual OpenForge app smoke verification was skipped because the changed files do not affect app UI, Electron shell, Rust sidecar/runtime, plugins, IPC, terminal, settings, navigation, or other running-app behavior.',
+        changedFiles: ['.a5c/processes/angry-oracle-code-change.js']
+      }
+    );
+  });
+
+  it('uses the openforge-app-operator skill for applicable manual app verification', async () => {
+    const task = await manualAppVerificationTask.build(
+      {
+        request: 'Fix task detail rendering',
+        changedFiles: ['src/components/TaskDetails.svelte'],
+        verificationResults: [{ command: 'pnpm test', status: 'ok' }],
+        iteration: 1
+      },
+      { effectId: 'effect-1' }
+    );
+
+    assert.equal(task.kind, 'skill');
+    assert.equal(task.skill.name, 'openforge-app-operator');
+    assert.ok(task.skill.context.instructions.some((instruction) => /manual app smoke verification/i.test(instruction)));
+    assert.ok(task.skill.context.instructions.some((instruction) => /read-only/i.test(instruction)));
+    assert.deepEqual(task.skill.context.changedFiles, ['src/components/TaskDetails.svelte']);
+    assert.equal(task.io.outputJsonPath, 'tasks/effect-1/output.json');
+  });
+
+  it('runs applicable manual app verification after automated verification and before oracle review', async () => {
+    const taskOrder = [];
+    const manualVerification = { status: 'passed', applicable: true, summary: 'Smoke checked task detail' };
+
+    const result = await runProcess(
+      {
+        request: 'Fix task detail rendering',
+        verificationCommands: ['pnpm test -- src/components/TaskDetails.test.ts'],
+        targetOracleScore: 90,
+        maxOracleIterations: 1
+      },
+      {
+        runId: 'run-1',
+        now: () => '2026-05-06T00:00:00.000Z',
+        task: async (task, args) => {
+          if (task === projectContextTask) {
+            taskOrder.push('project-context');
+            return { summary: 'context' };
+          }
+          if (task === implementationTask) {
+            taskOrder.push('implementation');
+            return { summary: 'implemented', changedFiles: ['src/components/TaskDetails.svelte'] };
+          }
+          if (task === changeInventoryTask) {
+            taskOrder.push('change-inventory');
+            return {};
+          }
+          if (task === runVerificationCommandTask) {
+            taskOrder.push('automated-verification');
+            assert.equal(args.command, 'pnpm test -- src/components/TaskDetails.test.ts');
+            return { status: 'ok' };
+          }
+          if (task === manualAppVerificationTask) {
+            taskOrder.push('manual-verification');
+            assert.deepEqual(args.verificationResults, [
+              { command: 'pnpm test -- src/components/TaskDetails.test.ts', status: 'ok' }
+            ]);
+            return manualVerification;
+          }
+          if (task === angryOracleReviewTask) {
+            taskOrder.push('oracle-review');
+            assert.deepEqual(args.manualVerification, manualVerification);
+            return { verdict: 'approve', score: 95, summary: 'ready', findings: [] };
+          }
+          throw new Error(`Unexpected task: ${task?.id || task?.title || 'unknown'}`);
+        },
+        breakpoint: async () => {
+          throw new Error('No breakpoint expected');
+        }
+      }
+    );
+
+    assert.deepEqual(taskOrder, [
+      'project-context',
+      'implementation',
+      'change-inventory',
+      'automated-verification',
+      'manual-verification',
+      'oracle-review'
+    ]);
+    assert.equal(result.oracleApproved, true);
+    assert.deepEqual(result.manualVerification, manualVerification);
   });
 });
