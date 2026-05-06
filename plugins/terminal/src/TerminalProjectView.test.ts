@@ -1,5 +1,8 @@
+import { existsSync, readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { cleanup, render } from '@testing-library/svelte'
 import { tick } from 'svelte'
+import { compile } from 'svelte/compiler'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import TerminalProjectView from './TerminalProjectView.svelte'
 
@@ -51,7 +54,30 @@ function renderProjectTerminalView() {
   })
 }
 
+function readTerminalProjectViewSource(): string {
+  const path = [
+    resolve(process.cwd(), 'plugins/terminal/src/TerminalProjectView.svelte'),
+    resolve(process.cwd(), 'src/TerminalProjectView.svelte'),
+  ].find((candidate) => existsSync(candidate))
+
+  if (!path) throw new Error('TerminalProjectView.svelte not found')
+
+  return readFileSync(path, 'utf8')
+}
+
 describe('TerminalProjectView', () => {
+  it('does not produce non-reactive bind:this compiler warnings', () => {
+    const source = readTerminalProjectViewSource()
+    const { js, warnings } = compile(source, {
+      filename: 'TerminalProjectView.svelte',
+      generate: 'client',
+      dev: true,
+    })
+
+    expect(warnings.map((warning) => warning.code)).not.toContain('binding_property_non_reactive')
+    expect(js.code).not.toContain("$.validate_binding('bind:this=")
+  })
+
   afterEach(() => {
     cleanup()
     resetMocks()
