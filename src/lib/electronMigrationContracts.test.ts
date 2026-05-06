@@ -165,15 +165,20 @@ describe('Electron migration Phase 0 contract inventory', () => {
       '{plugin-defined-desktop-event}',
     ])
     expect(dynamicShellEventContracts.find(contract => contract.eventPattern === 'pty-output-{taskId}')).toMatchObject({
+      currentSubscribers: ['src/lib/terminalPool.ts'],
       payload: '{ task_id: string; data: string; instance_id: number }',
       transportAfterMigration: 'sse-or-websocket',
     })
+    expect(dynamicShellEventContracts.find(contract => contract.eventPattern === 'pty-exit-{taskId}')).toMatchObject({
+      currentSubscribers: ['src/lib/terminalPool.ts'],
+      payload: '{ instance_id: number }',
+      transportAfterMigration: 'sse-or-websocket',
+    })
     expect(dynamicShellEventContracts.find(contract => contract.eventPattern === 'pty-output-{taskId}-shell-{terminalIndex}')).toMatchObject({
-      currentSubscribers: expect.arrayContaining([
-        'src/components/task-detail/TaskTerminal.svelte',
-        'src/lib/terminalPool.ts',
-        'src/lib/plugin/pluginRegistry.ts',
-      ]),
+      currentSubscribers: ['src/lib/terminalPool.ts', 'src/lib/plugin/pluginRegistry.ts'],
+    })
+    expect(dynamicShellEventContracts.find(contract => contract.eventPattern === 'pty-exit-{taskId}-shell-{terminalIndex}')).toMatchObject({
+      currentSubscribers: ['src/components/task-detail/TaskTerminal.svelte', 'src/lib/terminalPool.ts', 'src/lib/plugin/pluginRegistry.ts'],
     })
     expect(dynamicShellEventContracts.find(contract => contract.eventPattern === 'plugin:sidecar-exited')).toMatchObject({
       domain: 'plugins',

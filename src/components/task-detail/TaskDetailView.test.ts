@@ -35,16 +35,6 @@ vi.mock('../../lib/audioRecorder', () => ({
   createAudioRecorder: vi.fn(),
 }))
 
-vi.mock('../../lib/usePtyBridge.svelte', () => ({
-  createPtyBridge: vi.fn(() => ({
-    get ptySpawned() { return false },
-    attachPty: vi.fn().mockResolvedValue(undefined),
-    writeToPty: vi.fn(),
-    killPty: vi.fn().mockResolvedValue(undefined),
-    dispose: vi.fn(),
-  })),
-}))
-
 vi.mock('../../lib/useSessionHistory.svelte', () => ({
   createSessionHistory: vi.fn(() => ({
     get loadingHistory() { return false },
