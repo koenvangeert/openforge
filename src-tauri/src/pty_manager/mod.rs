@@ -15,8 +15,8 @@ use commands::resolve_shell_path;
 pub(crate) use commands::{build_claude_args, build_pi_args, get_shell_path};
 #[cfg(test)]
 use events::{
-    finalize_agent_pty_exit, find_utf8_boundary, read_pty_output_loop, PtyOutputBatcher,
-    RingBuffer, CLAUDE_BUFFER_CAPACITY,
+    finalize_pty_exit, find_utf8_boundary, read_pty_output_loop, spawn_batched_pty_event_emitter,
+    PtyEventEmitterConfig, PtyExitAction, PtyOutputBatcher, RingBuffer, CLAUDE_BUFFER_CAPACITY,
 };
 #[cfg(test)]
 use pids::{shell_pid_file_name, shell_session_key};
@@ -698,7 +698,117 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_finalize_agent_pty_exit_ignores_stale_instance() {
+    async fn test_cleanup_exit_action_cleans_shell_state_without_agent_event() {
+        let manager = PtyManager::new();
+        let pty_system = native_pty_system();
+        let size = PtySize {
+            rows: 24,
+            cols: 80,
+            pixel_width: 0,
+            pixel_height: 0,
+        };
+        let pair = pty_system.openpty(size).expect("openpty should succeed");
+
+        let shell = get_shell_path();
+        let mut cmd = CommandBuilder::new(&shell);
+        cmd.arg("-lc");
+        cmd.arg("true");
+        let child = pair
+            .slave
+            .spawn_command(cmd)
+            .expect("spawn command should succeed");
+        drop(pair.slave);
+
+        let writer = pair
+            .master
+            .take_writer()
+            .expect("take writer should succeed");
+
+        let key = "task-1-shell-0";
+        {
+            let mut sessions = manager.sessions.lock().await;
+            sessions.insert(
+                key.to_string(),
+                PtySession {
+                    child,
+                    master: pair.master,
+                    writer,
+                    instance_id: 1,
+                },
+            );
+        }
+
+        let ring = Arc::new(std::sync::Mutex::new(RingBuffer::new(128)));
+        {
+            let mut buffers = manager.output_buffers.lock().await;
+            buffers.insert(key.to_string(), Arc::clone(&ring));
+        }
+        {
+            let mut times = manager.last_output.lock().await;
+            times.insert(key.to_string(), Arc::new(AtomicU64::new(123)));
+        }
+
+        let tmp_dir = tempfile::tempdir().expect("tempdir should succeed");
+        let pid_file = tmp_dir.path().join("task-1-shell-0.pid");
+        std::fs::write(&pid_file, "1234").expect("pid file should write");
+
+        let (output_tx, output_rx) = tokio::sync::mpsc::unbounded_channel();
+        let (app_event_tx, mut app_event_rx) = tokio::sync::broadcast::channel(8);
+        spawn_batched_pty_event_emitter(
+            output_rx,
+            PtyEventEmitterConfig {
+                session_key: key.to_string(),
+                instance_id: 1,
+                app_handle: None,
+                app_event_tx: Some(app_event_tx),
+                ring_buffer: ring,
+                exit_action: PtyExitAction::Cleanup {
+                    sessions: Arc::clone(&manager.sessions),
+                    last_output: Arc::clone(&manager.last_output),
+                    output_buffers: Arc::clone(&manager.output_buffers),
+                    pid_file: pid_file.clone(),
+                    emit_agent_exit: false,
+                },
+            },
+        );
+
+        output_tx.send(None).expect("exit signal should send");
+        let exit_event =
+            tokio::time::timeout(tokio::time::Duration::from_secs(1), app_event_rx.recv())
+                .await
+                .expect("pty-exit event should be emitted")
+                .expect("pty-exit event should be received");
+
+        assert_eq!(exit_event.event_name, "pty-exit-task-1-shell-0");
+        assert_eq!(exit_event.payload["instance_id"], 1);
+        if let Ok(Ok(event)) =
+            tokio::time::timeout(tokio::time::Duration::from_millis(50), app_event_rx.recv()).await
+        {
+            assert_ne!(
+                event.event_name, "agent-pty-exited",
+                "cleanup-only PTYs must not emit agent-pty-exited"
+            );
+        }
+        assert!(
+            !manager.sessions.lock().await.contains_key(key),
+            "session should be removed after EOF cleanup"
+        );
+        assert!(
+            !manager.output_buffers.lock().await.contains_key(key),
+            "output buffer should be removed after EOF cleanup"
+        );
+        assert!(
+            !manager.last_output.lock().await.contains_key(key),
+            "last_output should be removed after EOF cleanup"
+        );
+        assert!(
+            !pid_file.exists(),
+            "pid file should be removed after EOF cleanup"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_finalize_pty_exit_ignores_stale_instance() {
         let manager = PtyManager::new();
         let pty_system = native_pty_system();
         let size = PtySize {
@@ -755,7 +865,7 @@ mod tests {
         let pid_file = tmp_dir.path().join("task-1-pty.pid");
         std::fs::write(&pid_file, "1234").expect("pid file should write");
 
-        let success = finalize_agent_pty_exit(
+        let success = finalize_pty_exit(
             &manager.sessions,
             &manager.last_output,
             &manager.output_buffers,

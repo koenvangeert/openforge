@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use super::session::{LastOutputTimes, PtyOutputBuffers, PtySessions};
 
-pub(super) async fn finalize_agent_pty_exit(
+pub(super) async fn finalize_pty_exit(
     sessions: &PtySessions,
     last_output: &LastOutputTimes,
     output_buffers: &PtyOutputBuffers,
@@ -236,12 +236,12 @@ impl PtyOutputBatcher {
 }
 
 pub(super) enum PtyExitAction {
-    EmitOnly,
-    FinalizeAgent {
+    Cleanup {
         sessions: PtySessions,
         last_output: LastOutputTimes,
         output_buffers: PtyOutputBuffers,
         pid_file: PathBuf,
+        emit_agent_exit: bool,
     },
 }
 
@@ -307,20 +307,23 @@ pub(super) fn spawn_batched_pty_event_emitter(
                             batcher.flush_pending(&mut emit_pty_event);
 
                             let agent_success = match exit_action {
-                                PtyExitAction::EmitOnly => None,
-                                PtyExitAction::FinalizeAgent {
+                                PtyExitAction::Cleanup {
                                     sessions,
                                     last_output,
                                     output_buffers,
                                     pid_file,
-                                } => Some(finalize_agent_pty_exit(
-                                    &sessions,
-                                    &last_output,
-                                    &output_buffers,
-                                    &pid_file,
-                                    &session_key,
-                                    instance_id,
-                                ).await),
+                                    emit_agent_exit,
+                                } => {
+                                    let success = finalize_pty_exit(
+                                        &sessions,
+                                        &last_output,
+                                        &output_buffers,
+                                        &pid_file,
+                                        &session_key,
+                                        instance_id,
+                                    ).await;
+                                    emit_agent_exit.then_some(success)
+                                }
                             };
 
                             info!("[PTY] key={} emitter received exit signal", session_key);

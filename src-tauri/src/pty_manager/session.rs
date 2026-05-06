@@ -177,7 +177,13 @@ impl PtyManager {
                 app_handle,
                 app_event_tx,
                 ring_buffer: ring_buffer_emitter,
-                exit_action: PtyExitAction::EmitOnly,
+                exit_action: PtyExitAction::Cleanup {
+                    sessions: Arc::clone(&self.sessions),
+                    last_output: Arc::clone(&self.last_output),
+                    output_buffers: Arc::clone(&self.output_buffers),
+                    pid_file,
+                    emit_agent_exit: false,
+                },
             },
         );
 
@@ -349,11 +355,12 @@ impl PtyManager {
                 app_handle,
                 app_event_tx,
                 ring_buffer: ring_buffer_emitter,
-                exit_action: PtyExitAction::FinalizeAgent {
+                exit_action: PtyExitAction::Cleanup {
                     sessions: Arc::clone(&self.sessions),
                     last_output: Arc::clone(&self.last_output),
                     output_buffers: Arc::clone(&self.output_buffers),
                     pid_file,
+                    emit_agent_exit: true,
                 },
             },
         );
@@ -489,11 +496,12 @@ impl PtyManager {
                 app_handle,
                 app_event_tx,
                 ring_buffer: ring_buffer_emitter,
-                exit_action: PtyExitAction::FinalizeAgent {
+                exit_action: PtyExitAction::Cleanup {
                     sessions: Arc::clone(&self.sessions),
                     last_output: Arc::clone(&self.last_output),
                     output_buffers: Arc::clone(&self.output_buffers),
                     pid_file,
+                    emit_agent_exit: true,
                 },
             },
         );
@@ -622,7 +630,13 @@ impl PtyManager {
                 app_handle,
                 app_event_tx,
                 ring_buffer: ring_buffer_emitter,
-                exit_action: PtyExitAction::EmitOnly,
+                exit_action: PtyExitAction::Cleanup {
+                    sessions: Arc::clone(&self.sessions),
+                    last_output: Arc::clone(&self.last_output),
+                    output_buffers: Arc::clone(&self.output_buffers),
+                    pid_file,
+                    emit_agent_exit: false,
+                },
             },
         );
 
