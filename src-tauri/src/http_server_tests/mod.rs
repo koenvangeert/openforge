@@ -26,6 +26,7 @@ fn test_state(name: &str) -> (AppState, std::path::PathBuf) {
             github_client: GitHubClient::new(),
             plugin_host: Some(PluginHost::new(crate::backend_runtime::AppHandle::new())),
             app_event_tx: Some(app_event_tx),
+            app_event_bus: None,
             whisper: Some(Arc::new(WhisperManager::with_active_model(
                 WhisperModelSize::Small,
             ))),

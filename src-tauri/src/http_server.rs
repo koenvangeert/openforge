@@ -1,5 +1,8 @@
 use crate::{
-    app_events::{publish_app_event, AppEventEnvelope, AppEventSender},
+    app_events::{
+        publish_app_event, AppEventBus, AppEventCursor, AppEventEnvelope, AppEventFrame,
+        AppEventSender,
+    },
     db,
     github_client::GitHubClient,
     plugin_host::PluginHost,
@@ -15,7 +18,7 @@ use axum::{
     routing::{get, post},
     Router,
 };
-use futures::Stream;
+use futures::{Stream, StreamExt};
 use log::{error, info, warn};
 use serde::{Deserialize, Serialize};
 use std::{convert::Infallible, net::SocketAddr, path::PathBuf, sync::Mutex, time::Duration};
@@ -46,6 +49,7 @@ pub struct AppState {
     pub github_client: GitHubClient,
     pub plugin_host: Option<PluginHost>,
     pub app_event_tx: Option<AppEventSender>,
+    pub app_event_bus: Option<AppEventBus>,
     pub whisper: Option<std::sync::Arc<WhisperManager>>,
 }
 
@@ -112,6 +116,38 @@ fn pi_session_matches_pty_instance(session: &db::AgentSessionRow, pty_instance_i
         .and_then(|data| serde_json::from_str::<serde_json::Value>(data).ok())
         .and_then(|value| value.get("pty_instance_id").and_then(|id| id.as_u64()))
         == Some(pty_instance_id)
+}
+
+fn emit_task_changed(state: &AppState, action: &str, task_id: &str, project_id: Option<&str>) {
+    let mut payload = serde_json::json!({
+        "action": action,
+        "task_id": task_id,
+    });
+    if let Some(project_id) = project_id {
+        payload["project_id"] = serde_json::json!(project_id);
+    }
+
+    if let Some(events) = &state.app_event_bus {
+        let result = match action {
+            "created" => Some(events.tasks().created(task_id, project_id)),
+            "updated" => Some(events.tasks().updated(task_id, project_id)),
+            _ => None,
+        };
+        match result {
+            Some(Err(error)) => warn!(
+                "[http_server] Failed to publish task-changed app event: {:?}",
+                error
+            ),
+            None => publish_app_event(&state.app_event_tx, "task-changed", &payload),
+            Some(Ok(_)) => {}
+        }
+    } else {
+        publish_app_event(&state.app_event_tx, "task-changed", &payload);
+    }
+
+    if let Some(app) = &state.app {
+        let _ = app.emit("task-changed", payload);
+    }
 }
 
 fn emit_agent_status_changed(state: &AppState, task_id: &str, status: &str, provider: &str) {
@@ -244,16 +280,7 @@ pub async fn create_task_handler(
 
     drop(db);
 
-    if let Some(app) = &state.app {
-        let _ = app.emit(
-            "task-changed",
-            serde_json::json!({
-                "action": "created",
-                "task_id": task.id,
-                "project_id": task.project_id
-            }),
-        );
-    }
+    emit_task_changed(&state, "created", &task.id, task.project_id.as_deref());
 
     Ok(Json(CreateTaskResponse {
         task_id: task.id,
@@ -292,15 +319,7 @@ pub async fn update_task_handler(
 
     drop(db);
 
-    if let Some(app) = &state.app {
-        let _ = app.emit(
-            "task-changed",
-            serde_json::json!({
-                "action": "updated",
-                "task_id": request.task_id
-            }),
-        );
-    }
+    emit_task_changed(&state, "updated", &request.task_id, None);
 
     Ok(Json(UpdateTaskResponse {
         task_id: request.task_id,
@@ -646,6 +665,17 @@ fn app_event_sse_data(envelope: &AppEventEnvelope) -> String {
     })
 }
 
+fn app_event_sse_event(envelope: &AppEventEnvelope) -> Event {
+    let event = Event::default()
+        .event("openforge-event")
+        .data(app_event_sse_data(envelope));
+    if let Some(id) = envelope.id.as_ref() {
+        event.id(id.as_sse_id())
+    } else {
+        event
+    }
+}
+
 fn app_event_keep_alive() -> KeepAlive {
     KeepAlive::new()
         .interval(APP_EVENT_KEEPALIVE_INTERVAL)
@@ -668,6 +698,32 @@ async fn app_events_handler(
     headers: HeaderMap,
 ) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, (StatusCode, String)> {
     require_backend_token(&state, &headers)?;
+
+    if let Some(bus) = state.app_event_bus.as_ref() {
+        let cursor = headers
+            .get("last-event-id")
+            .and_then(|value| value.to_str().ok())
+            .and_then(AppEventCursor::parse);
+        let subscription = bus.subscribe(cursor).map_err(|_| {
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "app event stream is not available".to_string(),
+            )
+        })?;
+        let stream = futures::stream::unfold(subscription, |mut subscription| async move {
+            subscription.recv().await.map(|frame| {
+                let event = match frame {
+                    AppEventFrame::Event(envelope) => app_event_sse_event(&envelope),
+                    AppEventFrame::Gap(gap) => app_event_sse_event(&gap.into_envelope()),
+                };
+                (Ok(event), subscription)
+            })
+        })
+        .boxed();
+
+        return Ok(Sse::new(stream).keep_alive(app_event_keep_alive()));
+    }
+
     let Some(sender) = state.app_event_tx.as_ref() else {
         return Err((
             StatusCode::SERVICE_UNAVAILABLE,
@@ -679,17 +735,13 @@ async fn app_events_handler(
     let stream = futures::stream::unfold(receiver, |mut receiver| async move {
         loop {
             match receiver.recv().await {
-                Ok(envelope) => {
-                    let event = Event::default()
-                        .event("openforge-event")
-                        .data(app_event_sse_data(&envelope));
-                    return Some((Ok(event), receiver));
-                }
+                Ok(envelope) => return Some((Ok(app_event_sse_event(&envelope)), receiver)),
                 Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
                 Err(tokio::sync::broadcast::error::RecvError::Closed) => return None,
             }
         }
-    });
+    })
+    .boxed();
 
     Ok(Sse::new(stream).keep_alive(app_event_keep_alive()))
 }
@@ -797,7 +849,8 @@ async fn start_http_server_with_app_state(
     );
 
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
-    let (app_event_tx, _) = tokio::sync::broadcast::channel(1024);
+    let app_event_bus = AppEventBus::new(1024, 1024);
+    let app_event_tx = app_event_bus.sender();
     let github_client = app
         .as_ref()
         .and_then(|app| app.try_state::<GitHubClient>())
@@ -818,6 +871,7 @@ async fn start_http_server_with_app_state(
         github_client: github_client.clone(),
         plugin_host,
         app_event_tx: Some(app_event_tx.clone()),
+        app_event_bus: Some(app_event_bus),
         whisper,
     };
 

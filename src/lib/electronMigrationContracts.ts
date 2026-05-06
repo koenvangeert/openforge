@@ -6,6 +6,7 @@ export type IpcContractOwner = 'rust-sidecar' | 'electron-main'
 
 export type IpcContractDomain =
   | 'agent-session-pty'
+  | 'app-shell'
   | 'config'
   | 'files-review'
   | 'github-review'
@@ -150,6 +151,7 @@ export const ipcCommandContracts = [
 
 export const appShellEventContracts = [
   { eventName: 'github-sync-complete', payload: 'PollResult', producer: 'rust-backend', transportAfterMigration: 'sse-or-websocket', domain: 'github-review' },
+  { eventName: 'openforge-app-events-gap', payload: '{ requestedAfter: string; oldestAvailable: string; newestAvailable: string }', producer: 'rust-backend', transportAfterMigration: 'sse-or-websocket', domain: 'app-shell' },
   { eventName: 'review-status-changed', payload: 'review status payload', producer: 'rust-backend', transportAfterMigration: 'sse-or-websocket', domain: 'github-review' },
   { eventName: 'action-complete', payload: '{ task_id: string }', producer: 'rust-backend', transportAfterMigration: 'sse-or-websocket', domain: 'agent-session-pty' },
   { eventName: 'implementation-failed', payload: '{ task_id: string; error: string }', producer: 'rust-backend', transportAfterMigration: 'sse-or-websocket', domain: 'agent-session-pty' },

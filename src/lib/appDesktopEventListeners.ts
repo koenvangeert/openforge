@@ -11,7 +11,7 @@ import {
   tasks,
 } from './stores'
 import { finalizeClaudeSession, getLatestSession, getTaskDetail } from './ipc'
-import { release as releaseTerminal } from './terminalPool'
+import { release as releaseTerminal, replayPtyBuffersForActiveTerminals } from './terminalPool'
 import { getOpenCodeSessionUpdate } from './opencodeSessionEvents'
 import { getTaskPromptText } from './taskPrompt'
 import type { AgentEvent, AgentSession } from './types'
@@ -79,6 +79,17 @@ export async function registerAppDesktopEventListeners(deps: AppDesktopEventDeps
     await listen('github-sync-complete', () => {
       void deps.loadPullRequests()
       void deps.loadProjectAttention()
+    }),
+  )
+
+  unlisteners.push(
+    await listen('openforge-app-events-gap', () => {
+      void deps.loadTasks()
+      void deps.loadSessions()
+      void deps.loadPullRequests()
+      void deps.loadProjectAttention()
+      void deps.refreshPrCounts()
+      void replayPtyBuffersForActiveTerminals()
     }),
   )
 

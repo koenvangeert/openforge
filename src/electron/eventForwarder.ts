@@ -2,6 +2,7 @@ import { OPENFORGE_APP_EVENTS_RECONNECTED_EVENT, OPENFORGE_EVENT_CHANNEL } from 
 import type { SidecarLaunchConfig } from './sidecar.js'
 
 export interface OpenForgeEventEnvelope {
+  id?: string
   eventName: string
   payload: unknown
 }
@@ -60,7 +61,13 @@ export function parseSseMessages(chunk: string): OpenForgeEventEnvelope[] {
 
     try {
       const parsed = JSON.parse(dataLines.join('\n'))
-      if (isEnvelope(parsed)) envelopes.push(parsed)
+      if (isEnvelope(parsed)) {
+        const idLine = frame
+          .split(/\r?\n/)
+          .find(line => line.startsWith('id:'))
+        const id = idLine?.slice('id:'.length).trimStart()
+        envelopes.push(id ? { ...parsed, id } : parsed)
+      }
     } catch {
       // Ignore malformed frames; the stream remains alive for later valid events.
     }
@@ -73,6 +80,7 @@ export function createAppEventForwarder(deps: AppEventForwarderDeps): AppEventFo
   const abortController = new AbortController()
   const decoder = new TextDecoder()
   let buffer = ''
+  let lastEventId: string | null = null
   let readySettled = false
   let resolveReady!: () => void
   let rejectReady!: (error: unknown) => void
@@ -101,6 +109,9 @@ export function createAppEventForwarder(deps: AppEventForwarderDeps): AppEventFo
   }
 
   function forward(envelope: OpenForgeEventEnvelope): void {
+    if (typeof envelope.id === 'string' && envelope.id.length > 0) {
+      lastEventId = envelope.id
+    }
     for (const window of deps.windows()) {
       window.webContents.send(OPENFORGE_EVENT_CHANNEL, envelope)
     }
@@ -162,8 +173,11 @@ export function createAppEventForwarder(deps: AppEventForwarderDeps): AppEventFo
 
     while (!abortController.signal.aborted) {
       try {
+        const headers: Record<string, string> = { Authorization: `Bearer ${deps.sidecarConfig.token}` }
+        if (lastEventId) headers['Last-Event-ID'] = lastEventId
+
         const response = await deps.fetch(`http://${deps.sidecarConfig.host}:${deps.sidecarConfig.port}/app/events`, {
-          headers: { Authorization: `Bearer ${deps.sidecarConfig.token}` },
+          headers,
           signal: abortController.signal,
         })
 

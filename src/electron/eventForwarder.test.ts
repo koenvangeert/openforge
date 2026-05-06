@@ -40,6 +40,102 @@ describe('Electron app event forwarding', () => {
     ])
   })
 
+  it('attaches SSE ids to parsed envelopes for reconnect cursors without changing payload compatibility', () => {
+    expect(parseSseMessages('id: epoch-1:12\nevent: openforge-event\ndata: {"eventName":"task-changed","payload":{"action":"updated","task_id":"T-1"}}\n\n')).toEqual([
+      { id: 'epoch-1:12', eventName: 'task-changed', payload: { action: 'updated', task_id: 'T-1' } },
+    ])
+  })
+
+  it('reconnects with the last delivered event id as Last-Event-ID', async () => {
+    const send = vi.fn()
+    let forwarder: ReturnType<typeof createAppEventForwarder>
+    const sleep = vi.fn(async () => {
+      if (sleep.mock.calls.length >= 2) forwarder.stop()
+    })
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        body: eventStream([
+          'id: epoch-1:7\nevent: openforge-event\ndata: {"eventName":"task-changed","payload":{"action":"updated","task_id":"T-7"}}\n\n',
+        ]),
+        text: async () => '',
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        body: eventStream([]),
+        text: async () => '',
+      })
+
+    forwarder = createAppEventForwarder({
+      sidecarConfig: sidecarConfig(),
+      fetch,
+      windows: () => [{ webContents: { send } }],
+      sleep,
+      reconnectDelayMs: 0,
+    })
+
+    await forwarder.start()
+
+    expect(fetch).toHaveBeenNthCalledWith(2, 'http://127.0.0.1:17642/app/events', {
+      headers: { Authorization: 'Bearer launch-token', 'Last-Event-ID': 'epoch-1:7' },
+      signal: expect.any(AbortSignal),
+    })
+  })
+
+  it('uses gap frame ids as reconnect cursors after unrecoverable replay gaps', async () => {
+    const send = vi.fn()
+    let forwarder: ReturnType<typeof createAppEventForwarder>
+    const sleep = vi.fn(async () => {
+      if (sleep.mock.calls.length >= 2) forwarder.stop()
+    })
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        body: eventStream([
+          'id: epoch-1:8\nevent: openforge-event\ndata: {"eventName":"openforge-app-events-gap","payload":{"requestedAfter":"epoch-1:1","oldestAvailable":"epoch-1:4","newestAvailable":"epoch-1:8"}}\n\n',
+        ]),
+        text: async () => '',
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        body: eventStream([]),
+        text: async () => '',
+      })
+
+    forwarder = createAppEventForwarder({
+      sidecarConfig: sidecarConfig(),
+      fetch,
+      windows: () => [{ webContents: { send } }],
+      sleep,
+      reconnectDelayMs: 0,
+    })
+
+    await forwarder.start()
+
+    expect(fetch).toHaveBeenNthCalledWith(2, 'http://127.0.0.1:17642/app/events', {
+      headers: { Authorization: 'Bearer launch-token', 'Last-Event-ID': 'epoch-1:8' },
+      signal: expect.any(AbortSignal),
+    })
+  })
+
+  it('forwards app event gap control frames to renderer listeners', () => {
+    const send = vi.fn()
+    const forwarder = createAppEventForwarder({
+      sidecarConfig: sidecarConfig(),
+      fetch: vi.fn(),
+      windows: () => [{ webContents: { send } }],
+    })
+
+    forwarder.acceptChunk('event: openforge-event\ndata: {"eventName":"openforge-app-events-gap","payload":{"requestedAfter":"epoch-1:1","oldestAvailable":"epoch-1:4","newestAvailable":"epoch-1:8"}}\n\n')
+
+    expect(send).toHaveBeenCalledWith(OPENFORGE_EVENT_CHANNEL, {
+      eventName: 'openforge-app-events-gap',
+      payload: { requestedAfter: 'epoch-1:1', oldestAvailable: 'epoch-1:4', newestAvailable: 'epoch-1:8' },
+    })
+  })
+
   it('parses CRLF-delimited SSE frames when accepting streamed chunks', () => {
     const send = vi.fn()
     const forwarder = createAppEventForwarder({
