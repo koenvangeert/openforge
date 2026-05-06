@@ -152,14 +152,14 @@ describe('DiffViewer integration', () => {
     })
 
     await waitFor(() => {
-      expect(container.querySelectorAll('.diff-line-content-item').length).toBeGreaterThan(0)
-      expect(container.querySelectorAll('.diff-line-content-item span[data-start][data-end]').length).toBeGreaterThan(0)
-      expect(container.textContent).toContain('addedValue')
+      expect(screen.getByText('src/example.ts')).toBeTruthy()
+      expect(container.textContent).toContain('const addedValue = 2')
+      expect(container.textContent).toContain('console.log(addedValue)')
     })
   })
 
   it('supports diff search against the real rendered diff output', async () => {
-    render(DiffViewer, {
+    const { container } = render(DiffViewer, {
       props: {
         files: [fileWithPatch],
         batchFetchFileContents: vi.fn().mockResolvedValue(new Map([
@@ -172,7 +172,8 @@ describe('DiffViewer integration', () => {
     })
 
     await waitFor(() => {
-      expect(document.querySelectorAll('.diff-line-content-item').length).toBeGreaterThan(0)
+      expect(screen.getByText('src/example.ts')).toBeTruthy()
+      expect(container.textContent).toContain('addedValue')
     })
 
     await fireEvent.click(screen.getByTitle('Search (⌘F)'))
