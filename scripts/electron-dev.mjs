@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { spawn } from 'node:child_process'
 import { mkdtempSync } from 'node:fs'
+import { rm as rmPath } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -47,15 +48,22 @@ export function resolveElectronDevRuntimeOptions(env = process.env, deps = { mkd
     ? null
     : parsePort(env.OPENFORGE_ELECTRON_DEBUG_PORT, 'OPENFORGE_ELECTRON_DEBUG_PORT')
   const tempRoot = deps.tmpdir()
+  const tempRuntimeDirs = []
+  const explicitUserDataDir = nonEmptyEnv(env.OPENFORGE_ELECTRON_USER_DATA_DIR)
+  const explicitAppDataDir = nonEmptyEnv(env.OPENFORGE_APP_DATA_DIR)
+  const userDataDir = explicitUserDataDir ?? deps.mkdtempSync(join(tempRoot, 'openforge-electron-user-data-'))
+  const appDataDir = explicitAppDataDir ?? deps.mkdtempSync(join(tempRoot, 'openforge-sidecar-app-data-'))
+
+  if (!explicitUserDataDir) tempRuntimeDirs.push(userDataDir)
+  if (!explicitAppDataDir) tempRuntimeDirs.push(appDataDir)
 
   return {
     rendererPort,
     rendererUrl: rendererUrlForPort(rendererPort),
     electronDebugPort,
-    userDataDir: nonEmptyEnv(env.OPENFORGE_ELECTRON_USER_DATA_DIR)
-      ?? deps.mkdtempSync(join(tempRoot, 'openforge-electron-user-data-')),
-    appDataDir: nonEmptyEnv(env.OPENFORGE_APP_DATA_DIR)
-      ?? deps.mkdtempSync(join(tempRoot, 'openforge-sidecar-app-data-')),
+    userDataDir,
+    appDataDir,
+    tempRuntimeDirs,
   }
 }
 
@@ -266,25 +274,40 @@ export async function stopProcess(child, options = {}) {
   return 'killed'
 }
 
+async function cleanupRuntimeDirs(runtimeOptions = {}, options = {}) {
+  const tempRuntimeDirs = runtimeOptions.tempRuntimeDirs ?? []
+  const removeDir = options.rm ?? rmPath
+  const logger = options.logger ?? console
+
+  return Promise.all(tempRuntimeDirs.map(async (runtimeDir) => {
+    try {
+      await removeDir(runtimeDir, { recursive: true, force: true })
+      return 'removed'
+    } catch (error) {
+      logger.warn?.(`[electron-dev] Failed to remove temp runtime directory ${runtimeDir}: ${error instanceof Error ? error.message : String(error)}`)
+      return 'failed'
+    }
+  }))
+}
+
 export async function cleanupDevProcesses(children, options = {}) {
   const stopTasks = [children.vite, children.electron]
     .filter(Boolean)
     .map(child => stopProcess(child, options))
 
-  return Promise.all(stopTasks)
+  const processes = await Promise.all(stopTasks)
+  const runtimeDirs = await cleanupRuntimeDirs(options.runtimeOptions, options)
+
+  return { processes, runtimeDirs }
 }
 
 async function main() {
   const runtimeOptions = resolveElectronDevRuntimeOptions()
-  logStep(`Starting Vite dev server on ${runtimeOptions.rendererUrl} ...`)
-  await assertVitePortAvailable(runtimeOptions.rendererPort)
-  await assertElectronDebugPortAvailable(runtimeOptions.electronDebugPort)
-  const devBackend = await resolveElectronDevBackendEnv()
-  const vite = spawnCommand('pnpm', ['exec', 'vite', '--host', VITE_HOST, '--port', String(runtimeOptions.rendererPort), '--strictPort'])
+  let vite = null
   let electron = null
   let cleanupPromise = null
   const cleanup = () => {
-    cleanupPromise ??= cleanupDevProcesses({ vite, electron })
+    cleanupPromise ??= cleanupDevProcesses({ vite, electron }, { runtimeOptions })
     return cleanupPromise
   }
   const shutdown = (exitCode) => {
@@ -294,6 +317,11 @@ async function main() {
   process.once('SIGTERM', () => shutdown(143))
 
   try {
+    logStep(`Starting Vite dev server on ${runtimeOptions.rendererUrl} ...`)
+    await assertVitePortAvailable(runtimeOptions.rendererPort)
+    await assertElectronDebugPortAvailable(runtimeOptions.electronDebugPort)
+    const devBackend = await resolveElectronDevBackendEnv()
+    vite = spawnCommand('pnpm', ['exec', 'vite', '--host', VITE_HOST, '--port', String(runtimeOptions.rendererPort), '--strictPort'])
     logStep('Waiting for Vite readiness ...')
     await waitForVite(runtimeOptions.rendererUrl, vite)
     const { env: cargoEnv, cargoTargetDir, source } = devBackend

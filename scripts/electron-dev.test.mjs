@@ -143,6 +143,7 @@ describe('electron dev script environment', () => {
     expect(options.electronDebugPort).toBe(9333)
     expect(options.userDataDir).toBe('/tmp/openforge-electron-user-data-1')
     expect(options.appDataDir).toBe('/tmp/openforge-sidecar-app-data-2')
+    expect(options.tempRuntimeDirs).toEqual(['/tmp/openforge-electron-user-data-1', '/tmp/openforge-sidecar-app-data-2'])
     expect(buildElectronDebugArgs(options)).toEqual(['--inspect=127.0.0.1:9333'])
   })
 
@@ -154,6 +155,7 @@ describe('electron dev script environment', () => {
 
     expect(options.userDataDir).toBe('/custom/user-data')
     expect(options.appDataDir).toBe('/custom/app-data')
+    expect(options.tempRuntimeDirs).toEqual([])
     expect(options.electronDebugPort).toBeNull()
     expect(buildElectronDebugArgs(options)).toEqual([])
   })
@@ -319,10 +321,20 @@ describe('electron dev script environment', () => {
     expect(child.unrefCalls).toBe(1)
   })
 
-  it('cleans up Vite and Electron child processes before resolving', async () => {
+  it('cleans up Vite, Electron, and auto-created runtime directories before resolving', async () => {
     const vite = createChildProcessMock()
     const electron = createChildProcessMock()
-    const cleanup = cleanupDevProcesses({ vite, electron }, { graceMs: 100 })
+    const rm = vi.fn(async () => undefined)
+    const cleanup = cleanupDevProcesses(
+      { vite, electron },
+      {
+        graceMs: 100,
+        runtimeOptions: {
+          tempRuntimeDirs: ['/tmp/openforge-electron-user-data-1', '/tmp/openforge-sidecar-app-data-2'],
+        },
+        rm,
+      },
+    )
 
     expect(vite.killSignals).toEqual(['SIGTERM'])
     expect(electron.killSignals).toEqual(['SIGTERM'])
@@ -330,6 +342,24 @@ describe('electron dev script environment', () => {
     vite.emitExit(0, null)
     electron.emitExit(0, null)
 
-    await expect(cleanup).resolves.toEqual(['terminated', 'terminated'])
+    await expect(cleanup).resolves.toEqual({
+      processes: ['terminated', 'terminated'],
+      runtimeDirs: ['removed', 'removed'],
+    })
+    expect(rm).toHaveBeenCalledWith('/tmp/openforge-electron-user-data-1', { recursive: true, force: true })
+    expect(rm).toHaveBeenCalledWith('/tmp/openforge-sidecar-app-data-2', { recursive: true, force: true })
+  })
+
+  it('does not remove explicit runtime directories during cleanup', async () => {
+    const rm = vi.fn(async () => undefined)
+
+    await expect(cleanupDevProcesses(
+      {},
+      {
+        runtimeOptions: { tempRuntimeDirs: [] },
+        rm,
+      },
+    )).resolves.toEqual({ processes: [], runtimeDirs: [] })
+    expect(rm).not.toHaveBeenCalled()
   })
 })
