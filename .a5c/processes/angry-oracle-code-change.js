@@ -1,6 +1,6 @@
 /**
  * @process openforge/angry-oracle-code-change
- * @description Code-change workflow with TDD, verification, and an adversarial post-change oracle review/fix loop
+ * @description Code-change workflow with context-appropriate verification and an adversarial post-change oracle review/fix loop
  * @skill rust .agents/skills/rust/SKILL.md
  * @skill ui-ux-pro-max .agents/skills/ui-ux-pro-max/SKILL.md
  * @skill openforge /Users/koen/.pi/agent/skills/openforge/SKILL.md
@@ -13,6 +13,9 @@ import { defineTask } from '@a5c-ai/babysitter-sdk';
 
 export const ORACLE_BLOCKING_SEVERITIES = ['critical', 'high'];
 export const DEFAULT_VERIFICATION_COMMANDS = ['pnpm exec tsc --noEmit', 'pnpm test'];
+
+export const TDD_APPLICABILITY_GUIDANCE = 'Use TDD for feature work, bugfixes, and business-logic or product-behavior implementation: write or update focused tests first, verify the right failure where practical, implement, then refactor.';
+export const LIGHTWEIGHT_VERIFICATION_GUIDANCE = 'For documentation-only, configuration-only, planning, metadata, process-only, or similarly low-risk changes, do not invent failing product tests; instead choose the lightest verification that proves the requested artifact is correct, such as process unit tests, schema checks, targeted CLI checks, or careful review.';
 
 export const MANUAL_APP_VERIFICATION_PATH_PREFIXES = [
   'src/',
@@ -115,6 +118,7 @@ export function buildOracleReviewPrompt({ request, changedFiles = [], verificati
         'TypeScript uses import type with verbatimModuleSyntax',
         'Rust commands return Result<T, String> with formatted errors',
         'Tests cover business logic, not visual styling',
+        'TDD is expected for feature, bugfix, business-logic, and product-behavior implementation; documentation-only, configuration-only, planning, metadata, and process-only changes may use lighter targeted verification without inventing failing product tests',
         'Map-based stores must replace with new Map() for reactivity',
         'Terminal lifecycle ownership belongs in src/lib/terminalPool.ts'
       ]
@@ -269,10 +273,10 @@ export const projectContextTask = defineTask('project-context', (args, taskCtx) 
   labels: ['agent', 'planning', 'project-context']
 }));
 
-export const implementationTask = defineTask('implementation-with-tdd', (args, taskCtx) => ({
+export const implementationTask = defineTask('implementation-with-appropriate-verification', (args, taskCtx) => ({
   kind: 'agent',
-  title: 'Implement requested code change with TDD',
-  description: 'Make the requested changes, writing or updating focused business-logic tests first',
+  title: 'Implement requested code change with appropriate verification',
+  description: 'Make the requested changes with TDD when it applies and lighter targeted verification for docs/config/process-only work',
   agent: {
     name: 'general-purpose',
     prompt: {
@@ -280,7 +284,8 @@ export const implementationTask = defineTask('implementation-with-tdd', (args, t
       task: 'Implement the requested code change completely',
       context: args,
       instructions: [
-        'Use TDD: write or update focused business-logic tests first and verify they fail for the right reason before implementation.',
+        TDD_APPLICABILITY_GUIDANCE,
+        LIGHTWEIGHT_VERIFICATION_GUIDANCE,
         'Implement only the requested scope; do not opportunistically refactor unrelated code.',
         'Follow AGENTS.md conventions exactly for Svelte, TypeScript, Rust, IPC, terminal lifecycle, task context menus, and styling.',
         'Run targeted verification as you work when practical.',
@@ -305,7 +310,7 @@ export const implementationTask = defineTask('implementation-with-tdd', (args, t
     inputJsonPath: `tasks/${taskCtx.effectId}/input.json`,
     outputJsonPath: `tasks/${taskCtx.effectId}/output.json`
   },
-  labels: ['agent', 'implementation', 'tdd']
+  labels: ['agent', 'implementation', 'verification']
 }));
 
 export const changeInventoryTask = defineTask('change-inventory', (args) => ({
@@ -413,7 +418,8 @@ export const oracleFixTask = defineTask('oracle-fix', (args, taskCtx) => ({
         'Fix every required fixes item, every requiredFixes entry, and every blocking review finding unless it is demonstrably false; explain any false positive with evidence.',
         'Fix every critical and high severity finding unless it is demonstrably false; explain any false positive with evidence.',
         'Address architectural fit feedback by preserving module boundaries, ownership, cohesion, and appropriate scope.',
-        'Add or update focused business-logic tests for the fixed behavior.',
+        'Add or update focused business-logic tests for fixed feature, bugfix, business-logic, or product-behavior changes.',
+        'Do not invent failing product tests for documentation-only, configuration-only, planning, metadata, process-only, or similarly low-risk fixes; use targeted verification that fits the changed artifact.',
         'Keep the scope tight to the oracle feedback and original request.',
         'Return exactly what changed and which findings were addressed.'
       ],

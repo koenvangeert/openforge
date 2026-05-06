@@ -214,7 +214,7 @@ Build and draft macOS releases.
 
 **Error handling:** Rust sidecar command boundaries map errors to `Result<T, String>`; frontend uses typed IPC wrappers and UI state; avoid direct desktop transport calls outside `src/lib/ipc.ts`.
 
-**Testing:** Use TDD. Write/update tests first, verify failure where practical, then implement. Cover business logic and behavior; do not assert Tailwind/CSS visual classes. Run `pnpm test` and/or `cargo test` depending on touched area.
+**Testing:** Use TDD for feature work, bugfixes, and business-logic or product-behavior implementation. Write/update tests first and verify failure where practical, then implement. For documentation-only, configuration-only, planning, metadata, process-only, or similarly low-risk changes, do not invent failing product tests; use targeted verification that fits the artifact. Cover business logic and behavior; do not assert Tailwind/CSS visual classes. Run `pnpm test` and/or `cargo test` depending on touched area.
 
 ### Additional Rules
 
@@ -235,7 +235,7 @@ Build and draft macOS releases.
 
 - Open Forge product goal: coordinate multiple projects and AI agents while preserving one-thing-at-a-time focus and low-noise timely nudges.
 - Use `/babysitter:project-install` to refresh project profile artifacts after major architecture, workflow, or product-direction changes.
-- Prefer TDD-driven iterative convergence for implementation tasks and run the relevant pnpm/electron/cargo verification gates.
+- Prefer TDD-driven iterative convergence for feature, bugfix, business-logic, and product-behavior implementation tasks. Use lighter targeted verification for docs/config/process-only work, and run the relevant pnpm/electron/cargo verification gates.
 - Map code before broad changes touching high-churn integration points: `App.svelte`, `src/electron/main.ts`, `main.rs`, ipc/types, github_poller, and terminalPool.
 - CI/CD babysitter integration was intentionally skipped; do not add GitHub Actions babysitter automation without a future explicit task.
 
