@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { invokeMock } = vi.hoisted(() => ({
@@ -16,12 +18,34 @@ import {
 	getAllTasks,
 	getCommitBatchFileContents,
 	getTaskBatchFileContents,
+	getPtyBuffer,
 	installPlugin,
+	killPty,
+	killShellsForTask,
+	resizePty,
+	spawnPty,
 	spawnShellPty,
 	transcribeAudio,
 	updateTask,
 	updateTaskSummary,
+	writePty,
 } from "./ipc";
+
+type PtyPayloadFixture = {
+	name: string;
+	command: string;
+	payload: Record<string, unknown>;
+}
+
+const ptyPayloadContracts = JSON.parse(
+	readFileSync(resolve(process.cwd(), "src-tauri/src/app_invoke/tests/fixtures/pty_payload_contracts.json"), "utf8"),
+) as { valid: PtyPayloadFixture[] };
+
+function ptyFixture(command: string, name: string): PtyPayloadFixture {
+	const fixture = ptyPayloadContracts.valid.find((entry) => entry.command === command && entry.name === name);
+	if (!fixture) throw new Error(`Missing PTY payload fixture ${command}/${name}`);
+	return fixture;
+}
 
 describe("ipc spawnShellPty", () => {
 	beforeEach(() => {
@@ -39,6 +63,36 @@ describe("ipc spawnShellPty", () => {
 			rows: 24,
 			terminalIndex: 1,
 		});
+	});
+
+	it("keeps renderer PTY payloads aligned with the Rust decoder contract fixtures", async () => {
+		const spawnAgent = ptyFixture("pty_spawn", "spawn_agent_pty");
+		await spawnPty("T-pty", 4096, "ses-pty", 80, 24);
+		expect(invokeMock).toHaveBeenLastCalledWith(spawnAgent.command, spawnAgent.payload);
+
+		const spawnShell = ptyFixture("pty_spawn_shell", "spawn_shell_with_index");
+		await spawnShellPty("T-pty", "/tmp/openforge-worktree", 80, 24, 2);
+		expect(invokeMock).toHaveBeenLastCalledWith(spawnShell.command, spawnShell.payload);
+
+		const write = ptyFixture("pty_write", "write_pty");
+		await writePty("T-pty", "echo ready\n");
+		expect(invokeMock).toHaveBeenLastCalledWith(write.command, write.payload);
+
+		const resize = ptyFixture("pty_resize", "resize_pty");
+		await resizePty("T-pty", 120, 40);
+		expect(invokeMock).toHaveBeenLastCalledWith(resize.command, resize.payload);
+
+		const kill = ptyFixture("pty_kill", "kill_pty");
+		await killPty("T-pty");
+		expect(invokeMock).toHaveBeenLastCalledWith(kill.command, kill.payload);
+
+		const killShells = ptyFixture("pty_kill_shells_for_task", "kill_shells_for_task");
+		await killShellsForTask("T-pty");
+		expect(invokeMock).toHaveBeenLastCalledWith(killShells.command, killShells.payload);
+
+		const buffer = ptyFixture("get_pty_buffer", "get_pty_buffer");
+		await getPtyBuffer("T-pty");
+		expect(invokeMock).toHaveBeenLastCalledWith(buffer.command, buffer.payload);
 	});
 
 	it("normalizes legacy board statuses in task responses", async () => {

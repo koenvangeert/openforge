@@ -6,6 +6,7 @@ mod github_review;
 mod lifecycle;
 mod plugins;
 mod pty;
+mod pty_payload;
 mod runtime;
 mod whisper;
 
@@ -52,20 +53,12 @@ fn payload_field<T: serde::de::DeserializeOwned>(
     payload::field(payload, key).map_err(Into::into)
 }
 
-fn payload_u16(payload: &serde_json::Value, key: &str) -> AppResult<u16> {
-    payload::u16(payload, key).map_err(Into::into)
-}
-
 fn payload_i64(payload: &serde_json::Value, key: &str) -> AppResult<i64> {
     payload::i64(payload, key).map_err(Into::into)
 }
 
 fn payload_string_vec(payload: &serde_json::Value, key: &str) -> AppResult<Vec<String>> {
     payload::string_vec(payload, key).map_err(Into::into)
-}
-
-fn payload_optional_u32(payload: &serde_json::Value, key: &str) -> AppResult<Option<u32>> {
-    payload::optional_u32(payload, key).map_err(Into::into)
 }
 
 fn payload_optional_i32(payload: &serde_json::Value, key: &str) -> AppResult<Option<i32>> {

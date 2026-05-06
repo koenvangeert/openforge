@@ -65,17 +65,6 @@ pub(crate) fn field<T: DeserializeOwned>(
         .map_err(|e| AppInvokeError::bad_request(format!("payload.{key} is invalid: {e}")))
 }
 
-pub(crate) fn u16(payload: &serde_json::Value, key: &str) -> Result<u16, AppInvokeError> {
-    let Some(value) = payload.get(key).and_then(|value| value.as_u64()) else {
-        return Err(AppInvokeError::bad_request(format!(
-            "payload.{key} must be an unsigned integer"
-        )));
-    };
-
-    u16::try_from(value)
-        .map_err(|_| AppInvokeError::bad_request(format!("payload.{key} must fit in u16")))
-}
-
 pub(crate) fn i64(payload: &serde_json::Value, key: &str) -> Result<i64, AppInvokeError> {
     payload
         .get(key)
@@ -106,25 +95,6 @@ pub(crate) fn string_vec(
             })
         })
         .collect()
-}
-
-pub(crate) fn optional_u32(
-    payload: &serde_json::Value,
-    key: &str,
-) -> Result<Option<u32>, AppInvokeError> {
-    match payload.get(key) {
-        None | Some(serde_json::Value::Null) => Ok(None),
-        Some(value) => {
-            let Some(value) = value.as_u64() else {
-                return Err(AppInvokeError::bad_request(format!(
-                    "payload.{key} must be an unsigned integer or null"
-                )));
-            };
-            u32::try_from(value)
-                .map(Some)
-                .map_err(|_| AppInvokeError::bad_request(format!("payload.{key} must fit in u32")))
-        }
-    }
 }
 
 pub(crate) fn optional_i32(
@@ -162,25 +132,5 @@ pub(crate) fn optional_usize(
                 AppInvokeError::bad_request(format!("payload.{key} must fit in usize"))
             })
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use serde_json::json;
-
-    #[test]
-    fn optional_u32_reports_typed_bad_request_errors() {
-        let payload = json!({ "terminalIndex": "not-a-number" });
-
-        let err = optional_u32(&payload, "terminalIndex")
-            .expect_err("invalid terminalIndex should be rejected before PTY dispatch");
-
-        assert_eq!(err.status, StatusCode::BAD_REQUEST);
-        assert_eq!(
-            err.message,
-            "payload.terminalIndex must be an unsigned integer or null"
-        );
     }
 }
