@@ -6,23 +6,28 @@ import { compile } from 'svelte/compiler'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import TerminalProjectView from './TerminalProjectView.svelte'
 
-const { terminalTabsApi, cleanupProjectTerminalTaskMock } = vi.hoisted(() => ({
+const { terminalTabsApi, cleanupSideEffects } = vi.hoisted(() => ({
   terminalTabsApi: {
     addTab: vi.fn(),
     closeActiveTab: vi.fn().mockResolvedValue(undefined),
     focusActiveTab: vi.fn(),
     switchToTab: vi.fn(),
   },
-  cleanupProjectTerminalTaskMock: vi.fn().mockResolvedValue({ killed: 0, released: 0, killFailures: [] }),
+  cleanupSideEffects: {
+    killPty: vi.fn(),
+    releaseAllForTask: vi.fn(),
+    clearTaskTerminalTabsSession: vi.fn(),
+  },
 }))
 
-vi.mock('./lib/projectTerminal', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('./lib/projectTerminal')>()
-  return {
-    ...actual,
-    cleanupProjectTerminalTask: cleanupProjectTerminalTaskMock,
-  }
-})
+vi.mock('./lib/ipc', () => ({
+  killPty: cleanupSideEffects.killPty,
+}))
+
+vi.mock('./lib/terminalPool', () => ({
+  releaseAllForTask: cleanupSideEffects.releaseAllForTask,
+  clearTaskTerminalTabsSession: cleanupSideEffects.clearTaskTerminalTabsSession,
+}))
 
 vi.mock('./TerminalTabs.svelte', () => ({
   default: vi.fn(() => ({
@@ -37,7 +42,15 @@ function resetMocks() {
   terminalTabsApi.closeActiveTab.mockClear()
   terminalTabsApi.focusActiveTab.mockClear()
   terminalTabsApi.switchToTab.mockClear()
-  cleanupProjectTerminalTaskMock.mockClear()
+  cleanupSideEffects.killPty.mockClear()
+  cleanupSideEffects.releaseAllForTask.mockClear()
+  cleanupSideEffects.clearTaskTerminalTabsSession.mockClear()
+}
+
+function expectNoProjectTerminalCleanup() {
+  expect(cleanupSideEffects.killPty).not.toHaveBeenCalled()
+  expect(cleanupSideEffects.releaseAllForTask).not.toHaveBeenCalled()
+  expect(cleanupSideEffects.clearTaskTerminalTabsSession).not.toHaveBeenCalled()
 }
 
 function makeKeyEvent(init: KeyboardEventInit): KeyboardEvent {
@@ -125,7 +138,7 @@ describe('TerminalProjectView', () => {
     })
     await tick()
 
-    expect(cleanupProjectTerminalTaskMock).not.toHaveBeenCalled()
+    expectNoProjectTerminalCleanup()
   })
 
   it('keeps the previous project terminal alive when switching projects after navigating away', async () => {
@@ -149,7 +162,7 @@ describe('TerminalProjectView', () => {
     })
     await tick()
 
-    expect(cleanupProjectTerminalTaskMock).not.toHaveBeenCalled()
+    expectNoProjectTerminalCleanup()
   })
 
   it('keeps the previous project terminal alive when switching to a different project', async () => {
@@ -168,6 +181,6 @@ describe('TerminalProjectView', () => {
     })
     await tick()
 
-    expect(cleanupProjectTerminalTaskMock).not.toHaveBeenCalled()
+    expectNoProjectTerminalCleanup()
   })
 })

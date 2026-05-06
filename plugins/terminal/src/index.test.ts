@@ -7,10 +7,14 @@ import manifest from '../manifest.json'
 
 const terminalSrcDir = dirname(fileURLToPath(import.meta.url))
 
-const { mockTerminalTaskPane, mockTerminalProjectView, cleanupProjectTerminalTaskMock } = vi.hoisted(() => ({
+const { mockTerminalTaskPane, mockTerminalProjectView, cleanupSideEffects } = vi.hoisted(() => ({
   mockTerminalTaskPane: { name: 'TerminalTaskPaneComponent' },
   mockTerminalProjectView: { name: 'TerminalProjectViewComponent' },
-  cleanupProjectTerminalTaskMock: vi.fn().mockResolvedValue({ killed: 0, released: 0, killFailures: [] }),
+  cleanupSideEffects: {
+    killPty: vi.fn(),
+    releaseAllForTask: vi.fn(),
+    clearTaskTerminalTabsSession: vi.fn(),
+  },
 }))
 
 vi.mock('./TerminalTaskPane.svelte', () => ({
@@ -21,28 +25,29 @@ vi.mock('./TerminalProjectView.svelte', () => ({
   default: mockTerminalProjectView,
 }))
 
-vi.mock('./lib/projectTerminal', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('./lib/projectTerminal')>()
-  return {
-    ...actual,
-    cleanupProjectTerminalTask: cleanupProjectTerminalTaskMock,
-  }
-})
-
 vi.mock('./lib/ipc', () => ({
-  killPty: vi.fn(),
+  killPty: cleanupSideEffects.killPty,
 }))
 
 vi.mock('./lib/terminalPool', () => ({
-  clearTaskTerminalTabsSession: vi.fn(),
+  clearTaskTerminalTabsSession: cleanupSideEffects.clearTaskTerminalTabsSession,
   getTaskTerminalTabsSession: vi.fn(() => ({ tabs: [] })),
-  releaseAllForTask: vi.fn(() => 0),
+  releaseAllForTask: cleanupSideEffects.releaseAllForTask,
 }))
+
+function expectNoProjectTerminalCleanup() {
+  expect(cleanupSideEffects.killPty).not.toHaveBeenCalled()
+  expect(cleanupSideEffects.releaseAllForTask).not.toHaveBeenCalled()
+  expect(cleanupSideEffects.clearTaskTerminalTabsSession).not.toHaveBeenCalled()
+}
 
 describe('terminal plugin', () => {
   afterEach(() => {
-    cleanupProjectTerminalTaskMock.mockClear()
+    cleanupSideEffects.killPty.mockClear()
+    cleanupSideEffects.releaseAllForTask.mockClear()
+    cleanupSideEffects.clearTaskTerminalTabsSession.mockClear()
   })
+
   it('does not retain stale host PluginContext state in the terminal plugin entry', () => {
     const indexSource = readFileSync(join(terminalSrcDir, 'index.ts'), 'utf8')
 
@@ -109,7 +114,7 @@ describe('terminal plugin', () => {
 
     navigationHandlers[0]?.({ activeProjectId: 'P-456', currentView: 'board' })
 
-    expect(cleanupProjectTerminalTaskMock).not.toHaveBeenCalled()
+    expectNoProjectTerminalCleanup()
   })
 
   it('does not clean up a project terminal that was never opened', async () => {
@@ -131,7 +136,7 @@ describe('terminal plugin', () => {
     await result.contributions.backgroundServices?.[0]?.start()
     navigationHandlers[0]?.({ activeProjectId: 'P-456', currentView: 'board' })
 
-    expect(cleanupProjectTerminalTaskMock).not.toHaveBeenCalled()
+    expectNoProjectTerminalCleanup()
   })
 
   it('deactivates without error', async () => {
