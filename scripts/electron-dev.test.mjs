@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events'
 import { describe, expect, it, vi } from 'vitest'
-import { ELECTRON_RENDERER_URL, assertBackendPortAvailable, assertVitePortAvailable, buildElectronDevEnv, cleanupDevProcesses, electronSidecarPath, resolveElectronDevBackendEnv, stopProcess, waitForVite } from './electron-dev.mjs'
+import { ELECTRON_RENDERER_URL, assertBackendPortAvailable, assertElectronDebugPortAvailable, assertVitePortAvailable, buildElectronDebugArgs, buildElectronDevEnv, cleanupDevProcesses, electronSidecarPath, rendererUrlForPort, resolveElectronDevBackendEnv, resolveElectronDevRuntimeOptions, stopProcess, waitForVite } from './electron-dev.mjs'
 import { resolveRustSidecarLayout } from './rust-sidecar-layout.mjs'
 
 const defaultTestLayout = resolveRustSidecarLayout({
@@ -67,6 +67,24 @@ describe('electron dev script environment', () => {
     expect(env.PATH).toBe('/usr/bin')
   })
 
+  it('passes configurable renderer URL and isolated runtime directories to Electron and the sidecar', () => {
+    const env = buildElectronDevEnv(
+      { PATH: '/usr/bin' },
+      '/tmp/openforge-sidecar',
+      {
+        rendererUrl: 'http://127.0.0.1:1431',
+        userDataDir: '/tmp/openforge-user-data',
+        appDataDir: '/tmp/openforge-sidecar-data',
+      },
+    )
+
+    expect(env.ELECTRON_RENDERER_URL).toBe('http://127.0.0.1:1431')
+    expect(env.OPENFORGE_ELECTRON_USER_DATA_DIR).toBe('/tmp/openforge-user-data')
+    expect(env.OPENFORGE_APP_DATA_DIR).toBe('/tmp/openforge-sidecar-data')
+    expect(env.OPENFORGE_SIDECAR_PATH).toBe('/tmp/openforge-sidecar')
+    expect(env.OPENFORGE_ELECTRON_SIDECAR).toBe('1')
+  })
+
   it('enables sidecar mode when the dev launcher supplies a built Rust sidecar path', () => {
     const env = buildElectronDevEnv({ PATH: '/usr/bin' }, '/tmp/openforge-sidecar')
 
@@ -102,12 +120,58 @@ describe('electron dev script environment', () => {
     expect(electronSidecarPath('/tmp/openforge-target', rustSidecarLayout)).toBe('/tmp/openforge-target/debug/openforge-backend')
   })
 
-  it('uses one canonical loopback URL for Electron and Vite readiness', () => {
+  it('uses one canonical loopback URL for Electron and Vite readiness by default', () => {
     expect(ELECTRON_RENDERER_URL).toBe('http://127.0.0.1:1420')
+    expect(rendererUrlForPort(1431)).toBe('http://127.0.0.1:1431')
+  })
+
+  it('resolves configurable renderer/debug ports and creates per-run isolation dirs', () => {
+    let dirCounter = 0
+    const options = resolveElectronDevRuntimeOptions(
+      {
+        OPENFORGE_ELECTRON_RENDERER_PORT: '1431',
+        OPENFORGE_ELECTRON_DEBUG_PORT: '9333',
+      },
+      {
+        tmpdir: () => '/tmp',
+        mkdtempSync: prefix => `${prefix}${++dirCounter}`,
+      },
+    )
+
+    expect(options.rendererPort).toBe(1431)
+    expect(options.rendererUrl).toBe('http://127.0.0.1:1431')
+    expect(options.electronDebugPort).toBe(9333)
+    expect(options.userDataDir).toBe('/tmp/openforge-electron-user-data-1')
+    expect(options.appDataDir).toBe('/tmp/openforge-sidecar-app-data-2')
+    expect(options.tempRuntimeDirs).toEqual(['/tmp/openforge-electron-user-data-1', '/tmp/openforge-sidecar-app-data-2'])
+    expect(buildElectronDebugArgs(options)).toEqual(['--inspect=127.0.0.1:9333'])
+  })
+
+  it('preserves explicit isolation directories and allows disabling Electron debug', () => {
+    const options = resolveElectronDevRuntimeOptions({
+      OPENFORGE_ELECTRON_USER_DATA_DIR: '/custom/user-data',
+      OPENFORGE_APP_DATA_DIR: '/custom/app-data',
+    })
+
+    expect(options.userDataDir).toBe('/custom/user-data')
+    expect(options.appDataDir).toBe('/custom/app-data')
+    expect(options.tempRuntimeDirs).toEqual([])
+    expect(options.electronDebugPort).toBeNull()
+    expect(buildElectronDebugArgs(options)).toEqual([])
+  })
+
+  it('rejects invalid configurable Electron dev ports', () => {
+    expect(() => resolveElectronDevRuntimeOptions({ OPENFORGE_ELECTRON_RENDERER_PORT: '0' })).toThrow('OPENFORGE_ELECTRON_RENDERER_PORT')
+    expect(() => resolveElectronDevRuntimeOptions({ OPENFORGE_ELECTRON_DEBUG_PORT: '70000' })).toThrow('OPENFORGE_ELECTRON_DEBUG_PORT')
   })
 
   it('fails before launch when the Vite port is already occupied', async () => {
-    await expect(assertVitePortAvailable({ isPortOpen: async () => true })).rejects.toThrow('Port 1420 is already in use')
+    await expect(assertVitePortAvailable(1431, { isPortOpen: async () => true })).rejects.toThrow('Port 1431 is already in use')
+  })
+
+  it('fails before launch when the configured Electron debug port is already occupied', async () => {
+    await expect(assertElectronDebugPortAvailable(9333, { isPortOpen: async () => true })).rejects.toThrow('Electron debug port 9333 is already in use')
+    await expect(assertElectronDebugPortAvailable(null, { isPortOpen: async () => true })).resolves.toBeUndefined()
   })
 
   it('fails before launch when a stale backend sidecar already owns an explicit backend port', async () => {
@@ -257,10 +321,20 @@ describe('electron dev script environment', () => {
     expect(child.unrefCalls).toBe(1)
   })
 
-  it('cleans up Vite and Electron child processes before resolving', async () => {
+  it('cleans up Vite, Electron, and auto-created runtime directories before resolving', async () => {
     const vite = createChildProcessMock()
     const electron = createChildProcessMock()
-    const cleanup = cleanupDevProcesses({ vite, electron }, { graceMs: 100 })
+    const rm = vi.fn(async () => undefined)
+    const cleanup = cleanupDevProcesses(
+      { vite, electron },
+      {
+        graceMs: 100,
+        runtimeOptions: {
+          tempRuntimeDirs: ['/tmp/openforge-electron-user-data-1', '/tmp/openforge-sidecar-app-data-2'],
+        },
+        rm,
+      },
+    )
 
     expect(vite.killSignals).toEqual(['SIGTERM'])
     expect(electron.killSignals).toEqual(['SIGTERM'])
@@ -268,6 +342,24 @@ describe('electron dev script environment', () => {
     vite.emitExit(0, null)
     electron.emitExit(0, null)
 
-    await expect(cleanup).resolves.toEqual(['terminated', 'terminated'])
+    await expect(cleanup).resolves.toEqual({
+      processes: ['terminated', 'terminated'],
+      runtimeDirs: ['removed', 'removed'],
+    })
+    expect(rm).toHaveBeenCalledWith('/tmp/openforge-electron-user-data-1', { recursive: true, force: true })
+    expect(rm).toHaveBeenCalledWith('/tmp/openforge-sidecar-app-data-2', { recursive: true, force: true })
+  })
+
+  it('does not remove explicit runtime directories during cleanup', async () => {
+    const rm = vi.fn(async () => undefined)
+
+    await expect(cleanupDevProcesses(
+      {},
+      {
+        runtimeOptions: { tempRuntimeDirs: [] },
+        rm,
+      },
+    )).resolves.toEqual({ processes: [], runtimeDirs: [] })
+    expect(rm).not.toHaveBeenCalled()
   })
 })

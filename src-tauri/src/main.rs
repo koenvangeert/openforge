@@ -507,6 +507,7 @@ pub(crate) fn restore_resumed_session_state(
 // ============================================================================
 
 const APP_IDENTIFIER: &str = "com.opencode.openforge";
+const OPENFORGE_APP_DATA_DIR_ENV: &str = "OPENFORGE_APP_DATA_DIR";
 
 fn database_filename() -> &'static str {
     if cfg!(debug_assertions) {
@@ -623,9 +624,21 @@ fn run_database_startup_maintenance(database: &db::Database) {
 }
 
 fn sidecar_app_data_dir() -> Result<PathBuf, String> {
-    let data_dir =
-        dirs::data_dir().ok_or_else(|| "failed to resolve user data directory".to_string())?;
-    let app_data_dir = data_dir.join(APP_IDENTIFIER);
+    let override_dir = std::env::var_os(OPENFORGE_APP_DATA_DIR_ENV);
+    sidecar_app_data_dir_from_override(override_dir)
+}
+
+fn sidecar_app_data_dir_from_override(
+    override_dir: Option<std::ffi::OsString>,
+) -> Result<PathBuf, String> {
+    let app_data_dir = match override_dir {
+        Some(path) if !path.is_empty() => PathBuf::from(path),
+        Some(_) | None => {
+            let data_dir = dirs::data_dir()
+                .ok_or_else(|| "failed to resolve user data directory".to_string())?;
+            data_dir.join(APP_IDENTIFIER)
+        }
+    };
     std::fs::create_dir_all(&app_data_dir).map_err(|error| {
         format!(
             "failed to create app data directory {}: {error}",
@@ -726,12 +739,27 @@ fn main() {
 mod tests {
     use super::{
         load_resume_targets, opencode_resume_persistence, restore_resumed_session_state,
-        should_start_project_root_server, ResumeSessionPersistence, ResumeTarget,
+        should_start_project_root_server, sidecar_app_data_dir_from_override,
+        ResumeSessionPersistence, ResumeTarget,
     };
     use crate::db::test_helpers::make_test_db;
     use crate::opencode_client::SessionStatusInfo;
     use std::collections::HashMap;
     use std::fs;
+
+    #[test]
+    fn sidecar_app_data_dir_uses_override_and_creates_dir() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let isolated_dir = temp_dir.path().join("isolated-openforge-data");
+
+        let resolved =
+            sidecar_app_data_dir_from_override(Some(isolated_dir.clone().into_os_string()))
+                .expect("sidecar app data dir");
+
+        assert_eq!(resolved, isolated_dir);
+        assert!(resolved.is_dir());
+    }
+
     #[test]
     fn test_should_start_project_root_server_for_opencode_project() {
         assert!(should_start_project_root_server(

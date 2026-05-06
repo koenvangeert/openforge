@@ -17,12 +17,12 @@ class FakeChild extends EventEmitter implements ChildProcessLike {
 }
 
 describe('Electron Rust sidecar supervision', () => {
-  it('builds a loopback-only sidecar command with a per-launch token in env', () => {
+  it('builds a loopback-only sidecar command with a per-launch token and app-data isolation in env', () => {
     const config = createSidecarLaunchConfig({
       executablePath: '/Applications/Open Forge.app/Contents/MacOS/openforge-sidecar',
       port: 17642,
       token: 'token-123',
-      processEnv: { PATH: '/usr/bin', OPENFORGE_BACKEND_TOKEN: 'stale' },
+      processEnv: { PATH: '/usr/bin', OPENFORGE_BACKEND_TOKEN: 'stale', OPENFORGE_APP_DATA_DIR: '/tmp/openforge-sidecar-data' },
     })
 
     expect(config.command).toBe('/Applications/Open Forge.app/Contents/MacOS/openforge-sidecar')
@@ -34,6 +34,7 @@ describe('Electron Rust sidecar supervision', () => {
       OPENFORGE_BACKEND_PORT: '17642',
       OPENFORGE_BACKEND_TOKEN: 'token-123',
       OPENFORGE_ELECTRON_SIDECAR: '1',
+      OPENFORGE_APP_DATA_DIR: '/tmp/openforge-sidecar-data',
     })
   })
 
