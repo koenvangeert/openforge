@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 import { writable } from "svelte/store";
-import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { requireElement } from "../../test-utils/dom";
 import type {
 	PrComment,
@@ -63,18 +63,6 @@ vi.mock("../../lib/ipc", () => ({
 }));
 
 import SelfReviewView from "./SelfReviewView.svelte";
-
-beforeAll(() => {
-	Object.defineProperty(HTMLCanvasElement.prototype, "getContext", {
-		value: vi.fn().mockReturnValue({
-			font: "",
-			measureText: (text: string) => ({ width: text.length * 7 }),
-			fillText: vi.fn(),
-			clearRect: vi.fn(),
-		}),
-		configurable: true,
-	});
-});
 
 import {
 	getActiveSelfReviewComments,

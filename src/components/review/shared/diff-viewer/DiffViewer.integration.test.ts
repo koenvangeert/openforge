@@ -94,7 +94,6 @@ class InlineDiffWorker {
 }
 
 const originalWorker = globalThis.Worker
-const originalCanvasGetContext = HTMLCanvasElement.prototype.getContext
 const highlightRegistry = new Map<string, MockHighlight>()
 
 const fileWithPatch: PrFileDiff = {
@@ -113,16 +112,6 @@ const fileWithPatch: PrFileDiff = {
 beforeAll(() => {
   configureDiffHighlighter(highlighter)
 
-  Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', {
-    value: vi.fn().mockReturnValue({
-      font: '',
-      measureText: (text: string) => ({ width: text.length * 7 }),
-      fillText: vi.fn(),
-      clearRect: vi.fn(),
-    }),
-    configurable: true,
-  })
-
   Object.defineProperty(globalThis, 'CSS', {
     value: { highlights: highlightRegistry },
     writable: true,
@@ -134,10 +123,6 @@ beforeAll(() => {
 
 afterAll(() => {
   globalThis.Worker = originalWorker
-  Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', {
-    value: originalCanvasGetContext,
-    configurable: true,
-  })
 })
 
 describe('DiffViewer integration', () => {
