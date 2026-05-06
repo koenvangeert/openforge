@@ -103,7 +103,9 @@ impl AppPathResolver {
             .lock()
             .map_err(|error| format!("app data dir lock error: {error}"))?
             .clone()
-            .or_else(|| dirs::data_dir().map(|dir| dir.join("com.opencode.openforge")))
+            .or_else(|| {
+                dirs::data_dir().map(|dir| dir.join(crate::data_identity::app_data_identifier()))
+            })
             .ok_or_else(|| "failed to resolve user data directory".to_string())
     }
 

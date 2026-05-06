@@ -1,0 +1,38 @@
+{
+  "dataIdentity": {
+    "appDataIdentifier": "com.opencode.openforge",
+    "appDataDirEnv": "OPENFORGE_APP_DATA_DIR",
+    "databaseFilenames": {
+      "debug": "openforge_dev.db",
+      "release": "openforge.db"
+    },
+    "keychain": {
+      "debugService": "openforge-dev",
+      "releaseService": "openforge",
+      "secretAccounts": ["github_token"]
+    }
+  },
+  "packageIdentity": {
+    "appName": "Open Forge",
+    "electronAppPackageName": "openforge-electron-app",
+    "bundleIdentifier": "com.openforge.app.electron",
+    "electronTemplateAppName": "Electron.app"
+  },
+  "legacySources": {
+    "homeDirNames": {
+      "old": ".ai-command-center",
+      "current": ".openforge"
+    },
+    "dataDirNames": {
+      "old": "ai-command-center",
+      "current": "openforge"
+    },
+    "appIdentifiers": {
+      "old": "com.opencode.ai-command-center"
+    },
+    "databaseFilenames": {
+      "debug": "ai_command_center_dev.db",
+      "release": "ai_command_center.db"
+    }
+  }
+}

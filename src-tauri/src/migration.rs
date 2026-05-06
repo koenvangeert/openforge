@@ -3,19 +3,6 @@ use rusqlite::Connection;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-const OLD_HOME_DIR_NAME: &str = ".ai-command-center";
-const NEW_HOME_DIR_NAME: &str = ".openforge";
-
-const OLD_DATA_DIR_NAME: &str = "ai-command-center";
-const NEW_DATA_DIR_NAME: &str = "openforge";
-
-const OLD_APP_IDENTIFIER: &str = "com.opencode.ai-command-center";
-
-const OLD_DB_PROD: &str = "ai_command_center.db";
-const OLD_DB_DEV: &str = "ai_command_center_dev.db";
-const NEW_DB_PROD: &str = "openforge.db";
-const NEW_DB_DEV: &str = "openforge_dev.db";
-
 pub fn run(new_app_data_dir: &Path) {
     run_with_dirs(dirs::home_dir(), dirs::data_dir(), new_app_data_dir);
 }
@@ -23,22 +10,25 @@ pub fn run(new_app_data_dir: &Path) {
 fn run_with_dirs(home_dir: Option<PathBuf>, data_dir: Option<PathBuf>, new_app_data_dir: &Path) {
     if let Some(ref home) = home_dir {
         rename_if_needed(
-            &home.join(OLD_HOME_DIR_NAME),
-            &home.join(NEW_HOME_DIR_NAME),
+            &home.join(crate::data_identity::legacy_home_dir_name()),
+            &home.join(crate::data_identity::current_home_dir_name()),
             "home config",
         );
     }
 
     if let Some(ref data) = data_dir {
         rename_if_needed(
-            &data.join(OLD_DATA_DIR_NAME),
-            &data.join(NEW_DATA_DIR_NAME),
+            &data.join(crate::data_identity::legacy_data_dir_name()),
+            &data.join(crate::data_identity::current_data_dir_name()),
             "whisper models",
         );
     }
 
     if let Some(ref data) = data_dir {
-        migrate_database(&data.join(OLD_APP_IDENTIFIER), new_app_data_dir);
+        migrate_database(
+            &data.join(crate::data_identity::legacy_app_identifier()),
+            new_app_data_dir,
+        );
     }
 
     rewrite_db_paths(new_app_data_dir, home_dir.as_deref());
@@ -75,13 +65,17 @@ fn migrate_database(old_app_data: &Path, new_app_data: &Path) {
     }
 
     rename_if_needed(
-        &old_app_data.join(OLD_DB_PROD),
-        &new_app_data.join(NEW_DB_PROD),
+        &old_app_data.join(crate::data_identity::legacy_database_filename_for_build(
+            false,
+        )),
+        &new_app_data.join(crate::data_identity::database_filename_for_build(false)),
         "production database",
     );
     rename_if_needed(
-        &old_app_data.join(OLD_DB_DEV),
-        &new_app_data.join(NEW_DB_DEV),
+        &old_app_data.join(crate::data_identity::legacy_database_filename_for_build(
+            true,
+        )),
+        &new_app_data.join(crate::data_identity::database_filename_for_build(true)),
         "development database",
     );
 
@@ -99,10 +93,19 @@ fn rewrite_db_paths(app_data_dir: &Path, home_dir: Option<&Path>) {
         None => return,
     };
 
-    let old_prefix = home.join(OLD_HOME_DIR_NAME).to_string_lossy().to_string();
-    let new_prefix = home.join(NEW_HOME_DIR_NAME).to_string_lossy().to_string();
+    let old_prefix = home
+        .join(crate::data_identity::legacy_home_dir_name())
+        .to_string_lossy()
+        .to_string();
+    let new_prefix = home
+        .join(crate::data_identity::current_home_dir_name())
+        .to_string_lossy()
+        .to_string();
 
-    let db_candidates = [NEW_DB_PROD, NEW_DB_DEV];
+    let db_candidates = [
+        crate::data_identity::database_filename_for_build(false),
+        crate::data_identity::database_filename_for_build(true),
+    ];
     for db_name in &db_candidates {
         let db_path = app_data_dir.join(db_name);
         if !db_path.exists() {
@@ -160,16 +163,52 @@ mod tests {
         let _ = fs::remove_dir_all(base);
     }
 
+    fn old_home_dir_name() -> &'static str {
+        crate::data_identity::legacy_home_dir_name()
+    }
+
+    fn new_home_dir_name() -> &'static str {
+        crate::data_identity::current_home_dir_name()
+    }
+
+    fn old_data_dir_name() -> &'static str {
+        crate::data_identity::legacy_data_dir_name()
+    }
+
+    fn new_data_dir_name() -> &'static str {
+        crate::data_identity::current_data_dir_name()
+    }
+
+    fn old_app_identifier() -> &'static str {
+        crate::data_identity::legacy_app_identifier()
+    }
+
+    fn old_db_prod() -> &'static str {
+        crate::data_identity::legacy_database_filename_for_build(false)
+    }
+
+    fn old_db_dev() -> &'static str {
+        crate::data_identity::legacy_database_filename_for_build(true)
+    }
+
+    fn new_db_prod() -> &'static str {
+        crate::data_identity::database_filename_for_build(false)
+    }
+
+    fn new_db_dev() -> &'static str {
+        crate::data_identity::database_filename_for_build(true)
+    }
+
     #[test]
     fn migrates_home_config_dir() {
         let (base, home, data, new_app) = setup_temp_dirs("home_config");
-        let old_dir = home.join(OLD_HOME_DIR_NAME);
+        let old_dir = home.join(old_home_dir_name());
         fs::create_dir_all(old_dir.join("pids")).unwrap();
         fs::write(old_dir.join("settings.json"), "{}").unwrap();
 
         run_with_dirs(Some(home.clone()), Some(data), &new_app);
 
-        let new_dir = home.join(NEW_HOME_DIR_NAME);
+        let new_dir = home.join(new_home_dir_name());
         assert!(!old_dir.exists());
         assert!(new_dir.join("pids").is_dir());
         assert!(new_dir.join("settings.json").is_file());
@@ -179,8 +218,8 @@ mod tests {
     #[test]
     fn skips_home_config_when_new_dir_already_exists() {
         let (base, home, data, new_app) = setup_temp_dirs("skip_home");
-        let old_dir = home.join(OLD_HOME_DIR_NAME);
-        let new_dir = home.join(NEW_HOME_DIR_NAME);
+        let old_dir = home.join(old_home_dir_name());
+        let new_dir = home.join(new_home_dir_name());
         fs::create_dir_all(&old_dir).unwrap();
         fs::write(old_dir.join("old.txt"), "old").unwrap();
         fs::create_dir_all(&new_dir).unwrap();
@@ -200,8 +239,8 @@ mod tests {
 
         run_with_dirs(Some(home.clone()), Some(data.clone()), &new_app);
 
-        assert!(!home.join(NEW_HOME_DIR_NAME).exists());
-        assert!(!data.join(NEW_DATA_DIR_NAME).exists());
+        assert!(!home.join(new_home_dir_name()).exists());
+        assert!(!data.join(new_data_dir_name()).exists());
         assert!(!new_app.exists());
         cleanup(&base);
     }
@@ -209,13 +248,13 @@ mod tests {
     #[test]
     fn migrates_whisper_models_dir() {
         let (base, home, data, new_app) = setup_temp_dirs("whisper");
-        let old_dir = data.join(OLD_DATA_DIR_NAME);
+        let old_dir = data.join(old_data_dir_name());
         fs::create_dir_all(old_dir.join("models")).unwrap();
         fs::write(old_dir.join("models/ggml-small.bin"), "model").unwrap();
 
         run_with_dirs(Some(home), Some(data.clone()), &new_app);
 
-        let new_dir = data.join(NEW_DATA_DIR_NAME);
+        let new_dir = data.join(new_data_dir_name());
         assert!(!old_dir.exists());
         assert!(new_dir.join("models/ggml-small.bin").is_file());
         cleanup(&base);
@@ -224,21 +263,21 @@ mod tests {
     #[test]
     fn migrates_database_files() {
         let (base, home, data, new_app) = setup_temp_dirs("db_files");
-        let old_app = data.join(OLD_APP_IDENTIFIER);
+        let old_app = data.join(old_app_identifier());
         fs::create_dir_all(&old_app).unwrap();
-        fs::write(old_app.join(OLD_DB_PROD), "prod-data").unwrap();
-        fs::write(old_app.join(OLD_DB_DEV), "dev-data").unwrap();
+        fs::write(old_app.join(old_db_prod()), "prod-data").unwrap();
+        fs::write(old_app.join(old_db_dev()), "dev-data").unwrap();
 
         run_with_dirs(Some(home), Some(data), &new_app);
 
-        assert!(new_app.join(NEW_DB_PROD).is_file());
-        assert!(new_app.join(NEW_DB_DEV).is_file());
+        assert!(new_app.join(new_db_prod()).is_file());
+        assert!(new_app.join(new_db_dev()).is_file());
         assert_eq!(
-            fs::read_to_string(new_app.join(NEW_DB_PROD)).unwrap(),
+            fs::read_to_string(new_app.join(new_db_prod())).unwrap(),
             "prod-data"
         );
         assert_eq!(
-            fs::read_to_string(new_app.join(NEW_DB_DEV)).unwrap(),
+            fs::read_to_string(new_app.join(new_db_dev())).unwrap(),
             "dev-data"
         );
         cleanup(&base);
@@ -247,9 +286,9 @@ mod tests {
     #[test]
     fn removes_old_app_data_dir_when_empty_after_migration() {
         let (base, home, data, new_app) = setup_temp_dirs("empty_cleanup");
-        let old_app = data.join(OLD_APP_IDENTIFIER);
+        let old_app = data.join(old_app_identifier());
         fs::create_dir_all(&old_app).unwrap();
-        fs::write(old_app.join(OLD_DB_PROD), "data").unwrap();
+        fs::write(old_app.join(old_db_prod()), "data").unwrap();
 
         run_with_dirs(Some(home), Some(data), &new_app);
 
@@ -260,35 +299,35 @@ mod tests {
     #[test]
     fn keeps_old_app_data_dir_when_extra_files_remain() {
         let (base, home, data, new_app) = setup_temp_dirs("extra_files");
-        let old_app = data.join(OLD_APP_IDENTIFIER);
+        let old_app = data.join(old_app_identifier());
         fs::create_dir_all(&old_app).unwrap();
-        fs::write(old_app.join(OLD_DB_PROD), "data").unwrap();
+        fs::write(old_app.join(old_db_prod()), "data").unwrap();
         fs::write(old_app.join("unknown.log"), "other stuff").unwrap();
 
         run_with_dirs(Some(home), Some(data), &new_app);
 
         assert!(old_app.exists());
         assert!(old_app.join("unknown.log").is_file());
-        assert!(!old_app.join(OLD_DB_PROD).exists());
+        assert!(!old_app.join(old_db_prod()).exists());
         cleanup(&base);
     }
 
     #[test]
     fn skips_db_when_target_already_exists() {
         let (base, home, data, new_app) = setup_temp_dirs("skip_db");
-        let old_app = data.join(OLD_APP_IDENTIFIER);
+        let old_app = data.join(old_app_identifier());
         fs::create_dir_all(&old_app).unwrap();
-        fs::write(old_app.join(OLD_DB_PROD), "old-data").unwrap();
+        fs::write(old_app.join(old_db_prod()), "old-data").unwrap();
         fs::create_dir_all(&new_app).unwrap();
-        fs::write(new_app.join(NEW_DB_PROD), "new-data").unwrap();
+        fs::write(new_app.join(new_db_prod()), "new-data").unwrap();
 
         run_with_dirs(Some(home), Some(data), &new_app);
 
         assert_eq!(
-            fs::read_to_string(new_app.join(NEW_DB_PROD)).unwrap(),
+            fs::read_to_string(new_app.join(new_db_prod())).unwrap(),
             "new-data"
         );
-        assert!(old_app.join(OLD_DB_PROD).is_file());
+        assert!(old_app.join(old_db_prod()).is_file());
         cleanup(&base);
     }
 
@@ -297,7 +336,7 @@ mod tests {
         let (base, home, _data, new_app) = setup_temp_dirs("rewrite_paths");
         fs::create_dir_all(&new_app).unwrap();
 
-        let db_path = new_app.join(NEW_DB_DEV);
+        let db_path = new_app.join(new_db_dev());
         let conn = Connection::open(&db_path).unwrap();
         conn.execute_batch(
             "CREATE TABLE worktrees (
@@ -310,7 +349,7 @@ mod tests {
         )
         .unwrap();
 
-        let old_base = home.join(OLD_HOME_DIR_NAME);
+        let old_base = home.join(old_home_dir_name());
         conn.execute(
             "INSERT INTO worktrees (task_id, worktree_path, status) VALUES (?1, ?2, 'active')",
             rusqlite::params![
@@ -329,7 +368,7 @@ mod tests {
         rewrite_db_paths(&new_app, Some(&home));
 
         let conn = Connection::open(&db_path).unwrap();
-        let new_base = home.join(NEW_HOME_DIR_NAME);
+        let new_base = home.join(new_home_dir_name());
 
         let path1: String = conn
             .query_row(
@@ -360,7 +399,7 @@ mod tests {
         let (base, home, _data, new_app) = setup_temp_dirs("rewrite_noop");
         fs::create_dir_all(&new_app).unwrap();
 
-        let db_path = new_app.join(NEW_DB_DEV);
+        let db_path = new_app.join(new_db_dev());
         let conn = Connection::open(&db_path).unwrap();
         conn.execute_batch(
             "CREATE TABLE worktrees (
