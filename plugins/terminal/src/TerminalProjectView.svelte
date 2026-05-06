@@ -15,6 +15,11 @@
   const terminalTaskId = $derived(projectId ? getProjectTerminalTaskId(projectId) : null)
 
   const terminalShortcuts = createTerminalShortcutController({ ignoreWhenDetached: true })
+  let terminalTabsRef = $state<TerminalTabs | null>(null)
+
+  $effect(() => {
+    terminalShortcuts.terminalTabsRef = terminalTabsRef
+  })
 
   onMount(() => terminalShortcuts.registerWindowKeydown())
 </script>
@@ -40,7 +45,7 @@
       <div class="flex-1 min-w-0 h-full overflow-hidden">
         {#key terminalTaskId}
           <TerminalTabs
-            bind:this={terminalShortcuts.terminalTabsRef}
+            bind:this={terminalTabsRef}
             taskId={terminalTaskId}
             workspacePath={projectPath}
             onTabChange={null}
