@@ -1,16 +1,19 @@
 #!/usr/bin/env node
 import { spawn } from 'node:child_process'
-import { dirname, resolve } from 'node:path'
+import { mkdtempSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { connect } from 'node:net'
 import { DEFAULT_DEV_BACKEND_PORT, buildElectronSidecarDevEnv } from './cargo-target-env.mjs'
 import { resolveRustSidecarLayout } from './rust-sidecar-layout.mjs'
 
-export const ELECTRON_RENDERER_URL = 'http://127.0.0.1:1420'
+export const DEFAULT_VITE_PORT = 1420
 const VITE_READY_TIMEOUT_MS = 30_000
 const VITE_READY_INTERVAL_MS = 250
 const VITE_HOST = '127.0.0.1'
-const VITE_PORT = 1420
+const VITE_PORT = DEFAULT_VITE_PORT
+export const ELECTRON_RENDERER_URL = rendererUrlForPort(VITE_PORT)
 const BACKEND_PORT_PROBE_LIMIT = 50
 export const ELECTRON_DEV_STOP_GRACE_MS = 2_000
 
@@ -20,6 +23,46 @@ function logStep(message) {
 
 function repoRoot() {
   return resolve(dirname(fileURLToPath(import.meta.url)), '..')
+}
+
+export function rendererUrlForPort(port, host = VITE_HOST) {
+  return `http://${host}:${port}`
+}
+
+function parsePort(value, envName) {
+  const port = Number(value)
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    throw new Error(`${envName} must be an integer port between 1 and 65535`)
+  }
+  return port
+}
+
+function nonEmptyEnv(value) {
+  return typeof value === 'string' && value.trim().length > 0 ? value : null
+}
+
+export function resolveElectronDevRuntimeOptions(env = process.env, deps = { mkdtempSync, tmpdir }) {
+  const rendererPort = parsePort(env.OPENFORGE_ELECTRON_RENDERER_PORT ?? env.VITE_PORT ?? String(VITE_PORT), 'OPENFORGE_ELECTRON_RENDERER_PORT')
+  const electronDebugPort = nonEmptyEnv(env.OPENFORGE_ELECTRON_DEBUG_PORT) === null
+    ? null
+    : parsePort(env.OPENFORGE_ELECTRON_DEBUG_PORT, 'OPENFORGE_ELECTRON_DEBUG_PORT')
+  const tempRoot = deps.tmpdir()
+
+  return {
+    rendererPort,
+    rendererUrl: rendererUrlForPort(rendererPort),
+    electronDebugPort,
+    userDataDir: nonEmptyEnv(env.OPENFORGE_ELECTRON_USER_DATA_DIR)
+      ?? deps.mkdtempSync(join(tempRoot, 'openforge-electron-user-data-')),
+    appDataDir: nonEmptyEnv(env.OPENFORGE_APP_DATA_DIR)
+      ?? deps.mkdtempSync(join(tempRoot, 'openforge-sidecar-app-data-')),
+  }
+}
+
+export function buildElectronDebugArgs(runtimeOptions) {
+  return runtimeOptions.electronDebugPort === null
+    ? []
+    : [`--inspect=127.0.0.1:${runtimeOptions.electronDebugPort}`]
 }
 
 export function isPortOpen(host = VITE_HOST, port = VITE_PORT, timeoutMs = 500) {
@@ -37,15 +80,24 @@ export function isPortOpen(host = VITE_HOST, port = VITE_PORT, timeoutMs = 500) 
   })
 }
 
-export async function assertVitePortAvailable(deps = { isPortOpen }) {
-  if (await deps.isPortOpen()) {
-    throw new Error('Port 1420 is already in use. Stop the existing dev server before running pnpm electron:dev so Electron does not attach to an untrusted renderer.')
+export async function assertVitePortAvailable(portOrDeps = VITE_PORT, deps = { isPortOpen }) {
+  const port = typeof portOrDeps === 'number' ? portOrDeps : VITE_PORT
+  const portDeps = typeof portOrDeps === 'number' ? deps : portOrDeps
+  if (await portDeps.isPortOpen(VITE_HOST, port)) {
+    throw new Error(`Port ${port} is already in use. Stop the existing dev server before running pnpm electron:dev so Electron does not attach to an untrusted renderer.`)
   }
 }
 
 export async function assertBackendPortAvailable(port = Number(process.env.OPENFORGE_BACKEND_PORT ?? DEFAULT_DEV_BACKEND_PORT), deps = { isPortOpen }) {
   if (await deps.isPortOpen(VITE_HOST, port)) {
     throw new Error(`Port ${port} is already in use. Stop the existing OpenForge sidecar/Electron process before running pnpm electron:dev, or set OPENFORGE_BACKEND_PORT to a free port.`)
+  }
+}
+
+export async function assertElectronDebugPortAvailable(port, deps = { isPortOpen }) {
+  if (port === null) return
+  if (await deps.isPortOpen(VITE_HOST, port)) {
+    throw new Error(`Electron debug port ${port} is already in use. Stop the existing debugger target or set OPENFORGE_ELECTRON_DEBUG_PORT to a free port.`)
   }
 }
 
@@ -90,10 +142,18 @@ export function electronSidecarPath(cargoTargetDir, rustSidecarLayout = resolveR
   return rustSidecarLayout.debugSidecarBinaryPath({ cargoTargetDir })
 }
 
-export function buildElectronDevEnv(baseEnv = process.env, sidecarPath = baseEnv.OPENFORGE_SIDECAR_PATH) {
+export function buildElectronDevEnv(baseEnv = process.env, sidecarPath = baseEnv.OPENFORGE_SIDECAR_PATH, runtimeOptions = {}) {
   const env = {
     ...baseEnv,
-    ELECTRON_RENDERER_URL,
+    ELECTRON_RENDERER_URL: runtimeOptions.rendererUrl ?? ELECTRON_RENDERER_URL,
+  }
+
+  if (runtimeOptions.userDataDir) {
+    env.OPENFORGE_ELECTRON_USER_DATA_DIR = runtimeOptions.userDataDir
+  }
+
+  if (runtimeOptions.appDataDir) {
+    env.OPENFORGE_APP_DATA_DIR = runtimeOptions.appDataDir
   }
 
   if (sidecarPath) {
@@ -215,10 +275,12 @@ export async function cleanupDevProcesses(children, options = {}) {
 }
 
 async function main() {
-  logStep('Starting Vite dev server on http://127.0.0.1:1420 ...')
-  await assertVitePortAvailable()
+  const runtimeOptions = resolveElectronDevRuntimeOptions()
+  logStep(`Starting Vite dev server on ${runtimeOptions.rendererUrl} ...`)
+  await assertVitePortAvailable(runtimeOptions.rendererPort)
+  await assertElectronDebugPortAvailable(runtimeOptions.electronDebugPort)
   const devBackend = await resolveElectronDevBackendEnv()
-  const vite = spawnCommand('pnpm', ['exec', 'vite', '--host', VITE_HOST])
+  const vite = spawnCommand('pnpm', ['exec', 'vite', '--host', VITE_HOST, '--port', String(runtimeOptions.rendererPort), '--strictPort'])
   let electron = null
   let cleanupPromise = null
   const cleanup = () => {
@@ -233,7 +295,7 @@ async function main() {
 
   try {
     logStep('Waiting for Vite readiness ...')
-    await waitForVite(ELECTRON_RENDERER_URL, vite)
+    await waitForVite(runtimeOptions.rendererUrl, vite)
     const { env: cargoEnv, cargoTargetDir, source } = devBackend
     const rustSidecarLayout = resolveRustSidecarLayout({ repoRoot: repoRoot() })
     const sidecarPath = cargoEnv.OPENFORGE_SIDECAR_PATH ?? electronSidecarPath(cargoTargetDir, rustSidecarLayout)
@@ -245,7 +307,7 @@ async function main() {
     logStep('Building Electron main process ...')
     await waitForExit(spawnCommand('pnpm', ['electron:build']), 'electron:build')
     logStep('Launching Electron with Rust sidecar. Close the Electron window to stop this command.')
-    electron = spawnCommand('pnpm', ['exec', 'electron', '.'], { env: buildElectronDevEnv(cargoEnv, sidecarPath) })
+    electron = spawnCommand('pnpm', ['exec', 'electron', ...buildElectronDebugArgs(runtimeOptions), '.'], { env: buildElectronDevEnv(cargoEnv, sidecarPath, runtimeOptions) })
     await waitForExit(electron, 'electron')
     electron = null
     logStep('Electron exited; stopping Vite ...')

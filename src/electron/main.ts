@@ -11,6 +11,7 @@ import { handleElectronInvoke } from './backendBridge.js'
 import { createAppEventForwarder } from './eventForwarder.js'
 import { trustedRendererUrlFromEnv } from './rendererUrl.js'
 import { resolveElectronSidecarPath } from './sidecarPath.js'
+import { configureElectronUserDataPath } from './runtimePaths.js'
 import {
   applyElectronRendererCsp,
   createElectronRendererCsp,
@@ -94,6 +95,10 @@ async function bootSidecar(): Promise<void> {
 
 registerPluginProtocolSchemeAsPrivileged(protocol)
 registerSkeletonIpc()
+const isolatedUserDataDir = configureElectronUserDataPath(app, process.env)
+if (isolatedUserDataDir) {
+  console.log(`[electron] Using isolated user data directory ${isolatedUserDataDir}`)
+}
 
 app.whenReady().then(async () => {
   await bootSidecar()
