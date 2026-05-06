@@ -18,85 +18,163 @@
 
   let terminalEl: HTMLDivElement
   let unlisteners: DesktopUnlistenFn[] = []
-  let poolEntry: PoolEntry | null = null
-  let mounted = false
+  let poolEntry = $state.raw<PoolEntry | null>(null)
+  let mounted = $state(false)
   let lifecycle = $state({ ptyActive: false, shellExited: false, currentPtyInstance: null as number | null })
   let previousIsActive: boolean | null = null
+  let activatingEntry: PoolEntry | null = null
+  let boundTerminalKey = $state<string | null>(null)
+  let boundContextSignature = $state<string | null>(null)
+  let bindRun = 0
 
-  function syncLifecycleState() {
-    lifecycle = getShellLifecycleState(terminalKey)
+  interface TerminalBindingContext {
+    taskId: string
+    workspacePath: string
+    terminalKey: string
+    terminalIndex: number
   }
 
-  async function activateTerminal(entry: PoolEntry) {
-    const wasAttached = entry.attached
-    await attach(entry, terminalEl)
-    if (!mounted || poolEntry !== entry) return
-    if (wasAttached) {
-      await recoverActiveTerminal(entry)
-      if (!mounted || poolEntry !== entry) return
+  function currentBindingContext(): TerminalBindingContext {
+    return { taskId, workspacePath, terminalKey, terminalIndex }
+  }
+
+  function bindingContextSignature(context: TerminalBindingContext): string {
+    return `${context.taskId}\u0000${context.workspacePath}\u0000${context.terminalKey}\u0000${context.terminalIndex}`
+  }
+
+  function isCurrentBindingContext(context: TerminalBindingContext): boolean {
+    return mounted
+      && boundTerminalKey === context.terminalKey
+      && terminalKey === context.terminalKey
+      && taskId === context.taskId
+      && workspacePath === context.workspacePath
+      && terminalIndex === context.terminalIndex
+  }
+
+  function syncLifecycleState(key: string = boundTerminalKey ?? terminalKey) {
+    lifecycle = getShellLifecycleState(key)
+  }
+
+  async function activateTerminal(entry: PoolEntry, context: TerminalBindingContext = currentBindingContext()) {
+    if (activatingEntry === entry) return
+    activatingEntry = entry
+    try {
+      const wasAttached = entry.attached
+      await attach(entry, terminalEl)
+      if (poolEntry !== entry || !isCurrentBindingContext(context)) return
+      if (wasAttached) {
+        await recoverActiveTerminal(entry)
+        if (poolEntry !== entry || !isCurrentBindingContext(context)) return
+      }
+      await ensureShellStarted(entry, context)
+    } finally {
+      if (activatingEntry === entry) activatingEntry = null
     }
-    await ensureShellStarted(entry)
   }
 
-  async function ensureShellStarted(entry: PoolEntry) {
-    if (!shouldSpawnPty(entry)) return
+  async function ensureShellStarted(entry: PoolEntry, context: TerminalBindingContext) {
+    if (!isCurrentBindingContext(context) || !shouldSpawnPty(entry)) return
 
     markPtySpawnPending(entry)
     try {
-      const instanceId = await spawnShellPty(taskId, workspacePath, entry.terminal.cols, entry.terminal.rows, terminalIndex)
+      if (!isCurrentBindingContext(context)) return
+      const instanceId = await spawnShellPty(context.taskId, context.workspacePath, entry.terminal.cols, entry.terminal.rows, context.terminalIndex)
       setCurrentPtyInstance(entry, instanceId)
-      updateShellLifecycleState(terminalKey, {
+      updateShellLifecycleState(context.terminalKey, {
         ptyActive: true,
         shellExited: false,
         currentPtyInstance: instanceId,
       })
-      syncLifecycleState()
+      if (isCurrentBindingContext(context)) syncLifecycleState(context.terminalKey)
     } finally {
       clearPtySpawnPending(entry)
     }
   }
 
-  onMount(async () => {
-    mounted = true
-    poolEntry = await acquire(terminalKey)
-    if (!mounted || !poolEntry) return
+  function clearComponentTerminalResources() {
+    unlisteners.forEach((fn) => {
+      fn()
+    })
+    unlisteners = []
+    if (poolEntry) {
+      detach(poolEntry)
+      poolEntry = null
+    }
+    previousIsActive = null
+    activatingEntry = null
+  }
 
-    syncLifecycleState()
+  async function bindToTerminalKey(nextTerminalKey: string) {
+    const currentRun = bindRun + 1
+    bindRun = currentRun
+    clearComponentTerminalResources()
+    const context = currentBindingContext()
+    boundTerminalKey = nextTerminalKey
+    boundContextSignature = bindingContextSignature(context)
+
+    const entry = await acquire(nextTerminalKey)
+    if (bindRun !== currentRun || !isCurrentBindingContext(context)) return
+
+    poolEntry = entry
+    syncLifecycleState(nextTerminalKey)
 
     if (isActive) {
-      await activateTerminal(poolEntry)
-      if (!mounted) return
+      await activateTerminal(entry, context)
+      if (bindRun !== currentRun || !isCurrentBindingContext(context)) return
     }
 
     previousIsActive = isActive
 
     // Listen for shell exit event
-    unlisteners.push(await listenDesktopEvent(`pty-exit-${terminalKey}`, (event) => {
-      if (!poolEntry) return
+    const unlisten = await listenDesktopEvent(`pty-exit-${nextTerminalKey}`, (event) => {
+      if (!poolEntry || boundTerminalKey !== nextTerminalKey) return
       const exitInstance = (event.payload as { instance_id?: number } | null)?.instance_id
       if (exitInstance != null && lifecycle.currentPtyInstance != null && exitInstance !== lifecycle.currentPtyInstance) {
         return
       }
-      updateShellLifecycleState(terminalKey, {
+      updateShellLifecycleState(nextTerminalKey, {
         ptyActive: false,
         shellExited: true,
         currentPtyInstance: lifecycle.currentPtyInstance,
       })
-      syncLifecycleState()
+      syncLifecycleState(nextTerminalKey)
       onExit?.()
-    }))
+    })
+
+    if (!mounted || bindRun !== currentRun || boundTerminalKey !== nextTerminalKey) {
+      unlisten()
+      return
+    }
+    unlisteners.push(unlisten)
+  }
+
+  onMount(() => {
+    mounted = true
   })
 
   $effect(() => {
+    if (!mounted) return
+
+    const context = currentBindingContext()
+    if (boundContextSignature !== bindingContextSignature(context)) {
+      void bindToTerminalKey(terminalKey)
+      return
+    }
+
     const entry = poolEntry
-    if (!mounted || !entry) return
+    if (!entry) return
 
-    syncLifecycleState()
+    syncLifecycleState(boundTerminalKey)
 
-    if (previousIsActive === null) return
+    const needsActiveHostRestore = isActive && entry.hostDiv.parentNode !== terminalEl
+    if (previousIsActive === null) {
+      if (needsActiveHostRestore) void activateTerminal(entry, context)
+      previousIsActive = isActive
+      return
+    }
 
-    if (!previousIsActive && isActive) {
-      void activateTerminal(entry)
+    if ((!previousIsActive && isActive) || needsActiveHostRestore) {
+      void activateTerminal(entry, context)
     }
 
     previousIsActive = isActive
@@ -104,33 +182,33 @@
 
   onDestroy(() => {
     mounted = false
-    unlisteners.forEach((fn) => {
-      fn()
-    })
-    if (poolEntry) {
-      detach(poolEntry)
-    }
+    bindRun += 1
+    clearComponentTerminalResources()
+    boundTerminalKey = null
+    boundContextSignature = null
   })
 
   async function handleRestart() {
-    if (!poolEntry || lifecycle.ptyActive) return
+    const entry = poolEntry
+    const context = currentBindingContext()
+    if (!entry || lifecycle.ptyActive) return
     try {
-      await killPty(terminalKey).catch(e => {
+      await killPty(context.terminalKey).catch(e => {
         console.error('[TaskTerminal] Failed to kill PTY on restart:', e)
       })
-      markPtySpawnPending(poolEntry)
-      const instanceId = await spawnShellPty(taskId, workspacePath, poolEntry.terminal.cols, poolEntry.terminal.rows, terminalIndex)
-      setCurrentPtyInstance(poolEntry, instanceId)
-      updateShellLifecycleState(terminalKey, {
+      markPtySpawnPending(entry)
+      const instanceId = await spawnShellPty(context.taskId, context.workspacePath, entry.terminal.cols, entry.terminal.rows, context.terminalIndex)
+      setCurrentPtyInstance(entry, instanceId)
+      updateShellLifecycleState(context.terminalKey, {
         ptyActive: true,
         shellExited: false,
         currentPtyInstance: instanceId,
       })
-      syncLifecycleState()
+      if (isCurrentBindingContext(context)) syncLifecycleState(context.terminalKey)
     } catch (e) {
       console.error('[TaskTerminal] Failed to restart shell:', e)
     } finally {
-      if (poolEntry) clearPtySpawnPending(poolEntry)
+      clearPtySpawnPending(entry)
     }
   }
 </script>
