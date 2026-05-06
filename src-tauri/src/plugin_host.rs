@@ -893,11 +893,44 @@ fn exit_status_signal(_status: &std::process::ExitStatus) -> Option<i32> {
 mod tests {
     use super::*;
     use serde_json::json;
+    use std::ffi::OsString;
     use std::fs;
+    use std::sync::OnceLock;
     use tempfile::tempdir;
 
     #[cfg(unix)]
     use std::os::unix::fs::PermissionsExt;
+
+    static PLUGIN_HOST_ENV_LOCK: OnceLock<tokio::sync::Mutex<()>> = OnceLock::new();
+
+    struct EnvVarRestore {
+        key: &'static str,
+        previous: Option<OsString>,
+    }
+
+    impl EnvVarRestore {
+        fn set_path(key: &'static str, value: &std::path::Path) -> Self {
+            let previous = std::env::var_os(key);
+            std::env::set_var(key, value);
+            Self { key, previous }
+        }
+    }
+
+    impl Drop for EnvVarRestore {
+        fn drop(&mut self) {
+            match &self.previous {
+                Some(value) => std::env::set_var(self.key, value),
+                None => std::env::remove_var(self.key),
+            }
+        }
+    }
+
+    async fn lock_plugin_host_env() -> tokio::sync::MutexGuard<'static, ()> {
+        PLUGIN_HOST_ENV_LOCK
+            .get_or_init(|| tokio::sync::Mutex::new(()))
+            .lock()
+            .await
+    }
 
     fn build_plugin_host() -> PluginHost {
         PluginHost::new(AppHandle::new())
@@ -991,7 +1024,7 @@ mod tests {
     #[tokio::test]
     async fn invoke_backend_round_trips_through_real_sidecar_stdio() {
         let temp = tempdir().expect("tempdir should create");
-        let sidecar_path = temp.path().join("sidecar.js");
+        let sidecar_path = temp.path().join("sidecar.cjs");
         let backend_path = temp.path().join("backend.mjs");
         let bun_shim_path = temp.path().join("bun-shim");
 
@@ -1036,8 +1069,9 @@ rl.on('close', () => process.exit(0));"#,
             fs::set_permissions(&bun_shim_path, permissions).expect("permissions should set");
         }
 
-        std::env::set_var(BUN_PATH_ENV, &bun_shim_path);
-        std::env::set_var(ENTRYPOINT_ENV, &sidecar_path);
+        let _env_lock = lock_plugin_host_env().await;
+        let _bun_env = EnvVarRestore::set_path(BUN_PATH_ENV, &bun_shim_path);
+        let _entrypoint_env = EnvVarRestore::set_path(ENTRYPOINT_ENV, &sidecar_path);
 
         let host = build_plugin_host();
         host.start_sidecar().await.expect("sidecar should start");
@@ -1052,16 +1086,13 @@ rl.on('close', () => process.exit(0));"#,
             .expect("invoke should succeed");
         host.stop_sidecar().await.expect("sidecar should stop");
 
-        std::env::remove_var(BUN_PATH_ENV);
-        std::env::remove_var(ENTRYPOINT_ENV);
-
         assert_eq!(result["echoed"], "hello");
     }
 
     #[tokio::test]
     async fn concurrent_first_invoke_calls_wait_for_transport_readiness() {
         let temp = tempdir().expect("tempdir should create");
-        let sidecar_path = temp.path().join("sidecar.js");
+        let sidecar_path = temp.path().join("sidecar.cjs");
         let backend_path = temp.path().join("backend.mjs");
         let bun_shim_path = temp.path().join("bun-shim");
 
@@ -1106,8 +1137,9 @@ rl.on('close', () => process.exit(0));"#,
             fs::set_permissions(&bun_shim_path, permissions).expect("permissions should set");
         }
 
-        std::env::set_var(BUN_PATH_ENV, &bun_shim_path);
-        std::env::set_var(ENTRYPOINT_ENV, &sidecar_path);
+        let _env_lock = lock_plugin_host_env().await;
+        let _bun_env = EnvVarRestore::set_path(BUN_PATH_ENV, &bun_shim_path);
+        let _entrypoint_env = EnvVarRestore::set_path(ENTRYPOINT_ENV, &sidecar_path);
 
         let host = build_plugin_host();
         let (first, second) = tokio::join!(
@@ -1125,9 +1157,6 @@ rl.on('close', () => process.exit(0));"#,
             )
         );
         host.stop_sidecar().await.expect("sidecar should stop");
-
-        std::env::remove_var(BUN_PATH_ENV);
-        std::env::remove_var(ENTRYPOINT_ENV);
 
         assert_eq!(
             first.expect("first invoke should succeed")["echoed"],
