@@ -1,6 +1,6 @@
 <script lang="ts">
   import { FolderOpen } from 'lucide-svelte'
-  import { PROJECT_COLORS } from '../../lib/projectColors'
+  import { DEFAULT_PROJECT_COLOR, PROJECT_COLORS } from '../../lib/projectColors'
 
   interface Props {
     projectName: string
@@ -160,8 +160,8 @@
         <button
           type="button"
           class="w-7 h-7 rounded-full border-2 transition-all duration-150 cursor-pointer hover:scale-110 {projectColor === '' ? 'border-primary ring-2 ring-primary/30 scale-110' : 'border-base-content/20'}"
-          style="background-color: #9ca3af"
-          title="Default Gray"
+          style="background-color: {DEFAULT_PROJECT_COLOR.swatch}"
+          title={DEFAULT_PROJECT_COLOR.label}
           onclick={() => onProjectColorChange('')}
         ></button>
         {#each PROJECT_COLORS as color (color.id)}
