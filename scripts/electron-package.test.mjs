@@ -28,6 +28,44 @@ async function writeExecutable(path, content = '#!/bin/sh\n') {
   await writeFile(path, content, { mode: 0o755 })
 }
 
+async function writeCurrentDataIdentityManifest(repoRoot) {
+  const manifest = await readFile(join(import.meta.dirname, '..', 'openforge-data-identity.json'), 'utf8')
+  await writeFile(join(repoRoot, 'openforge-data-identity.json'), manifest)
+}
+
+async function writeAlternateDataIdentityManifest(repoRoot) {
+  await writeFile(join(repoRoot, 'openforge-data-identity.json'), JSON.stringify({
+    dataIdentity: {
+      appDataIdentifier: 'com.example.alternate-openforge',
+      appDataDirEnv: 'ALTERNATE_OPENFORGE_APP_DATA_DIR',
+      databaseFilenames: {
+        debug: 'alternate_openforge_dev.db',
+        release: 'alternate_openforge.db',
+      },
+      keychain: {
+        debugService: 'alternate-openforge-dev',
+        releaseService: 'alternate-openforge',
+        secretAccounts: ['alternate_github_token'],
+      },
+    },
+    packageIdentity: {
+      appName: 'Alternate Forge',
+      electronAppPackageName: 'alternate-forge-electron-app',
+      bundleIdentifier: 'com.example.alternate-forge.electron',
+      electronTemplateAppName: 'Alternate Electron.app',
+    },
+    legacySources: {
+      homeDirNames: { old: '.alternate-old', current: '.alternate-forge' },
+      dataDirNames: { old: 'alternate-old', current: 'alternate-forge' },
+      appIdentifiers: { old: 'com.example.alternate-old' },
+      databaseFilenames: {
+        debug: 'alternate_old_dev.db',
+        release: 'alternate_old.db',
+      },
+    },
+  }))
+}
+
 describe('Electron macOS packaging helpers', () => {
   it('places the Electron install bundle in the existing release bundle tree', () => {
     expect(resolveRustSidecarLayout({ repoRoot: '/repo', config: currentLayoutConfig }).electronAppPath).toBe('/repo/src-tauri/target/release/bundle/electron/macos/Open Forge.app')
@@ -44,6 +82,38 @@ describe('Electron macOS packaging helpers', () => {
       main: 'dist-electron/main.js',
       private: true,
     })
+  })
+
+  it('packages an alternate repoRoot with the package identity from that repoRoot data identity manifest', async () => {
+    const root = await import('node:os').then(os => os.tmpdir()).then(tmp => join(tmp, `openforge-electron-package-alternate-identity-${process.pid}-${Date.now()}`))
+    const template = join(root, 'node_modules/electron/dist/Alternate Electron.app')
+    await mkdir(root, { recursive: true })
+    await writeFile(join(root, BACKEND_LAYOUT_CONFIG_FILE), JSON.stringify(currentLayoutConfig))
+    await writeAlternateDataIdentityManifest(root)
+
+    const output = electronBundlePath(root)
+    expect(output).toBe(join(root, 'src-tauri/target/release/bundle/electron/macos/Alternate Forge.app'))
+
+    await mkdir(join(template, 'Contents/MacOS'), { recursive: true })
+    await mkdir(join(template, 'Contents/Resources'), { recursive: true })
+    await writeExecutable(join(template, 'Contents/MacOS/Electron'))
+    await writeFile(join(template, 'Contents/Info.plist'), '<plist><dict><key>CFBundleExecutable</key><string>Electron</string><key>CFBundleName</key><string>Electron</string><key>CFBundleDisplayName</key><string>Electron</string></dict></plist>')
+    await mkdir(join(root, 'dist'), { recursive: true })
+    await writeFile(join(root, 'dist/index.html'), '<!doctype html>')
+    await mkdir(join(root, 'dist-electron'), { recursive: true })
+    await writeFile(join(root, 'dist-electron/main.js'), 'console.log("main")')
+    await mkdir(join(root, 'src-tauri/target/release'), { recursive: true })
+    await writeExecutable(join(root, 'src-tauri/target/release/openforge'), '#!/bin/sh\necho sidecar\n')
+
+    await packageElectronApp({ repoRoot: root })
+
+    await expect(stat(join(output, 'Contents/MacOS/Alternate Forge'))).resolves.toBeTruthy()
+    await expect(readFile(join(output, 'Contents/Resources/app/package.json'), 'utf8').then(JSON.parse)).resolves.toMatchObject({
+      name: 'alternate-forge-electron-app',
+      main: 'dist-electron/main.js',
+    })
+    await expect(readFile(join(output, 'Contents/Info.plist'), 'utf8')).resolves.toContain('<key>CFBundleExecutable</key><string>Alternate Forge</string>')
+    await expect(readFile(join(output, 'Contents/Info.plist'), 'utf8')).resolves.toMatch(/<key>CFBundleIdentifier<\/key>\s*<string>com\.example\.alternate-forge\.electron<\/string>/)
   })
 
   it('updates plist string and boolean values while preserving the rest of the document', () => {
@@ -150,6 +220,7 @@ describe('Electron macOS packaging helpers', () => {
     const template = join(root, 'node_modules/electron/dist/Electron.app')
     await mkdir(root, { recursive: true })
     await writeFile(join(root, BACKEND_LAYOUT_CONFIG_FILE), JSON.stringify(currentLayoutConfig))
+    await writeCurrentDataIdentityManifest(root)
     const output = electronBundlePath(root)
 
     await mkdir(join(template, 'Contents/MacOS'), { recursive: true })
