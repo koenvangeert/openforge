@@ -198,6 +198,54 @@ describe('TaskTerminal', () => {
     })
   })
 
+  it('retries binding when workspacePath changes while acquiring the same terminal key', async () => {
+    const { acquire, attach } = await import('../../lib/terminalPool')
+
+    const staleEntry = {
+      ...mockPoolEntry,
+      taskId: 'project-P-1-shell-0',
+      hostDiv: document.createElement('div'),
+      ptyActive: false,
+      needsClear: false,
+      attached: false,
+      spawnPending: false,
+      currentPtyInstance: null,
+    }
+    const nextEntry = {
+      ...mockPoolEntry,
+      taskId: 'project-P-1-shell-0',
+      hostDiv: document.createElement('div'),
+      ptyActive: false,
+      needsClear: false,
+      attached: false,
+      spawnPending: false,
+      currentPtyInstance: null,
+    }
+    let resolveStaleAcquire!: (entry: PoolEntry) => void
+    const staleAcquire = new Promise<PoolEntry>((resolve) => {
+      resolveStaleAcquire = resolve
+    })
+    const stalePoolEntry = staleEntry as unknown as PoolEntry
+
+    vi.mocked(acquire).mockReturnValueOnce(staleAcquire).mockResolvedValueOnce(nextEntry as unknown as PoolEntry)
+
+    const { rerender } = render(TaskTerminal, { props: { taskId: 'project-P-1', workspacePath: '', terminalKey: 'project-P-1-shell-0', terminalIndex: 0, isActive: true } })
+
+    await vi.waitFor(() => {
+      expect(acquire).toHaveBeenCalledWith('project-P-1-shell-0')
+    })
+
+    await rerender({ taskId: 'project-P-1', workspacePath: '/resolved/workspace', terminalKey: 'project-P-1-shell-0', terminalIndex: 0, isActive: true })
+    resolveStaleAcquire(stalePoolEntry)
+
+    await vi.waitFor(() => {
+      expect(acquire).toHaveBeenCalledTimes(2)
+      expect(attach).toHaveBeenCalledWith(expect.objectContaining({ hostDiv: nextEntry.hostDiv }), expect.any(HTMLDivElement))
+    })
+
+    expect(vi.mocked(attach).mock.calls.some(([entry]) => entry === stalePoolEntry)).toBe(false)
+  })
+
   it('cancels stale acquire and attaches the new key when terminalKey changes while acquiring', async () => {
     const { acquire, attach } = await import('../../lib/terminalPool')
     const { spawnShellPty } = await import('../../lib/ipc')

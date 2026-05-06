@@ -24,6 +24,7 @@
   let previousIsActive: boolean | null = null
   let activatingEntry: PoolEntry | null = null
   let boundTerminalKey = $state<string | null>(null)
+  let boundContextSignature = $state<string | null>(null)
   let bindRun = 0
 
   interface TerminalBindingContext {
@@ -35,6 +36,10 @@
 
   function currentBindingContext(): TerminalBindingContext {
     return { taskId, workspacePath, terminalKey, terminalIndex }
+  }
+
+  function bindingContextSignature(context: TerminalBindingContext): string {
+    return `${context.taskId}\u0000${context.workspacePath}\u0000${context.terminalKey}\u0000${context.terminalIndex}`
   }
 
   function isCurrentBindingContext(context: TerminalBindingContext): boolean {
@@ -103,9 +108,10 @@
     const currentRun = bindRun + 1
     bindRun = currentRun
     clearComponentTerminalResources()
-    boundTerminalKey = nextTerminalKey
-
     const context = currentBindingContext()
+    boundTerminalKey = nextTerminalKey
+    boundContextSignature = bindingContextSignature(context)
+
     const entry = await acquire(nextTerminalKey)
     if (bindRun !== currentRun || !isCurrentBindingContext(context)) return
 
@@ -149,7 +155,8 @@
   $effect(() => {
     if (!mounted) return
 
-    if (boundTerminalKey !== terminalKey) {
+    const context = currentBindingContext()
+    if (boundContextSignature !== bindingContextSignature(context)) {
       void bindToTerminalKey(terminalKey)
       return
     }
@@ -161,13 +168,13 @@
 
     const needsActiveHostRestore = isActive && entry.hostDiv.parentNode !== terminalEl
     if (previousIsActive === null) {
-      if (needsActiveHostRestore) void activateTerminal(entry, currentBindingContext())
+      if (needsActiveHostRestore) void activateTerminal(entry, context)
       previousIsActive = isActive
       return
     }
 
     if ((!previousIsActive && isActive) || needsActiveHostRestore) {
-      void activateTerminal(entry, currentBindingContext())
+      void activateTerminal(entry, context)
     }
 
     previousIsActive = isActive
@@ -178,6 +185,7 @@
     bindRun += 1
     clearComponentTerminalResources()
     boundTerminalKey = null
+    boundContextSignature = null
   })
 
   async function handleRestart() {
