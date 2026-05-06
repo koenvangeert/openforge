@@ -80,6 +80,7 @@ import {
 	ticketPrs,
 } from "../../lib/stores";
 import { createVirtualizer } from "../../lib/useVirtualizer.svelte";
+import { clearTaskReviewPaneState, getTaskReviewPaneState } from "../../lib/taskReviewPaneState";
 
 const baseTask: Task = {
 	id: "task-1",
@@ -435,6 +436,87 @@ describe("SelfReviewView integration — performance fixes", () => {
 		expect(virtualizer?.scrollToIndex).toHaveBeenCalledWith(0, {
 			align: "start",
 			behavior: "smooth",
+		});
+	});
+});
+
+describe("SelfReviewView pane restoration", () => {
+	beforeEach(() => {
+		clearTaskReviewPaneState();
+		selfReviewDiffFiles.set([]);
+		selfReviewGeneralComments.set([]);
+		selfReviewArchivedComments.set([]);
+		pendingManualComments.set([]);
+		ticketPrs.set(new Map());
+		vi.clearAllMocks();
+	});
+
+	it("restores the selected commit when the review pane is remounted for the same task", async () => {
+		const commit = {
+			sha: "commit-sha",
+			short_sha: "commit",
+			message: "Keep selected commit",
+			author: "dev",
+			date: "2025-01-01T00:00:00Z",
+		};
+		const commitDiff = { ...baseDiff, filename: "src/commit-only.ts" };
+		vi.mocked(getTaskDiff).mockResolvedValue([baseDiff]);
+		vi.mocked(getTaskCommits).mockResolvedValue([commit]);
+		vi.mocked(getCommitDiff).mockResolvedValue([commitDiff]);
+
+		const firstRender = render(SelfReviewView, {
+			props: { task: baseTask, agentStatus: null, onSendToAgent: vi.fn() },
+		});
+
+		await waitFor(() => {
+			expect(screen.getByTitle(commit.message)).toBeTruthy();
+		});
+
+		await fireEvent.click(screen.getByTitle(commit.message));
+
+		await waitFor(() => {
+			expect(screen.getByText("Show all changes")).toBeTruthy();
+			expect(getCommitDiff).toHaveBeenCalledWith(baseTask.id, commit.sha);
+		});
+
+		firstRender.unmount();
+		vi.mocked(getCommitDiff).mockClear();
+
+		render(SelfReviewView, {
+			props: { task: baseTask, agentStatus: null, onSendToAgent: vi.fn() },
+		});
+
+		await waitFor(() => {
+			expect(screen.getByText("Show all changes")).toBeTruthy();
+			expect(getCommitDiff).toHaveBeenCalledWith(baseTask.id, commit.sha);
+		});
+	});
+
+	it("restores the diff scroll position when the review pane is remounted for the same task", async () => {
+		vi.mocked(getTaskDiff).mockResolvedValue([baseDiff]);
+		vi.mocked(getTaskBatchFileContents).mockResolvedValue([["", ""]]);
+
+		const firstRender = render(SelfReviewView, {
+			props: { task: baseTask, agentStatus: null, onSendToAgent: vi.fn() },
+		});
+
+		let scrollArea!: HTMLElement;
+		await waitFor(() => {
+			scrollArea = requireElement(screen.getByRole("region", { name: "Diff scroll area" }), HTMLElement);
+		});
+		Object.defineProperty(scrollArea, "scrollTop", { value: 184, writable: true, configurable: true });
+		await fireEvent.scroll(scrollArea);
+		expect(getTaskReviewPaneState(baseTask.id).diffScrollTop).toBe(184);
+
+		firstRender.unmount();
+
+		render(SelfReviewView, {
+			props: { task: baseTask, agentStatus: null, onSendToAgent: vi.fn() },
+		});
+
+		await waitFor(() => {
+			const restoredScrollArea = requireElement(screen.getByRole("region", { name: "Diff scroll area" }), HTMLElement);
+			expect(restoredScrollArea.scrollTop).toBe(184);
 		});
 	});
 });

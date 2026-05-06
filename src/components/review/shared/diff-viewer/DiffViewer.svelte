@@ -14,7 +14,7 @@
   import { createDiffWorker } from '../../../../lib/useDiffWorker.svelte'
   import { createFileContentsFetcher } from '../../../../lib/useFileContentsFetcher.svelte'
   import { createVirtualizer } from '../../../../lib/useVirtualizer.svelte'
-  import { tick } from 'svelte'
+  import { onDestroy, tick } from 'svelte'
   import { sortFilesAsTree } from '../../../../lib/fileSort'
   import { getFileStatusIcon, getFileStatusColor, getFileStatusLabel } from '../../../../lib/fileStatus'
   import { themeMode, getDiffTheme } from '../../../../lib/theme'
@@ -31,13 +31,21 @@
     toolbarExtra?: Snippet
     includeUncommitted?: boolean
     agentComments?: AgentReviewComment[]
+    onScrollTopChange?: (scrollTop: number) => void
+    initialScrollTop?: number
   }
-  let { files = [], existingComments = [], repoOwner: _repoOwner = '', repoName: _repoName = '', fileTreeVisible = true, onToggleFileTree, fetchFileContents, batchFetchFileContents, toolbarExtra, includeUncommitted = false, agentComments = [] }: Props = $props()
+  let { files = [], existingComments = [], repoOwner: _repoOwner = '', repoName: _repoName = '', fileTreeVisible = true, onToggleFileTree, fetchFileContents, batchFetchFileContents, toolbarExtra, includeUncommitted = false, agentComments = [], onScrollTopChange, initialScrollTop = 0 }: Props = $props()
   let diffViewMode = $state<DiffModeEnum>(DiffModeEnum.Split)
   let diffViewWrap = $state(false)
   let commentText = $state('')
   let collapsedFiles = $state(new Set<string>())
   let scrollContainerEl = $state<HTMLElement | null>(null)
+  let pendingScrollTop: number | null = null
+  let scrollRestoreTimer: ReturnType<typeof setTimeout> | null = null
+  let scrollRestoreAttempts = 0
+  let hasRestoredInitialScroll = false
+  const maxScrollRestoreAttempts = 40
+  const scrollRestoreRetryMs = 25
   let hasAutoCollapsed = false
   const fileContentsFetcher = createFileContentsFetcher({
     getFiles: () => files,
@@ -85,6 +93,64 @@
       virtualizer.scrollToIndex(index, { align: 'start', behavior: 'smooth' })
     }
   }
+
+  export function getScrollTop() {
+    return scrollContainerEl?.scrollTop ?? 0
+  }
+
+  function clearScrollRestoreTimer() {
+    if (scrollRestoreTimer === null) return
+    clearTimeout(scrollRestoreTimer)
+    scrollRestoreTimer = null
+  }
+
+  function canReachScrollTop(scrollTop: number) {
+    if (!scrollContainerEl) return false
+    return scrollTop <= Math.max(0, scrollContainerEl.scrollHeight - scrollContainerEl.clientHeight)
+  }
+
+  function applyPendingScrollTop() {
+    clearScrollRestoreTimer()
+    if (!scrollContainerEl || pendingScrollTop === null) return
+
+    const targetScrollTop = pendingScrollTop
+    scrollContainerEl.scrollTop = targetScrollTop
+
+    if (
+      targetScrollTop <= 0 ||
+      scrollContainerEl.scrollTop === targetScrollTop ||
+      canReachScrollTop(targetScrollTop) ||
+      scrollRestoreAttempts >= maxScrollRestoreAttempts
+    ) {
+      pendingScrollTop = null
+      scrollRestoreAttempts = 0
+      return
+    }
+
+    scrollRestoreAttempts += 1
+    scrollRestoreTimer = setTimeout(applyPendingScrollTop, scrollRestoreRetryMs)
+  }
+
+  export function setScrollTop(scrollTop: number) {
+    pendingScrollTop = scrollTop
+    scrollRestoreAttempts = 0
+    applyPendingScrollTop()
+  }
+
+  $effect(() => {
+    if (!scrollContainerEl) return
+    if (!hasRestoredInitialScroll) {
+      hasRestoredInitialScroll = true
+      if (initialScrollTop > 0) {
+        setScrollTop(initialScrollTop)
+      }
+    }
+    applyPendingScrollTop()
+  })
+
+  onDestroy(() => {
+    clearScrollRestoreTimer()
+  })
 
   export async function scrollToComment(filename: string, lineNumber: number) {
     const index = sortedFiles.findIndex(f => f.filename === filename)
@@ -268,7 +334,15 @@
   </div>
 
   <!-- svelte-ignore a11y_click_events_have_key_events -->
-  <div role="region" aria-label="Diff scroll area" class="flex-1 min-h-0 overflow-y-auto overflow-x-hidden bg-base-100" bind:this={scrollContainerEl} ondblclick={search.handleDoubleClick} onclick={search.handleContainerClick}>
+  <div
+    role="region"
+    aria-label="Diff scroll area"
+    class="flex-1 min-h-0 overflow-y-auto overflow-x-hidden bg-base-100"
+    bind:this={scrollContainerEl}
+    ondblclick={search.handleDoubleClick}
+    onclick={search.handleContainerClick}
+    onscroll={(e) => onScrollTopChange?.(e.currentTarget.scrollTop)}
+  >
     {#if files.length === 0}
       <div class="flex items-center justify-center h-full text-base-content/50 text-sm">No files to display</div>
     {:else}
