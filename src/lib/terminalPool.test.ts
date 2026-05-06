@@ -372,6 +372,26 @@ describe("terminalPool", () => {
 		expect(wrapper.childElementCount).toBe(1);
 	});
 
+	it("attach rehomes an already attached terminal into the requested active wrapper", async () => {
+		const entry = await acquire("project-P-123-shell-0");
+		const hiddenWrapper = document.createElement("div");
+		const activeWrapper = document.createElement("div");
+
+		await attach(entry, hiddenWrapper);
+
+		const { refresh: refreshSpy, focus: focusSpy } = getTerminalMocks(entry);
+		refreshSpy.mockClear();
+		focusSpy.mockClear();
+
+		await attach(entry, activeWrapper);
+
+		expect(hiddenWrapper.contains(entry.hostDiv)).toBe(false);
+		expect(activeWrapper.contains(entry.hostDiv)).toBe(true);
+		expect(entry.attached).toBe(true);
+		expect(refreshSpy).toHaveBeenCalled();
+		expect(focusSpy).toHaveBeenCalled();
+	});
+
 	it("retries the initial fit until the host div has real dimensions", async () => {
 		const entry = await acquire("task-delayed-fit");
 		const wrapper = document.createElement("div");

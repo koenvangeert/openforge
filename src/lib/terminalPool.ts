@@ -228,7 +228,7 @@ export async function acquire(taskId: string): Promise<PoolEntry> {
 }
 
 export async function attach(entry: PoolEntry, wrapperEl: HTMLDivElement): Promise<void> {
-  if (entry.attached) return
+  if (entry.attached && entry.hostDiv.parentNode === wrapperEl) return
 
   wrapperEl.appendChild(entry.hostDiv)
   entry.attached = true
@@ -242,31 +242,35 @@ export async function attach(entry: PoolEntry, wrapperEl: HTMLDivElement): Promi
   }
 
   // Set up ResizeObserver
-  entry.resizeObserver = new ResizeObserver((entries) => {
-    if (!entry.hostDiv || !entry.terminal) return
-    const { width, height } = entries[0].contentRect
-    if (width === 0 || height === 0) return
-    if (entry.resizeTimeout) clearTimeout(entry.resizeTimeout)
-    entry.resizeTimeout = setTimeout(() => {
-      entry.resizeTimeout = null
-      safeFit(entry)
-      syncPtySize(entry)
-    }, 100)
-  })
-  entry.resizeObserver.observe(entry.hostDiv)
-
-  // Set up IntersectionObserver for visibility-based refresh
-  entry.visibilityObserver = new IntersectionObserver((entries) => {
-    const last = entries[entries.length - 1]
-    if (last.isIntersecting) {
-      requestAnimationFrame(() => {
+  if (!entry.resizeObserver) {
+    entry.resizeObserver = new ResizeObserver((entries) => {
+      if (!entry.hostDiv || !entry.terminal) return
+      const { width, height } = entries[0].contentRect
+      if (width === 0 || height === 0) return
+      if (entry.resizeTimeout) clearTimeout(entry.resizeTimeout)
+      entry.resizeTimeout = setTimeout(() => {
+        entry.resizeTimeout = null
         safeFit(entry)
         syncPtySize(entry)
-        refreshAndFocus(entry)
-      })
-    }
-  }, { threshold: 0 })
-  entry.visibilityObserver.observe(entry.hostDiv)
+      }, 100)
+    })
+    entry.resizeObserver.observe(entry.hostDiv)
+  }
+
+  // Set up IntersectionObserver for visibility-based refresh
+  if (!entry.visibilityObserver) {
+    entry.visibilityObserver = new IntersectionObserver((entries) => {
+      const last = entries[entries.length - 1]
+      if (last.isIntersecting) {
+        requestAnimationFrame(() => {
+          safeFit(entry)
+          syncPtySize(entry)
+          refreshAndFocus(entry)
+        })
+      }
+    }, { threshold: 0 })
+    entry.visibilityObserver.observe(entry.hostDiv)
+  }
 
   await waitForInitialFit(entry)
 }

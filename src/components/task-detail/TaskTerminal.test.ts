@@ -103,6 +103,7 @@ vi.mock('../../lib/terminalPool', () => ({
 }))
 
 import TaskTerminal from './TaskTerminal.svelte'
+import type { PoolEntry } from '../../lib/terminalPool'
 
 describe('TaskTerminal', () => {
   it('calls onExit when a matching pty-exit event fires', async () => {
@@ -191,6 +192,201 @@ describe('TaskTerminal', () => {
     expect(attach).not.toHaveBeenCalled()
 
     await rerender({ taskId: 'T-1', workspacePath: '/path/to/worktree', terminalKey: 'T-1-shell-0', terminalIndex: 0, isActive: true })
+
+    await vi.waitFor(() => {
+      expect(attach).toHaveBeenCalledWith(mockPoolEntry, expect.any(HTMLDivElement))
+    })
+  })
+
+  it('cancels stale acquire and attaches the new key when terminalKey changes while acquiring', async () => {
+    const { acquire, attach } = await import('../../lib/terminalPool')
+    const { spawnShellPty } = await import('../../lib/ipc')
+
+    const staleEntry = {
+      ...mockPoolEntry,
+      taskId: 'project-P-1-shell-0',
+      hostDiv: document.createElement('div'),
+      ptyActive: false,
+      needsClear: false,
+      attached: false,
+      spawnPending: false,
+      currentPtyInstance: null,
+    }
+    const nextEntry = {
+      ...mockPoolEntry,
+      taskId: 'project-P-2-shell-0',
+      hostDiv: document.createElement('div'),
+      ptyActive: false,
+      needsClear: false,
+      attached: false,
+      spawnPending: false,
+      currentPtyInstance: null,
+    }
+    let resolveStaleAcquire!: (entry: PoolEntry) => void
+    const staleAcquire = new Promise<PoolEntry>((resolve) => {
+      resolveStaleAcquire = resolve
+    })
+
+    const stalePoolEntry = staleEntry as unknown as PoolEntry
+    vi.mocked(acquire).mockReturnValueOnce(staleAcquire).mockResolvedValueOnce(nextEntry as unknown as PoolEntry)
+
+    const { rerender } = render(TaskTerminal, { props: { taskId: 'project-P-1', workspacePath: '/path/to/one', terminalKey: 'project-P-1-shell-0', terminalIndex: 0, isActive: true } })
+
+    await vi.waitFor(() => {
+      expect(acquire).toHaveBeenCalledWith('project-P-1-shell-0')
+    })
+
+    await rerender({ taskId: 'project-P-2', workspacePath: '/path/to/two', terminalKey: 'project-P-2-shell-0', terminalIndex: 0, isActive: true })
+    resolveStaleAcquire(stalePoolEntry)
+
+    await vi.waitFor(() => {
+      expect(acquire).toHaveBeenCalledWith('project-P-2-shell-0')
+      expect(attach).toHaveBeenCalledWith(expect.objectContaining({ hostDiv: nextEntry.hostDiv }), expect.any(HTMLDivElement))
+    })
+
+    expect(vi.mocked(attach).mock.calls.some(([entry]) => entry === stalePoolEntry)).toBe(false)
+    expect(vi.mocked(spawnShellPty).mock.calls.some(([taskId]) => taskId === 'project-P-1')).toBe(false)
+  })
+
+  it('records a captured PTY spawn when terminalKey changes before spawn resolves', async () => {
+    const { acquire, updateShellLifecycleState, setCurrentPtyInstance } = await import('../../lib/terminalPool')
+    const { spawnShellPty } = await import('../../lib/ipc')
+
+    const nextEntry = {
+      ...mockPoolEntry,
+      taskId: 'project-P-2-shell-0',
+      hostDiv: document.createElement('div'),
+      ptyActive: false,
+      needsClear: false,
+      attached: false,
+      spawnPending: false,
+      currentPtyInstance: null,
+    }
+    let resolveSpawn!: (instanceId: number) => void
+    const spawnPromise = new Promise<number>((resolve) => {
+      resolveSpawn = resolve
+    })
+
+    vi.mocked(acquire).mockResolvedValueOnce(mockPoolEntry as unknown as PoolEntry).mockResolvedValueOnce(nextEntry as unknown as PoolEntry)
+    vi.mocked(spawnShellPty).mockReturnValueOnce(spawnPromise).mockResolvedValueOnce(8)
+
+    const { rerender } = render(TaskTerminal, { props: { taskId: 'project-P-1', workspacePath: '/path/to/one', terminalKey: 'project-P-1-shell-0', terminalIndex: 0, isActive: true } })
+
+    await vi.waitFor(() => {
+      expect(spawnShellPty).toHaveBeenCalledWith('project-P-1', '/path/to/one', 80, 24, 0)
+    })
+
+    await rerender({ taskId: 'project-P-2', workspacePath: '/path/to/two', terminalKey: 'project-P-2-shell-0', terminalIndex: 0, isActive: true })
+    resolveSpawn(7)
+
+    await vi.waitFor(() => {
+      expect(setCurrentPtyInstance).toHaveBeenCalledWith(mockPoolEntry, 7)
+      expect(updateShellLifecycleState).toHaveBeenCalledWith('project-P-1-shell-0', {
+        ptyActive: true,
+        shellExited: false,
+        currentPtyInstance: 7,
+      })
+    })
+  })
+
+  it('restart records the captured PTY when terminalKey changes before restart spawn resolves', async () => {
+    const { acquire, updateShellLifecycleState, setCurrentPtyInstance } = await import('../../lib/terminalPool')
+    const { killPty, spawnShellPty } = await import('../../lib/ipc')
+
+    mockPoolEntry.ptyActive = false
+    mockPoolEntry.needsClear = true
+
+    const nextEntry = {
+      ...mockPoolEntry,
+      taskId: 'project-P-2-shell-0',
+      hostDiv: document.createElement('div'),
+      ptyActive: true,
+      needsClear: false,
+      attached: false,
+      spawnPending: false,
+      currentPtyInstance: null,
+    }
+    let resolveKill!: () => void
+    const killPromise = new Promise<void>((resolve) => {
+      resolveKill = resolve
+    })
+
+    vi.mocked(acquire).mockResolvedValueOnce(mockPoolEntry as unknown as PoolEntry).mockResolvedValueOnce(nextEntry as unknown as PoolEntry)
+    vi.mocked(killPty).mockReturnValueOnce(killPromise)
+    vi.mocked(spawnShellPty).mockResolvedValueOnce(9)
+
+    const { rerender } = render(TaskTerminal, { props: { taskId: 'project-P-1', workspacePath: '/path/to/one', terminalKey: 'project-P-1-shell-0', terminalIndex: 0, isActive: true } })
+
+    await vi.waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Restart' })).toBeTruthy()
+    })
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Restart' }))
+    await vi.waitFor(() => {
+      expect(killPty).toHaveBeenCalledWith('project-P-1-shell-0')
+    })
+    await rerender({ taskId: 'project-P-2', workspacePath: '/path/to/two', terminalKey: 'project-P-2-shell-0', terminalIndex: 0, isActive: true })
+    resolveKill()
+
+    await vi.waitFor(() => {
+      expect(killPty).toHaveBeenCalledWith('project-P-1-shell-0')
+      expect(spawnShellPty).toHaveBeenCalledWith('project-P-1', '/path/to/one', 80, 24, 0)
+      expect(setCurrentPtyInstance).toHaveBeenCalledWith(expect.any(Object), 9)
+      expect(updateShellLifecycleState).toHaveBeenCalledWith('project-P-1-shell-0', {
+        ptyActive: true,
+        shellExited: false,
+        currentPtyInstance: 9,
+      })
+    })
+  })
+
+  it('reacquires and attaches when the terminal key changes while the component stays mounted', async () => {
+    const { acquire, attach, detach } = await import('../../lib/terminalPool')
+
+    const nextEntry = {
+      ...mockPoolEntry,
+      taskId: 'project-P-2-shell-0',
+      hostDiv: document.createElement('div'),
+      ptyActive: false,
+      needsClear: false,
+      attached: false,
+      spawnPending: false,
+      currentPtyInstance: null,
+    }
+
+    vi.mocked(acquire).mockResolvedValueOnce(mockPoolEntry as unknown as PoolEntry).mockResolvedValueOnce(nextEntry as unknown as PoolEntry)
+
+    const { rerender } = render(TaskTerminal, { props: { taskId: 'project-P-1', workspacePath: '/path/to/one', terminalKey: 'project-P-1-shell-0', terminalIndex: 0, isActive: true } })
+
+    await vi.waitFor(() => {
+      expect(attach).toHaveBeenCalledWith(mockPoolEntry, expect.any(HTMLDivElement))
+    })
+
+    await rerender({ taskId: 'project-P-2', workspacePath: '/path/to/two', terminalKey: 'project-P-2-shell-0', terminalIndex: 0, isActive: true })
+
+    await vi.waitFor(() => {
+      expect(detach).toHaveBeenCalledWith(expect.objectContaining({ hostDiv: mockPoolEntry.hostDiv }))
+      expect(acquire).toHaveBeenCalledWith('project-P-2-shell-0')
+      expect(attach).toHaveBeenCalledWith(expect.objectContaining({ hostDiv: nextEntry.hostDiv }), expect.any(HTMLDivElement))
+    })
+  })
+
+  it('attaches when activated before a remounted inactive terminal finishes acquiring its pool entry', async () => {
+    const { acquire, attach } = await import('../../lib/terminalPool')
+
+    let resolveAcquire!: (entry: PoolEntry) => void
+    const acquirePromise = new Promise<PoolEntry>((resolve) => {
+      resolveAcquire = resolve
+    })
+    vi.mocked(acquire).mockImplementationOnce(async (taskId: string) => {
+      mockPoolEntry.taskId = taskId
+      return acquirePromise
+    })
+
+    const { rerender } = render(TaskTerminal, { props: { taskId: 'T-1', workspacePath: '/path/to/worktree', terminalKey: 'T-1-shell-0', terminalIndex: 0, isActive: false } })
+
+    await rerender({ taskId: 'T-1', workspacePath: '/path/to/worktree', terminalKey: 'T-1-shell-0', terminalIndex: 0, isActive: true })
+    resolveAcquire(mockPoolEntry as unknown as PoolEntry)
 
     await vi.waitFor(() => {
       expect(attach).toHaveBeenCalledWith(mockPoolEntry, expect.any(HTMLDivElement))
