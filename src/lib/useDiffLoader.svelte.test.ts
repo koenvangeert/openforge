@@ -272,10 +272,16 @@ describe("createDiffLoader", () => {
 		expect(loader.isLoading).toBe(false);
 	});
 
-	it("cleanup clears all store state", async () => {
+	it("preserves pending inline comments across review tab unmount and remount", async () => {
 		mockGetTaskDiff.mockResolvedValue([baseDiff]);
 		mockGetActiveSelfReviewComments.mockResolvedValue([baseSelfReviewComment]);
 		mockGetArchivedSelfReviewComments.mockResolvedValue([]);
+		const pendingInlineComment = {
+			path: "src/main.rs",
+			line: 42,
+			side: "RIGHT",
+			body: "Please double-check this before sending to the agent",
+		};
 
 		const loader = createDiffLoader({
 			getTaskId: () => "task-1",
@@ -284,13 +290,43 @@ describe("createDiffLoader", () => {
 
 		await loader.loadDiff();
 		expect(get(selfReviewDiffFiles)).toEqual([baseDiff]);
+		pendingManualComments.set([pendingInlineComment]);
 
 		loader.cleanup();
 
 		expect(get(selfReviewDiffFiles)).toEqual([]);
 		expect(get(selfReviewGeneralComments)).toEqual([]);
 		expect(get(selfReviewArchivedComments)).toEqual([]);
-		expect(get(pendingManualComments)).toEqual([]);
+		expect(get(pendingManualComments)).toEqual([pendingInlineComment]);
+
+		const remountedLoader = createDiffLoader({
+			getTaskId: () => "task-1",
+			getIncludeUncommitted: () => false,
+		});
+		await remountedLoader.loadDiff();
+
+		expect(get(pendingManualComments)).toEqual([pendingInlineComment]);
+	});
+
+	it("preserves pending inline comments when remounting a selected commit diff", async () => {
+		mockGetCommitDiff.mockResolvedValue([baseDiff]);
+		const pendingInlineComment = {
+			path: "src/main.rs",
+			line: 42,
+			side: "RIGHT",
+			body: "Keep this feedback on commit view",
+		};
+		pendingManualComments.set([pendingInlineComment]);
+
+		const loader = createDiffLoader({
+			getTaskId: () => "task-1",
+			getIncludeUncommitted: () => false,
+			initialSelectedCommitSha: "abc1234",
+		});
+		await loader.loadDiff();
+
+		expect(mockGetCommitDiff).toHaveBeenCalledWith("task-1", "abc1234");
+		expect(get(pendingManualComments)).toEqual([pendingInlineComment]);
 	});
 
 	it("starts with empty commits and null selectedCommitSha", () => {

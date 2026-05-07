@@ -14,7 +14,7 @@ import {
 	selfReviewGeneralComments,
 	ticketPrs,
 } from "./stores";
-import type { CommitInfo, PrComment, PullRequestInfo } from "./types";
+import type { CommitInfo, PrComment, PullRequestInfo, ReviewSubmissionComment } from "./types";
 
 // ============================================================================
 // Interface
@@ -63,6 +63,25 @@ export function createDiffLoader(deps: {
 		return generation !== loadGeneration;
 	}
 
+	function commentKey(comment: ReviewSubmissionComment): string {
+		return `${comment.path}\u0000${comment.line}\u0000${comment.side}\u0000${comment.body}`;
+	}
+
+	function mergeComments(
+		activeComments: ReviewSubmissionComment[],
+		savedPendingComments: ReviewSubmissionComment[],
+	): ReviewSubmissionComment[] {
+		const merged: ReviewSubmissionComment[] = [];
+		const seen = new Set<string>();
+		for (const comment of [...activeComments, ...savedPendingComments]) {
+			const key = commentKey(comment);
+			if (seen.has(key)) continue;
+			seen.add(key);
+			merged.push(comment);
+		}
+		return merged;
+	}
+
 	async function loadDiff(): Promise<void> {
 		const generation = beginLoad();
 		try {
@@ -88,15 +107,16 @@ export function createDiffLoader(deps: {
 					archivedComments.filter((c) => c.comment_type === "general"),
 				);
 
+				const activeInlineComments = activeComments
+					.filter((c) => c.comment_type === "inline")
+					.map((c) => ({
+						path: c.file_path!,
+						line: c.line_number!,
+						body: c.body,
+						side: "RIGHT",
+					}));
 				pendingManualComments.set(
-					activeComments
-						.filter((c) => c.comment_type === "inline")
-						.map((c) => ({
-							path: c.file_path!,
-							line: c.line_number!,
-							body: c.body,
-							side: "RIGHT",
-						})),
+					mergeComments(activeInlineComments, get(pendingManualComments)),
 				);
 
 				const taskPrs = get(ticketPrs).get(taskId) || [];
@@ -173,7 +193,6 @@ export function createDiffLoader(deps: {
 		selfReviewDiffFiles.set([]);
 		selfReviewGeneralComments.set([]);
 		selfReviewArchivedComments.set([]);
-		pendingManualComments.set([]);
 		selectedCommitSha = null;
 		commits = [];
 	}
