@@ -5,6 +5,7 @@ import type { FileEntry, FileContent } from '../lib/types'
 
 vi.mock('../lib/stores', () => ({
   activeProjectId: writable<string | null>('test-project-id'),
+  fileBrowserStates: writable(new Map()),
   pendingFileReveal: writable<string | null>(null),
 }))
 
@@ -14,7 +15,7 @@ vi.mock('../lib/ipc', () => ({
 }))
 
 import FilesView from './FilesView.svelte'
-import { activeProjectId, pendingFileReveal } from '../lib/stores'
+import { activeProjectId, fileBrowserStates, pendingFileReveal } from '../lib/stores'
 import { fsReadDir, fsReadFile } from '../lib/ipc'
 
 function makeFileEntry(overrides: Partial<FileEntry> = {}): FileEntry {
@@ -43,6 +44,7 @@ const sampleFileContent: FileContent = {
 describe('FilesView', () => {
   beforeEach(() => {
     activeProjectId.set('test-project-id')
+    fileBrowserStates.set(new Map())
     pendingFileReveal.set(null)
     vi.clearAllMocks()
     vi.mocked(fsReadDir).mockResolvedValue([])
@@ -134,11 +136,117 @@ describe('FilesView', () => {
 
     expect(fsReadDir).not.toHaveBeenCalled()
   })
+
+  it('restores expanded directories and the open file after remounting the Files view', async () => {
+    const srcEntry = makeFileEntry({ name: 'src', path: 'src', isDir: true, size: null })
+    const mainEntry = makeFileEntry({ name: 'main.ts', path: 'src/main.ts', isDir: false })
+    vi.mocked(fsReadDir)
+      .mockResolvedValueOnce([srcEntry])
+      .mockResolvedValueOnce([mainEntry])
+    vi.mocked(fsReadFile).mockResolvedValue(sampleFileContent)
+
+    const { unmount } = render(FilesView, { props: { projectName: 'My Project' } })
+
+    await waitFor(() => {
+      expect(screen.getByText('src/')).toBeTruthy()
+    })
+
+    await fireEvent.click(screen.getByRole('button', { name: /src\// }))
+    await waitFor(() => {
+      expect(screen.getByText('main.ts')).toBeTruthy()
+    })
+
+    await fireEvent.click(screen.getByRole('button', { name: /main.ts/ }))
+    await waitFor(() => {
+      expect(fsReadFile).toHaveBeenCalledWith('test-project-id', 'src/main.ts')
+    })
+
+    unmount()
+    vi.clearAllMocks()
+
+    render(FilesView, { props: { projectName: 'My Project' } })
+
+    expect(screen.getByText('src/')).toBeTruthy()
+    expect(screen.getAllByText('main.ts').length).toBeGreaterThan(0)
+    expect(screen.getByLabelText('File text content').textContent).toContain('Hello world')
+    expect(fsReadDir).not.toHaveBeenCalled()
+    expect(fsReadFile).not.toHaveBeenCalled()
+  })
+
+  it('refetches the open file when returning to a project after a stale response was ignored', async () => {
+    const readmeEntry = makeFileEntry({ name: 'README.md', path: 'README.md', isDir: false })
+    let resolveStaleRead: (content: FileContent) => void = () => {}
+    const staleRead = new Promise<FileContent>((resolve) => {
+      resolveStaleRead = resolve
+    })
+    vi.mocked(fsReadDir)
+      .mockResolvedValueOnce([readmeEntry])
+      .mockResolvedValueOnce([])
+    vi.mocked(fsReadFile)
+      .mockReturnValueOnce(staleRead)
+      .mockResolvedValueOnce(sampleFileContent)
+
+    const { rerender } = render(FilesView, { props: { projectName: 'Project A' } })
+
+    await waitFor(() => {
+      expect(screen.getByText('README.md')).toBeTruthy()
+    })
+    await fireEvent.click(screen.getByRole('button', { name: /README.md/ }))
+    await waitFor(() => {
+      expect(fsReadFile).toHaveBeenCalledWith('test-project-id', 'README.md')
+    })
+
+    activeProjectId.set('project-b')
+    await rerender({ projectName: 'Project B' })
+    resolveStaleRead(sampleFileContent)
+
+    activeProjectId.set('test-project-id')
+    await rerender({ projectName: 'Project A' })
+
+    await waitFor(() => {
+      expect(fsReadFile).toHaveBeenCalledTimes(2)
+      expect(screen.getByText('Hello world')).toBeTruthy()
+    })
+  })
+
+  it('keeps file browser state separate for each project', async () => {
+    const projectASrc = makeFileEntry({ name: 'src', path: 'src', isDir: true, size: null })
+    const projectAMain = makeFileEntry({ name: 'main.ts', path: 'src/main.ts', isDir: false })
+    const projectBDocs = makeFileEntry({ name: 'docs', path: 'docs', isDir: true, size: null })
+    vi.mocked(fsReadDir)
+      .mockResolvedValueOnce([projectASrc])
+      .mockResolvedValueOnce([projectAMain])
+      .mockResolvedValueOnce([projectBDocs])
+
+    const { rerender } = render(FilesView, { props: { projectName: 'Project A' } })
+
+    await waitFor(() => {
+      expect(screen.getByText('src/')).toBeTruthy()
+    })
+    await fireEvent.click(screen.getByRole('button', { name: /src\// }))
+    await waitFor(() => {
+      expect(screen.getByText('main.ts')).toBeTruthy()
+    })
+
+    activeProjectId.set('project-b')
+    await rerender({ projectName: 'Project B' })
+    await waitFor(() => {
+      expect(screen.getByText('docs/')).toBeTruthy()
+    })
+    expect(screen.queryByText('main.ts')).toBeNull()
+
+    activeProjectId.set('test-project-id')
+    await rerender({ projectName: 'Project A' })
+
+    expect(screen.getByText('src/')).toBeTruthy()
+    expect(screen.getByText('main.ts')).toBeTruthy()
+  })
 })
 
 describe('revealPath', () => {
   beforeEach(() => {
     activeProjectId.set('test-project-id')
+    fileBrowserStates.set(new Map())
     pendingFileReveal.set(null)
     vi.clearAllMocks()
     vi.mocked(fsReadDir).mockResolvedValue([])

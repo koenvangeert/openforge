@@ -5,6 +5,7 @@ import type { FileEntry, FileContent } from '../lib/types'
 
 vi.mock('../lib/stores', () => ({
   activeProjectId: writable<string | null>('test-project-id'),
+  fileBrowserStates: writable(new Map()),
   pendingFileReveal: writable<string | null>(null),
 }))
 
@@ -14,7 +15,7 @@ vi.mock('../lib/ipc', () => ({
 }))
 
 import FilesView from './FilesView.svelte'
-import { activeProjectId } from '../lib/stores'
+import { activeProjectId, fileBrowserStates } from '../lib/stores'
 import { fsReadDir, fsReadFile } from '../lib/ipc'
 
 const sampleModifiedAt = Date.UTC(2024, 2, 9, 15, 30)
@@ -37,6 +38,7 @@ function makeFileEntry(overrides: Partial<FileEntry> = {}): FileEntry {
 describe('FilesView integration', () => {
   beforeEach(() => {
     activeProjectId.set('test-project-id')
+    fileBrowserStates.set(new Map())
     vi.clearAllMocks()
     vi.mocked(fsReadDir).mockResolvedValue([])
     vi.mocked(fsReadFile).mockResolvedValue({

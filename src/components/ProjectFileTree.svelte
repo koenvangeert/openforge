@@ -8,6 +8,8 @@
     selectedPath: string | null
     onToggleDir: (path: string) => void
     onSelectFile: (path: string) => void
+    initialScrollTop?: number
+    onScrollTopChange?: (scrollTop: number) => void
   }
 
   const {
@@ -16,7 +18,12 @@
     selectedPath,
     onToggleDir,
     onSelectFile,
+    initialScrollTop = 0,
+    onScrollTopChange,
   }: Props = $props()
+
+  let scrollContainer = $state<HTMLDivElement | null>(null)
+  let appliedInitialScrollTop = $state<number | null>(null)
 
   function getDepth(path: string): number {
     return path.split('/').length - 1
@@ -28,10 +35,27 @@
     if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`
     return `${(size / (1024 * 1024)).toFixed(1)} MB`
   }
+
+  function handleScroll() {
+    if (scrollContainer) {
+      onScrollTopChange?.(scrollContainer.scrollTop)
+    }
+  }
+
+  $effect(() => {
+    if (scrollContainer && appliedInitialScrollTop !== initialScrollTop) {
+      scrollContainer.scrollTop = initialScrollTop
+      appliedInitialScrollTop = initialScrollTop
+    }
+  })
 </script>
 
 <div class="flex flex-col h-full bg-base-200 border-r border-base-300">
-  <div class="flex-1 overflow-y-auto py-2">
+  <div
+    class="flex-1 overflow-y-auto py-2"
+    bind:this={scrollContainer}
+    onscroll={handleScroll}
+  >
     {#each entries as entry (entry.path)}
       {#if entry.isDir}
         {@const isExpanded = expandedDirs.has(entry.path)}
