@@ -8,13 +8,13 @@ import {
 	getTaskDiff,
 } from "./ipc";
 import {
-	pendingManualComments,
 	selfReviewArchivedComments,
 	selfReviewDiffFiles,
 	selfReviewGeneralComments,
 	ticketPrs,
 } from "./stores";
-import type { CommitInfo, PrComment, PullRequestInfo, ReviewSubmissionComment } from "./types";
+import { mergePendingSelfReviewComments } from "./taskScopedReviewComments";
+import type { CommitInfo, PrComment, PullRequestInfo } from "./types";
 
 // ============================================================================
 // Interface
@@ -63,25 +63,6 @@ export function createDiffLoader(deps: {
 		return generation !== loadGeneration;
 	}
 
-	function commentKey(comment: ReviewSubmissionComment): string {
-		return `${comment.path}\u0000${comment.line}\u0000${comment.side}\u0000${comment.body}`;
-	}
-
-	function mergeComments(
-		activeComments: ReviewSubmissionComment[],
-		savedPendingComments: ReviewSubmissionComment[],
-	): ReviewSubmissionComment[] {
-		const merged: ReviewSubmissionComment[] = [];
-		const seen = new Set<string>();
-		for (const comment of [...activeComments, ...savedPendingComments]) {
-			const key = commentKey(comment);
-			if (seen.has(key)) continue;
-			seen.add(key);
-			merged.push(comment);
-		}
-		return merged;
-	}
-
 	async function loadDiff(): Promise<void> {
 		const generation = beginLoad();
 		try {
@@ -115,9 +96,7 @@ export function createDiffLoader(deps: {
 						body: c.body,
 						side: "RIGHT",
 					}));
-				pendingManualComments.set(
-					mergeComments(activeInlineComments, get(pendingManualComments)),
-				);
+				mergePendingSelfReviewComments(taskId, activeInlineComments);
 
 				const taskPrs = get(ticketPrs).get(taskId) || [];
 				const openPrs = taskPrs

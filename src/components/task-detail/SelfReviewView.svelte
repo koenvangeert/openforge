@@ -8,7 +8,8 @@
   import { createCommentSelection } from '../../lib/useCommentSelection.svelte'
   import { prCommentsToReviewComments } from '../../lib/diffComments'
   import { getTaskReviewPaneState, updateTaskReviewPaneState } from '../../lib/taskReviewPaneState'
-  import type { Task, PrFileDiff } from '../../lib/types'
+  import { pendingSelfReviewCommentsByTask, setPendingSelfReviewComments } from '../../lib/taskScopedReviewComments'
+  import type { Task, PrFileDiff, ReviewSubmissionComment } from '../../lib/types'
   import type { FileContents } from '../../lib/diffAdapter'
   import FileTree from '../review/shared/FileTree.svelte'
   import ResizablePanel from '../shared/ui/ResizablePanel.svelte'
@@ -54,6 +55,7 @@
   })
 
   let inlineReviewComments = $derived(prCommentsToReviewComments(diffLoader.prComments))
+  let pendingInlineComments = $derived($pendingSelfReviewCommentsByTask.get(task.id) ?? [])
   let visibleComments = $derived(showAddressed ? diffLoader.prComments : commentSelection.unaddressedComments)
 
   let hasAutoOpened = false
@@ -110,6 +112,10 @@
 
   async function handleCommitSelect(sha: string | null) {
     await diffLoader.selectCommit(sha)
+  }
+
+  function handlePendingInlineCommentsChange(comments: ReviewSubmissionComment[]) {
+    setPendingSelfReviewComments(task.id, comments)
   }
 
   async function restoreDiffScroll() {
@@ -249,6 +255,8 @@
               bind:this={diffViewer}
               files={$selfReviewDiffFiles}
               existingComments={inlineReviewComments}
+              pendingComments={pendingInlineComments}
+              onPendingCommentsChange={handlePendingInlineCommentsChange}
               {fileTreeVisible}
               onToggleFileTree={() => { fileTreeVisible = !fileTreeVisible }}
               fetchFileContents={fetchTaskFileContents}
@@ -394,6 +402,8 @@
     {onSendToAgent}
     onRefresh={diffLoader.refresh}
     selectedPrComments={commentSelection.selectedPrComments}
+    pendingInlineComments={pendingInlineComments}
+    onPendingInlineCommentsChange={handlePendingInlineCommentsChange}
     onSendComplete={() => { commentSelection.deselectAll() }}
   />
 </div>

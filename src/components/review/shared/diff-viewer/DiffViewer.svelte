@@ -19,7 +19,7 @@
   import { getFileStatusIcon, getFileStatusColor, getFileStatusLabel } from '../../../../lib/fileStatus'
   import { themeMode, getDiffTheme } from '../../../../lib/theme'
   import type { Snippet } from 'svelte'
-  interface Props {
+  interface BaseProps {
     files?: PrFileDiff[]
     existingComments?: ReviewComment[]
     repoOwner?: string
@@ -34,7 +34,11 @@
     onScrollTopChange?: (scrollTop: number) => void
     initialScrollTop?: number
   }
-  let { files = [], existingComments = [], repoOwner: _repoOwner = '', repoName: _repoName = '', fileTreeVisible = true, onToggleFileTree, fetchFileContents, batchFetchFileContents, toolbarExtra, includeUncommitted = false, agentComments = [], onScrollTopChange, initialScrollTop = 0 }: Props = $props()
+  type PendingCommentsControl =
+    | { pendingComments?: undefined; onPendingCommentsChange?: undefined }
+    | { pendingComments: ReviewSubmissionComment[]; onPendingCommentsChange: (comments: ReviewSubmissionComment[]) => void }
+  type Props = BaseProps & PendingCommentsControl
+  let { files = [], existingComments = [], repoOwner: _repoOwner = '', repoName: _repoName = '', fileTreeVisible = true, onToggleFileTree, fetchFileContents, batchFetchFileContents, toolbarExtra, includeUncommitted = false, agentComments = [], pendingComments, onPendingCommentsChange, onScrollTopChange, initialScrollTop = 0 }: Props = $props()
   let diffViewMode = $state<DiffModeEnum>(DiffModeEnum.Split)
   let diffViewWrap = $state(false)
   let commentText = $state('')
@@ -195,6 +199,16 @@
     node.focus()
   }
 
+  const visiblePendingComments = $derived(pendingComments ?? $pendingManualComments)
+
+  function setVisiblePendingComments(comments: ReviewSubmissionComment[]) {
+    if (onPendingCommentsChange) {
+      onPendingCommentsChange(comments)
+    } else {
+      $pendingManualComments = comments
+    }
+  }
+
   function submitInlineComment(filename: string, lineNumber: number, side: SplitSide, onClose: () => void) {
     if (!commentText.trim()) return
     const newComment: ReviewSubmissionComment = {
@@ -203,7 +217,7 @@
       side: side === SplitSide.old ? 'LEFT' : 'RIGHT',
       body: commentText.trim()
     }
-    $pendingManualComments = [...$pendingManualComments, newComment]
+    setVisiblePendingComments([...visiblePendingComments, newComment])
     onClose()
     commentText = ''
   }
@@ -428,7 +442,7 @@
                 {#if workerDiffFile}
                 <DiffView
                   diffFile={workerDiffFile}
-                  extendData={buildExtendData(file.filename, existingComments, $pendingManualComments, agentComments)}
+                  extendData={buildExtendData(file.filename, existingComments, visiblePendingComments, agentComments)}
                   diffViewMode={diffViewMode}
                   diffViewWrap={diffViewWrap}
                   diffViewTheme={getDiffTheme($themeMode)}
@@ -470,12 +484,12 @@
                                         if (comment.commentId === undefined) return
                                         try {
                                            await updateAgentReviewCommentStatus(comment.commentId, 'approved')
-                                           $pendingManualComments = [...$pendingManualComments, {
+                                           setVisiblePendingComments([...visiblePendingComments, {
                                              path: comment.filePath || file.filename,
                                             line: comment.lineNumber || 0,
                                             side: comment.commentSide || 'RIGHT',
                                             body: comment.body
-                                          }]
+                                          }])
                                           $agentReviewComments = $agentReviewComments.map(c =>
                                             c.id === comment.commentId ? { ...c, status: 'approved' } : c
                                           )
@@ -506,9 +520,9 @@
                                 <button
                                   class="btn btn-ghost btn-xs text-base-content/50 hover:text-error ml-auto"
                                   onclick={() => {
-                                    $pendingManualComments = $pendingManualComments.filter(
+                                    setVisiblePendingComments(visiblePendingComments.filter(
                                       (_, i) => i !== comment.index
-                                    )
+                                    ))
                                   }}
                                 >✕</button>
                               {/if}

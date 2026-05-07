@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { pendingManualComments, selfReviewGeneralComments, selfReviewArchivedComments } from '../../lib/stores'
+  import { selfReviewGeneralComments, selfReviewArchivedComments } from '../../lib/stores'
   import { archiveSelfReviewComments, getActiveSelfReviewComments, getArchivedSelfReviewComments } from '../../lib/ipc'
   import { compileReviewPrompt } from '../../lib/reviewPrompt'
-  import type { PrComment } from '../../lib/types'
+  import type { PrComment, ReviewSubmissionComment } from '../../lib/types'
 
   interface Props {
     taskId: string
@@ -11,16 +11,18 @@
     onSendToAgent: (prompt: string) => void
     onRefresh: () => void
     selectedPrComments?: PrComment[]
+    pendingInlineComments?: ReviewSubmissionComment[]
+    onPendingInlineCommentsChange?: (comments: ReviewSubmissionComment[]) => void
     onSendComplete?: () => void
   }
 
-  let { taskId, taskTitle, agentStatus, onSendToAgent, onRefresh, selectedPrComments = [], onSendComplete }: Props = $props()
+  let { taskId, taskTitle, agentStatus, onSendToAgent, onRefresh, selectedPrComments = [], pendingInlineComments = [], onPendingInlineCommentsChange, onSendComplete }: Props = $props()
 
   let isSending = $state(false)
   let error = $state<string | null>(null)
   let successMessage = $state<string | null>(null)
 
-  let inlineCount = $derived($pendingManualComments.length)
+  let inlineCount = $derived(pendingInlineComments.length)
   let generalCount = $derived($selfReviewGeneralComments.length)
   let prCommentCount = $derived(selectedPrComments.length)
   let hasComments = $derived(inlineCount > 0 || generalCount > 0 || prCommentCount > 0)
@@ -30,7 +32,7 @@
   async function handleSendToAgent() {
     if (!canSend) return
 
-    const inlineComments = $pendingManualComments.map(c => ({ path: c.path, line: c.line, body: c.body }))
+    const inlineComments = pendingInlineComments.map(c => ({ path: c.path, line: c.line, body: c.body }))
     const generalComments = $selfReviewGeneralComments.map(c => ({ body: c.body }))
     const prReviewComments = selectedPrComments.map(c => ({
       body: c.body,
@@ -48,8 +50,8 @@
       // CRITICAL ORDER: archive → clear stores → reload → call callback
       await archiveSelfReviewComments(taskId)
 
-      // Clear inline comments from store
-      $pendingManualComments = []
+      // Clear task-scoped inline comments from store
+      onPendingInlineCommentsChange?.([])
 
       // Reload archived comments into store
       const archived = await getArchivedSelfReviewComments(taskId)
