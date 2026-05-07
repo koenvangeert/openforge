@@ -65,6 +65,38 @@ async fn handles_db_backed_commands() {
 }
 
 #[tokio::test]
+async fn resolves_plugin_asset_roots_through_rust_plugin_platform() {
+    let (state, path, _app_dir) = test_state_with_backend_app("app_invoke_plugin_asset_roots");
+
+    invoke_ok(&state, "install_plugin", json!({"plugin":{"id":"com.example.assets","name":"Assets","version":"1.0.0","apiVersion":1,"description":"Assets plugin","permissions":"[]","contributes":"{}","frontendEntry":"dist/index.js","backendEntry":null,"installPath":"/tmp/openforge-assets-plugin","installedAt":123,"isBuiltin":false}})).await;
+    let external = invoke_ok(
+        &state,
+        "resolve_plugin_asset_root",
+        json!({ "pluginId": "com.example.assets" }),
+    )
+    .await;
+    assert_eq!(external["plugin_id"], "com.example.assets");
+    assert_eq!(external["asset_root"], "/tmp/openforge-assets-plugin");
+    assert_eq!(external["is_builtin"], false);
+
+    invoke_ok(&state, "install_plugin", json!({"plugin":{"id":"com.openforge.file-viewer","name":"File Viewer","version":"1.0.0","apiVersion":1,"description":"Builtin plugin","permissions":"[]","contributes":"{}","frontendEntry":"","backendEntry":null,"installPath":"builtin:com.openforge.file-viewer","installedAt":123,"isBuiltin":true}})).await;
+    let builtin = invoke_ok(
+        &state,
+        "resolve_plugin_asset_root",
+        json!({ "pluginId": "com.openforge.file-viewer" }),
+    )
+    .await;
+    assert_eq!(builtin["plugin_id"], "com.openforge.file-viewer");
+    assert!(builtin["asset_root"]
+        .as_str()
+        .expect("builtin asset root should be a string")
+        .ends_with("plugins/file-viewer"));
+    assert_eq!(builtin["is_builtin"], true);
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
 async fn installs_local_plugin_with_backend_app_path_state() {
     let (state, path, _app_dir) =
         test_state_with_backend_app("app_invoke_local_plugin_backend_paths");
