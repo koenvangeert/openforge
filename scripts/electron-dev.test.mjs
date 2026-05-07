@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events'
 import { describe, expect, it, vi } from 'vitest'
-import { ELECTRON_RENDERER_URL, assertBackendPortAvailable, assertElectronDebugPortAvailable, assertVitePortAvailable, buildElectronDebugArgs, buildElectronDevEnv, cleanupDevProcesses, electronSidecarPath, rendererUrlForPort, resolveElectronDevBackendEnv, resolveElectronDevRuntimeOptions, stopProcess, waitForVite } from './electron-dev.mjs'
+import { ELECTRON_DEV_DISABLE_AUTO_SEED_ENV, ELECTRON_DEV_SEED_APP_DATA_DIR_ENV, ELECTRON_DEV_SEED_DB_PATH_ENV, ELECTRON_RENDERER_URL, assertBackendPortAvailable, assertElectronDebugPortAvailable, assertVitePortAvailable, buildElectronDebugArgs, buildElectronDevEnv, cleanupDevProcesses, electronSidecarPath, rendererUrlForPort, resolveElectronDevBackendEnv, resolveElectronDevRuntimeOptions, stopProcess, waitForVite } from './electron-dev.mjs'
 import { resolveRustSidecarLayout } from './rust-sidecar-layout.mjs'
 
 const defaultTestLayout = resolveRustSidecarLayout({
@@ -133,8 +133,12 @@ describe('electron dev script environment', () => {
         OPENFORGE_ELECTRON_DEBUG_PORT: '9333',
       },
       {
+        repoRoot: () => '/repo/openforge',
         tmpdir: () => '/tmp',
         mkdtempSync: prefix => `${prefix}${++dirCounter}`,
+        existsSync: () => false,
+        mkdirSync: vi.fn(),
+        writeFileSync: vi.fn(),
       },
     )
 
@@ -142,8 +146,8 @@ describe('electron dev script environment', () => {
     expect(options.rendererUrl).toBe('http://127.0.0.1:1431')
     expect(options.electronDebugPort).toBe(9333)
     expect(options.userDataDir).toBe('/tmp/openforge-electron-user-data-1')
-    expect(options.appDataDir).toBe('/tmp/openforge-sidecar-app-data-2')
-    expect(options.tempRuntimeDirs).toEqual(['/tmp/openforge-electron-user-data-1', '/tmp/openforge-sidecar-app-data-2'])
+    expect(options.appDataDir).toBe('/repo/openforge/.openforge-dev/sidecar-app-data')
+    expect(options.tempRuntimeDirs).toEqual(['/tmp/openforge-electron-user-data-1'])
     expect(buildElectronDebugArgs(options)).toEqual(['--inspect=127.0.0.1:9333'])
   })
 
@@ -158,6 +162,309 @@ describe('electron dev script environment', () => {
     expect(options.tempRuntimeDirs).toEqual([])
     expect(options.electronDebugPort).toBeNull()
     expect(buildElectronDebugArgs(options)).toEqual([])
+  })
+
+  it('stores and auto-seeds worktree-persistent dev app data from the default development database', () => {
+    let dirCounter = 0
+    const copyFileSync = vi.fn()
+    const mkdirSync = vi.fn()
+    const writeFileSync = vi.fn()
+    const options = resolveElectronDevRuntimeOptions(
+      {},
+      {
+        repoRoot: () => '/repo/openforge',
+        tmpdir: () => '/tmp',
+        homedir: () => '/Users/tester',
+        platform: 'darwin',
+        mkdtempSync: prefix => `${prefix}${++dirCounter}`,
+        existsSync: path => path === '/Users/tester/Library/Application Support/com.opencode.openforge/openforge_dev.db',
+        copyFileSync,
+        mkdirSync,
+        writeFileSync,
+      },
+    )
+
+    expect(options.appDataDir).toBe('/repo/openforge/.openforge-dev/sidecar-app-data')
+    expect(options.tempRuntimeDirs).toEqual(['/tmp/openforge-electron-user-data-1'])
+    expect(options.seededAppData).toMatchObject({
+      sourceDbPath: '/Users/tester/Library/Application Support/com.opencode.openforge/openforge_dev.db',
+      sourceBuildMode: 'debug',
+      sourceKind: 'auto-default-app-data',
+      targetDbPath: '/repo/openforge/.openforge-dev/sidecar-app-data/openforge_dev.db',
+    })
+    expect(copyFileSync).toHaveBeenCalledWith('/Users/tester/Library/Application Support/com.opencode.openforge/openforge_dev.db', '/repo/openforge/.openforge-dev/sidecar-app-data/openforge_dev.db')
+    expect(mkdirSync).toHaveBeenCalledWith('/repo/openforge/.openforge-dev', { recursive: true })
+    expect(mkdirSync).toHaveBeenCalledWith('/repo/openforge/.openforge-dev/sidecar-app-data', { recursive: true })
+    expect(writeFileSync).toHaveBeenCalledWith('/repo/openforge/.openforge-dev/electron-dev-runtime.json', expect.stringContaining('sidecar-app-data'))
+  })
+
+  it('reuses stored worktree app data without reseeding when it already has a dev database', () => {
+    const copyFileSync = vi.fn()
+    const options = resolveElectronDevRuntimeOptions(
+      {},
+      {
+        repoRoot: () => '/repo/openforge',
+        tmpdir: () => '/tmp',
+        mkdtempSync: prefix => `${prefix}1`,
+        existsSync: path => path === '/repo/openforge/.openforge-dev/electron-dev-runtime.json' || path === '/repo/openforge/.openforge-dev/sidecar-app-data/openforge_dev.db',
+        readFileSync: () => JSON.stringify({ appDataDir: '/repo/openforge/.openforge-dev/sidecar-app-data' }),
+        copyFileSync,
+        mkdirSync: vi.fn(),
+      },
+    )
+
+    expect(options.appDataDir).toBe('/repo/openforge/.openforge-dev/sidecar-app-data')
+    expect(options.seededAppData).toBeNull()
+    expect(copyFileSync).not.toHaveBeenCalled()
+  })
+
+  it('leaves persistent worktree dev app data empty when no default development database exists', () => {
+    let dirCounter = 0
+    const copyFileSync = vi.fn()
+    const options = resolveElectronDevRuntimeOptions(
+      {},
+      {
+        repoRoot: () => '/repo/openforge',
+        tmpdir: () => '/tmp',
+        homedir: () => '/Users/tester',
+        platform: 'darwin',
+        mkdtempSync: prefix => `${prefix}${++dirCounter}`,
+        existsSync: () => false,
+        copyFileSync,
+        mkdirSync: vi.fn(),
+        writeFileSync: vi.fn(),
+      },
+    )
+
+    expect(options.appDataDir).toBe('/repo/openforge/.openforge-dev/sidecar-app-data')
+    expect(options.seededAppData).toBeNull()
+    expect(copyFileSync).not.toHaveBeenCalled()
+  })
+
+  it('allows auto-seeding to be disabled for fresh empty dev runs', () => {
+    let dirCounter = 0
+    const copyFileSync = vi.fn()
+    const options = resolveElectronDevRuntimeOptions(
+      { [ELECTRON_DEV_DISABLE_AUTO_SEED_ENV]: '1' },
+      {
+        repoRoot: () => '/repo/openforge',
+        tmpdir: () => '/tmp',
+        homedir: () => '/Users/tester',
+        platform: 'darwin',
+        mkdtempSync: prefix => `${prefix}${++dirCounter}`,
+        existsSync: () => true,
+        copyFileSync,
+        mkdirSync: vi.fn(),
+        writeFileSync: vi.fn(),
+      },
+    )
+
+    expect(options.seededAppData).toBeNull()
+    expect(copyFileSync).not.toHaveBeenCalled()
+  })
+
+  it('seeds worktree-persistent dev app data from an existing debug database when requested', () => {
+    let dirCounter = 0
+    const copyFileSync = vi.fn()
+    const options = resolveElectronDevRuntimeOptions(
+      { [ELECTRON_DEV_SEED_APP_DATA_DIR_ENV]: '/existing/openforge-data' },
+      {
+        repoRoot: () => '/repo/openforge',
+        tmpdir: () => '/tmp',
+        mkdtempSync: prefix => `${prefix}${++dirCounter}`,
+        existsSync: path => path === '/existing/openforge-data/openforge_dev.db',
+        copyFileSync,
+        mkdirSync: vi.fn(),
+        writeFileSync: vi.fn(),
+      },
+    )
+
+    expect(options.appDataDir).toBe('/repo/openforge/.openforge-dev/sidecar-app-data')
+    expect(options.seededAppData).toEqual({
+      sourceDbPath: '/existing/openforge-data/openforge_dev.db',
+      sourceBuildMode: 'debug',
+      sourceKind: 'explicit-app-data-dir',
+      targetDbPath: '/repo/openforge/.openforge-dev/sidecar-app-data/openforge_dev.db',
+      copiedCompanionFiles: [],
+    })
+    expect(copyFileSync).toHaveBeenCalledWith('/existing/openforge-data/openforge_dev.db', '/repo/openforge/.openforge-dev/sidecar-app-data/openforge_dev.db')
+  })
+
+  it('rejects app data seeding when only a production database exists', () => {
+    const copyFileSync = vi.fn()
+
+    expect(() => resolveElectronDevRuntimeOptions(
+      { [ELECTRON_DEV_SEED_APP_DATA_DIR_ENV]: '/existing/openforge-data' },
+      {
+        repoRoot: () => '/repo/openforge',
+        tmpdir: () => '/tmp',
+        mkdtempSync: prefix => `${prefix}1`,
+        existsSync: path => path === '/existing/openforge-data/openforge.db',
+        copyFileSync,
+        mkdirSync: vi.fn(),
+        rmSync: vi.fn(),
+        writeFileSync: vi.fn(),
+      },
+    )).toThrow('openforge_dev.db does not exist')
+    expect(copyFileSync).not.toHaveBeenCalled()
+  })
+
+  it('seeds worktree-persistent dev app data from an explicit development database file path', () => {
+    let dirCounter = 0
+    const copyFileSync = vi.fn()
+    const options = resolveElectronDevRuntimeOptions(
+      { [ELECTRON_DEV_SEED_DB_PATH_ENV]: '/backups/openforge_dev.db' },
+      {
+        repoRoot: () => '/repo/openforge',
+        tmpdir: () => '/tmp',
+        mkdtempSync: prefix => `${prefix}${++dirCounter}`,
+        existsSync: path => path === '/backups/openforge_dev.db',
+        copyFileSync,
+        mkdirSync: vi.fn(),
+        writeFileSync: vi.fn(),
+      },
+    )
+
+    expect(options.seededAppData).toMatchObject({
+      sourceDbPath: '/backups/openforge_dev.db',
+      sourceBuildMode: 'debug',
+      targetDbPath: '/repo/openforge/.openforge-dev/sidecar-app-data/openforge_dev.db',
+    })
+    expect(copyFileSync).toHaveBeenCalledWith('/backups/openforge_dev.db', '/repo/openforge/.openforge-dev/sidecar-app-data/openforge_dev.db')
+  })
+
+  it('rejects explicit production database seed paths', () => {
+    const copyFileSync = vi.fn()
+
+    expect(() => resolveElectronDevRuntimeOptions(
+      { [ELECTRON_DEV_SEED_DB_PATH_ENV]: '/backups/openforge.db' },
+      {
+        repoRoot: () => '/repo/openforge',
+        tmpdir: () => '/tmp',
+        mkdtempSync: prefix => `${prefix}1`,
+        existsSync: path => path === '/backups/openforge.db',
+        copyFileSync,
+        mkdirSync: vi.fn(),
+        rmSync: vi.fn(),
+        writeFileSync: vi.fn(),
+      },
+    )).toThrow('must point to openforge_dev.db')
+    expect(copyFileSync).not.toHaveBeenCalled()
+  })
+
+  it('still rejects explicit production seed paths when the worktree dev database already exists', () => {
+    const copyFileSync = vi.fn()
+
+    expect(() => resolveElectronDevRuntimeOptions(
+      { [ELECTRON_DEV_SEED_DB_PATH_ENV]: '/backups/openforge.db' },
+      {
+        repoRoot: () => '/repo/openforge',
+        tmpdir: () => '/tmp',
+        mkdtempSync: prefix => `${prefix}1`,
+        existsSync: path => path === '/backups/openforge.db' || path === '/repo/openforge/.openforge-dev/sidecar-app-data/openforge_dev.db',
+        copyFileSync,
+        mkdirSync: vi.fn(),
+        rmSync: vi.fn(),
+        writeFileSync: vi.fn(),
+      },
+    )).toThrow('must point to openforge_dev.db')
+    expect(copyFileSync).not.toHaveBeenCalled()
+  })
+
+  it('requires resetting worktree app data before applying an explicit seed to an existing dev database', () => {
+    const copyFileSync = vi.fn()
+
+    expect(() => resolveElectronDevRuntimeOptions(
+      { [ELECTRON_DEV_SEED_DB_PATH_ENV]: '/backups/openforge_dev.db' },
+      {
+        repoRoot: () => '/repo/openforge',
+        tmpdir: () => '/tmp',
+        mkdtempSync: prefix => `${prefix}1`,
+        existsSync: path => path === '/backups/openforge_dev.db' || path === '/repo/openforge/.openforge-dev/sidecar-app-data/openforge_dev.db',
+        copyFileSync,
+        mkdirSync: vi.fn(),
+        rmSync: vi.fn(),
+        writeFileSync: vi.fn(),
+      },
+    )).toThrow('delete .openforge-dev')
+    expect(copyFileSync).not.toHaveBeenCalled()
+  })
+
+  it('does not seed or clean an explicit app data directory even when seed env is present', () => {
+    const copyFileSync = vi.fn()
+    const options = resolveElectronDevRuntimeOptions(
+      {
+        OPENFORGE_APP_DATA_DIR: '/custom/app-data',
+        [ELECTRON_DEV_SEED_APP_DATA_DIR_ENV]: '/existing/openforge-data',
+      },
+      {
+        tmpdir: () => '/tmp',
+        mkdtempSync: prefix => `${prefix}unused`,
+        existsSync: () => true,
+        copyFileSync,
+      },
+    )
+
+    expect(options.appDataDir).toBe('/custom/app-data')
+    expect(options.tempRuntimeDirs).toEqual(['/tmp/openforge-electron-user-data-unused'])
+    expect(options.tempRuntimeDirs).not.toContain('/custom/app-data')
+    expect(options.seededAppData).toBeNull()
+    expect(copyFileSync).not.toHaveBeenCalled()
+  })
+
+  it('cleans created temp runtime dirs when requested dev app data seeding cannot find a source database', () => {
+    const rmSync = vi.fn()
+
+    expect(() => resolveElectronDevRuntimeOptions(
+      { [ELECTRON_DEV_SEED_APP_DATA_DIR_ENV]: '/missing/openforge-data' },
+      {
+        repoRoot: () => '/repo/openforge',
+        tmpdir: () => '/tmp',
+        mkdtempSync: prefix => `${prefix}1`,
+        existsSync: () => false,
+        copyFileSync: vi.fn(),
+        mkdirSync: vi.fn(),
+        rmSync,
+        writeFileSync: vi.fn(),
+      },
+    )).toThrow('openforge_dev.db does not exist')
+
+    expect(rmSync).toHaveBeenCalledWith('/tmp/openforge-electron-user-data-1', { recursive: true, force: true })
+    expect(rmSync).not.toHaveBeenCalledWith('/repo/openforge/.openforge-dev/sidecar-app-data', expect.anything())
+  })
+
+  it('copies sqlite companion files when present during worktree dev app data seeding', () => {
+    let dirCounter = 0
+    const copyFileSync = vi.fn()
+    const options = resolveElectronDevRuntimeOptions(
+      { [ELECTRON_DEV_SEED_APP_DATA_DIR_ENV]: '/existing/openforge-data' },
+      {
+        repoRoot: () => '/repo/openforge',
+        tmpdir: () => '/tmp',
+        mkdtempSync: prefix => `${prefix}${++dirCounter}`,
+        existsSync: path => [
+          '/existing/openforge-data/openforge_dev.db',
+          '/existing/openforge-data/openforge_dev.db-wal',
+          '/existing/openforge-data/openforge_dev.db-shm',
+        ].includes(path),
+        copyFileSync,
+        mkdirSync: vi.fn(),
+        writeFileSync: vi.fn(),
+      },
+    )
+
+    expect(options.seededAppData.copiedCompanionFiles).toEqual([
+      {
+        sourcePath: '/existing/openforge-data/openforge_dev.db-wal',
+        targetPath: '/repo/openforge/.openforge-dev/sidecar-app-data/openforge_dev.db-wal',
+      },
+      {
+        sourcePath: '/existing/openforge-data/openforge_dev.db-shm',
+        targetPath: '/repo/openforge/.openforge-dev/sidecar-app-data/openforge_dev.db-shm',
+      },
+    ])
+    expect(copyFileSync).toHaveBeenCalledWith('/existing/openforge-data/openforge_dev.db-wal', '/repo/openforge/.openforge-dev/sidecar-app-data/openforge_dev.db-wal')
+    expect(copyFileSync).toHaveBeenCalledWith('/existing/openforge-data/openforge_dev.db-shm', '/repo/openforge/.openforge-dev/sidecar-app-data/openforge_dev.db-shm')
   })
 
   it('rejects invalid configurable Electron dev ports', () => {

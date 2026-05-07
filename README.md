@@ -105,6 +105,22 @@ pnpm dev
 
 `pnpm electron:dev` starts Vite, builds the Rust sidecar, builds the Electron main/preload bundle, then launches Electron. Rust sidecar layout facts live in `openforge-backend-layout.json` and are resolved by `scripts/rust-sidecar-layout.mjs`. It shares Rust build artifacts through the checkout's Git common directory by setting `CARGO_TARGET_DIR` to `.cargo-target` beside the primary `.git` directory. Set `CARGO_TARGET_DIR` yourself to override it.
 
+By default, `pnpm electron:dev` uses temporary Electron `userData` and a worktree-local sidecar app-data directory recorded in `.openforge-dev/electron-dev-runtime.json`. If your normal Open Forge app-data directory already contains `openforge_dev.db`, the dev launcher snapshots that development database into `.openforge-dev/sidecar-app-data` on first use, then reuses that worktree-local database across later launches. To force a fresh empty dev database for a run, disable auto-seeding:
+
+```bash
+OPENFORGE_ELECTRON_DEV_DISABLE_AUTO_SEED=1 pnpm electron:dev
+```
+
+To reuse a directory directly, set `OPENFORGE_APP_DATA_DIR=/path/to/app-data` only when no other Open Forge build is using that database. To seed from a non-default development data directory or a specific development backup file:
+
+```bash
+OPENFORGE_ELECTRON_DEV_SEED_APP_DATA_DIR="$HOME/Library/Application Support/com.opencode.openforge" pnpm electron:dev
+# or seed from a specific development backup/database file:
+OPENFORGE_ELECTRON_DEV_SEED_DB_PATH="/path/to/openforge_dev.db" pnpm electron:dev
+```
+
+Seeding only copies the development database (`openforge_dev.db`) into the worktree-local dev sidecar directory as `openforge_dev.db`; production databases (`openforge.db`) are never copied or accepted. Companion SQLite `-wal`/`-shm` files are copied if present. The source database is not shared live, and the worktree-local database is not cleaned up when dev exits. Explicit seed settings apply before the worktree DB exists; to reseed or clean up that per-worktree state, stop `pnpm electron:dev` and delete `.openforge-dev/`. For the safest snapshot, quit other dev Open Forge builds before seeding from their app-data directory.
+
 ## Testing
 
 ```bash

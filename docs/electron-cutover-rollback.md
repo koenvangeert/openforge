@@ -20,6 +20,18 @@ cp -a "$HOME/Library/Application Support/com.opencode.openforge" ~/OpenForgeBack
 
 If your local build uses a different app identifier or data root, back up the directory printed by the sidecar startup log before installing.
 
+## Testing a dev Electron build with existing data
+
+`pnpm electron:dev` intentionally uses temporary Electron `userData` plus a worktree-local sidecar app-data directory by default, which avoids accidental live sharing while preserving state across launches in the same worktree. The reusable sidecar path is recorded in `.openforge-dev/electron-dev-runtime.json`; the default path is `.openforge-dev/sidecar-app-data`. If the normal Open Forge app-data directory already contains `openforge_dev.db`, the dev launcher snapshots that development database into the worktree-local sidecar directory on first use. To force an empty dev run, use `OPENFORGE_ELECTRON_DEV_DISABLE_AUTO_SEED=1 pnpm electron:dev`.
+
+For an isolated test run from a non-default development data directory, seed the worktree-local sidecar app-data directory instead of pointing the dev sidecar at a live directory:
+
+```bash
+OPENFORGE_ELECTRON_DEV_SEED_APP_DATA_DIR="$HOME/Library/Application Support/com.opencode.openforge" pnpm electron:dev
+```
+
+The dev launcher only copies `openforge_dev.db` from that directory into the worktree-local sidecar directory as `openforge_dev.db`; it never copies `openforge.db`. You can also seed from a specific development database or backup file with `OPENFORGE_ELECTRON_DEV_SEED_DB_PATH=/path/to/openforge_dev.db`. This is a snapshot copy for the worktree; changes made in the dev app are kept in `.openforge-dev/sidecar-app-data` and are not written back to the source. Explicit seed settings apply before the worktree DB exists; to reseed, reset, or clean up that per-worktree state, stop `pnpm electron:dev` and delete `.openforge-dev/`. Quit other dev Open Forge builds before snapshotting their data for the most consistent SQLite copy.
+
 ## Rollback procedure
 
 1. Quit Open Forge.

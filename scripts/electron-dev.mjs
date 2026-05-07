@@ -1,15 +1,21 @@
 #!/usr/bin/env node
 import { spawn } from 'node:child_process'
-import { mkdtempSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { rm as rmPath } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { dirname, join, resolve } from 'node:path'
+import { homedir, tmpdir } from 'node:os'
+import { basename, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { connect } from 'node:net'
 import { DEFAULT_DEV_BACKEND_PORT, buildElectronSidecarDevEnv } from './cargo-target-env.mjs'
+import { OPENFORGE_APP_DATA_IDENTIFIER, databaseFilenameForBuildMode } from './data-identity.mjs'
 import { resolveRustSidecarLayout } from './rust-sidecar-layout.mjs'
 
 export const DEFAULT_VITE_PORT = 1420
+export const ELECTRON_DEV_SEED_APP_DATA_DIR_ENV = 'OPENFORGE_ELECTRON_DEV_SEED_APP_DATA_DIR'
+export const ELECTRON_DEV_SEED_DB_PATH_ENV = 'OPENFORGE_ELECTRON_DEV_SEED_DB_PATH'
+export const ELECTRON_DEV_DISABLE_AUTO_SEED_ENV = 'OPENFORGE_ELECTRON_DEV_DISABLE_AUTO_SEED'
+export const ELECTRON_DEV_WORKTREE_STATE_DIR = '.openforge-dev'
+export const ELECTRON_DEV_WORKTREE_STATE_FILE = 'electron-dev-runtime.json'
 const VITE_READY_TIMEOUT_MS = 30_000
 const VITE_READY_INTERVAL_MS = 250
 const VITE_HOST = '127.0.0.1'
@@ -42,20 +48,193 @@ function nonEmptyEnv(value) {
   return typeof value === 'string' && value.trim().length > 0 ? value : null
 }
 
-export function resolveElectronDevRuntimeOptions(env = process.env, deps = { mkdtempSync, tmpdir }) {
+function runtimeDeps(deps = {}) {
+  return {
+    mkdtempSync,
+    tmpdir,
+    homedir,
+    platform: process.platform,
+    repoRoot,
+    existsSync,
+    copyFileSync,
+    mkdirSync,
+    readFileSync,
+    rmSync,
+    writeFileSync,
+    ...deps,
+  }
+}
+
+function worktreeDevRuntimePaths(deps) {
+  const stateDir = join(deps.repoRoot(), ELECTRON_DEV_WORKTREE_STATE_DIR)
+  return {
+    stateDir,
+    statePath: join(stateDir, ELECTRON_DEV_WORKTREE_STATE_FILE),
+    defaultAppDataDir: join(stateDir, 'sidecar-app-data'),
+  }
+}
+
+function readWorktreeDevRuntimeState(paths, deps) {
+  if (!deps.existsSync(paths.statePath)) return null
+
+  try {
+    const parsed = JSON.parse(deps.readFileSync(paths.statePath, 'utf8'))
+    return typeof parsed?.appDataDir === 'string' && parsed.appDataDir.trim() !== ''
+      ? { appDataDir: parsed.appDataDir }
+      : null
+  } catch {
+    return null
+  }
+}
+
+function resolveWorktreeAppDataDir(deps) {
+  const paths = worktreeDevRuntimePaths(deps)
+  const stored = readWorktreeDevRuntimeState(paths, deps)
+  const appDataDir = stored?.appDataDir ?? paths.defaultAppDataDir
+
+  deps.mkdirSync(paths.stateDir, { recursive: true })
+  deps.mkdirSync(appDataDir, { recursive: true })
+
+  if (stored?.appDataDir !== appDataDir) {
+    deps.writeFileSync(paths.statePath, `${JSON.stringify({ appDataDir }, null, 2)}\n`)
+  }
+
+  return { appDataDir, statePath: paths.statePath }
+}
+
+function resolveSeedDatabaseFromAppDataDir(appDataDir, deps) {
+  const debugDbPath = join(appDataDir, databaseFilenameForBuildMode('debug'))
+  if (deps.existsSync(debugDbPath)) {
+    return { sourceDbPath: debugDbPath, sourceBuildMode: 'debug', sourceKind: 'explicit-app-data-dir' }
+  }
+
+  throw new Error(`${ELECTRON_DEV_SEED_APP_DATA_DIR_ENV} is set to ${appDataDir}, but ${databaseFilenameForBuildMode('debug')} does not exist there`)
+}
+
+function truthyEnv(value) {
+  return ['1', 'true', 'yes', 'on'].includes(String(value ?? '').trim().toLowerCase())
+}
+
+function defaultAppDataDir(env, deps) {
+  const home = deps.homedir()
+  if (deps.platform === 'darwin') {
+    return join(home, 'Library', 'Application Support', OPENFORGE_APP_DATA_IDENTIFIER)
+  }
+
+  if (deps.platform === 'win32') {
+    return join(nonEmptyEnv(env.APPDATA) ?? join(home, 'AppData', 'Roaming'), OPENFORGE_APP_DATA_IDENTIFIER)
+  }
+
+  return join(nonEmptyEnv(env.XDG_DATA_HOME) ?? join(home, '.local', 'share'), OPENFORGE_APP_DATA_IDENTIFIER)
+}
+
+function resolveAutoSeedDatabase(env, deps) {
+  if (truthyEnv(env[ELECTRON_DEV_DISABLE_AUTO_SEED_ENV])) return null
+
+  const appDataDir = defaultAppDataDir(env, deps)
+  const debugDbPath = join(appDataDir, databaseFilenameForBuildMode('debug'))
+  if (!deps.existsSync(debugDbPath)) return null
+
+  return {
+    sourceDbPath: debugDbPath,
+    sourceBuildMode: 'debug',
+    sourceKind: 'auto-default-app-data',
+  }
+}
+
+function hasExplicitSeedEnv(env) {
+  return nonEmptyEnv(env[ELECTRON_DEV_SEED_DB_PATH_ENV]) !== null || nonEmptyEnv(env[ELECTRON_DEV_SEED_APP_DATA_DIR_ENV]) !== null
+}
+
+function resolveSeedDatabase(env, deps) {
+  const explicitSeedDbPath = nonEmptyEnv(env[ELECTRON_DEV_SEED_DB_PATH_ENV])
+  if (explicitSeedDbPath) {
+    const debugDatabaseFilename = databaseFilenameForBuildMode('debug')
+    if (basename(explicitSeedDbPath) !== debugDatabaseFilename) {
+      throw new Error(`${ELECTRON_DEV_SEED_DB_PATH_ENV} must point to ${debugDatabaseFilename}; production databases are never copied into Electron dev runs`)
+    }
+    if (!deps.existsSync(explicitSeedDbPath)) {
+      throw new Error(`${ELECTRON_DEV_SEED_DB_PATH_ENV} is set to ${explicitSeedDbPath}, but that database file does not exist`)
+    }
+    return { sourceDbPath: explicitSeedDbPath, sourceBuildMode: 'debug', sourceKind: 'explicit-db-path' }
+  }
+
+  const seedAppDataDir = nonEmptyEnv(env[ELECTRON_DEV_SEED_APP_DATA_DIR_ENV])
+  if (seedAppDataDir) return resolveSeedDatabaseFromAppDataDir(seedAppDataDir, deps)
+
+  return resolveAutoSeedDatabase(env, deps)
+}
+
+function copySqliteCompanionFiles(sourceDbPath, targetDbPath, deps) {
+  return ['-wal', '-shm'].flatMap((suffix) => {
+    const sourcePath = `${sourceDbPath}${suffix}`
+    if (!deps.existsSync(sourcePath)) return []
+
+    const targetPath = `${targetDbPath}${suffix}`
+    deps.copyFileSync(sourcePath, targetPath)
+    return [{ sourcePath, targetPath }]
+  })
+}
+
+function seedElectronDevAppData(env, appDataDir, deps) {
+  const targetDbPath = join(appDataDir, databaseFilenameForBuildMode('debug'))
+  const targetExists = deps.existsSync(targetDbPath)
+  const seed = resolveSeedDatabase(env, deps)
+
+  if (targetExists) {
+    if (hasExplicitSeedEnv(env)) {
+      throw new Error(`Worktree dev database already exists at ${targetDbPath}; delete .openforge-dev/ before reseeding from explicit seed settings`)
+    }
+    return null
+  }
+
+  if (seed === null) return null
+
+  deps.copyFileSync(seed.sourceDbPath, targetDbPath)
+  const copiedCompanionFiles = copySqliteCompanionFiles(seed.sourceDbPath, targetDbPath, deps)
+
+  return {
+    ...seed,
+    targetDbPath,
+    copiedCompanionFiles,
+  }
+}
+
+function cleanupCreatedRuntimeDirsOnError(tempRuntimeDirs, deps) {
+  for (const runtimeDir of tempRuntimeDirs) {
+    try {
+      deps.rmSync(runtimeDir, { recursive: true, force: true })
+    } catch {
+      // Preserve the original seed failure; best-effort temp cleanup should not hide it.
+    }
+  }
+}
+
+export function resolveElectronDevRuntimeOptions(env = process.env, deps = {}) {
+  const resolvedDeps = runtimeDeps(deps)
   const rendererPort = parsePort(env.OPENFORGE_ELECTRON_RENDERER_PORT ?? env.VITE_PORT ?? String(VITE_PORT), 'OPENFORGE_ELECTRON_RENDERER_PORT')
   const electronDebugPort = nonEmptyEnv(env.OPENFORGE_ELECTRON_DEBUG_PORT) === null
     ? null
     : parsePort(env.OPENFORGE_ELECTRON_DEBUG_PORT, 'OPENFORGE_ELECTRON_DEBUG_PORT')
-  const tempRoot = deps.tmpdir()
+  const tempRoot = resolvedDeps.tmpdir()
   const tempRuntimeDirs = []
   const explicitUserDataDir = nonEmptyEnv(env.OPENFORGE_ELECTRON_USER_DATA_DIR)
   const explicitAppDataDir = nonEmptyEnv(env.OPENFORGE_APP_DATA_DIR)
-  const userDataDir = explicitUserDataDir ?? deps.mkdtempSync(join(tempRoot, 'openforge-electron-user-data-'))
-  const appDataDir = explicitAppDataDir ?? deps.mkdtempSync(join(tempRoot, 'openforge-sidecar-app-data-'))
+  const worktreeAppData = explicitAppDataDir ? null : resolveWorktreeAppDataDir(resolvedDeps)
+  const userDataDir = explicitUserDataDir ?? resolvedDeps.mkdtempSync(join(tempRoot, 'openforge-electron-user-data-'))
+  const appDataDir = explicitAppDataDir ?? worktreeAppData.appDataDir
 
   if (!explicitUserDataDir) tempRuntimeDirs.push(userDataDir)
-  if (!explicitAppDataDir) tempRuntimeDirs.push(appDataDir)
+
+  let seededAppData = null
+  try {
+    seededAppData = explicitAppDataDir
+      ? null
+      : seedElectronDevAppData(env, appDataDir, resolvedDeps)
+  } catch (error) {
+    cleanupCreatedRuntimeDirsOnError(tempRuntimeDirs, resolvedDeps)
+    throw error
+  }
 
   return {
     rendererPort,
@@ -64,6 +243,7 @@ export function resolveElectronDevRuntimeOptions(env = process.env, deps = { mkd
     userDataDir,
     appDataDir,
     tempRuntimeDirs,
+    seededAppData,
   }
 }
 
@@ -303,6 +483,9 @@ export async function cleanupDevProcesses(children, options = {}) {
 
 async function main() {
   const runtimeOptions = resolveElectronDevRuntimeOptions()
+  if (runtimeOptions.seededAppData) {
+    logStep(`Seeded isolated sidecar app data from ${runtimeOptions.seededAppData.sourceDbPath} to ${runtimeOptions.seededAppData.targetDbPath}.`)
+  }
   let vite = null
   let electron = null
   let cleanupPromise = null
