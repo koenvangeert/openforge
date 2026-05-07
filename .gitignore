@@ -6,6 +6,7 @@ node_modules/
 package-lock.json
 bun.lock
 .sisyphus/
+.openforge-dev/
 
 # --- babysitter managed ---
 .a5c/creds.env
