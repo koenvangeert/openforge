@@ -5,8 +5,7 @@ import type {
   BootLifecycleAdapter,
   BootLifecycleOptions,
 } from './bootLifecycle'
-import type { AppEventForwarder } from './eventForwarder'
-import type { SidecarHandle, SidecarLaunchConfig } from './sidecar'
+import type { SidecarLaunchConfig, SidecarReadinessHandle, SidecarReadinessSnapshot } from './sidecar'
 
 function sidecarConfig(): SidecarLaunchConfig {
   return {
@@ -16,28 +15,46 @@ function sidecarConfig(): SidecarLaunchConfig {
     host: '127.0.0.1',
     port: 17642,
     token: 'launch-token',
+    baseUrl: 'http://127.0.0.1:17642',
     healthUrl: 'http://127.0.0.1:17642/app/health',
+    readinessUrl: 'http://127.0.0.1:17642/app/readiness',
+    eventUrl: 'http://127.0.0.1:17642/app/events',
   }
 }
 
-class FakeSidecarHandle implements SidecarHandle {
-  process = { killed: false, kill: vi.fn(), once: vi.fn() } as unknown as SidecarHandle['process']
-  config = sidecarConfig()
-  stop = vi.fn(async () => undefined)
+function readinessSnapshot(config: SidecarLaunchConfig): SidecarReadinessSnapshot {
+  return {
+    identity: {
+      command: config.command,
+      args: config.args,
+      host: config.host,
+      port: config.port,
+      baseUrl: config.baseUrl,
+      healthUrl: config.healthUrl,
+      readinessUrl: config.readinessUrl,
+      eventUrl: config.eventUrl,
+    },
+    http: { available: true, authenticated: true },
+    events: { available: true },
+    startupResume: { phase: 'pending' },
+    degraded: [],
+    process: { state: 'running' },
+  }
 }
 
-class FakeEventForwarder implements AppEventForwarder {
-  start = vi.fn(async () => undefined)
-  ready = vi.fn(async () => undefined)
-  stop = vi.fn()
-  acceptChunk = vi.fn()
+class FakeSidecarHandle implements SidecarReadinessHandle {
+  process = { killed: false, kill: vi.fn(), once: vi.fn() } as unknown as SidecarReadinessHandle['process']
+  config = sidecarConfig()
+  eventStream = { start: vi.fn(), ready: vi.fn(), stop: vi.fn(), acceptChunk: vi.fn() }
+  ready = vi.fn(async () => readinessSnapshot(this.config))
+  snapshot = vi.fn(() => readinessSnapshot(this.config))
+  stop = vi.fn(async () => undefined)
 }
 
 class FakeBootLifecycleAdapter implements BootLifecycleAdapter {
   operations: string[] = []
   sidecarPath: string | null = '/Applications/Open Forge.app/Contents/MacOS/openforge-sidecar'
   sidecar = new FakeSidecarHandle()
-  eventForwarder = new FakeEventForwarder()
   backendContext: BootBackendInvokeContext | null = null
   windowAllClosedHandler: (() => void) | null = null
   beforeQuitHandler: (() => void) | null = null
@@ -45,7 +62,6 @@ class FakeBootLifecycleAdapter implements BootLifecycleAdapter {
     this.operations.push('quit')
   })
   startSidecarFailure: Error | null = null
-  eventReadyFailure: Error | null = null
   mainWindowFailure: Error | null = null
   sidecarConfigsForProtocol: Array<SidecarLaunchConfig | null> = []
   sidecarConfigsForCsp: Array<SidecarLaunchConfig | null> = []
@@ -88,8 +104,8 @@ class FakeBootLifecycleAdapter implements BootLifecycleAdapter {
     return this.sidecar.config
   }
 
-  async startSidecar(_config: SidecarLaunchConfig): Promise<SidecarHandle> {
-    this.operations.push('start-sidecar')
+  async startSidecar(_config: SidecarLaunchConfig): Promise<SidecarReadinessHandle> {
+    this.operations.push('start-sidecar-readiness')
     if (this.startSidecarFailure) throw this.startSidecarFailure
     return this.sidecar
   }
@@ -102,14 +118,6 @@ class FakeBootLifecycleAdapter implements BootLifecycleAdapter {
   applyRendererCsp(sidecarConfig: SidecarLaunchConfig | null): void {
     this.operations.push(sidecarConfig ? 'apply-csp:sidecar' : 'apply-csp:null')
     this.sidecarConfigsForCsp.push(sidecarConfig)
-  }
-
-  createAppEventForwarder(_sidecarConfig: SidecarLaunchConfig): AppEventForwarder {
-    this.operations.push('create-event-forwarder')
-    if (this.eventReadyFailure) {
-      this.eventForwarder.ready.mockRejectedValueOnce(this.eventReadyFailure)
-    }
-    return this.eventForwarder
   }
 
   async createMainWindow(): Promise<unknown> {
@@ -138,7 +146,6 @@ describe('Electron Boot Lifecycle Module seam', () => {
     const result = await bootOpenForgeDesktop(adapter, bootOptions())
 
     expect(result.sidecar).toBe(adapter.sidecar)
-    expect(result.appEventForwarder).toBe(adapter.eventForwarder)
     expect(result.degradations).toEqual([])
     expect(adapter.backendContext?.getSidecarConfig()).toBe(adapter.sidecar.config)
     expect(adapter.operations).toEqual([
@@ -150,17 +157,14 @@ describe('Electron Boot Lifecycle Module seam', () => {
       'app-ready',
       'resolve-sidecar-path',
       'create-sidecar-config',
-      'start-sidecar',
+      'start-sidecar-readiness',
       'register-plugin-protocol:sidecar',
       'apply-csp:sidecar',
-      'create-event-forwarder',
       'create-main-window',
     ])
-    expect(adapter.eventForwarder.start).toHaveBeenCalledTimes(1)
-    expect(adapter.eventForwarder.ready).toHaveBeenCalledTimes(1)
-    expectBefore(adapter.operations, 'start-sidecar', 'register-plugin-protocol:sidecar')
-    expectBefore(adapter.operations, 'apply-csp:sidecar', 'create-event-forwarder')
-    expectBefore(adapter.operations, 'create-event-forwarder', 'create-main-window')
+    expect(adapter.sidecar.ready).toHaveBeenCalledTimes(0)
+    expectBefore(adapter.operations, 'start-sidecar-readiness', 'register-plugin-protocol:sidecar')
+    expectBefore(adapter.operations, 'apply-csp:sidecar', 'create-main-window')
   })
 
   it.each([
@@ -207,45 +211,12 @@ describe('Electron Boot Lifecycle Module seam', () => {
     expect(adapter.operations).toContain('create-main-window')
   })
 
-  it.each([
-    {
-      name: 'default event stream degraded policy reveals the renderer',
-      policy: undefined,
-      rejects: false,
-    },
-    {
-      name: 'strict event stream policy rejects and cleans up launch resources',
-      policy: { eventStreamFailure: 'fail' as const },
-      rejects: true,
-    },
-  ])('$name', async ({ policy, rejects }) => {
-    const adapter = new FakeBootLifecycleAdapter()
-    adapter.eventReadyFailure = new Error('SSE unavailable')
-
-    const boot = bootOpenForgeDesktop(adapter, bootOptions({ policy }))
-
-    if (rejects) {
-      await expect(boot).rejects.toThrow('SSE unavailable')
-      expect(adapter.eventForwarder.stop).toHaveBeenCalledTimes(1)
-      expect(adapter.sidecar.stop).toHaveBeenCalledTimes(1)
-      expect(adapter.operations).not.toContain('create-main-window')
-    } else {
-      await expect(boot).resolves.toMatchObject({
-        degradations: [{ kind: 'event-stream-unavailable' }],
-      })
-      expect(adapter.operations).toContain('create-main-window')
-      expect(adapter.eventForwarder.stop).not.toHaveBeenCalled()
-      expect(adapter.sidecar.stop).not.toHaveBeenCalled()
-    }
-  })
-
-  it('treats renderer load failure as strict and cleans up sidecar/event stream resources', async () => {
+  it('treats renderer load failure as strict and cleans up sidecar readiness resources', async () => {
     const adapter = new FakeBootLifecycleAdapter()
     adapter.mainWindowFailure = new Error('renderer failed to load')
 
     await expect(bootOpenForgeDesktop(adapter, bootOptions())).rejects.toThrow('renderer failed to load')
 
-    expect(adapter.eventForwarder.stop).toHaveBeenCalledTimes(1)
     expect(adapter.sidecar.stop).toHaveBeenCalledTimes(1)
   })
 
@@ -261,8 +232,6 @@ describe('Electron Boot Lifecycle Module seam', () => {
     expect(adapter.quit).toHaveBeenCalledTimes(shouldQuit ? 1 : 0)
 
     adapter.beforeQuitHandler?.()
-    expect(adapter.eventForwarder.stop).toHaveBeenCalledTimes(1)
     expect(adapter.sidecar.stop).toHaveBeenCalledTimes(1)
-    expect(adapter.eventForwarder.stop.mock.invocationCallOrder[0]).toBeLessThan(adapter.sidecar.stop.mock.invocationCallOrder[0])
   })
 })

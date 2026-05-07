@@ -17,10 +17,9 @@ import {
   registerPluginProtocolSchemeAsPrivileged,
   resolveHostRuntimeRoot,
 } from './pluginProtocol.js'
-import { asChildProcessLike, createSidecarLaunchConfig, startSidecar } from './sidecar.js'
-import type { AppEventForwarder } from './eventForwarder.js'
+import { asChildProcessLike, createSidecarLaunchConfig, startSidecarReadiness } from './sidecar.js'
 import type { BootBackendInvokeContext, BootLifecycleAdapter } from './bootLifecycle.js'
-import type { SidecarHandle, SidecarLaunchConfig } from './sidecar.js'
+import type { SidecarEventEnvelopeLike, SidecarLaunchConfig, SidecarReadinessHandle } from './sidecar.js'
 
 export interface ElectronBootAdapterOptions {
   currentDir: string
@@ -98,15 +97,31 @@ export function createElectronBootAdapter(options: ElectronBootAdapterOptions): 
       })
     },
 
-    async startSidecar(config: SidecarLaunchConfig): Promise<SidecarHandle> {
+    async startSidecar(config: SidecarLaunchConfig): Promise<SidecarReadinessHandle> {
       console.log(`[electron] Starting Rust sidecar: ${config.command} --host ${config.host} --port ${config.port}`)
-      const sidecar = await startSidecar(config, {
+      const sidecar = await startSidecarReadiness(config, {
         spawn: (command, args, spawnOptions) => asChildProcessLike(spawn(command, [...args], spawnOptions)),
         fetch: (url, init) => fetch(url, init),
         sleep: (ms) => new Promise(resolve => setTimeout(resolve, ms)),
         logSidecarOutput: true,
+        createEventStream: sidecarConfig => {
+          let eventListener: ((envelope: SidecarEventEnvelopeLike) => void) | null = null
+          const forwarder = createAppEventForwarder({
+            sidecarConfig,
+            fetch: (url, init) => fetch(url, init),
+            windows: () => BrowserWindow.getAllWindows(),
+            onEvent: envelope => eventListener?.(envelope),
+          })
+          return {
+            ...forwarder,
+            onEvent(listener: (envelope: SidecarEventEnvelopeLike) => void): void {
+              eventListener = listener
+            },
+          }
+        },
       })
-      console.log(`[electron] Rust sidecar is ready at ${config.healthUrl}`)
+      const readiness = await sidecar.ready()
+      console.log(`[electron] Rust sidecar is ready at ${readiness.identity.readinessUrl}`)
       return sidecar
     },
 
@@ -121,14 +136,6 @@ export function createElectronBootAdapter(options: ElectronBootAdapterOptions): 
 
     applyRendererCsp(sidecarConfig: SidecarLaunchConfig | null): void {
       applyElectronRendererCsp(session.defaultSession, createElectronRendererCsp(sidecarConfig))
-    },
-
-    createAppEventForwarder(sidecarConfig: SidecarLaunchConfig): AppEventForwarder {
-      return createAppEventForwarder({
-        sidecarConfig,
-        fetch: (url, init) => fetch(url, init),
-        windows: () => BrowserWindow.getAllWindows(),
-      })
     },
 
     createMainWindow,

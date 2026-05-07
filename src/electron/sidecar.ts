@@ -9,9 +9,10 @@ export interface ChildProcessLike {
   readonly killed: boolean
   readonly stdout?: SidecarOutputStreamLike | null
   readonly stderr?: SidecarOutputStreamLike | null
+  readonly pid?: number
   kill(signal?: NodeJS.Signals): boolean
-  once(event: 'exit', listener: () => void): this
-  off?(event: 'exit', listener: () => void): this
+  once(event: 'exit', listener: (code?: number | null, signal?: NodeJS.Signals | null) => void): this
+  off?(event: 'exit', listener: (code?: number | null, signal?: NodeJS.Signals | null) => void): this
 }
 
 export interface SidecarLogSink {
@@ -36,11 +37,106 @@ export interface SidecarLaunchConfig {
   port: number
   token: string
   healthUrl: string
+  readinessUrl: string
+  eventUrl: string
+  baseUrl: string
 }
 
 export interface SidecarHealth {
   status: 'ok'
   version?: string | null
+}
+
+export type SidecarStartupResumePhase = 'pending' | 'running' | 'complete' | 'degraded'
+export type SidecarProcessState = 'starting' | 'running' | 'exited' | 'stopping' | 'stopped'
+export type SidecarDegradedArea = 'http' | 'events' | 'startupResume' | 'process'
+
+export interface SidecarDegradedState {
+  area: SidecarDegradedArea
+  message: string
+  since: string
+}
+
+export interface SidecarReadinessIdentity {
+  command: string
+  args: readonly string[]
+  host: string
+  port: number
+  baseUrl: string
+  healthUrl: string
+  readinessUrl: string
+  eventUrl: string
+  pid?: number
+  rustVersion?: string | null
+}
+
+export interface SidecarHttpReadiness {
+  available: boolean
+  authenticated: boolean
+  checkedAt?: string
+}
+
+export interface SidecarEventReadiness {
+  available: boolean
+  connectedAt?: string
+  lastEventId?: string | null
+  reconnectAttempt?: number
+}
+
+export interface SidecarStartupResumeReadiness {
+  phase: SidecarStartupResumePhase
+  targetCount?: number | null
+  resumedCount?: number | null
+  failedCount?: number | null
+  completedAt?: string | null
+}
+
+export interface SidecarProcessReadiness {
+  state: SidecarProcessState
+  exitCode?: number | null
+  signal?: NodeJS.Signals | null
+  exitedAt?: string
+}
+
+export interface SidecarReadinessSnapshot {
+  identity: SidecarReadinessIdentity
+  http: SidecarHttpReadiness
+  events: SidecarEventReadiness
+  startupResume: SidecarStartupResumeReadiness
+  degraded: SidecarDegradedState[]
+  process: SidecarProcessReadiness
+}
+
+export interface SidecarReadinessResponse {
+  status: 'ok'
+  version?: string | null
+  events?: { available?: boolean }
+  startupResume?: Partial<SidecarStartupResumeReadiness>
+  degraded?: SidecarDegradedState[]
+}
+
+export interface SidecarEventEnvelopeLike {
+  id?: string
+  eventName: string
+  payload: unknown
+}
+
+export interface SidecarEventStreamAdapter {
+  start(): Promise<void>
+  ready(): Promise<void>
+  stop(): void
+  onEvent?(listener: (envelope: SidecarEventEnvelopeLike) => void): void
+  snapshot?(): Partial<SidecarEventReadiness>
+}
+
+export interface StartSidecarReadinessDeps extends StartSidecarDeps {
+  createEventStream(config: SidecarLaunchConfig): SidecarEventStreamAdapter
+}
+
+export interface SidecarReadinessHandle extends SidecarHandle {
+  ready(): Promise<SidecarReadinessSnapshot>
+  snapshot(): SidecarReadinessSnapshot
+  eventStream: SidecarEventStreamAdapter
 }
 
 export interface HealthResponseLike {
@@ -55,6 +151,15 @@ export type Sleep = (ms: number) => Promise<void>
 
 export interface WaitForSidecarHealthOptions {
   healthUrl: string
+  token: string
+  fetch: HealthFetch
+  sleep: Sleep
+  timeoutMs: number
+  intervalMs: number
+}
+
+export interface WaitForSidecarReadinessOptions {
+  readinessUrl: string
   token: string
   fetch: HealthFetch
   sleep: Sleep
@@ -117,6 +222,8 @@ export function createSidecarLaunchConfig(options: SidecarLaunchConfigOptions = 
     OPENFORGE_ELECTRON_SIDECAR: '1',
   }
 
+  const baseUrl = `http://${host}:${port}`
+
   return {
     command,
     args: ['--host', host, '--port', String(port)],
@@ -124,7 +231,10 @@ export function createSidecarLaunchConfig(options: SidecarLaunchConfigOptions = 
     host,
     port,
     token,
-    healthUrl: `http://${host}:${port}${healthPath}`,
+    baseUrl,
+    healthUrl: `${baseUrl}${healthPath}`,
+    readinessUrl: `${baseUrl}/app/readiness`,
+    eventUrl: `${baseUrl}/app/events`,
   }
 }
 
@@ -136,6 +246,47 @@ function parseHealth(value: unknown): SidecarHealth | null {
   return typeof version === 'string'
     ? { status, version }
     : { status }
+}
+
+function parseStartupResume(value: unknown): SidecarStartupResumeReadiness {
+  if (typeof value !== 'object' || value === null) return { phase: 'pending' }
+  const candidate = value as Partial<SidecarStartupResumeReadiness>
+  const phases: SidecarStartupResumePhase[] = ['pending', 'running', 'complete', 'degraded']
+  return {
+    phase: phases.includes(candidate.phase as SidecarStartupResumePhase) ? candidate.phase as SidecarStartupResumePhase : 'pending',
+    targetCount: typeof candidate.targetCount === 'number' ? candidate.targetCount : null,
+    resumedCount: typeof candidate.resumedCount === 'number' ? candidate.resumedCount : null,
+    failedCount: typeof candidate.failedCount === 'number' ? candidate.failedCount : null,
+    completedAt: typeof candidate.completedAt === 'string' ? candidate.completedAt : null,
+  }
+}
+
+function parseDegraded(value: unknown): SidecarDegradedState[] {
+  if (!Array.isArray(value)) return []
+  return value.filter((item): item is SidecarDegradedState => {
+    if (typeof item !== 'object' || item === null) return false
+    const candidate = item as SidecarDegradedState
+    return typeof candidate.area === 'string'
+      && typeof candidate.message === 'string'
+      && typeof candidate.since === 'string'
+  })
+}
+
+function parseReadiness(value: unknown): SidecarReadinessResponse | null {
+  if (typeof value !== 'object' || value === null) return null
+  const status = (value as { status?: unknown }).status
+  if (status !== 'ok') return null
+  const version = (value as { version?: unknown }).version
+  const events = (value as { events?: unknown }).events
+  return {
+    status,
+    version: typeof version === 'string' ? version : null,
+    events: typeof events === 'object' && events !== null
+      ? { available: (events as { available?: unknown }).available === true }
+      : { available: false },
+    startupResume: parseStartupResume((value as { startupResume?: unknown }).startupResume),
+    degraded: parseDegraded((value as { degraded?: unknown }).degraded),
+  }
 }
 
 export async function waitForSidecarHealth(options: WaitForSidecarHealthOptions): Promise<SidecarHealth> {
@@ -154,6 +305,34 @@ export async function waitForSidecarHealth(options: WaitForSidecarHealthOptions)
       } else {
         const detail = response.text ? await response.text() : `HTTP ${response.status ?? 'error'}`
         lastError = new Error(`sidecar health check failed: ${detail}`)
+      }
+    } catch (error) {
+      lastError = error
+    }
+
+    await options.sleep(options.intervalMs)
+  }
+
+  const message = lastError instanceof Error ? lastError.message : String(lastError ?? 'timed out')
+  throw new Error(`sidecar did not become ready: ${message}`)
+}
+
+export async function waitForSidecarReadiness(options: WaitForSidecarReadinessOptions): Promise<SidecarReadinessResponse> {
+  const startedAt = Date.now()
+  let lastError: unknown = null
+
+  while (Date.now() - startedAt <= options.timeoutMs) {
+    try {
+      const response = await options.fetch(options.readinessUrl, {
+        headers: { Authorization: `Bearer ${options.token}` },
+      })
+      if (response.ok) {
+        const readiness = parseReadiness(await response.json())
+        if (readiness) return readiness
+        lastError = new Error('sidecar readiness response did not include status=ok')
+      } else {
+        const detail = response.text ? await response.text() : `HTTP ${response.status ?? 'error'}`
+        lastError = new Error(`sidecar readiness check failed: ${detail}`)
       }
     } catch (error) {
       lastError = error
@@ -250,6 +429,140 @@ export async function startSidecar(config: SidecarLaunchConfig, deps: StartSidec
         graceMs: options.graceMs ?? DEFAULT_STOP_GRACE_MS,
         sleep: options.sleep ?? ((ms) => new Promise(resolve => setTimeout(resolve, ms))),
       })
+    },
+  }
+}
+
+function createInitialSnapshot(
+  config: SidecarLaunchConfig,
+  child: ChildProcessLike,
+  readiness: SidecarReadinessResponse,
+): SidecarReadinessSnapshot {
+  const now = new Date().toISOString()
+  return {
+    identity: {
+      command: config.command,
+      args: config.args,
+      host: config.host,
+      port: config.port,
+      baseUrl: config.baseUrl,
+      healthUrl: config.healthUrl,
+      readinessUrl: config.readinessUrl,
+      eventUrl: config.eventUrl,
+      pid: child.pid,
+      rustVersion: readiness.version ?? null,
+    },
+    http: { available: true, authenticated: true, checkedAt: now },
+    events: { available: readiness.events?.available === true },
+    startupResume: parseStartupResume(readiness.startupResume),
+    degraded: readiness.degraded ?? [],
+    process: { state: 'running' },
+  }
+}
+
+function applyReadinessEvent(snapshot: SidecarReadinessSnapshot, envelope: SidecarEventEnvelopeLike): void {
+  if (typeof envelope.id === 'string' && envelope.id.length > 0) {
+    snapshot.events.lastEventId = envelope.id
+  }
+
+  if (envelope.eventName === 'startup-resume-complete') {
+    snapshot.startupResume = {
+      ...snapshot.startupResume,
+      phase: 'complete',
+      completedAt: new Date().toISOString(),
+    }
+  }
+}
+
+function markDegraded(snapshot: SidecarReadinessSnapshot, area: SidecarDegradedArea, message: string): void {
+  snapshot.degraded.push({ area, message, since: new Date().toISOString() })
+}
+
+export async function startSidecarReadiness(
+  config: SidecarLaunchConfig,
+  deps: StartSidecarReadinessDeps,
+): Promise<SidecarReadinessHandle> {
+  const child = deps.spawn(config.command, config.args, {
+    env: config.env,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  })
+
+  if (deps.logSidecarOutput) {
+    forwardSidecarOutput(child, deps.logger ?? console)
+  }
+
+  let eventStream: SidecarEventStreamAdapter | null = null
+  let snapshot: SidecarReadinessSnapshot | null = null
+
+  try {
+    const readiness = await waitForSidecarReadiness({
+      readinessUrl: config.readinessUrl,
+      token: config.token,
+      fetch: deps.fetch,
+      sleep: deps.sleep,
+      timeoutMs: deps.healthTimeoutMs ?? DEFAULT_HEALTH_TIMEOUT_MS,
+      intervalMs: deps.healthIntervalMs ?? DEFAULT_HEALTH_INTERVAL_MS,
+    })
+    snapshot = createInitialSnapshot(config, child, readiness)
+
+    eventStream = deps.createEventStream(config)
+    eventStream.onEvent?.((envelope) => {
+      if (snapshot) applyReadinessEvent(snapshot, envelope)
+    })
+    const eventRun = eventStream.start()
+    await eventStream.ready()
+    snapshot.events = {
+      ...snapshot.events,
+      ...eventStream.snapshot?.(),
+      available: true,
+      connectedAt: snapshot.events.connectedAt ?? new Date().toISOString(),
+    }
+    void eventRun.catch(error => {
+      if (snapshot) markDegraded(snapshot, 'events', error instanceof Error ? error.message : String(error))
+    })
+  } catch (error) {
+    eventStream?.stop()
+    await stopSidecar(child, { graceMs: DEFAULT_STOP_GRACE_MS, sleep: deps.sleep })
+    throw error
+  }
+
+  const resolvedSnapshot = snapshot
+  const resolvedEventStream = eventStream
+  let intentionalStop = false
+  if (!resolvedSnapshot || !resolvedEventStream) {
+    await stopSidecar(child, { graceMs: DEFAULT_STOP_GRACE_MS, sleep: deps.sleep })
+    throw new Error('sidecar readiness did not produce a snapshot')
+  }
+
+  child.once('exit', (code, signal) => {
+    resolvedSnapshot.process = {
+      state: intentionalStop ? 'stopped' : 'exited',
+      exitCode: code ?? null,
+      signal: signal ?? null,
+      exitedAt: new Date().toISOString(),
+    }
+    if (!intentionalStop) {
+      markDegraded(resolvedSnapshot, 'process', `sidecar process exited${typeof code === 'number' ? ` with code ${code}` : ''}`)
+    }
+  })
+
+  return {
+    process: child,
+    config,
+    eventStream: resolvedEventStream,
+    ready: async () => resolvedSnapshot,
+    snapshot: () => resolvedSnapshot,
+    async stop(options: Partial<StopSidecarOptions> = {}): Promise<void> {
+      intentionalStop = true
+      resolvedSnapshot.process = { ...resolvedSnapshot.process, state: 'stopping' }
+      resolvedEventStream.stop()
+      await stopSidecar(child, {
+        graceMs: options.graceMs ?? DEFAULT_STOP_GRACE_MS,
+        sleep: options.sleep ?? ((ms) => new Promise(resolve => setTimeout(resolve, ms))),
+      })
+      if (resolvedSnapshot.process.state !== 'exited') {
+        resolvedSnapshot.process = { state: 'stopped' }
+      }
     },
   }
 }

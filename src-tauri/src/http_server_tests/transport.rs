@@ -185,6 +185,52 @@ async fn test_app_events_requires_backend_token() {
 }
 
 #[tokio::test]
+async fn test_app_readiness_requires_backend_token_and_reports_readiness_state() {
+    let (state, path) = test_state("app_readiness_requires_token");
+    state.sidecar_readiness.mark_startup_resume_running(2);
+    state.sidecar_readiness.record_startup_resume_success();
+    state
+        .sidecar_readiness
+        .record_startup_resume_failure("one startup resume failed");
+    state.sidecar_readiness.mark_startup_resume_complete();
+    let router = create_router(state);
+
+    let unauthorized = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/app/readiness")
+                .body(Body::empty())
+                .expect("build request"),
+        )
+        .await
+        .expect("request should succeed");
+    assert_eq!(unauthorized.status(), StatusCode::UNAUTHORIZED);
+
+    let authorized = router
+        .oneshot(
+            Request::builder()
+                .uri("/app/readiness")
+                .header("authorization", "Bearer test-token")
+                .body(Body::empty())
+                .expect("build request"),
+        )
+        .await
+        .expect("request should succeed");
+    assert_eq!(authorized.status(), StatusCode::OK);
+    let body = response_body_json(authorized).await;
+    assert_eq!(body["status"], "ok");
+    assert_eq!(body["events"]["available"], true);
+    assert_eq!(body["startupResume"]["phase"], "degraded");
+    assert_eq!(body["startupResume"]["targetCount"], 2);
+    assert_eq!(body["startupResume"]["resumedCount"], 1);
+    assert_eq!(body["startupResume"]["failedCount"], 1);
+    assert_eq!(body["degraded"][0]["area"], "startupResume");
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
 async fn test_app_health_requires_backend_token() {
     let (state, path) = test_state("app_health_requires_token");
     let router = create_router(state);
