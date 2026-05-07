@@ -78,13 +78,21 @@ fn app_resolve_project_path(
     Ok(canonical_resolved)
 }
 
-fn app_detect_file_type(path: &std::path::Path) -> &'static str {
-    let ext = path
-        .extension()
-        .and_then(|ext| ext.to_str())
+fn app_file_type_key(path: &std::path::Path) -> String {
+    if let Some(ext) = path.extension().and_then(|ext| ext.to_str()) {
+        return ext.to_ascii_lowercase();
+    }
+
+    path.file_name()
+        .and_then(|name| name.to_str())
         .unwrap_or("")
-        .to_ascii_lowercase();
-    match ext.as_str() {
+        .trim_start_matches('.')
+        .to_ascii_lowercase()
+}
+
+fn app_detect_file_type(path: &std::path::Path) -> &'static str {
+    let key = app_file_type_key(path);
+    match key.as_str() {
         "ts" | "tsx" | "js" | "jsx" | "rs" | "py" | "rb" | "go" | "json" | "yaml" | "yml"
         | "md" | "txt" | "toml" | "css" | "html" | "svelte" | "vue" | "sh" | "bash" | "zsh"
         | "sql" | "graphql" | "xml" | "csv" | "env" | "gitignore" | "prettierrc" | "eslintrc"
@@ -96,12 +104,8 @@ fn app_detect_file_type(path: &std::path::Path) -> &'static str {
 }
 
 fn app_mime_type(path: &std::path::Path) -> Option<String> {
-    let ext = path
-        .extension()
-        .and_then(|ext| ext.to_str())
-        .unwrap_or("")
-        .to_ascii_lowercase();
-    let mime = match ext.as_str() {
+    let key = app_file_type_key(path);
+    let mime = match key.as_str() {
         "ts" | "tsx" => "text/typescript",
         "js" | "jsx" => "application/javascript",
         "rs" => "text/rust",
@@ -122,7 +126,7 @@ fn app_mime_type(path: &std::path::Path) -> Option<String> {
         "graphql" => "text/graphql",
         "xml" => "application/xml",
         "csv" => "text/csv",
-        "env" => "text/plain",
+        "env" | "gitignore" | "prettierrc" | "eslintrc" => "text/plain",
         "cfg" | "ini" | "conf" => "text/plain",
         "log" => "text/plain",
         "lock" => "text/plain",
