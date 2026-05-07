@@ -1,4 +1,4 @@
-use crate::app_events::{publish_app_event, AppEventSender};
+use crate::app_events::{publish_app_event_to_runtime, AppEventSender};
 use crate::backend_runtime::AppHandle;
 use crate::db;
 use crate::opencode_client::{OpenCodeClient, OpenCodeError, SessionInfo, SessionStatusInfo};
@@ -117,12 +117,7 @@ fn emit_app_event(
     event_name: &str,
     payload: &serde_json::Value,
 ) {
-    if let Some(app) = app {
-        if let Err(e) = app.emit(event_name, payload.clone()) {
-            warn!("[SSE] Failed to emit {}: {}", event_name, e);
-        }
-    }
-    publish_app_event(app_event_tx, event_name, payload);
+    publish_app_event_to_runtime(app, app_event_tx, event_name, payload);
 }
 
 fn emit_session_interrupted(

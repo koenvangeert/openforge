@@ -20,7 +20,7 @@ use lifecycle::cleanup_task_runtime_for_app;
 pub(crate) use lifecycle::{start_opencode_sse_bridge_for_app, ExistingSseBridge};
 
 use crate::{
-    app_events::publish_app_event,
+    app_events::publish_app_event_to_runtime,
     db,
     http_server::{AppInvokeRequest, AppState},
     opencode_client::OpenCodeClient,
@@ -86,10 +86,12 @@ fn publish_task_changed(state: &AppState, task_id: &str) {
 }
 
 fn publish_task_changed_payload(state: &AppState, payload: serde_json::Value) {
-    publish_app_event(&state.app_event_tx, "task-changed", &payload);
-    if let Some(app) = state.app.as_ref() {
-        let _ = app.emit("task-changed", payload);
-    }
+    publish_app_event_to_runtime(
+        state.app.as_ref(),
+        &state.app_event_tx,
+        "task-changed",
+        &payload,
+    );
 }
 
 fn publish_server_resumed(state: &AppState, task_id: &str, port: u16, workspace_path: &str) {
@@ -98,18 +100,22 @@ fn publish_server_resumed(state: &AppState, task_id: &str, port: u16, workspace_
         "port": port,
         "workspace_path": workspace_path,
     });
-    publish_app_event(&state.app_event_tx, "server-resumed", &payload);
-    if let Some(app) = state.app.as_ref() {
-        let _ = app.emit("server-resumed", payload);
-    }
+    publish_app_event_to_runtime(
+        state.app.as_ref(),
+        &state.app_event_tx,
+        "server-resumed",
+        &payload,
+    );
 }
 
 fn publish_startup_resume_complete(state: &AppState) {
     let payload = serde_json::Value::Null;
-    publish_app_event(&state.app_event_tx, "startup-resume-complete", &payload);
-    if let Some(app) = state.app.as_ref() {
-        let _ = app.emit("startup-resume-complete", payload);
-    }
+    publish_app_event_to_runtime(
+        state.app.as_ref(),
+        &state.app_event_tx,
+        "startup-resume-complete",
+        &payload,
+    );
 }
 
 pub(crate) async fn handle_core_task_project_command(

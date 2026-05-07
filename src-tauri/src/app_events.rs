@@ -133,6 +133,42 @@ pub struct AppEvent {
     ordering_key: Option<String>,
 }
 
+/// Adapter Interface at the Seam where Rust runtime lifecycle notifications become AppEventBus envelopes.
+///
+/// This Module keeps launch lifecycle producers from needing to know the AppEventBus
+/// Implementation while still giving Electron/Svelte durable, replayable envelopes.
+pub trait RustAppEventAdapter: Send + Sync {
+    fn emit(
+        &self,
+        event_name: &str,
+        payload: serde_json::Value,
+    ) -> Result<EmitReceipt, AppEventError>;
+}
+
+#[derive(Clone)]
+pub struct InMemoryAppEventAdapter {
+    bus: AppEventBus,
+}
+
+impl InMemoryAppEventAdapter {
+    pub fn new(bus: AppEventBus) -> Self {
+        Self { bus }
+    }
+}
+
+impl RustAppEventAdapter for InMemoryAppEventAdapter {
+    fn emit(
+        &self,
+        event_name: &str,
+        payload: serde_json::Value,
+    ) -> Result<EmitReceipt, AppEventError> {
+        let delivery = legacy_delivery_class(event_name);
+        let ordering_key = legacy_ordering_key(event_name, &payload);
+        self.bus
+            .try_emit(AppEvent::new(event_name, payload, delivery, ordering_key))
+    }
+}
+
 impl AppEvent {
     pub fn new(
         event_name: impl Into<String>,
@@ -244,15 +280,15 @@ impl AppEventBus {
         let receiver = self.inner.sender.subscribe();
         let mut queued = VecDeque::new();
 
-        if let Some(cursor) = cursor {
-            let replay = self
-                .inner
-                .replay
-                .lock()
-                .map_err(|_| AppEventError::BusClosed)?;
-            let oldest = replay.front().and_then(envelope_cursor);
-            let newest = replay.back().and_then(envelope_cursor);
+        let replay = self
+            .inner
+            .replay
+            .lock()
+            .map_err(|_| AppEventError::BusClosed)?;
+        let oldest = replay.front().and_then(envelope_cursor);
+        let newest = replay.back().and_then(envelope_cursor);
 
+        if let Some(cursor) = cursor {
             if let (Some(oldest), Some(newest)) = (oldest, newest) {
                 if cursor.epoch != newest.epoch || cursor.seq + 1 < oldest.seq {
                     queued.push_back(AppEventFrame::Gap(AppEventGap {
@@ -273,7 +309,22 @@ impl AppEventBus {
                     }
                 }
             }
+        } else {
+            queued.extend(
+                replay
+                    .iter()
+                    .filter(|envelope| {
+                        envelope
+                            .meta
+                            .as_ref()
+                            .map(|meta| meta.delivery == DeliveryClass::Lifecycle)
+                            .unwrap_or(false)
+                    })
+                    .cloned()
+                    .map(AppEventFrame::Event),
+            );
         }
+        drop(replay);
 
         let last_delivered = queued
             .iter()
@@ -465,7 +516,10 @@ fn bus_for_sender(sender: &AppEventSender) -> Option<AppEventBus> {
 fn legacy_delivery_class(event_name: &str) -> DeliveryClass {
     if event_name.starts_with("pty-output-") {
         DeliveryClass::RealtimeLossy
-    } else if event_name.starts_with("pty-exit-") || event_name.starts_with("plugin:") {
+    } else if event_name.starts_with("pty-exit-")
+        || event_name.starts_with("plugin:")
+        || matches!(event_name, "server-resumed" | "startup-resume-complete")
+    {
         DeliveryClass::Lifecycle
     } else if matches!(
         event_name,
@@ -483,6 +537,9 @@ fn legacy_ordering_key(event_name: &str, payload: &serde_json::Value) -> Option<
         .or_else(|| event_name.strip_prefix("pty-exit-"))
     {
         return Some(format!("pty:{session_key}"));
+    }
+    if matches!(event_name, "server-resumed" | "startup-resume-complete") {
+        return Some(format!("lifecycle:{event_name}"));
     }
     payload
         .get("task_id")
@@ -542,6 +599,20 @@ pub fn publish_app_event(
             meta: None,
         });
     }
+}
+
+pub fn publish_app_event_to_runtime(
+    app: Option<&crate::backend_runtime::AppHandle>,
+    sender: &Option<AppEventSender>,
+    event_name: &str,
+    payload: &serde_json::Value,
+) {
+    if let Some(app) = app {
+        if app.has_app_event_adapter() && app.emit(event_name, payload.clone()).is_ok() {
+            return;
+        }
+    }
+    publish_app_event(sender, event_name, payload);
 }
 
 #[cfg(test)]
@@ -616,6 +687,50 @@ mod tests {
         assert_eq!(meta.sequence, 1);
         assert_eq!(meta.ordering_key.as_deref(), Some("task:T-1009"));
         assert_eq!(meta.delivery, DeliveryClass::StateInvalidation);
+    }
+
+    #[tokio::test]
+    async fn test_app_handle_emit_through_in_memory_adapter_is_replayed_to_late_subscribers() {
+        let bus = AppEventBus::new(16, 8);
+        let app = crate::backend_runtime::AppHandle::new();
+        app.set_app_event_adapter(std::sync::Arc::new(InMemoryAppEventAdapter::new(
+            bus.clone(),
+        )));
+
+        app.emit(
+            "pty-output-T-boot-shell-0",
+            serde_json::json!({ "data": "stale boot output" }),
+        )
+        .expect("non-lifecycle event should publish through adapter");
+
+        app.emit(
+            "server-resumed",
+            serde_json::json!({
+                "task_id": "T-boot",
+                "port": 17642,
+                "workspace_path": "/tmp/openforge/T-boot"
+            }),
+        )
+        .expect("app handle emit should publish through adapter");
+
+        let mut subscription = bus.subscribe(None).expect("subscribe should work");
+        let AppEventFrame::Event(received) = subscription
+            .recv()
+            .await
+            .expect("boot-time event should replay to late subscribers")
+        else {
+            panic!("expected replayed lifecycle event");
+        };
+
+        assert_eq!(received.event_name, "server-resumed");
+        assert_eq!(received.payload["task_id"], "T-boot");
+        assert_eq!(received.id.as_ref().expect("id should be assigned").seq, 2);
+        let meta = received.meta.as_ref().expect("meta should be assigned");
+        assert_eq!(meta.delivery, DeliveryClass::Lifecycle);
+        assert_eq!(
+            meta.ordering_key.as_deref(),
+            Some("lifecycle:server-resumed")
+        );
     }
 
     #[tokio::test]

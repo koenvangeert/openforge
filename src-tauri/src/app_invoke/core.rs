@@ -363,10 +363,12 @@ pub(super) async fn handle_app_unmatched_command(
                         "status": next_status,
                         "provider": session.provider,
                     });
-                    publish_app_event(&state.app_event_tx, "agent-status-changed", &payload);
-                    if let Some(app) = state.app.as_ref() {
-                        let _ = app.emit("agent-status-changed", payload);
-                    }
+                    publish_app_event_to_runtime(
+                        state.app.as_ref(),
+                        &state.app_event_tx,
+                        "agent-status-changed",
+                        &payload,
+                    );
                 }
             }
             serde_json::Value::Null

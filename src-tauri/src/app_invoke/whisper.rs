@@ -75,10 +75,12 @@ pub(super) async fn handle_app_whisper_command(
             let path = whisper
                 .download_model_with_progress(size, move |progress| {
                     if let Ok(payload) = serde_json::to_value(&progress) {
-                        publish_app_event(&event_tx, "whisper-download-progress", &payload);
-                        if let Some(app) = app.as_ref() {
-                            let _ = app.emit("whisper-download-progress", payload);
-                        }
+                        publish_app_event_to_runtime(
+                            app.as_ref(),
+                            &event_tx,
+                            "whisper-download-progress",
+                            &payload,
+                        );
                     }
                 })
                 .await

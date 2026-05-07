@@ -1,5 +1,7 @@
 use super::{json_value, payload_field, payload_i64, payload_string, AppResult};
-use crate::{app_events::publish_app_event, http_server::AppInvokeRequest, http_server::AppState};
+use crate::{
+    app_events::publish_app_event_to_runtime, http_server::AppInvokeRequest, http_server::AppState,
+};
 use axum::http::StatusCode;
 use serde::Serialize;
 
@@ -9,10 +11,12 @@ fn runtime_error(error: String) -> (StatusCode, String) {
 
 fn publish_comment_addressed(state: &AppState) {
     let payload = serde_json::Value::Null;
-    if let Some(app) = &state.app {
-        let _ = app.emit("comment-addressed", payload.clone());
-    }
-    publish_app_event(&state.app_event_tx, "comment-addressed", &payload);
+    publish_app_event_to_runtime(
+        state.app.as_ref(),
+        &state.app_event_tx,
+        "comment-addressed",
+        &payload,
+    );
 }
 
 fn to_app_value<T: Serialize>(value: T) -> AppResult<serde_json::Value> {

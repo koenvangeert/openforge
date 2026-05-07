@@ -7,6 +7,8 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+use crate::app_events::RustAppEventAdapter;
+
 #[derive(Clone, Default)]
 pub struct AppHandle {
     inner: Arc<AppHandleInner>,
@@ -17,6 +19,7 @@ struct AppHandleInner {
     states: Mutex<HashMap<TypeId, &'static (dyn Any + Send + Sync)>>,
     app_data_dir: Mutex<Option<PathBuf>>,
     resource_dir: Mutex<Option<PathBuf>>,
+    app_event_adapter: Mutex<Option<Arc<dyn RustAppEventAdapter>>>,
 }
 
 impl AppHandle {
@@ -50,6 +53,20 @@ impl AppHandle {
         }
     }
 
+    pub fn set_app_event_adapter(&self, adapter: Arc<dyn RustAppEventAdapter>) {
+        if let Ok(mut current) = self.inner.app_event_adapter.lock() {
+            *current = Some(adapter);
+        }
+    }
+
+    pub fn has_app_event_adapter(&self) -> bool {
+        self.inner
+            .app_event_adapter
+            .lock()
+            .map(|adapter| adapter.is_some())
+            .unwrap_or(false)
+    }
+
     pub fn manage<T>(&self, state: T)
     where
         T: Any + Send + Sync + 'static,
@@ -60,8 +77,23 @@ impl AppHandle {
         }
     }
 
-    pub fn emit<T: Serialize>(&self, _event_name: &str, _payload: T) -> Result<(), String> {
-        Ok(())
+    pub fn emit<T: Serialize>(&self, event_name: &str, payload: T) -> Result<(), String> {
+        let payload = serde_json::to_value(payload)
+            .map_err(|error| format!("failed to serialize app event payload: {error}"))?;
+        let adapter = self
+            .inner
+            .app_event_adapter
+            .lock()
+            .map_err(|error| format!("app event adapter lock error: {error}"))?
+            .clone();
+        if let Some(adapter) = adapter {
+            adapter
+                .emit(event_name, payload)
+                .map(|_| ())
+                .map_err(|error| format!("failed to publish app event: {error:?}"))
+        } else {
+            Ok(())
+        }
     }
 
     pub fn state<T>(&self) -> State<'static, T>
