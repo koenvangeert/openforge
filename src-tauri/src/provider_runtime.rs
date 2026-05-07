@@ -1,13 +1,13 @@
 use crate::command_discovery::{
-    find_skill_source_dir, is_supported_skill_source_dir, scan_skill_directories_for_root,
-    search_project_files, skill_source_dir, GENERIC_SKILLS_SOURCE_DIR,
+    is_supported_skill_source_dir, scan_skill_directories_for_root, search_project_files,
+    skill_source_dir,
 };
 use crate::db;
-use crate::opencode_client::{
-    AgentInfo, CommandInfo, OpenCodeClient, ProviderModelInfo, SkillInfo,
+use crate::opencode_client::{AgentInfo, CommandInfo, ProviderModelInfo, SkillInfo};
+use crate::providers::{
+    claude_code::ClaudeCodeProvider, opencode::OpenCodeProvider, pi::PiProvider,
 };
-use crate::providers::{claude_code::ClaudeCodeProvider, pi::PiProvider};
-use crate::server_manager::{discovery_server_task_id, ServerManager};
+use crate::server_manager::ServerManager;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
@@ -46,31 +46,16 @@ pub(crate) fn load_project_runtime_context(
     })
 }
 
+#[allow(dead_code)]
 pub(crate) async fn ensure_project_discovery_server(
-    server_manager: Option<&ServerManager>,
-    project_id: &str,
-    context: &ProjectRuntimeContext,
+    _server_manager: Option<&ServerManager>,
+    _project_id: &str,
+    _context: &ProjectRuntimeContext,
 ) -> Result<Option<u16>, String> {
-    if context.provider != "opencode" {
-        return Ok(None);
-    }
-
-    let server_manager =
-        server_manager.ok_or_else(|| "Server manager is not available".to_string())?;
-    let discovery_task_id = discovery_server_task_id(project_id);
-    if let Some(port) = server_manager.get_server_port(&discovery_task_id).await {
-        return Ok(Some(port));
-    }
-
-    let Some(project_path) = context.project_path.as_deref() else {
-        return Ok(None);
-    };
-
-    server_manager
-        .spawn_server(&discovery_task_id, Path::new(project_path))
-        .await
-        .map(Some)
-        .map_err(|e| format!("Failed to start discovery server: {e}"))
+    // OpenForge does not own OpenCode server lifecycle. Discovery for OpenCode
+    // is local, like Claude Code and Pi; runtime server communication happens
+    // via the installed OpenCode plugin hooks.
+    Ok(None)
 }
 
 pub(crate) fn provider_commands(
@@ -83,6 +68,10 @@ pub(crate) fn provider_commands(
         }
         "claude-code" => Some(
             ClaudeCodeProvider::new(crate::pty_manager::PtyManager::new())
+                .list_commands(project_path),
+        ),
+        "opencode" => Some(
+            OpenCodeProvider::new(crate::pty_manager::PtyManager::new())
                 .list_commands(project_path),
         ),
         _ => None,
@@ -101,6 +90,9 @@ pub(crate) fn provider_agents(
             ClaudeCodeProvider::new(crate::pty_manager::PtyManager::new())
                 .list_agents(project_path),
         ),
+        "opencode" => Some(
+            OpenCodeProvider::new(crate::pty_manager::PtyManager::new()).list_agents(project_path),
+        ),
         _ => None,
     }
 }
@@ -114,15 +106,8 @@ pub(crate) async fn list_runtime_commands(
         return Ok(commands);
     }
 
-    let Some(port) = ensure_project_discovery_server(server_manager, project_id, context).await?
-    else {
-        return Ok(Vec::new());
-    };
-
-    OpenCodeClient::with_base_url(format!("http://127.0.0.1:{port}"))
-        .list_commands()
-        .await
-        .map_err(|e| format!("Failed to list commands: {e}"))
+    let _ = (server_manager, project_id);
+    Ok(Vec::new())
 }
 
 pub(crate) async fn search_runtime_files(
@@ -131,7 +116,8 @@ pub(crate) async fn search_runtime_files(
     context: &ProjectRuntimeContext,
     query: &str,
 ) -> Result<Vec<String>, String> {
-    if matches!(context.provider.as_str(), "claude-code" | "pi") {
+    let _ = (server_manager, project_id);
+    if matches!(context.provider.as_str(), "claude-code" | "pi" | "opencode") {
         return Ok(context
             .project_path
             .as_deref()
@@ -139,15 +125,7 @@ pub(crate) async fn search_runtime_files(
             .unwrap_or_default());
     }
 
-    let Some(port) = ensure_project_discovery_server(server_manager, project_id, context).await?
-    else {
-        return Ok(Vec::new());
-    };
-
-    OpenCodeClient::with_base_url(format!("http://127.0.0.1:{port}"))
-        .find_files(query, true, 10)
-        .await
-        .map_err(|e| format!("Failed to search files: {e}"))
+    Ok(Vec::new())
 }
 
 pub(crate) async fn list_runtime_agents(
@@ -159,15 +137,8 @@ pub(crate) async fn list_runtime_agents(
         return Ok(agents);
     }
 
-    let Some(port) = ensure_project_discovery_server(server_manager, project_id, context).await?
-    else {
-        return Ok(Vec::new());
-    };
-
-    OpenCodeClient::with_base_url(format!("http://127.0.0.1:{port}"))
-        .list_agents()
-        .await
-        .map_err(|e| format!("Failed to list agents: {e}"))
+    let _ = (server_manager, project_id);
+    Ok(Vec::new())
 }
 
 pub(crate) async fn list_runtime_models(
@@ -175,48 +146,8 @@ pub(crate) async fn list_runtime_models(
     project_id: &str,
     context: &ProjectRuntimeContext,
 ) -> Result<Vec<ProviderModelInfo>, String> {
-    let Some(port) = ensure_project_discovery_server(server_manager, project_id, context).await?
-    else {
-        return Ok(Vec::new());
-    };
-
-    OpenCodeClient::with_base_url(format!("http://127.0.0.1:{port}"))
-        .list_providers()
-        .await
-        .map_err(|e| format!("Failed to list models: {e}"))
-}
-
-fn skill_info_from_api_command(command: CommandInfo, project_path: Option<&str>) -> SkillInfo {
-    let template = command
-        .extra
-        .get("template")
-        .and_then(|value| value.as_str())
-        .map(str::to_string);
-
-    let (level, source_dir) = if let Some(project_path) = project_path {
-        let project_path = Path::new(project_path);
-        if let Some(source_dir) = find_skill_source_dir(project_path, &command.name) {
-            ("project".to_string(), source_dir.to_string())
-        } else if let Some(source_dir) = dirs::home_dir()
-            .as_deref()
-            .and_then(|home| find_skill_source_dir(home, &command.name))
-        {
-            ("user".to_string(), source_dir.to_string())
-        } else {
-            ("user".to_string(), GENERIC_SKILLS_SOURCE_DIR.to_string())
-        }
-    } else {
-        ("user".to_string(), GENERIC_SKILLS_SOURCE_DIR.to_string())
-    };
-
-    SkillInfo {
-        name: command.name,
-        description: command.description,
-        agent: command.agent,
-        template,
-        level,
-        source_dir,
-    }
+    let _ = (server_manager, project_id, context);
+    Ok(Vec::new())
 }
 
 pub(crate) async fn list_runtime_skills(
@@ -226,19 +157,7 @@ pub(crate) async fn list_runtime_skills(
 ) -> Result<Vec<SkillInfo>, String> {
     let mut skills_map = HashMap::<String, SkillInfo>::new();
 
-    if let Some(port) = ensure_project_discovery_server(server_manager, project_id, context).await?
-    {
-        let client = OpenCodeClient::with_base_url(format!("http://127.0.0.1:{port}"));
-        if let Ok(commands) = client.list_commands().await {
-            for command in commands {
-                if command.source.as_deref() != Some("skill") {
-                    continue;
-                }
-                let skill = skill_info_from_api_command(command, context.project_path.as_deref());
-                skills_map.insert(skill.name.clone(), skill);
-            }
-        }
-    }
+    let _ = (server_manager, project_id);
 
     if let Some(project_path) = context.project_path.as_deref() {
         for skill in scan_skill_directories_for_root(Path::new(project_path), "project") {
@@ -369,7 +288,7 @@ pub(crate) fn get_task_workspace(
 
 pub(crate) fn app_invoke_abort_session_policy(provider: &str) -> AbortSessionPolicy {
     AbortSessionPolicy {
-        session_status: if matches!(provider, "claude-code" | "pi") {
+        session_status: if matches!(provider, "claude-code" | "pi" | "opencode") {
             "interrupted"
         } else {
             "failed"
@@ -425,23 +344,13 @@ pub(crate) fn session_output_context(
 pub(crate) async fn session_output_server_port(
     server_manager: &ServerManager,
     task_id: &str,
-    workspace_path: Option<&str>,
+    _workspace_path: Option<&str>,
 ) -> Result<(u16, bool), String> {
-    let existing_port = server_manager.get_server_port(task_id).await;
-    let spawned_server = existing_port.is_none();
-    let port = match existing_port {
-        Some(port) => port,
-        None => {
-            let workspace_path =
-                workspace_path.ok_or_else(|| "No workspace found for this task".to_string())?;
-            server_manager
-                .spawn_server(task_id, Path::new(workspace_path))
-                .await
-                .map_err(|e| format!("Failed to start OpenCode server: {e}"))?
-        }
+    let Some(port) = server_manager.get_server_port(task_id).await else {
+        return Err("OpenCode server is not managed by OpenForge".to_string());
     };
 
-    Ok((port, spawned_server))
+    Ok((port, false))
 }
 
 pub(crate) fn assistant_text_from_messages(messages: &[serde_json::Value]) -> String {

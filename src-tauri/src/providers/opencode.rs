@@ -3,21 +3,15 @@ use std::path::Path;
 
 use super::ProviderSessionResult;
 use crate::db::AgentSessionRow;
-use crate::opencode_client::OpenCodeClient;
-use crate::server_manager::ServerManager;
-use crate::sse_bridge::SseBridgeManager;
+use crate::pty_manager::PtyManager;
 
 pub struct OpenCodeProvider {
-    pub server_mgr: ServerManager,
-    pub sse_mgr: SseBridgeManager,
+    pub pty_mgr: PtyManager,
 }
 
 impl OpenCodeProvider {
-    pub fn new(server_mgr: ServerManager, sse_mgr: SseBridgeManager) -> Self {
-        Self {
-            server_mgr,
-            sse_mgr,
-        }
+    pub fn new(pty_mgr: PtyManager) -> Self {
+        Self { pty_mgr }
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -31,44 +25,29 @@ impl OpenCodeProvider {
         model: Option<&crate::opencode_client::PromptModel>,
         app: &AppHandle,
     ) -> Result<ProviderSessionResult, String> {
-        let port = self
-            .server_mgr
-            .spawn_server(task_id, worktree_path)
-            .await
-            .map_err(|e| e.to_string())?;
-
-        let client = OpenCodeClient::with_base_url(format!("http://127.0.0.1:{}", port));
-
-        let opencode_session_id = client
-            .create_session(format!("Task {}", task_id))
-            .await
-            .map_err(|e| format!("Failed to create session: {}", e))?;
-
-        self.sse_mgr
-            .start_bridge(
-                app.clone(),
-                task_id.to_string(),
-                Some(opencode_session_id.clone()),
-                port,
+        let pty_instance_id = self
+            .pty_mgr
+            .spawn_opencode_run_pty(
+                task_id,
+                worktree_path,
+                prompt,
+                None,
+                false,
+                agent,
+                model,
+                80,
+                24,
+                Some(app.clone()),
+                None,
             )
             .await
             .map_err(|e| e.to_string())?;
-
-        client
-            .prompt_async(
-                &opencode_session_id,
-                prompt.to_string(),
-                agent.map(str::to_string),
-                model.cloned(),
-            )
-            .await
-            .map_err(|e| format!("Failed to send prompt: {}", e))?;
 
         Ok(ProviderSessionResult {
-            port,
-            opencode_session_id: Some(opencode_session_id),
+            port: 0,
+            opencode_session_id: None,
             pi_session_id: None,
-            pty_instance_id: None,
+            pty_instance_id: Some(pty_instance_id),
         })
     }
 
@@ -84,106 +63,47 @@ impl OpenCodeProvider {
         model: Option<&crate::opencode_client::PromptModel>,
         app: &AppHandle,
     ) -> Result<ProviderSessionResult, String> {
-        match prompt {
-            Some(action_prompt) => {
-                let port = match self.server_mgr.get_server_port(task_id).await {
-                    Some(p) => p,
-                    None => self
-                        .server_mgr
-                        .spawn_server(task_id, worktree_path)
-                        .await
-                        .map_err(|e| e.to_string())?,
-                };
+        let resume_session_id = session.opencode_session_id.as_deref();
+        let actual_prompt = prompt.unwrap_or("");
+        let continue_session = resume_session_id.is_none();
+        let pty_instance_id = self
+            .pty_mgr
+            .spawn_opencode_run_pty(
+                task_id,
+                worktree_path,
+                actual_prompt,
+                resume_session_id,
+                continue_session,
+                agent,
+                model,
+                80,
+                24,
+                Some(app.clone()),
+                None,
+            )
+            .await
+            .map_err(|e| e.to_string())?;
 
-                let client = OpenCodeClient::with_base_url(format!("http://127.0.0.1:{}", port));
-
-                let opencode_session_id = match &session.opencode_session_id {
-                    Some(sid) => sid.clone(),
-                    None => client
-                        .create_session(format!("Task {}", task_id))
-                        .await
-                        .map_err(|e| format!("Failed to create session: {}", e))?,
-                };
-
-                client
-                    .prompt_async(
-                        &opencode_session_id,
-                        action_prompt.to_string(),
-                        agent.map(str::to_string),
-                        model.cloned(),
-                    )
-                    .await
-                    .map_err(|e| format!("Failed to send prompt: {}", e))?;
-
-                match self
-                    .sse_mgr
-                    .start_bridge(
-                        app.clone(),
-                        task_id.to_string(),
-                        Some(opencode_session_id.clone()),
-                        port,
-                    )
-                    .await
-                {
-                    Ok(_) => {}
-                    Err(e) if e.to_string().contains("already running") => {}
-                    Err(e) => return Err(e.to_string()),
-                }
-
-                Ok(ProviderSessionResult {
-                    port,
-                    opencode_session_id: Some(opencode_session_id),
-                    pi_session_id: None,
-                    pty_instance_id: None,
-                })
-            }
-            None => {
-                let port = self
-                    .server_mgr
-                    .spawn_server(task_id, worktree_path)
-                    .await
-                    .map_err(|e| e.to_string())?;
-
-                if let Some(bridge_session_id) = resume_bridge_session_id(session) {
-                    self.sse_mgr
-                        .start_bridge(
-                            app.clone(),
-                            task_id.to_string(),
-                            Some(bridge_session_id),
-                            port,
-                        )
-                        .await
-                        .map_err(|e| e.to_string())?;
-                }
-
-                Ok(ProviderSessionResult {
-                    port,
-                    opencode_session_id: resume_bridge_session_id(session),
-                    pi_session_id: None,
-                    pty_instance_id: None,
-                })
-            }
-        }
+        Ok(ProviderSessionResult {
+            port: 0,
+            opencode_session_id: resume_session_id.map(str::to_string),
+            pi_session_id: None,
+            pty_instance_id: Some(pty_instance_id),
+        })
     }
 
-    pub async fn abort(&self, task_id: &str, session: &AgentSessionRow) -> Result<(), String> {
-        if let Some(port) = self.server_mgr.get_server_port(task_id).await {
-            if let Some(ref opencode_session_id) = session.opencode_session_id {
-                let client = OpenCodeClient::with_base_url(format!("http://127.0.0.1:{}", port));
-                let _ = client.abort_session(opencode_session_id).await;
-            }
-        }
-
-        self.sse_mgr.stop_bridge(task_id).await;
-        let _ = self.server_mgr.stop_server(task_id).await;
-
-        Ok(())
+    pub async fn abort(&self, task_id: &str, _session: &AgentSessionRow) -> Result<(), String> {
+        self.pty_mgr
+            .kill_pty(task_id)
+            .await
+            .map_err(|e| e.to_string())
     }
 
     pub async fn cleanup(&self, task_id: &str) -> Result<(), String> {
-        self.sse_mgr.stop_bridge(task_id).await;
-        let _ = self.server_mgr.stop_server(task_id).await;
-        Ok(())
+        self.pty_mgr
+            .kill_pty(task_id)
+            .await
+            .map_err(|e| e.to_string())
     }
 
     pub fn provider_name(&self) -> &'static str {
@@ -196,21 +116,87 @@ impl OpenCodeProvider {
 
     pub fn list_commands(
         &self,
-        _project_path: Option<&str>,
+        project_path: Option<&str>,
     ) -> Vec<crate::opencode_client::CommandInfo> {
-        vec![]
+        use crate::command_discovery::{
+            resolve_active_plugins, scan_commands_directory, scan_plugin_agents,
+            scan_skills_directory,
+        };
+        use std::collections::HashMap;
+
+        let mut commands_map = HashMap::<String, crate::opencode_client::CommandInfo>::new();
+
+        if let Some(config) = dirs::config_dir() {
+            let opencode_config = config.join("opencode");
+            for cmd in scan_commands_directory(&opencode_config.join("commands")) {
+                commands_map.insert(cmd.name.clone(), cmd);
+            }
+            for skill in scan_skills_directory(&opencode_config.join("skills"), "user", ".opencode")
+            {
+                commands_map
+                    .entry(format!("skill:{}", skill.name))
+                    .or_insert(crate::opencode_client::CommandInfo {
+                        name: format!("skill:{}", skill.name),
+                        description: skill.description,
+                        source: Some("skill".to_string()),
+                        agent: skill.agent,
+                        extra: serde_json::Map::new(),
+                    });
+            }
+        }
+
+        if let Some(proj_path) = project_path {
+            let proj = Path::new(proj_path);
+            for cmd in scan_commands_directory(&proj.join(".opencode").join("commands")) {
+                commands_map.insert(cmd.name.clone(), cmd);
+            }
+            for skill in scan_skills_directory(
+                &proj.join(".opencode").join("skills"),
+                "project",
+                ".opencode",
+            ) {
+                commands_map.insert(
+                    format!("skill:{}", skill.name),
+                    crate::opencode_client::CommandInfo {
+                        name: format!("skill:{}", skill.name),
+                        description: skill.description,
+                        source: Some("skill".to_string()),
+                        agent: skill.agent,
+                        extra: serde_json::Map::new(),
+                    },
+                );
+            }
+        }
+
+        let active_plugins = dirs::home_dir()
+            .map(|home| resolve_active_plugins(&home))
+            .unwrap_or_default();
+        let mut commands: Vec<_> = commands_map.into_values().collect();
+        commands.extend(
+            scan_plugin_agents(&active_plugins)
+                .into_iter()
+                .map(|agent| crate::opencode_client::CommandInfo {
+                    name: format!("agent:{}", agent.name),
+                    description: Some(format!("Run with agent {}", agent.name)),
+                    source: Some("agent".to_string()),
+                    agent: Some(agent.name),
+                    extra: serde_json::Map::new(),
+                }),
+        );
+        commands.sort_by(|left, right| left.name.cmp(&right.name));
+        commands
     }
 
     pub fn list_agents(
         &self,
-        _project_path: Option<&str>,
+        project_path: Option<&str>,
     ) -> Vec<crate::opencode_client::AgentInfo> {
-        vec![]
+        let _ = project_path;
+        dirs::home_dir()
+            .map(|home| crate::command_discovery::resolve_active_plugins(&home))
+            .map(|plugins| crate::command_discovery::scan_plugin_agents(&plugins))
+            .unwrap_or_default()
     }
-}
-
-fn resume_bridge_session_id(session: &AgentSessionRow) -> Option<String> {
-    session.opencode_session_id.clone()
 }
 
 #[cfg(test)]
@@ -237,48 +223,45 @@ mod tests {
 
     #[test]
     fn test_provider_name() {
-        let provider = OpenCodeProvider::new(
-            crate::server_manager::ServerManager::new(),
-            crate::sse_bridge::SseBridgeManager::new(),
-        );
+        let provider = OpenCodeProvider::new(PtyManager::new());
         assert_eq!(provider.provider_name(), "opencode");
     }
 
     #[test]
     fn test_provider_session_id_with_opencode_session() {
-        let provider = OpenCodeProvider::new(
-            crate::server_manager::ServerManager::new(),
-            crate::sse_bridge::SseBridgeManager::new(),
-        );
-        let session = make_session(Some("oc-xyz789"));
+        let provider = OpenCodeProvider::new(PtyManager::new());
+        let session = make_session(Some("oc-abc123"));
         assert_eq!(
             provider.provider_session_id(&session),
-            Some("oc-xyz789".to_string())
+            Some("oc-abc123".to_string())
         );
+    }
+
+    #[test]
+    fn list_commands_includes_project_opencode_skills() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let skill_dir = temp_dir.path().join(".opencode/skills/review");
+        std::fs::create_dir_all(&skill_dir).expect("create skill dir");
+        std::fs::write(
+            skill_dir.join("SKILL.md"),
+            "---\nname: review\ndescription: Review the code\n---\nReview this project.",
+        )
+        .expect("write skill");
+
+        let provider = OpenCodeProvider::new(PtyManager::new());
+        let commands = provider.list_commands(temp_dir.path().to_str());
+
+        assert!(commands.iter().any(|command| {
+            command.name == "skill:review"
+                && command.source.as_deref() == Some("skill")
+                && command.description.as_deref() == Some("Review the code")
+        }));
     }
 
     #[test]
     fn test_provider_session_id_without_opencode_session() {
-        let provider = OpenCodeProvider::new(
-            crate::server_manager::ServerManager::new(),
-            crate::sse_bridge::SseBridgeManager::new(),
-        );
+        let provider = OpenCodeProvider::new(PtyManager::new());
         let session = make_session(None);
         assert_eq!(provider.provider_session_id(&session), None);
-    }
-
-    #[test]
-    fn test_resume_bridge_session_id_uses_existing_session_id() {
-        let session = make_session(Some("oc-xyz789"));
-        assert_eq!(
-            resume_bridge_session_id(&session),
-            Some("oc-xyz789".to_string())
-        );
-    }
-
-    #[test]
-    fn test_resume_bridge_session_id_skips_bridge_when_missing() {
-        let session = make_session(None);
-        assert_eq!(resume_bridge_session_id(&session), None);
     }
 }

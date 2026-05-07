@@ -332,14 +332,15 @@ pub(super) async fn handle_app_unmatched_command(
                     format!("Failed to get latest session: {e}"),
                 )
             })? {
-                if matches!(session.provider.as_str(), "claude-code" | "pi")
+                if matches!(session.provider.as_str(), "claude-code" | "pi" | "opencode")
                     && session.status == "running"
                 {
-                    let next_status = if session.provider == "pi" && success {
-                        "completed"
-                    } else {
-                        "interrupted"
-                    };
+                    let next_status =
+                        if matches!(session.provider.as_str(), "pi" | "opencode") && success {
+                            "completed"
+                        } else {
+                            "interrupted"
+                        };
                     let error_message = if next_status == "completed" {
                         None
                     } else {

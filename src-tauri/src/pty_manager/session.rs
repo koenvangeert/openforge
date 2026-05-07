@@ -9,7 +9,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-use super::commands::{build_claude_args, build_pi_args, get_shell_path};
+use super::commands::{build_claude_args, build_opencode_run_args, build_pi_args, get_shell_path};
 use super::events::{
     spawn_batched_pty_event_emitter, spawn_pty_output_reader, PtyEventEmitterConfig, PtyExitAction,
     RingBuffer, SharedRingBuffer, CLAUDE_BUFFER_CAPACITY,
@@ -183,6 +183,164 @@ impl PtyManager {
                     output_buffers: Arc::clone(&self.output_buffers),
                     pid_file,
                     emit_agent_exit: false,
+                },
+            },
+        );
+
+        Ok(instance_id)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub async fn spawn_opencode_run_pty(
+        &self,
+        task_id: &str,
+        cwd: &Path,
+        prompt: &str,
+        resume_session_id: Option<&str>,
+        continue_session: bool,
+        agent: Option<&str>,
+        model: Option<&crate::opencode_client::PromptModel>,
+        cols: u16,
+        rows: u16,
+        app_handle: Option<crate::backend_runtime::AppHandle>,
+        app_event_tx: Option<AppEventSender>,
+    ) -> Result<u64, PtyError> {
+        let mut sessions = self.sessions.lock().await;
+
+        if sessions.contains_key(task_id) {
+            info!("[PTY] Replacing existing OpenCode PTY for task {}", task_id);
+            if let Some(mut old_session) = sessions.remove(task_id) {
+                let _ = old_session.child.kill();
+            }
+            if let Ok(pid_dir) = self.get_pid_dir() {
+                let _ = std::fs::remove_file(pid_dir.join(format!("{}-pty.pid", task_id)));
+            }
+        }
+
+        info!(
+            "Spawning OpenCode PTY for task {} ({}x{})",
+            task_id, cols, rows
+        );
+
+        let pty_system = native_pty_system();
+        let size = PtySize {
+            rows,
+            cols,
+            pixel_width: 0,
+            pixel_height: 0,
+        };
+
+        let pair = pty_system
+            .openpty(size)
+            .map_err(|e| PtyError::SpawnFailed(format!("Failed to create PTY pair: {}", e)))?;
+
+        crate::opencode_plugin::ensure_opencode_plugin_installed().map_err(|e| {
+            PtyError::SpawnFailed(format!("Failed to install OpenCode plugin: {}", e))
+        })?;
+        let instance_id = NEXT_INSTANCE_ID.fetch_add(1, Ordering::Relaxed);
+        let model_name = model.map(|model| format!("{}/{}", model.provider_id, model.model_id));
+
+        let mut cmd = CommandBuilder::new("opencode");
+        for arg in build_opencode_run_args(
+            prompt,
+            resume_session_id,
+            continue_session,
+            agent,
+            model_name.as_deref(),
+        ) {
+            cmd.arg(arg);
+        }
+        cmd.cwd(cwd);
+
+        for (key, value) in user_environment() {
+            cmd.env(key, value);
+        }
+
+        cmd.env("TERM", "xterm-256color");
+        cmd.env("COLORTERM", "truecolor");
+        cmd.env("TERM_PROGRAM", "vscode");
+        cmd.env("OPENFORGE_TASK_ID", task_id);
+        cmd.env("OPENFORGE_PTY_INSTANCE_ID", instance_id.to_string());
+        cmd.env(
+            "OPENFORGE_HTTP_PORT",
+            crate::claude_hooks::get_http_server_port().to_string(),
+        );
+
+        let child = pair
+            .slave
+            .spawn_command(cmd)
+            .map_err(|e| PtyError::SpawnFailed(format!("Failed to spawn command: {}", e)))?;
+
+        drop(pair.slave);
+
+        let pid = child.process_id().unwrap_or(0);
+        info!("OpenCode PTY for task {} started (PID: {})", task_id, pid);
+
+        let reader = pair
+            .master
+            .try_clone_reader()
+            .map_err(|e| PtyError::SpawnFailed(format!("Failed to clone reader: {}", e)))?;
+
+        let writer = pair
+            .master
+            .take_writer()
+            .map_err(|e| PtyError::SpawnFailed(format!("Failed to take writer: {}", e)))?;
+
+        sessions.insert(
+            task_id.to_string(),
+            PtySession {
+                child,
+                master: pair.master,
+                writer,
+                instance_id,
+            },
+        );
+
+        drop(sessions);
+
+        #[cfg(target_os = "macos")]
+        {
+            tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+        }
+
+        let pid_dir = self.get_pid_dir()?;
+        std::fs::create_dir_all(&pid_dir)?;
+        let pid_file = pid_dir.join(format!("{}-pty.pid", task_id));
+        std::fs::write(&pid_file, pid.to_string())?;
+
+        let last_output_time = Arc::new(AtomicU64::new(0));
+        {
+            let mut times = self.last_output.lock().await;
+            times.insert(task_id.to_string(), Arc::clone(&last_output_time));
+        }
+        let ring_buffer = Arc::new(std::sync::Mutex::new(RingBuffer::new(
+            CLAUDE_BUFFER_CAPACITY,
+        )));
+        {
+            let mut buffers = self.output_buffers.lock().await;
+            buffers.insert(task_id.to_string(), Arc::clone(&ring_buffer));
+        }
+        let ring_buffer_emitter = Arc::clone(&ring_buffer);
+
+        let rx = spawn_pty_output_reader(
+            reader,
+            task_id.to_string(),
+            Some(Arc::clone(&last_output_time)),
+        );
+        spawn_batched_pty_event_emitter(
+            rx,
+            PtyEventEmitterConfig {
+                session_key: task_id.to_string(),
+                instance_id,
+                app_handle,
+                app_event_tx,
+                ring_buffer: ring_buffer_emitter,
+                exit_action: PtyExitAction::Cleanup {
+                    sessions: Arc::clone(&self.sessions),
+                    last_output: Arc::clone(&self.last_output),
+                    output_buffers: Arc::clone(&self.output_buffers),
+                    pid_file,
+                    emit_agent_exit: true,
                 },
             },
         );

@@ -19,12 +19,12 @@ use lifecycle::cleanup_task_runtime_for_app;
 #[cfg(test)]
 pub(crate) use lifecycle::{start_opencode_sse_bridge_for_app, ExistingSseBridge};
 
+#[cfg(test)]
+use crate::sse_bridge::SseBridgeError;
 use crate::{
     app_events::publish_app_event_to_runtime,
     db,
     http_server::{AppInvokeRequest, AppState},
-    opencode_client::OpenCodeClient,
-    sse_bridge::SseBridgeError,
     whisper_manager::WhisperModelSize,
 };
 use axum::http::StatusCode;

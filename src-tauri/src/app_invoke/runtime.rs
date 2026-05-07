@@ -199,6 +199,12 @@ async fn get_session_output(
     request: &AppInvokeRequest,
 ) -> AppResult<serde_json::Value> {
     let task_id = payload_string(&request.payload, "taskId")?;
+    if let Some(pty_manager) = state.pty_manager.as_ref() {
+        if let Some(output) = pty_manager.get_pty_buffer(&task_id).await {
+            return json_value(output);
+        }
+    }
+
     let context = {
         let db = crate::db::acquire_db(&state.db);
         provider_runtime::session_output_context(&db, &task_id).map_err(|error| {
@@ -229,6 +235,8 @@ async fn get_session_output(
     .map_err(|error| {
         let status = if error == "No workspace found for this task" {
             StatusCode::NOT_FOUND
+        } else if error == "OpenCode server is not managed by OpenForge" {
+            StatusCode::SERVICE_UNAVAILABLE
         } else {
             StatusCode::INTERNAL_SERVER_ERROR
         };
@@ -248,10 +256,7 @@ async fn get_session_output(
 
     let output = provider_runtime::assistant_text_from_messages(&messages);
 
-    if spawned_server {
-        let _ = server_manager.stop_server(&task_id).await;
-    }
-
+    let _ = spawned_server;
     json_value(output)
 }
 
