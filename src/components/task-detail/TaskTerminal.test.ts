@@ -85,6 +85,27 @@ vi.mock('../../lib/terminalPool', () => ({
   setCurrentPtyInstance: vi.fn((entry, instanceId) => {
     entry.currentPtyInstance = instanceId
   }),
+  markShellPtyStarted: vi.fn((entry, instanceId) => {
+    entry.currentPtyInstance = instanceId
+    entry.ptyActive = true
+    entry.needsClear = false
+  }),
+  subscribeShellLifecycle: vi.fn((_taskId, callback) => {
+    listenCallback = (event: { payload: unknown }) => {
+      const exitInstance = (event.payload as { instance_id?: number } | null)?.instance_id
+      if (exitInstance != null && mockPoolEntry.currentPtyInstance != null && exitInstance !== mockPoolEntry.currentPtyInstance) return
+      mockPoolEntry.ptyActive = false
+      mockPoolEntry.needsClear = true
+      callback({
+        ptyActive: mockPoolEntry.ptyActive,
+        shellExited: !mockPoolEntry.ptyActive && mockPoolEntry.needsClear,
+        currentPtyInstance: mockPoolEntry.currentPtyInstance,
+      })
+    }
+    return () => {
+      if (listenCallback) listenCallback = null
+    }
+  }),
   getShellLifecycleState: vi.fn(() => ({
     ptyActive: mockPoolEntry.ptyActive,
     shellExited: !mockPoolEntry.ptyActive && mockPoolEntry.needsClear,
@@ -106,7 +127,7 @@ import TaskTerminal from './TaskTerminal.svelte'
 import type { PoolEntry } from '../../lib/terminalPool'
 
 describe('TaskTerminal', () => {
-  it('calls onExit when a matching pty-exit event fires', async () => {
+  it('calls onExit when the pool reports a matching shell exit', async () => {
     const onExitMock = vi.fn()
     
     render(TaskTerminal, { 
@@ -121,9 +142,10 @@ describe('TaskTerminal', () => {
       expect(listenCallback).not.toBeNull()
     })
 
-    // simulate matching instance
-    const { updateShellLifecycleState } = await import('../../lib/terminalPool')
-    updateShellLifecycleState('T-1-shell-2', { ptyActive: true, shellExited: false, currentPtyInstance: 1 })
+    // simulate matching instance handled by the pool-owned lifecycle subscriber
+    mockPoolEntry.ptyActive = true
+    mockPoolEntry.needsClear = false
+    ;(mockPoolEntry as unknown as PoolEntry).currentPtyInstance = 1
     
     if (!listenCallback) {
       throw new Error('Expected pty-exit listener to be registered')
@@ -297,7 +319,7 @@ describe('TaskTerminal', () => {
   })
 
   it('records a captured PTY spawn when terminalKey changes before spawn resolves', async () => {
-    const { acquire, updateShellLifecycleState, setCurrentPtyInstance } = await import('../../lib/terminalPool')
+    const { acquire, markShellPtyStarted } = await import('../../lib/terminalPool')
     const { spawnShellPty } = await import('../../lib/ipc')
 
     const nextEntry = {
@@ -328,17 +350,12 @@ describe('TaskTerminal', () => {
     resolveSpawn(7)
 
     await vi.waitFor(() => {
-      expect(setCurrentPtyInstance).toHaveBeenCalledWith(mockPoolEntry, 7)
-      expect(updateShellLifecycleState).toHaveBeenCalledWith('project-P-1-shell-0', {
-        ptyActive: true,
-        shellExited: false,
-        currentPtyInstance: 7,
-      })
+      expect(markShellPtyStarted).toHaveBeenCalledWith(mockPoolEntry, 7)
     })
   })
 
   it('restart records the captured PTY when terminalKey changes before restart spawn resolves', async () => {
-    const { acquire, updateShellLifecycleState, setCurrentPtyInstance } = await import('../../lib/terminalPool')
+    const { acquire, markShellPtyStarted } = await import('../../lib/terminalPool')
     const { killPty, spawnShellPty } = await import('../../lib/ipc')
 
     mockPoolEntry.ptyActive = false
@@ -379,12 +396,7 @@ describe('TaskTerminal', () => {
     await vi.waitFor(() => {
       expect(killPty).toHaveBeenCalledWith('project-P-1-shell-0')
       expect(spawnShellPty).toHaveBeenCalledWith('project-P-1', '/path/to/one', 80, 24, 0)
-      expect(setCurrentPtyInstance).toHaveBeenCalledWith(expect.any(Object), 9)
-      expect(updateShellLifecycleState).toHaveBeenCalledWith('project-P-1-shell-0', {
-        ptyActive: true,
-        shellExited: false,
-        currentPtyInstance: 9,
-      })
+      expect(markShellPtyStarted).toHaveBeenCalledWith(expect.any(Object), 9)
     })
   })
 
@@ -628,14 +640,16 @@ describe('TaskTerminal', () => {
     expect(theme.foreground).toBe('#POOLFG')
   })
 
-  it('listens for pty-exit event with terminalKey through the desktop IPC adapter', async () => {
+  it('subscribes to pool lifecycle with terminalKey instead of listening to desktop pty-exit directly', async () => {
     const { listenDesktopEvent } = await import('../../lib/desktopIpc')
+    const { subscribeShellLifecycle } = await import('../../lib/terminalPool')
 
     render(TaskTerminal, { props: { taskId: 'T-1', workspacePath: '/path/to/worktree', terminalKey: 'T-1-shell-2', terminalIndex: 2, isActive: true } })
 
     await vi.waitFor(() => {
-      expect(listenDesktopEvent).toHaveBeenCalledWith('pty-exit-T-1-shell-2', expect.any(Function))
+      expect(subscribeShellLifecycle).toHaveBeenCalledWith('T-1-shell-2', expect.any(Function))
     })
+    expect(listenDesktopEvent).not.toHaveBeenCalledWith('pty-exit-T-1-shell-2', expect.any(Function))
   })
 
   it('shows shell exited overlay immediately when pool says shell already exited', async () => {

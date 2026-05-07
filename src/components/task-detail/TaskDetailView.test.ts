@@ -187,6 +187,12 @@ vi.mock('../../lib/terminalPool', () => ({
   setCurrentPtyInstance: vi.fn((entry, instanceId) => {
     entry.currentPtyInstance = instanceId
   }),
+  markShellPtyStarted: vi.fn((entry, instanceId) => {
+    entry.currentPtyInstance = instanceId
+    entry.ptyActive = true
+    entry.needsClear = false
+  }),
+  subscribeShellLifecycle: vi.fn(() => () => {}),
   getShellLifecycleState: vi.fn((taskId: string) => ({
     ptyActive: false,
     shellExited: false,

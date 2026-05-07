@@ -42,10 +42,13 @@ export interface ShellLifecycleState {
   currentPtyInstance: number | null
 }
 
+type ShellLifecycleListener = (state: ShellLifecycleState) => void
+
 export const APP_EVENTS_RECONNECTED_EVENT = 'openforge-app-events-reconnected'
 
 const pool = new Map<string, PoolEntry>()
 const taskTabSessions = new Map<string, TaskTerminalTabsSession>()
+const shellLifecycleListeners = new Map<string, Set<ShellLifecycleListener>>()
 const openedTerminals = new WeakSet<Terminal>()
 let appEventsReconnectUnlisten: DesktopUnlistenFn | null = null
 let appEventsReconnectListenerPending: Promise<void> | null = null
@@ -98,6 +101,30 @@ function syncPtySize(entry: PoolEntry): void {
 
   resizePty(entry.taskId, entry.terminal.cols, entry.terminal.rows)
     .catch(e => console.error('[terminalPool] resize failed:', e))
+}
+
+function getShellLifecycleStateFromEntry(entry: PoolEntry | undefined): ShellLifecycleState {
+  return {
+    ptyActive: entry?.ptyActive ?? false,
+    shellExited: entry ? !entry.ptyActive && entry.needsClear : false,
+    currentPtyInstance: entry?.currentPtyInstance ?? null,
+  }
+}
+
+function notifyShellLifecycleListeners(taskId: string): void {
+  const listeners = shellLifecycleListeners.get(taskId)
+  if (!listeners || listeners.size === 0) return
+
+  const state = getShellLifecycleStateFromEntry(pool.get(taskId))
+  for (const listener of listeners) {
+    listener(state)
+  }
+}
+
+function markShellPtyExited(entry: PoolEntry): void {
+  entry.ptyActive = false
+  entry.needsClear = true
+  notifyShellLifecycleListeners(entry.taskId)
 }
 
 function waitForInitialFit(entry: PoolEntry): Promise<void> {
@@ -154,6 +181,7 @@ async function replayPtyBuffer(entry: PoolEntry): Promise<void> {
     entry.needsClear = false
     entry.terminal.write(buffered)
     entry.ptyActive = true
+    notifyShellLifecycleListeners(entry.taskId)
     if (entry.attached) refreshTerminal(entry)
   } catch (e) {
     console.error('[terminalPool] Failed to replay PTY buffer after app event reconnect:', e)
@@ -256,6 +284,7 @@ export async function acquire(taskId: string): Promise<PoolEntry> {
       }
       entry.terminal.write(event.payload.data)
       entry.ptyActive = true
+      notifyShellLifecycleListeners(taskId)
     }
   }))
 
@@ -265,8 +294,7 @@ export async function acquire(taskId: string): Promise<PoolEntry> {
     if (instanceId != null && entry.currentPtyInstance != null && instanceId !== entry.currentPtyInstance) {
       return
     }
-    entry.ptyActive = false
-    entry.needsClear = true
+    markShellPtyExited(entry)
   }))
 
   // Terminal onData -> write to PTY (guarded by ptyActive)
@@ -369,6 +397,7 @@ export function release(taskId: string): void {
   entry.unlisteners.length = 0
   entry.terminal.dispose()
   pool.delete(taskId)
+  shellLifecycleListeners.delete(taskId)
   releaseAppEventsReconnectListenerIfIdle()
 }
 
@@ -388,6 +417,30 @@ export function setCurrentPtyInstance(entry: PoolEntry, instanceId: number | nul
   entry.currentPtyInstance = instanceId
 }
 
+export function markShellPtyStarted(entry: PoolEntry, instanceId: number): void {
+  entry.currentPtyInstance = instanceId
+  entry.ptyActive = true
+  entry.needsClear = false
+  notifyShellLifecycleListeners(entry.taskId)
+}
+
+export function subscribeShellLifecycle(taskId: string, listener: ShellLifecycleListener): DesktopUnlistenFn {
+  let listeners = shellLifecycleListeners.get(taskId)
+  if (!listeners) {
+    listeners = new Set()
+    shellLifecycleListeners.set(taskId, listeners)
+  }
+
+  listeners.add(listener)
+
+  return () => {
+    const current = shellLifecycleListeners.get(taskId)
+    if (!current) return
+    current.delete(listener)
+    if (current.size === 0) shellLifecycleListeners.delete(taskId)
+  }
+}
+
 export function isShellExited(taskId: string): boolean {
   const entry = pool.get(taskId)
   if (!entry) return false
@@ -395,12 +448,7 @@ export function isShellExited(taskId: string): boolean {
 }
 
 export function getShellLifecycleState(taskId: string): ShellLifecycleState {
-  const entry = pool.get(taskId)
-  return {
-    ptyActive: entry?.ptyActive ?? false,
-    shellExited: entry ? !entry.ptyActive && entry.needsClear : false,
-    currentPtyInstance: entry?.currentPtyInstance ?? null,
-  }
+  return getShellLifecycleStateFromEntry(pool.get(taskId))
 }
 
 export function updateShellLifecycleState(taskId: string, state: ShellLifecycleState): void {
@@ -410,6 +458,7 @@ export function updateShellLifecycleState(taskId: string, state: ShellLifecycleS
   entry.ptyActive = state.ptyActive
   entry.needsClear = state.shellExited
   entry.currentPtyInstance = state.currentPtyInstance
+  notifyShellLifecycleListeners(taskId)
 }
 
 export function getTaskTerminalTabsSession(taskId: string): TaskTerminalTabsSession {
@@ -434,6 +483,7 @@ export function releaseAll(): void {
     release(taskId)
   }
   taskTabSessions.clear()
+  shellLifecycleListeners.clear()
   releaseAppEventsReconnectListenerIfIdle()
 }
 

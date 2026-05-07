@@ -1,9 +1,8 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte'
-  import { listenDesktopEvent, type DesktopUnlistenFn } from '../../lib/desktopIpc'
   import { spawnShellPty, killPty } from '../../lib/ipc'
   import '@xterm/xterm/css/xterm.css'
-  import { acquire, attach, detach, recoverActiveTerminal, markPtySpawnPending, clearPtySpawnPending, shouldSpawnPty, setCurrentPtyInstance, getShellLifecycleState, updateShellLifecycleState, type PoolEntry } from '../../lib/terminalPool'
+  import { acquire, attach, detach, recoverActiveTerminal, markPtySpawnPending, clearPtySpawnPending, shouldSpawnPty, markShellPtyStarted, getShellLifecycleState, subscribeShellLifecycle, type PoolEntry, type ShellLifecycleState } from '../../lib/terminalPool'
 
   interface Props {
     taskId: string
@@ -17,7 +16,7 @@
   let { taskId, workspacePath, terminalKey, terminalIndex, isActive, onExit }: Props = $props()
 
   let terminalEl: HTMLDivElement
-  let unlisteners: DesktopUnlistenFn[] = []
+  let unsubscribeShellLifecycle: (() => void) | null = null
   let poolEntry = $state.raw<PoolEntry | null>(null)
   let mounted = $state(false)
   let lifecycle = $state({ ptyActive: false, shellExited: false, currentPtyInstance: null as number | null })
@@ -79,12 +78,7 @@
     try {
       if (!isCurrentBindingContext(context)) return
       const instanceId = await spawnShellPty(context.taskId, context.workspacePath, entry.terminal.cols, entry.terminal.rows, context.terminalIndex)
-      setCurrentPtyInstance(entry, instanceId)
-      updateShellLifecycleState(context.terminalKey, {
-        ptyActive: true,
-        shellExited: false,
-        currentPtyInstance: instanceId,
-      })
+      markShellPtyStarted(entry, instanceId)
       if (isCurrentBindingContext(context)) syncLifecycleState(context.terminalKey)
     } finally {
       clearPtySpawnPending(entry)
@@ -92,10 +86,8 @@
   }
 
   function clearComponentTerminalResources() {
-    unlisteners.forEach((fn) => {
-      fn()
-    })
-    unlisteners = []
+    unsubscribeShellLifecycle?.()
+    unsubscribeShellLifecycle = null
     if (poolEntry) {
       detach(poolEntry)
       poolEntry = null
@@ -118,6 +110,13 @@
     poolEntry = entry
     syncLifecycleState(nextTerminalKey)
 
+    unsubscribeShellLifecycle = subscribeShellLifecycle(nextTerminalKey, (state: ShellLifecycleState) => {
+      if (!poolEntry || boundTerminalKey !== nextTerminalKey) return
+      const wasExited = lifecycle.shellExited
+      lifecycle = state
+      if (!wasExited && state.shellExited) onExit?.()
+    })
+
     if (isActive) {
       await activateTerminal(entry, context)
       if (bindRun !== currentRun || !isCurrentBindingContext(context)) return
@@ -125,27 +124,10 @@
 
     previousIsActive = isActive
 
-    // Listen for shell exit event
-    const unlisten = await listenDesktopEvent(`pty-exit-${nextTerminalKey}`, (event) => {
-      if (!poolEntry || boundTerminalKey !== nextTerminalKey) return
-      const exitInstance = (event.payload as { instance_id?: number } | null)?.instance_id
-      if (exitInstance != null && lifecycle.currentPtyInstance != null && exitInstance !== lifecycle.currentPtyInstance) {
-        return
-      }
-      updateShellLifecycleState(nextTerminalKey, {
-        ptyActive: false,
-        shellExited: true,
-        currentPtyInstance: lifecycle.currentPtyInstance,
-      })
-      syncLifecycleState(nextTerminalKey)
-      onExit?.()
-    })
-
     if (!mounted || bindRun !== currentRun || boundTerminalKey !== nextTerminalKey) {
-      unlisten()
-      return
+      unsubscribeShellLifecycle?.()
+      unsubscribeShellLifecycle = null
     }
-    unlisteners.push(unlisten)
   }
 
   onMount(() => {
@@ -198,12 +180,7 @@
       })
       markPtySpawnPending(entry)
       const instanceId = await spawnShellPty(context.taskId, context.workspacePath, entry.terminal.cols, entry.terminal.rows, context.terminalIndex)
-      setCurrentPtyInstance(entry, instanceId)
-      updateShellLifecycleState(context.terminalKey, {
-        ptyActive: true,
-        shellExited: false,
-        currentPtyInstance: instanceId,
-      })
+      markShellPtyStarted(entry, instanceId)
       if (isCurrentBindingContext(context)) syncLifecycleState(context.terminalKey)
     } catch (e) {
       console.error('[TaskTerminal] Failed to restart shell:', e)
