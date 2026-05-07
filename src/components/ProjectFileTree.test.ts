@@ -20,6 +20,8 @@ function renderTree(props: Partial<{
   selectedPath: string | null
   onToggleDir: (path: string) => void
   onSelectFile: (path: string) => void
+  initialScrollTop: number
+  onScrollTopChange: (scrollTop: number) => void
 }> = {}) {
   return render(ProjectFileTree, {
     props: {
@@ -165,6 +167,26 @@ describe('ProjectFileTree', () => {
     expect(styles[1]).toContain('padding-left: 28px')
     expect(styles[2]).toContain('padding-left: 28px')
     expect(styles[3]).toContain('padding-left: 44px')
+  })
+
+  it('restores initial scroll position and reports scroll changes', async () => {
+    const onScrollTopChange = vi.fn()
+    renderTree({
+      entries: [
+        makeEntry({ name: 'one.ts', path: 'one.ts', isDir: false }),
+        makeEntry({ name: 'two.ts', path: 'two.ts', isDir: false }),
+      ],
+      initialScrollTop: 42,
+      onScrollTopChange,
+    })
+
+    const scrollRegion = screen.getAllByTestId('tree-entry')[0]?.parentElement as HTMLDivElement
+    expect(scrollRegion.scrollTop).toBe(42)
+
+    scrollRegion.scrollTop = 84
+    await fireEvent.scroll(scrollRegion)
+
+    expect(onScrollTopChange).toHaveBeenCalledWith(84)
   })
 
   it('renders selected file with adjusted indentation', () => {
