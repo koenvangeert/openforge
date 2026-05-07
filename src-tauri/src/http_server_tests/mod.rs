@@ -40,4 +40,5 @@ mod handlers;
 mod hook_lifecycle;
 mod models;
 mod project_resolution;
+mod shutdown;
 mod transport;

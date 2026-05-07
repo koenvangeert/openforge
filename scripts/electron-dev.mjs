@@ -481,6 +481,23 @@ export async function cleanupDevProcesses(children, options = {}) {
   return { processes, runtimeDirs }
 }
 
+export class DevScriptCleanupAdapter {
+  constructor(children, options = {}) {
+    this.name = 'dev-script-cleanup'
+    this.children = children
+    this.options = options
+    this.cleanupPromise = null
+  }
+
+  shutdown() {
+    this.cleanupPromise ??= cleanupDevProcesses(
+      typeof this.children === 'function' ? this.children() : this.children,
+      this.options,
+    )
+    return this.cleanupPromise
+  }
+}
+
 async function main() {
   const runtimeOptions = resolveElectronDevRuntimeOptions()
   if (runtimeOptions.seededAppData) {

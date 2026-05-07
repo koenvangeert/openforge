@@ -171,6 +171,7 @@ export interface StartSidecarDeps {
   spawn(command: string, args: readonly string[], options: SpawnOptions): ChildProcessLike
   fetch: HealthFetch
   sleep: Sleep
+  onSpawned?: (child: ChildProcessLike) => void
   healthTimeoutMs?: number
   healthIntervalMs?: number
   logSidecarOutput?: boolean
@@ -182,10 +183,19 @@ export interface StopSidecarOptions {
   sleep: Sleep
 }
 
+export type SidecarStopStatus = 'already-signaled' | 'terminated' | 'killed' | 'kill-failed'
+
+export interface SidecarStopReport {
+  status: SidecarStopStatus
+  signal: NodeJS.Signals | null
+  timedOut: boolean
+  error: string | null
+}
+
 export interface SidecarHandle {
   process: ChildProcessLike
   config: SidecarLaunchConfig
-  stop(options?: Partial<StopSidecarOptions>): Promise<void>
+  stop(options?: Partial<StopSidecarOptions>): Promise<SidecarStopReport>
 }
 
 const DEFAULT_HOST = '127.0.0.1'
@@ -387,14 +397,25 @@ function waitForExit(child: ChildProcessLike, sleep: Sleep, graceMs: number): Pr
 export async function stopSidecar(
   child: ChildProcessLike,
   options: StopSidecarOptions = { graceMs: DEFAULT_STOP_GRACE_MS, sleep: (ms) => new Promise(resolve => setTimeout(resolve, ms)) },
-): Promise<void> {
-  if (child.killed) return
-
-  child.kill('SIGTERM')
-  const result = await waitForExit(child, options.sleep, options.graceMs)
-  if (result === 'timeout') {
-    child.kill('SIGKILL')
+): Promise<SidecarStopReport> {
+  if (child.killed) {
+    return { status: 'already-signaled', signal: null, timedOut: false, error: null }
   }
+
+  if (!child.kill('SIGTERM')) {
+    return { status: 'kill-failed', signal: 'SIGTERM', timedOut: false, error: 'failed to send SIGTERM to Rust sidecar' }
+  }
+
+  const result = await waitForExit(child, options.sleep, options.graceMs)
+  if (result !== 'timeout') {
+    return { status: 'terminated', signal: 'SIGTERM', timedOut: false, error: null }
+  }
+
+  if (!child.kill('SIGKILL')) {
+    return { status: 'kill-failed', signal: 'SIGKILL', timedOut: true, error: 'failed to send SIGKILL to Rust sidecar after shutdown timeout' }
+  }
+
+  return { status: 'killed', signal: 'SIGKILL', timedOut: true, error: null }
 }
 
 export async function startSidecar(config: SidecarLaunchConfig, deps: StartSidecarDeps): Promise<SidecarHandle> {
@@ -402,6 +423,7 @@ export async function startSidecar(config: SidecarLaunchConfig, deps: StartSidec
     env: config.env,
     stdio: ['ignore', 'pipe', 'pipe'],
   })
+  deps.onSpawned?.(child)
 
   if (deps.logSidecarOutput) {
     forwardSidecarOutput(child, deps.logger ?? console)
@@ -421,14 +443,17 @@ export async function startSidecar(config: SidecarLaunchConfig, deps: StartSidec
     throw error
   }
 
+  let stopPromise: Promise<SidecarStopReport> | null = null
+
   return {
     process: child,
     config,
-    stop(options: Partial<StopSidecarOptions> = {}): Promise<void> {
-      return stopSidecar(child, {
+    stop(options: Partial<StopSidecarOptions> = {}): Promise<SidecarStopReport> {
+      stopPromise ??= stopSidecar(child, {
         graceMs: options.graceMs ?? DEFAULT_STOP_GRACE_MS,
         sleep: options.sleep ?? ((ms) => new Promise(resolve => setTimeout(resolve, ms))),
       })
+      return stopPromise
     },
   }
 }
@@ -486,6 +511,7 @@ export async function startSidecarReadiness(
     env: config.env,
     stdio: ['ignore', 'pipe', 'pipe'],
   })
+  deps.onSpawned?.(child)
 
   if (deps.logSidecarOutput) {
     forwardSidecarOutput(child, deps.logger ?? console)
@@ -552,17 +578,18 @@ export async function startSidecarReadiness(
     eventStream: resolvedEventStream,
     ready: async () => resolvedSnapshot,
     snapshot: () => resolvedSnapshot,
-    async stop(options: Partial<StopSidecarOptions> = {}): Promise<void> {
+    async stop(options: Partial<StopSidecarOptions> = {}): Promise<SidecarStopReport> {
       intentionalStop = true
       resolvedSnapshot.process = { ...resolvedSnapshot.process, state: 'stopping' }
       resolvedEventStream.stop()
-      await stopSidecar(child, {
+      const report = await stopSidecar(child, {
         graceMs: options.graceMs ?? DEFAULT_STOP_GRACE_MS,
         sleep: options.sleep ?? ((ms) => new Promise(resolve => setTimeout(resolve, ms))),
       })
       if (resolvedSnapshot.process.state !== 'exited') {
         resolvedSnapshot.process = { state: 'stopped' }
       }
+      return report
     },
   }
 }

@@ -1,4 +1,5 @@
-import type { SidecarLaunchConfig, SidecarReadinessHandle } from './sidecar.js'
+import { ElectronShutdownAdapter, RustSidecarShutdownAdapter, ShutdownCoordinator } from './shutdown.js'
+import type { ChildProcessLike, SidecarLaunchConfig, SidecarReadinessHandle } from './sidecar.js'
 
 export type BootFailurePolicy = 'fail' | 'continue'
 
@@ -39,11 +40,13 @@ export interface BootLifecycleAdapter {
   registerBackendInvokeHandler(context: BootBackendInvokeContext): void
   configureUserDataPath(): string | null
   onWindowAllClosed(handler: () => void): void
-  onBeforeQuit(handler: () => void): void
+  onBeforeQuit(handler: (event: { preventDefault(): void }) => void): void
+  exit(exitCode?: number): void
   waitForAppReady(): Promise<void>
   resolveSidecarPath(): string | null
   createSidecarLaunchConfig(sidecarPath: string): SidecarLaunchConfig
   startSidecar(config: SidecarLaunchConfig): Promise<SidecarReadinessHandle>
+  getSidecarLaunchProcess(): ChildProcessLike | null
   registerPluginProtocolHandler(sidecarConfig: SidecarLaunchConfig | null): void
   applyRendererCsp(sidecarConfig: SidecarLaunchConfig | null): void
   createMainWindow(): Promise<unknown>
@@ -62,6 +65,9 @@ export interface BootResult {
   mainWindow: unknown | null
   degradations: BootDegradation[]
 }
+
+const RUST_SIDECAR_STOP_GRACE_MS = 7_000
+const RUST_SIDECAR_SHUTDOWN_DEADLINE_MS = 8_000
 
 export const DEFAULT_BOOT_LIFECYCLE_POLICY: BootLifecyclePolicy = {
   missingSidecar: 'continue',
@@ -90,8 +96,28 @@ export async function bootOpenForgeDesktop(
   let sidecar: SidecarReadinessHandle | null = null
   let mainWindow: unknown | null = null
 
+  const shutdownCoordinator = new ShutdownCoordinator({
+    adapters: [
+      new RustSidecarShutdownAdapter({
+        sidecar: () => sidecar,
+        process: () => adapter.getSidecarLaunchProcess(),
+        stopOptions: { graceMs: RUST_SIDECAR_STOP_GRACE_MS },
+        deadlineMs: RUST_SIDECAR_SHUTDOWN_DEADLINE_MS,
+      }),
+    ],
+    logger,
+  })
+  const shutdownAdapter = new ElectronShutdownAdapter({
+    app: {
+      on: (_event, handler) => adapter.onBeforeQuit(handler),
+      exit: (exitCode) => adapter.exit(exitCode),
+    },
+    shutdown: shutdownCoordinator,
+    logger,
+  })
+
   const cleanupStartedResources = async (): Promise<void> => {
-    await sidecar?.stop()
+    await shutdownCoordinator.shutdown()
   }
 
   adapter.registerPluginProtocolSchemeAsPrivileged()
@@ -108,9 +134,7 @@ export async function bootOpenForgeDesktop(
     if (platform !== 'darwin') adapter.quit()
   })
 
-  adapter.onBeforeQuit(() => {
-    void sidecar?.stop()
-  })
+  shutdownAdapter.register()
 
   try {
     await adapter.waitForAppReady()

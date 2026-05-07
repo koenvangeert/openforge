@@ -29,6 +29,8 @@ export interface ElectronBootAdapterOptions {
 
 /** Real Electron Adapter for the Boot Lifecycle Module seam. */
 export function createElectronBootAdapter(options: ElectronBootAdapterOptions): BootLifecycleAdapter {
+  let sidecarLaunchProcess: SidecarReadinessHandle['process'] | null = null
+
   async function createMainWindow(): Promise<BrowserWindow> {
     const preloadPath = createPreloadPath(options.currentDir)
     const window = new BrowserWindow(createMainWindowOptions(preloadPath))
@@ -77,8 +79,12 @@ export function createElectronBootAdapter(options: ElectronBootAdapterOptions): 
       app.on('window-all-closed', handler)
     },
 
-    onBeforeQuit(handler: () => void): void {
+    onBeforeQuit(handler: (event: { preventDefault(): void }) => void): void {
       app.on('before-quit', handler)
+    },
+
+    exit(exitCode?: number): void {
+      app.exit(exitCode)
     },
 
     waitForAppReady(): Promise<void> {
@@ -103,6 +109,9 @@ export function createElectronBootAdapter(options: ElectronBootAdapterOptions): 
         spawn: (command, args, spawnOptions) => asChildProcessLike(spawn(command, [...args], spawnOptions)),
         fetch: (url, init) => fetch(url, init),
         sleep: (ms) => new Promise(resolve => setTimeout(resolve, ms)),
+        onSpawned: (child) => {
+          sidecarLaunchProcess = child
+        },
         logSidecarOutput: true,
         createEventStream: sidecarConfig => {
           let eventListener: ((envelope: SidecarEventEnvelopeLike) => void) | null = null
@@ -122,7 +131,12 @@ export function createElectronBootAdapter(options: ElectronBootAdapterOptions): 
       })
       const readiness = await sidecar.ready()
       console.log(`[electron] Rust sidecar is ready at ${readiness.identity.readinessUrl}`)
+      sidecarLaunchProcess = sidecar.process
       return sidecar
+    },
+
+    getSidecarLaunchProcess(): SidecarReadinessHandle['process'] | null {
+      return sidecarLaunchProcess
     },
 
     registerPluginProtocolHandler(sidecarConfig: SidecarLaunchConfig | null): void {

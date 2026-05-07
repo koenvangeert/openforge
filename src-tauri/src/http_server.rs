@@ -31,6 +31,7 @@ use std::{
 
 const APP_INVOKE_MAX_BODY_BYTES: usize = 96 * 1024 * 1024;
 const APP_EVENT_KEEPALIVE_TEXT: &str = "openforge-event-stream-keepalive";
+const SIDECAR_RUNTIME_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(5);
 #[cfg(test)]
 const APP_EVENT_KEEPALIVE_INTERVAL: Duration = Duration::from_millis(50);
 #[cfg(not(test))]
@@ -967,6 +968,71 @@ pub fn electron_sidecar_app_handle(
     crate::backend_runtime::AppHandle::with_app_paths(app_data_dir, resource_dir)
 }
 
+async fn sidecar_shutdown_signal() {
+    let ctrl_c = async {
+        if let Err(error) = tokio::signal::ctrl_c().await {
+            warn!(
+                "[http_server] Failed to listen for ctrl-c shutdown signal: {}",
+                error
+            );
+        }
+    };
+
+    #[cfg(unix)]
+    {
+        match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) {
+            Ok(mut terminate) => {
+                tokio::select! {
+                    _ = ctrl_c => {},
+                    _ = terminate.recv() => {},
+                }
+            }
+            Err(error) => {
+                warn!(
+                    "[http_server] Failed to listen for SIGTERM shutdown signal: {}",
+                    error
+                );
+                ctrl_c.await;
+            }
+        }
+    }
+
+    #[cfg(not(unix))]
+    ctrl_c.await;
+}
+
+async fn shutdown_sidecar_runtime(state: &AppState) {
+    info!("[http_server] Rust sidecar shutdown cleanup started");
+
+    if let Some(sse_bridge_manager) = &state.sse_bridge_manager {
+        sse_bridge_manager.stop_all().await;
+    }
+
+    if let Some(plugin_host) = &state.plugin_host {
+        if let Err(error) = plugin_host.stop_sidecar().await {
+            warn!(
+                "[http_server] Failed to stop plugin sidecar during shutdown: {}",
+                error
+            );
+        }
+    }
+
+    if let Some(pty_manager) = &state.pty_manager {
+        pty_manager.kill_all().await;
+    }
+
+    if let Some(server_manager) = &state.server_manager {
+        if let Err(error) = server_manager.stop_all().await {
+            warn!(
+                "[http_server] Failed to stop task servers during shutdown: {}",
+                error
+            );
+        }
+    }
+
+    info!("[http_server] Rust sidecar shutdown cleanup completed");
+}
+
 pub async fn start_http_sidecar_server(
     app: crate::backend_runtime::AppHandle,
     db: std::sync::Arc<Mutex<db::Database>>,
@@ -1048,6 +1114,7 @@ async fn start_http_server_with_app_state(
         ));
     }
 
+    let shutdown_state = state.clone();
     let router = create_router(state);
 
     info!("[http_server] Starting on {}", addr);
@@ -1055,7 +1122,26 @@ async fn start_http_server_with_app_state(
     let listener = tokio::net::TcpListener::bind(addr).await?;
     // Signal that the server is listening before entering the serve loop
     let _ = ready_tx.send(());
-    axum::serve(listener, router).await?;
+    if is_electron_sidecar {
+        axum::serve(listener, router)
+            .with_graceful_shutdown(sidecar_shutdown_signal())
+            .await?;
+
+        if tokio::time::timeout(
+            SIDECAR_RUNTIME_SHUTDOWN_TIMEOUT,
+            shutdown_sidecar_runtime(&shutdown_state),
+        )
+        .await
+        .is_err()
+        {
+            warn!(
+                "[http_server] Rust sidecar shutdown cleanup timed out after {:?}",
+                SIDECAR_RUNTIME_SHUTDOWN_TIMEOUT
+            );
+        }
+    } else {
+        axum::serve(listener, router).await?;
+    }
 
     Ok(())
 }
