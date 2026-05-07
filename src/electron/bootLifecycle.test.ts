@@ -48,7 +48,7 @@ class FakeSidecarHandle implements SidecarReadinessHandle {
   eventStream = { start: vi.fn(), ready: vi.fn(), stop: vi.fn(), acceptChunk: vi.fn() }
   ready = vi.fn(async () => readinessSnapshot(this.config))
   snapshot = vi.fn(() => readinessSnapshot(this.config))
-  stop = vi.fn(async () => undefined)
+  stop = vi.fn(async () => ({ status: 'terminated' as const, signal: 'SIGTERM' as const, timedOut: false, error: null }))
 }
 
 class FakeBootLifecycleAdapter implements BootLifecycleAdapter {
@@ -57,9 +57,12 @@ class FakeBootLifecycleAdapter implements BootLifecycleAdapter {
   sidecar = new FakeSidecarHandle()
   backendContext: BootBackendInvokeContext | null = null
   windowAllClosedHandler: (() => void) | null = null
-  beforeQuitHandler: (() => void) | null = null
+  beforeQuitHandler: ((event: { preventDefault(): void }) => void) | null = null
   quit = vi.fn(() => {
     this.operations.push('quit')
+  })
+  exit = vi.fn(() => {
+    this.operations.push('exit')
   })
   startSidecarFailure: Error | null = null
   mainWindowFailure: Error | null = null
@@ -85,9 +88,13 @@ class FakeBootLifecycleAdapter implements BootLifecycleAdapter {
     this.windowAllClosedHandler = handler
   }
 
-  onBeforeQuit(handler: () => void): void {
+  onBeforeQuit(handler: (event: { preventDefault(): void }) => void): void {
     this.operations.push('register-before-quit')
     this.beforeQuitHandler = handler
+  }
+
+  getSidecarLaunchProcess(): SidecarReadinessHandle['process'] | null {
+    return this.sidecar.process
   }
 
   async waitForAppReady(): Promise<void> {
@@ -231,7 +238,10 @@ describe('Electron Boot Lifecycle Module seam', () => {
     adapter.windowAllClosedHandler?.()
     expect(adapter.quit).toHaveBeenCalledTimes(shouldQuit ? 1 : 0)
 
-    adapter.beforeQuitHandler?.()
+    const beforeQuitEvent = { preventDefault: vi.fn() }
+    adapter.beforeQuitHandler?.(beforeQuitEvent)
+    await vi.waitFor(() => expect(adapter.exit).toHaveBeenCalledTimes(1))
+    expect(beforeQuitEvent.preventDefault).toHaveBeenCalledTimes(1)
     expect(adapter.sidecar.stop).toHaveBeenCalledTimes(1)
   })
 })

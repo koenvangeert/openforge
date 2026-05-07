@@ -92,6 +92,26 @@ describe('Electron Rust sidecar supervision', () => {
     expect(child.killCalls).toContain('SIGTERM')
   })
 
+  it('exposes the spawned child before health readiness so shutdown can clean up in-flight launches', async () => {
+    const child = new FakeChild()
+    const spawn = vi.fn(() => child)
+    const onSpawned = vi.fn()
+    const health = new Promise<never>(() => undefined)
+    const fetch = vi.fn(() => health)
+    const sleep = vi.fn(async () => undefined)
+
+    void startSidecar(createSidecarLaunchConfig({ token: 'token-123', port: 17642 }), {
+      spawn,
+      fetch,
+      sleep,
+      onSpawned,
+    }).catch(() => undefined)
+
+    await Promise.resolve()
+
+    expect(onSpawned).toHaveBeenCalledWith(child)
+  })
+
   it('spawns the sidecar, waits for readiness, and exposes a stop handle', async () => {
     const child = new FakeChild()
     const spawn = vi.fn(() => child)
@@ -114,7 +134,7 @@ describe('Electron Rust sidecar supervision', () => {
 
     const stopping = handle.stop({ graceMs: 1, sleep })
     child.emit('exit')
-    await stopping
+    await expect(stopping).resolves.toMatchObject({ status: 'terminated' })
     expect(child.killCalls).toEqual(['SIGTERM'])
   })
 
@@ -144,7 +164,10 @@ describe('Electron Rust sidecar supervision', () => {
     const child = new FakeChild()
     const sleep = vi.fn(async () => undefined)
 
-    await stopSidecar(child, { graceMs: 1, sleep })
+    await expect(stopSidecar(child, { graceMs: 1, sleep })).resolves.toMatchObject({
+      status: 'killed',
+      timedOut: true,
+    })
 
     expect(child.killCalls).toEqual(['SIGTERM', 'SIGKILL'])
   })
@@ -269,5 +292,26 @@ describe('Electron Rust sidecar supervision', () => {
     })).rejects.toThrow('sidecar did not become ready: sidecar readiness check failed: missing backend token')
 
     expect(child.killCalls).toContain('SIGTERM')
+  })
+
+  it('makes a sidecar handle stop idempotent and reports the original stop result', async () => {
+    const child = new FakeChild()
+    const spawn = vi.fn(() => child)
+    const fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ status: 'ok' }) })
+    const sleep = vi.fn(async () => undefined)
+    const handle = await startSidecar(createSidecarLaunchConfig({ token: 'token-123', port: 17642 }), {
+      spawn,
+      fetch,
+      sleep,
+    })
+
+    const first = handle.stop({ graceMs: 1, sleep })
+    const second = handle.stop({ graceMs: 1, sleep })
+    expect(second).toBe(first)
+    child.emit('exit')
+
+    await expect(first).resolves.toMatchObject({ status: 'terminated' })
+    await expect(handle.stop({ graceMs: 1, sleep })).resolves.toMatchObject({ status: 'terminated' })
+    expect(child.killCalls).toEqual(['SIGTERM'])
   })
 })

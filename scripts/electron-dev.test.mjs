@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events'
 import { describe, expect, it, vi } from 'vitest'
-import { ELECTRON_DEV_DISABLE_AUTO_SEED_ENV, ELECTRON_DEV_SEED_APP_DATA_DIR_ENV, ELECTRON_DEV_SEED_DB_PATH_ENV, ELECTRON_RENDERER_URL, assertBackendPortAvailable, assertElectronDebugPortAvailable, assertVitePortAvailable, buildElectronDebugArgs, buildElectronDevEnv, cleanupDevProcesses, electronSidecarPath, rendererUrlForPort, resolveElectronDevBackendEnv, resolveElectronDevRuntimeOptions, stopProcess, waitForVite } from './electron-dev.mjs'
+import { DevScriptCleanupAdapter, ELECTRON_DEV_DISABLE_AUTO_SEED_ENV, ELECTRON_DEV_SEED_APP_DATA_DIR_ENV, ELECTRON_DEV_SEED_DB_PATH_ENV, ELECTRON_RENDERER_URL, assertBackendPortAvailable, assertElectronDebugPortAvailable, assertVitePortAvailable, buildElectronDebugArgs, buildElectronDevEnv, cleanupDevProcesses, electronSidecarPath, rendererUrlForPort, resolveElectronDevBackendEnv, resolveElectronDevRuntimeOptions, stopProcess, waitForVite } from './electron-dev.mjs'
 import { resolveRustSidecarLayout } from './rust-sidecar-layout.mjs'
 
 const defaultTestLayout = resolveRustSidecarLayout({
@@ -668,5 +668,38 @@ describe('electron dev script environment', () => {
       },
     )).resolves.toEqual({ processes: [], runtimeDirs: [] })
     expect(rm).not.toHaveBeenCalled()
+  })
+
+  it('exposes dev cleanup as an idempotent Shutdown Cleanup Module adapter', async () => {
+    const vite = createChildProcessMock()
+    const electron = createChildProcessMock()
+    const rm = vi.fn(async () => undefined)
+    const adapter = new DevScriptCleanupAdapter(
+      () => ({ vite, electron }),
+      {
+        graceMs: 100,
+        runtimeOptions: { tempRuntimeDirs: ['/tmp/openforge-electron-user-data-1'] },
+        rm,
+      },
+    )
+
+    const first = adapter.shutdown()
+    const second = adapter.shutdown()
+    expect(second).toBe(first)
+    expect(vite.killSignals).toEqual(['SIGTERM'])
+    expect(electron.killSignals).toEqual(['SIGTERM'])
+
+    vite.emitExit(0, null)
+    electron.emitExit(0, null)
+
+    await expect(first).resolves.toEqual({
+      processes: ['terminated', 'terminated'],
+      runtimeDirs: ['removed'],
+    })
+    await expect(adapter.shutdown()).resolves.toEqual({
+      processes: ['terminated', 'terminated'],
+      runtimeDirs: ['removed'],
+    })
+    expect(rm).toHaveBeenCalledTimes(1)
   })
 })
