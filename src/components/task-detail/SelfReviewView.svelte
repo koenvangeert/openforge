@@ -259,6 +259,7 @@
               existingComments={inlineReviewComments}
               pendingComments={pendingInlineComments}
               onPendingCommentsChange={handlePendingInlineCommentsChange}
+              inlineDraftScopeId={task.id}
               {fileTreeVisible}
               onToggleFileTree={() => { fileTreeVisible = !fileTreeVisible }}
               fetchFileContents={fetchTaskFileContents}

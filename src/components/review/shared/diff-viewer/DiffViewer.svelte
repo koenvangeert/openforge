@@ -5,6 +5,7 @@
   import type { PrFileDiff, ReviewComment, ReviewSubmissionComment, AgentReviewComment } from '../../../../lib/types'
   import { pendingManualComments, agentReviewComments } from '../../../../lib/stores'
   import { updateAgentReviewCommentStatus } from '../../../../lib/ipc'
+  import { clearSelfReviewInlineCommentDraft, getSelfReviewInlineCommentDraft, setSelfReviewInlineCommentDraft } from '../../../../lib/taskScopedReviewComments'
   import { isTruncated, getTruncationStats, isImageFileDiff, getImagePreviewDataUrl, type FileContents } from '../../../../lib/diffAdapter'
   import { buildExtendData, type CommentDisplayData } from '../../../../lib/diffComments'
   import { timeAgo } from '../../../../lib/timeAgo'
@@ -33,15 +34,23 @@
     agentComments?: AgentReviewComment[]
     onScrollTopChange?: (scrollTop: number) => void
     initialScrollTop?: number
+    inlineDraftScopeId?: string
   }
   type PendingCommentsControl =
     | { pendingComments?: undefined; onPendingCommentsChange?: undefined }
     | { pendingComments: ReviewSubmissionComment[]; onPendingCommentsChange: (comments: ReviewSubmissionComment[]) => void }
   type Props = BaseProps & PendingCommentsControl
-  let { files = [], existingComments = [], repoOwner: _repoOwner = '', repoName: _repoName = '', fileTreeVisible = true, onToggleFileTree, fetchFileContents, batchFetchFileContents, toolbarExtra, includeUncommitted = false, agentComments = [], pendingComments, onPendingCommentsChange, onScrollTopChange, initialScrollTop = 0 }: Props = $props()
+  let { files = [], existingComments = [], repoOwner: _repoOwner = '', repoName: _repoName = '', fileTreeVisible = true, onToggleFileTree, fetchFileContents, batchFetchFileContents, toolbarExtra, includeUncommitted = false, agentComments = [], pendingComments, onPendingCommentsChange, onScrollTopChange, initialScrollTop = 0, inlineDraftScopeId }: Props = $props()
   let diffViewMode = $state<DiffModeEnum>(DiffModeEnum.Split)
   let diffViewWrap = $state(false)
   let commentText = $state('')
+  type InlineCommentDraftSide = ReviewSubmissionComment['side']
+  type InlineCommentDraftKey = {
+    filename: string
+    lineNumber: number
+    side: InlineCommentDraftSide
+  }
+  let activeInlineCommentDraftKey = $state<InlineCommentDraftKey | null>(null)
   let collapsedFiles = $state(new Set<string>())
   let scrollContainerEl = $state<HTMLElement | null>(null)
   let pendingScrollTop: number | null = null
@@ -209,17 +218,67 @@
     }
   }
 
+  function inlineCommentDraftSide(side: SplitSide): InlineCommentDraftSide {
+    return side === SplitSide.old ? 'LEFT' : 'RIGHT'
+  }
+
+  function isActiveInlineCommentDraft(filename: string, lineNumber: number, side: InlineCommentDraftSide) {
+    return activeInlineCommentDraftKey?.filename === filename &&
+      activeInlineCommentDraftKey.lineNumber === lineNumber &&
+      activeInlineCommentDraftKey.side === side
+  }
+
+  function getInlineCommentText(filename: string, lineNumber: number, side: SplitSide) {
+    const reviewSide = inlineCommentDraftSide(side)
+    if (isActiveInlineCommentDraft(filename, lineNumber, reviewSide)) {
+      return commentText
+    }
+    if (inlineDraftScopeId) {
+      return getSelfReviewInlineCommentDraft(inlineDraftScopeId, filename, lineNumber, reviewSide)
+    }
+    return ''
+  }
+
+  function openInlineCommentWidget(filename: string, lineNumber: number, side: SplitSide) {
+    const reviewSide = inlineCommentDraftSide(side)
+    activeInlineCommentDraftKey = { filename, lineNumber, side: reviewSide }
+    commentText = inlineDraftScopeId
+      ? getSelfReviewInlineCommentDraft(inlineDraftScopeId, filename, lineNumber, reviewSide)
+      : ''
+  }
+
+  function setInlineCommentText(filename: string, lineNumber: number, side: SplitSide, text: string) {
+    const reviewSide = inlineCommentDraftSide(side)
+    activeInlineCommentDraftKey = { filename, lineNumber, side: reviewSide }
+    commentText = text
+    if (inlineDraftScopeId) {
+      setSelfReviewInlineCommentDraft(inlineDraftScopeId, filename, lineNumber, reviewSide, text)
+    }
+  }
+
+  function clearInlineCommentText(filename: string, lineNumber: number, side: SplitSide) {
+    const reviewSide = inlineCommentDraftSide(side)
+    if (inlineDraftScopeId) {
+      clearSelfReviewInlineCommentDraft(inlineDraftScopeId, filename, lineNumber, reviewSide)
+    }
+    if (isActiveInlineCommentDraft(filename, lineNumber, reviewSide)) {
+      commentText = ''
+      activeInlineCommentDraftKey = null
+    }
+  }
+
   function submitInlineComment(filename: string, lineNumber: number, side: SplitSide, onClose: () => void) {
-    if (!commentText.trim()) return
+    const text = getInlineCommentText(filename, lineNumber, side)
+    if (!text.trim()) return
     const newComment: ReviewSubmissionComment = {
       path: filename,
       line: lineNumber,
-      side: side === SplitSide.old ? 'LEFT' : 'RIGHT',
-      body: commentText.trim()
+      side: inlineCommentDraftSide(side),
+      body: text.trim()
     }
     setVisiblePendingComments([...visiblePendingComments, newComment])
+    clearInlineCommentText(filename, lineNumber, side)
     onClose()
-    commentText = ''
   }
 
   // Large diff warning banner calculations
@@ -450,8 +509,8 @@
                   diffViewAddWidget={true}
                   diffViewFontSize={12}
                   registerHighlighter={diffHighlighter}
-                  onAddWidgetClick={(_lineNumber, _side) => {
-                    commentText = ''
+                  onAddWidgetClick={(lineNumber, side) => {
+                    openInlineCommentWidget(file.filename, lineNumber, side)
                   }}
                 >
                     {#snippet renderExtendLine({ lineNumber: _ln, side: _side, data, diffFile: _df, onUpdate: _ou }: { lineNumber: number; side: SplitSide; data: CommentDisplayData; diffFile: import('@git-diff-view/core').DiffFile; onUpdate: () => void })}
@@ -540,8 +599,12 @@
                           class="textarea textarea-bordered w-full min-h-[60px] text-[0.8rem] leading-relaxed resize-y"
                           placeholder="Leave a comment… (⇧Enter to submit)"
                           rows="3"
-                          bind:value={commentText}
+                          value={getInlineCommentText(file.filename, lineNumber, side)}
                           use:autofocus
+                          oninput={(e: Event) => {
+                            if (!(e.currentTarget instanceof HTMLTextAreaElement)) return
+                            setInlineCommentText(file.filename, lineNumber, side, e.currentTarget.value)
+                          }}
                           onkeydown={(e: KeyboardEvent) => {
                             if (e.key === 'Enter' && (e.metaKey || e.ctrlKey || e.shiftKey)) {
                               e.preventDefault()
@@ -554,6 +617,7 @@
                             type="button"
                             class="btn btn-sm border border-base-300 hover:border-primary hover:text-primary"
                             onclick={() => {
+                              clearInlineCommentText(file.filename, lineNumber, side)
                               onClose()
                             }}
                           >Cancel</button>
