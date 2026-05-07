@@ -53,6 +53,36 @@ pub(crate) fn build_pi_args(
     args
 }
 
+pub(crate) fn build_opencode_run_args(
+    prompt: &str,
+    resume_session_id: Option<&str>,
+    continue_session: bool,
+    agent: Option<&str>,
+    model: Option<&str>,
+) -> Vec<String> {
+    let mut args = vec!["run".to_string()];
+    if let Some(session_id) = resume_session_id {
+        args.push("--session".to_string());
+        args.push(session_id.to_string());
+    } else if continue_session {
+        args.push("--continue".to_string());
+    }
+    if let Some(agent) = agent.filter(|value| !value.is_empty()) {
+        args.push("--agent".to_string());
+        args.push(agent.to_string());
+    }
+    if let Some(model) = model.filter(|value| !value.is_empty()) {
+        args.push("--model".to_string());
+        args.push(model.to_string());
+    }
+    args.push("--title".to_string());
+    args.push("OpenForge task".to_string());
+    if !prompt.is_empty() {
+        args.push(prompt.to_string());
+    }
+    args
+}
+
 pub(super) fn resolve_shell_path<'a>(
     shell: Option<&str>,
     candidates: impl IntoIterator<Item = &'a str>,
@@ -73,4 +103,42 @@ pub(super) fn resolve_shell_path<'a>(
 pub(crate) fn get_shell_path() -> String {
     let shell = std::env::var("SHELL").ok();
     resolve_shell_path(shell.as_deref(), ["/bin/zsh", "/bin/bash", "/bin/sh"])
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn opencode_run_args_use_cli_session_without_attaching_to_openforge_server() {
+        assert_eq!(
+            build_opencode_run_args(
+                "fix the bug",
+                Some("oc-session-1"),
+                false,
+                Some("build"),
+                Some("anthropic/claude-sonnet-4"),
+            ),
+            vec![
+                "run",
+                "--session",
+                "oc-session-1",
+                "--agent",
+                "build",
+                "--model",
+                "anthropic/claude-sonnet-4",
+                "--title",
+                "OpenForge task",
+                "fix the bug",
+            ]
+        );
+    }
+
+    #[test]
+    fn opencode_run_args_continue_without_prompt_for_startup_resume() {
+        assert_eq!(
+            build_opencode_run_args("", None, true, None, None),
+            vec!["run", "--continue", "--title", "OpenForge task"]
+        );
+    }
 }

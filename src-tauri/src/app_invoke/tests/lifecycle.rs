@@ -294,3 +294,42 @@ async fn test_start_opencode_sse_bridge_for_app_is_idempotent_when_bridge_alread
         .await;
     let _ = std::fs::remove_file(path);
 }
+
+#[tokio::test]
+async fn finalize_claude_session_completes_successful_opencode_pty_run() {
+    let (state, path) = test_state("finalize_opencode_success");
+    let task_id = {
+        let db = crate::db::acquire_db(&state.db);
+        let task = db
+            .create_task("OpenCode task", "doing", None, None, None, None)
+            .expect("create task");
+        db.create_agent_session(
+            "session-opencode",
+            &task.id,
+            None,
+            "implementing",
+            "running",
+            "opencode",
+        )
+        .expect("create session");
+        task.id
+    };
+
+    invoke_ok(
+        &state,
+        "finalize_claude_session",
+        json!({ "taskId": task_id, "success": true }),
+    )
+    .await;
+
+    let db = crate::db::acquire_db(&state.db);
+    assert_eq!(
+        db.get_agent_session("session-opencode")
+            .expect("get opencode")
+            .expect("opencode exists")
+            .status,
+        "completed"
+    );
+
+    let _ = std::fs::remove_file(path);
+}

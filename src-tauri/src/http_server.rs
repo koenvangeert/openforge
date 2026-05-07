@@ -241,7 +241,17 @@ pub struct PiAgentLifecyclePayload {
     pub pty_instance_id: u64,
 }
 
-fn pi_session_matches_pty_instance(session: &db::AgentSessionRow, pty_instance_id: u64) -> bool {
+/// Payload from the installed OpenCode plugin event hook.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OpenCodePluginEventPayload {
+    pub task_id: String,
+    pub pty_instance_id: u64,
+    pub event_type: String,
+    pub session_id: Option<String>,
+    pub status_type: Option<String>,
+}
+
+fn session_matches_pty_instance(session: &db::AgentSessionRow, pty_instance_id: u64) -> bool {
     session
         .checkpoint_data
         .as_deref()
@@ -314,7 +324,7 @@ fn update_pi_session_status_for_pty(
     if let Ok(Some(session)) = db.get_latest_session_for_ticket(task_id) {
         if session.provider == "pi"
             && eligible_statuses.contains(&session.status.as_str())
-            && pi_session_matches_pty_instance(&session, pty_instance_id)
+            && session_matches_pty_instance(&session, pty_instance_id)
         {
             if session.status == target_status {
                 return Some(target_status.to_string());
@@ -707,6 +717,95 @@ pub async fn pi_agent_end_handler(
     Ok(Json(serde_json::json!({ "status": "ok" })))
 }
 
+fn opencode_status_from_event(
+    event_type: &str,
+    status_type: Option<&str>,
+) -> Option<(&'static str, &'static [&'static str])> {
+    match (event_type, status_type) {
+        ("session.status", Some("busy" | "retry" | "running"))
+        | ("session.created" | "session.updated" | "message.updated", _)
+        | ("tool.execute.before" | "tool.execute.after", _) => Some((
+            "running",
+            &["completed", "paused", "interrupted", "running"],
+        )),
+        ("session.status", Some("error" | "failed")) | ("session.error", _) => {
+            Some(("failed", &["running", "paused"]))
+        }
+        // Do not complete on idle hook events: OpenCode can emit idle for a
+        // parent while descendant work is still settling. The PTY process exit
+        // is the completion signal for `opencode run`, which preserves the old
+        // SSE bridge's conservative descendant-completion guard without
+        // requiring OpenForge to own an OpenCode server client.
+        ("session.status", Some("idle")) | ("session.idle", _) => None,
+        _ => None,
+    }
+}
+
+pub async fn opencode_event_handler(
+    State(state): State<AppState>,
+    Json(payload): Json<OpenCodePluginEventPayload>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    publish_app_event_to_runtime(
+        state.app.as_ref(),
+        &state.app_event_tx,
+        "opencode-plugin-event",
+        &serde_json::json!({
+            "task_id": payload.task_id,
+            "event_type": payload.event_type,
+            "session_id": payload.session_id,
+            "status_type": payload.status_type,
+        }),
+    );
+
+    let status_update = {
+        let db = state.db.lock().unwrap();
+        let Ok(Some(session)) = db.get_latest_session_for_ticket(&payload.task_id) else {
+            return Ok(Json(serde_json::json!({ "status": "ok" })));
+        };
+        if session.provider != "opencode"
+            || !session_matches_pty_instance(&session, payload.pty_instance_id)
+        {
+            return Ok(Json(serde_json::json!({ "status": "ok" })));
+        }
+
+        if session.opencode_session_id.is_none() {
+            if let Some(session_id) = payload.session_id.as_deref().filter(|id| !id.is_empty()) {
+                if let Err(error) = db.set_agent_session_opencode_id(&session.id, session_id) {
+                    error!(
+                        "[http_server] Failed to set opencode_session_id for session {}: {}",
+                        session.id, error
+                    );
+                }
+            }
+        }
+
+        let Some((new_status, allowed_current_statuses)) =
+            opencode_status_from_event(&payload.event_type, payload.status_type.as_deref())
+        else {
+            return Ok(Json(serde_json::json!({ "status": "ok" })));
+        };
+        if !allowed_current_statuses.contains(&session.status.as_str()) {
+            None
+        } else if let Err(error) =
+            db.update_agent_session(&session.id, &session.stage, new_status, None, None)
+        {
+            error!(
+                "[http_server] Failed to update OpenCode session status for task {}: {}",
+                payload.task_id, error
+            );
+            None
+        } else {
+            Some(new_status.to_string())
+        }
+    };
+
+    if let Some(new_status) = status_update {
+        emit_agent_status_changed(&state, &payload.task_id, &new_status, "opencode");
+    }
+
+    Ok(Json(serde_json::json!({ "status": "ok" })))
+}
+
 pub async fn hook_stop_handler(
     State(state): State<AppState>,
     Json(payload): Json<ClaudeHookPayload>,
@@ -931,6 +1030,7 @@ pub fn create_router(state: AppState) -> Router {
         .route("/project/:id/attention", get(get_project_attention_handler))
         .route("/hooks/pi-agent-start", post(pi_agent_start_handler))
         .route("/hooks/pi-agent-end", post(pi_agent_end_handler))
+        .route("/hooks/opencode-event", post(opencode_event_handler))
         .route("/hooks/stop", post(hook_stop_handler))
         .route("/hooks/pre-tool-use", post(hook_pre_tool_use_handler))
         .route("/hooks/post-tool-use", post(hook_post_tool_use_handler))

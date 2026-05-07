@@ -587,3 +587,140 @@ fn test_map_hook_to_status_full_lifecycle() {
     }
     assert_eq!(status, "completed");
 }
+
+#[test]
+fn opencode_status_events_preserve_payload_semantics_without_idle_completion() {
+    assert_eq!(
+        opencode_status_from_event("session.status", Some("busy")),
+        Some((
+            "running",
+            &["completed", "paused", "interrupted", "running"] as &[_]
+        ))
+    );
+    assert_eq!(
+        opencode_status_from_event("session.status", Some("retry")),
+        Some((
+            "running",
+            &["completed", "paused", "interrupted", "running"] as &[_]
+        ))
+    );
+    assert_eq!(
+        opencode_status_from_event("session.status", Some("error")),
+        Some(("failed", &["running", "paused"] as &[_]))
+    );
+    assert_eq!(
+        opencode_status_from_event("session.status", Some("idle")),
+        None
+    );
+    assert_eq!(opencode_status_from_event("session.idle", None), None);
+}
+
+#[tokio::test]
+async fn opencode_hook_stores_session_id_and_does_not_complete_on_idle_status() {
+    let (state, path) = test_state("opencode_hook_idle_no_complete");
+    let task_id = {
+        let db = state.db.lock().expect("lock db");
+        let task = db
+            .create_task("OpenCode task", "doing", None, None, None, None)
+            .expect("create task");
+        db.create_agent_session(
+            "ses-opencode-running",
+            &task.id,
+            None,
+            "implementing",
+            "running",
+            "opencode",
+        )
+        .expect("create opencode session");
+        db.update_agent_session(
+            "ses-opencode-running",
+            "implementing",
+            "running",
+            Some(r#"{"pty_instance_id":77}"#),
+            None,
+        )
+        .expect("store pty instance");
+        task.id
+    };
+
+    let _ = opencode_event_handler(
+        State(state.clone()),
+        Json(OpenCodePluginEventPayload {
+            task_id: task_id.clone(),
+            pty_instance_id: 77,
+            event_type: "session.status".to_string(),
+            session_id: Some("oc-session-77".to_string()),
+            status_type: Some("idle".to_string()),
+        }),
+    )
+    .await
+    .expect("handler response");
+
+    let session = state
+        .db
+        .lock()
+        .expect("lock db")
+        .get_agent_session("ses-opencode-running")
+        .expect("get session")
+        .expect("session exists");
+    assert_eq!(session.status, "running");
+    assert_eq!(
+        session.opencode_session_id,
+        Some("oc-session-77".to_string())
+    );
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
+async fn opencode_hook_marks_error_status_failed() {
+    let (state, path) = test_state("opencode_hook_error_failed");
+    let task_id = {
+        let db = state.db.lock().expect("lock db");
+        let task = db
+            .create_task("OpenCode task", "doing", None, None, None, None)
+            .expect("create task");
+        db.create_agent_session(
+            "ses-opencode-error",
+            &task.id,
+            None,
+            "implementing",
+            "running",
+            "opencode",
+        )
+        .expect("create opencode session");
+        db.update_agent_session(
+            "ses-opencode-error",
+            "implementing",
+            "running",
+            Some(r#"{"pty_instance_id":78}"#),
+            None,
+        )
+        .expect("store pty instance");
+        task.id
+    };
+
+    let _ = opencode_event_handler(
+        State(state.clone()),
+        Json(OpenCodePluginEventPayload {
+            task_id: task_id.clone(),
+            pty_instance_id: 78,
+            event_type: "session.status".to_string(),
+            session_id: None,
+            status_type: Some("error".to_string()),
+        }),
+    )
+    .await
+    .expect("handler response");
+
+    let session = state
+        .db
+        .lock()
+        .expect("lock db")
+        .get_agent_session("ses-opencode-error")
+        .expect("get session")
+        .expect("session exists");
+    assert_eq!(session.status, "failed");
+
+    let _ = std::fs::remove_file(path);
+}

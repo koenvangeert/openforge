@@ -31,6 +31,7 @@ pub struct OpenCodeClient {
     base_url: String,
 }
 
+#[allow(dead_code)]
 impl OpenCodeClient {
     /// Create a new OpenCode client with default base URL
     pub fn new() -> Self {
@@ -467,12 +468,14 @@ impl Default for OpenCodeClient {
 // ============================================================================
 
 /// Request to create a new session
+#[allow(dead_code)]
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CreateSessionRequest {
     pub title: String,
 }
 
 /// Response from creating a session
+#[allow(dead_code)]
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CreateSessionResponse {
     pub id: String,
@@ -481,6 +484,7 @@ pub struct CreateSessionResponse {
 }
 
 /// Part of a prompt (text, image, etc.)
+#[allow(dead_code)]
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Part {
     #[serde(rename = "type")]
@@ -498,6 +502,7 @@ pub struct PromptModel {
 }
 
 /// Request to send a prompt asynchronously
+#[allow(dead_code)]
 #[derive(Debug, Serialize)]
 pub struct PromptAsyncRequest {
     pub parts: Vec<Part>,

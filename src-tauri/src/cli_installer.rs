@@ -280,6 +280,8 @@ pub fn install_openforge_cli() -> Result<(), Box<dyn std::error::Error>> {
 
     let home_dir = dirs::home_dir();
 
+    crate::opencode_plugin::ensure_opencode_plugin_installed()?;
+
     if let Some(home_dir) = home_dir.as_deref() {
         write_provider_skill_files(home_dir, &config_dir)?;
         install_cli_launcher(home_dir, &config_dir)?;

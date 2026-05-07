@@ -19,6 +19,7 @@ mod github_runtime;
 mod http_server;
 mod migration;
 mod opencode_client;
+mod opencode_plugin;
 mod pi_extension;
 mod plugin_host;
 mod plugin_installation;
@@ -36,9 +37,8 @@ mod sse_bridge;
 mod user_environment;
 mod whisper_manager;
 use log::{debug, error, info, warn};
-use opencode_client::OpenCodeClient;
 use pty_manager::PtyManager;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
@@ -59,15 +59,17 @@ pub(crate) struct ResumeTarget {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)]
 pub(crate) enum ResumeSessionPersistence {
     LeaveExisting,
     Running,
     Completed,
 }
 
+#[cfg(test)]
 fn opencode_resume_persistence(
     opencode_session_id: Option<&str>,
-    statuses: &HashMap<String, opencode_client::SessionStatusInfo>,
+    statuses: &std::collections::HashMap<String, opencode_client::SessionStatusInfo>,
 ) -> ResumeSessionPersistence {
     let Some(session_id) = opencode_session_id else {
         return ResumeSessionPersistence::LeaveExisting;
@@ -85,39 +87,17 @@ fn opencode_resume_persistence(
 
 pub(crate) async fn resolve_resume_session_persistence(
     provider_name: &str,
-    latest_session: Option<&db::AgentSessionRow>,
-    port: u16,
+    _latest_session: Option<&db::AgentSessionRow>,
+    _port: u16,
 ) -> ResumeSessionPersistence {
-    if provider_name != "opencode" {
+    if provider_name == "opencode" {
+        // OpenForge no longer owns an `opencode serve` process to query during
+        // startup. OpenCode status is reconciled through the installed plugin
+        // hooks as the CLI process resumes, matching Claude Code and Pi.
         return ResumeSessionPersistence::Running;
     }
 
-    let Some(session) = latest_session else {
-        return ResumeSessionPersistence::LeaveExisting;
-    };
-
-    let Some(opencode_session_id) = session.opencode_session_id.as_deref() else {
-        return ResumeSessionPersistence::LeaveExisting;
-    };
-
-    let client = OpenCodeClient::with_base_url(format!("http://127.0.0.1:{}", port));
-
-    for attempt in 1..=3 {
-        match client.get_all_session_statuses().await {
-            Ok(statuses) => {
-                return opencode_resume_persistence(Some(opencode_session_id), &statuses);
-            }
-            Err(e) => {
-                warn!(
-                    "[startup] Failed to fetch OpenCode session status for {} on attempt {}: {}",
-                    session.ticket_id, attempt, e
-                );
-                tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
-            }
-        }
-    }
-
-    ResumeSessionPersistence::LeaveExisting
+    ResumeSessionPersistence::Running
 }
 
 pub(crate) fn load_resume_targets(db: &db::Database) -> rusqlite::Result<Vec<ResumeTarget>> {
@@ -344,7 +324,7 @@ async fn resume_task_servers(
 
                 // Mark provider sessions as interrupted on failure for providers that do not
                 // have an external status source to reconcile against after startup.
-                if matches!(provider_name, "claude-code" | "pi") {
+                if matches!(provider_name, "claude-code" | "pi" | "opencode") {
                     if let Some(ref session) = latest_session {
                         let db = app.state::<Arc<Mutex<db::Database>>>();
                         let db_lock = db.lock().unwrap();
@@ -380,7 +360,8 @@ fn should_start_project_root_server(
     project_path: Option<&str>,
     existing_port: Option<u16>,
 ) -> bool {
-    provider == "opencode" && project_path.is_some() && existing_port.is_none()
+    let _ = (provider, project_path, existing_port);
+    false
 }
 
 async fn start_project_root_server(
@@ -451,7 +432,7 @@ pub(crate) fn restore_resumed_session_state(
         &target.kind,
         target.branch_name.as_deref(),
         provider_name,
-        if provider_name == "claude-code" {
+        if matches!(provider_name, "claude-code" | "opencode") {
             None
         } else {
             Some(port as i64)
@@ -464,7 +445,7 @@ pub(crate) fn restore_resumed_session_state(
         );
     }
 
-    if provider_name != "claude-code" && target.kind == "git_worktree" {
+    if !matches!(provider_name, "claude-code" | "opencode") && target.kind == "git_worktree" {
         if let Err(e) = db.update_worktree_server(&target.task_id, port as i64, 0) {
             warn!(
                 "[startup] Failed to update worktree server for {}: {}",
@@ -499,13 +480,14 @@ pub(crate) fn restore_resumed_session_state(
         };
 
         if let Some(status) = persisted_status {
-            let checkpoint_data = if status == "running" || provider_name == "pi" {
-                pty_checkpoint_data
-                    .as_deref()
-                    .or(session.checkpoint_data.as_deref())
-            } else {
-                None
-            };
+            let checkpoint_data =
+                if status == "running" || matches!(provider_name, "pi" | "opencode") {
+                    pty_checkpoint_data
+                        .as_deref()
+                        .or(session.checkpoint_data.as_deref())
+                } else {
+                    None
+                };
 
             if let Err(e) =
                 db.update_agent_session(&session.id, &session.stage, status, checkpoint_data, None)
@@ -776,8 +758,8 @@ mod tests {
     }
 
     #[test]
-    fn test_should_start_project_root_server_for_opencode_project() {
-        assert!(should_start_project_root_server(
+    fn test_should_not_start_project_root_server_for_opencode_project() {
+        assert!(!should_start_project_root_server(
             "opencode",
             Some("/tmp/project"),
             None
@@ -918,14 +900,14 @@ mod tests {
             .get_worktree_for_task(&task.id)
             .expect("get worktree failed")
             .expect("missing worktree");
-        assert_eq!(worktree.opencode_port, Some(4312));
+        assert_eq!(worktree.opencode_port, None);
 
         let workspace = db
             .get_task_workspace_for_task(&task.id)
             .expect("get task workspace failed")
             .expect("missing task workspace");
         assert_eq!(workspace.workspace_path, "/tmp/test-repo/.worktrees/T-100");
-        assert_eq!(workspace.opencode_port, Some(4312));
+        assert_eq!(workspace.opencode_port, None);
         assert_eq!(workspace.kind, "git_worktree");
 
         drop(db);

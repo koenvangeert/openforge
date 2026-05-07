@@ -1,10 +1,12 @@
 use super::*;
 
+#[cfg(test)]
 pub(crate) enum ExistingSseBridge {
     Error,
     TreatAsResumed,
 }
 
+#[cfg(test)]
 pub(crate) async fn start_opencode_sse_bridge_for_app(
     state: &AppState,
     task_id: &str,
@@ -126,13 +128,6 @@ pub(super) async fn handle_app_resume_startup_sessions_command(
             "PTY manager is not available".to_string(),
         ));
     };
-    let Some(server_manager) = state.server_manager.as_ref() else {
-        return Err((
-            StatusCode::SERVICE_UNAVAILABLE,
-            "Server manager is not available".to_string(),
-        ));
-    };
-
     for target in targets {
         let workspace_path = std::path::Path::new(&target.workspace_path);
         if !workspace_path.exists() {
@@ -178,44 +173,48 @@ pub(super) async fn handle_app_resume_startup_sessions_command(
 
         let result = match provider_name {
             "opencode" => {
-                let port = match server_manager
-                    .spawn_server(&target.task_id, workspace_path)
+                let resume_id = session_ref.opencode_session_id.as_deref();
+                let pty_instance_id = match pty_manager
+                    .spawn_opencode_run_pty(
+                        &target.task_id,
+                        workspace_path,
+                        "",
+                        resume_id,
+                        resume_id.is_none(),
+                        None,
+                        None,
+                        80,
+                        24,
+                        state.app.clone(),
+                        state.app_event_tx.clone(),
+                    )
                     .await
                 {
-                    Ok(port) => port,
+                    Ok(instance_id) => instance_id,
                     Err(e) => {
                         error!(
                             "[startup] Failed to resume opencode for task {}: {}",
                             target.task_id, e
                         );
+                        if let Some(session) = latest_session.as_ref() {
+                            let db = crate::db::acquire_db(&state.db);
+                            let _ = db.update_agent_session(
+                                &session.id,
+                                &session.stage,
+                                "interrupted",
+                                None,
+                                Some("App restarted"),
+                            );
+                        }
                         publish_server_resumed(state, &target.task_id, 0, &target.workspace_path);
                         continue;
                     }
                 };
-                if let Some(opencode_session_id) = session_ref.opencode_session_id.clone() {
-                    if let Err((_, e)) = start_opencode_sse_bridge_for_app(
-                        state,
-                        &target.task_id,
-                        Some(opencode_session_id),
-                        port,
-                        ExistingSseBridge::TreatAsResumed,
-                    )
-                    .await
-                    {
-                        error!(
-                            "[startup] Failed to resume OpenCode SSE bridge for task {}: {}",
-                            target.task_id, e
-                        );
-                        let _ = server_manager.stop_server(&target.task_id).await;
-                        publish_server_resumed(state, &target.task_id, 0, &target.workspace_path);
-                        continue;
-                    }
-                }
                 crate::providers::ProviderSessionResult {
-                    port,
-                    opencode_session_id: session_ref.opencode_session_id.clone(),
+                    port: 0,
+                    opencode_session_id: resume_id.map(str::to_string),
                     pi_session_id: None,
-                    pty_instance_id: None,
+                    pty_instance_id: Some(pty_instance_id),
                 }
             }
             "claude-code" => {
@@ -390,18 +389,9 @@ pub(super) async fn handle_app_abort_implementation_command(
     if let Some(session) = session {
         match session.provider.as_str() {
             "opencode" => {
-                if let Some(server_manager) = state.server_manager.as_ref() {
-                    if let Some(opencode_session_id) = session.opencode_session_id.as_ref() {
-                        if let Some(port) = server_manager.get_server_port(&task_id).await {
-                            let client =
-                                OpenCodeClient::with_base_url(format!("http://127.0.0.1:{port}"));
-                            let _ = client.abort_session(opencode_session_id).await;
-                        }
-                    }
-                    if let Some(sse_bridge_manager) = state.sse_bridge_manager.as_ref() {
-                        sse_bridge_manager.stop_bridge(&task_id).await;
-                    }
-                    let _ = server_manager.stop_server(&task_id).await;
+                if let Some(pty_manager) = state.pty_manager.as_ref() {
+                    pty_manager.kill_shells_for_task(&task_id).await;
+                    let _ = pty_manager.kill_pty(&task_id).await;
                 }
             }
             "claude-code" | "pi" => {
@@ -413,7 +403,8 @@ pub(super) async fn handle_app_abort_implementation_command(
             _ => {}
         }
 
-        let abort_status = if matches!(session.provider.as_str(), "claude-code" | "pi") {
+        let abort_status = if matches!(session.provider.as_str(), "claude-code" | "pi" | "opencode")
+        {
             "interrupted"
         } else {
             "failed"
@@ -553,37 +544,30 @@ pub(super) async fn handle_app_start_implementation_command(
         additional_instructions.as_deref(),
         code_cleanup_enabled,
     );
-    let mut deferred_opencode_prompt: Option<(String, u16, Option<String>)> = None;
 
     let provider_result = match provider_name.as_str() {
         "opencode" => {
-            let server_manager = state.server_manager.as_ref().ok_or_else(|| {
-                (
-                    StatusCode::SERVICE_UNAVAILABLE,
-                    "Server manager is not available".to_string(),
+            let pty_instance_id = pty_manager
+                .spawn_opencode_run_pty(
+                    &task_id,
+                    &working_dir,
+                    &prompt,
+                    None,
+                    false,
+                    task.agent.as_deref(),
+                    None,
+                    80,
+                    24,
+                    state.app.clone(),
+                    state.app_event_tx.clone(),
                 )
-            })?;
-            let port = server_manager
-                .spawn_server(&task_id, &working_dir)
                 .await
                 .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-            let client = OpenCodeClient::with_base_url(format!("http://127.0.0.1:{port}"));
-            let opencode_session_id = client
-                .create_session(format!("Task {task_id}"))
-                .await
-                .map_err(|e| {
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        format!("Failed to create session: {e}"),
-                    )
-                })?;
-            deferred_opencode_prompt =
-                Some((opencode_session_id.clone(), port, task.agent.clone()));
             crate::providers::ProviderSessionResult {
-                port,
-                opencode_session_id: Some(opencode_session_id),
+                port: 0,
+                opencode_session_id: None,
                 pi_session_id: None,
-                pty_instance_id: None,
+                pty_instance_id: Some(pty_instance_id),
             }
         }
         "claude-code" => {
@@ -658,7 +642,7 @@ pub(super) async fn handle_app_start_implementation_command(
             workspace_kind,
             branch_name.as_deref(),
             &provider_name,
-            if provider_name == "claude-code" {
+            if matches!(provider_name.as_str(), "claude-code" | "opencode") {
                 None
             } else {
                 Some(provider_result.port as i64)
@@ -673,7 +657,7 @@ pub(super) async fn handle_app_start_implementation_command(
         })?;
     }
 
-    if use_worktrees && provider_name != "claude-code" {
+    if use_worktrees && !matches!(provider_name.as_str(), "claude-code" | "opencode") {
         let db = crate::db::acquire_db(&state.db);
         db.update_worktree_server(&task_id, provider_result.port as i64, 0)
             .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
@@ -686,27 +670,6 @@ pub(super) async fn handle_app_start_implementation_command(
         &provider_name,
     )
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
-
-    if let Some((opencode_session_id, port, agent)) = deferred_opencode_prompt {
-        start_opencode_sse_bridge_for_app(
-            state,
-            &task_id,
-            Some(opencode_session_id.clone()),
-            port,
-            ExistingSseBridge::Error,
-        )
-        .await?;
-        let client = OpenCodeClient::with_base_url(format!("http://127.0.0.1:{port}"));
-        client
-            .prompt_async(&opencode_session_id, prompt, agent, None)
-            .await
-            .map_err(|e| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Failed to send prompt: {e}"),
-                )
-            })?;
-    }
 
     if task.status == "backlog" {
         let db = crate::db::acquire_db(&state.db);
