@@ -23,12 +23,6 @@ const HOST_RUNTIME_INDEX_HTML = `<!doctype html>
 </html>
 `
 const HOST_RUNTIME_RUNTIME_JS = 'globalThis.__OPENFORGE_PLUGIN_RUNTIME__ = true; export const runtimeReady = true;'
-const BUILTIN_PLUGIN_DIRECTORIES = new Map<string, string>([
-  ['com.openforge.file-viewer', 'file-viewer'],
-  ['com.openforge.github-sync', 'github-sync'],
-  ['com.openforge.skills-viewer', 'skills-viewer'],
-  ['com.openforge.terminal', 'terminal'],
-])
 
 type PluginProtocolFetchResponse = {
   ok: boolean
@@ -85,9 +79,9 @@ type ParsedPluginUrl = {
   relPath: string
 }
 
-type PluginRow = {
-  id: string
-  installPath: string
+type PluginAssetRoot = {
+  pluginId: string
+  assetRoot: string
   isBuiltin: boolean
 }
 
@@ -244,14 +238,18 @@ async function hostRuntimeResponse(relPath: string, deps: PluginProtocolDeps): P
   }
 }
 
-function normalizePluginRow(value: unknown): PluginRow | null {
+function normalizePluginAssetRoot(value: unknown): PluginAssetRoot | null {
   if (typeof value !== 'object' || value === null) return null
   const record = value as Record<string, unknown>
-  const id = typeof record.id === 'string' ? record.id : null
-  const installPath = typeof record.installPath === 'string'
-    ? record.installPath
-    : typeof record.install_path === 'string'
-      ? record.install_path
+  const pluginId = typeof record.pluginId === 'string'
+    ? record.pluginId
+    : typeof record.plugin_id === 'string'
+      ? record.plugin_id
+      : null
+  const assetRoot = typeof record.assetRoot === 'string'
+    ? record.assetRoot
+    : typeof record.asset_root === 'string'
+      ? record.asset_root
       : null
   const isBuiltin = typeof record.isBuiltin === 'boolean'
     ? record.isBuiltin
@@ -259,12 +257,12 @@ function normalizePluginRow(value: unknown): PluginRow | null {
       ? record.is_builtin
       : null
 
-  return id && installPath && isBuiltin !== null
-    ? { id, installPath, isBuiltin }
+  return pluginId && assetRoot && isBuiltin !== null
+    ? { pluginId, assetRoot, isBuiltin }
     : null
 }
 
-async function fetchPluginMetadata(pluginId: string, deps: PluginProtocolDeps): Promise<PluginRow | null> {
+async function fetchPluginAssetRoot(pluginId: string, deps: PluginProtocolDeps): Promise<PluginAssetRoot | null> {
   if (!deps.sidecarConfig) return null
 
   const sidecarUrl = `http://${deps.sidecarConfig.host}:${deps.sidecarConfig.port}/app/invoke`
@@ -274,25 +272,16 @@ async function fetchPluginMetadata(pluginId: string, deps: PluginProtocolDeps): 
       Authorization: `Bearer ${deps.sidecarConfig.token}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ command: 'get_plugin', payload: { pluginId } }),
+    body: JSON.stringify({ command: 'resolve_plugin_asset_root', payload: { pluginId } }),
   })
 
   if (!response.ok) return null
 
   const body = await response.json()
-  const rawPlugin = typeof body === 'object' && body !== null && 'value' in body
+  const rawAssetRoot = typeof body === 'object' && body !== null && 'value' in body
     ? (body as { value: unknown }).value
     : body
-  return normalizePluginRow(rawPlugin)
-}
-
-function resolvePluginInstallBaseDir(plugin: PluginRow, workspaceRoot: string): string | null {
-  if (plugin.isBuiltin && plugin.installPath === `builtin:${plugin.id}`) {
-    const directoryName = BUILTIN_PLUGIN_DIRECTORIES.get(plugin.id)
-    return directoryName ? join(workspaceRoot, 'plugins', directoryName) : null
-  }
-
-  return plugin.installPath
+  return normalizePluginAssetRoot(rawAssetRoot)
 }
 
 async function pluginAssetResponse(parsed: ParsedPluginUrl, deps: PluginProtocolDeps): Promise<Response> {
@@ -300,14 +289,11 @@ async function pluginAssetResponse(parsed: ParsedPluginUrl, deps: PluginProtocol
     return forbiddenResponse()
   }
 
-  const plugin = await fetchPluginMetadata(parsed.pluginId, deps)
-  if (!plugin) return response(403, `Unknown plugin: ${parsed.pluginId}`)
-
-  const installBaseDir = resolvePluginInstallBaseDir(plugin, deps.workspaceRoot)
-  if (!installBaseDir) return response(403, `Unknown builtin plugin: ${parsed.pluginId}`)
+  const assetRoot = await fetchPluginAssetRoot(parsed.pluginId, deps)
+  if (!assetRoot || assetRoot.pluginId !== parsed.pluginId) return response(403, `Unknown plugin: ${parsed.pluginId}`)
 
   const asset = await readCanonicalAsset(
-    installBaseDir,
+    assetRoot.assetRoot,
     parsed.relPath,
     { readFile: deps.readFile ?? nodeReadFile, realpath: deps.realpath ?? nodeRealpath },
   )

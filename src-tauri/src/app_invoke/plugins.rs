@@ -57,55 +57,40 @@ fn app_data_dir(state: &AppState) -> Result<std::path::PathBuf, (StatusCode, Str
     })
 }
 
-fn app_resolve_plugin_install_root(plugin: &db::PluginRow) -> Result<std::path::PathBuf, String> {
-    if plugin.is_builtin
-        && plugin.install_path == crate::builtin_plugins::sentinel_install_path(&plugin.id)
-    {
-        return crate::builtin_plugins::install_path(&plugin.id);
-    }
+fn plugin_platform(
+    state: &AppState,
+    require_app_data_dir: bool,
+) -> Result<crate::plugin_platform::PluginPlatform<'_>, (StatusCode, String)> {
+    let app_data_dir = if require_app_data_dir {
+        Some(app_data_dir(state)?)
+    } else {
+        None
+    };
 
-    Ok(std::path::PathBuf::from(&plugin.install_path))
+    Ok(crate::plugin_platform::PluginPlatform::new(
+        state.db.as_ref(),
+        app_data_dir,
+        state.plugin_host.as_ref(),
+    ))
 }
 
-fn app_resolve_backend_entry_path(
-    install_root: &std::path::Path,
-    backend_entry: &str,
-) -> Result<std::path::PathBuf, String> {
-    let backend_entry_path = std::path::Path::new(backend_entry);
-    if backend_entry_path.is_absolute()
-        || backend_entry_path
-            .components()
-            .any(|component| matches!(component, std::path::Component::ParentDir))
+fn plugin_platform_error_status(message: &str) -> StatusCode {
+    if message.starts_with("Unknown plugin:") {
+        StatusCode::NOT_FOUND
+    } else if message.contains("backend not configured")
+        || message.contains("backend entry")
+        || message.contains("install root")
     {
-        return Err("plugin backend entry must stay within the plugin install root".to_string());
+        StatusCode::BAD_REQUEST
+    } else if message.contains("plugin host state is not available") {
+        StatusCode::SERVICE_UNAVAILABLE
+    } else {
+        StatusCode::INTERNAL_SERVER_ERROR
     }
+}
 
-    let backend_path = install_root.join(backend_entry_path);
-    if !backend_path.is_file() {
-        return Err(format!(
-            "Plugin backend entry does not exist: {}",
-            backend_path.display()
-        ));
-    }
-
-    let canonical_install_root = install_root.canonicalize().map_err(|error| {
-        format!(
-            "Failed to canonicalize plugin install root {}: {error}",
-            install_root.display()
-        )
-    })?;
-    let canonical_backend_path = backend_path.canonicalize().map_err(|error| {
-        format!(
-            "Failed to canonicalize plugin backend entry {}: {error}",
-            backend_path.display()
-        )
-    })?;
-
-    if !canonical_backend_path.starts_with(&canonical_install_root) {
-        return Err("plugin backend entry must stay within the plugin install root".to_string());
-    }
-
-    Ok(canonical_backend_path)
+fn map_plugin_platform_error(message: String) -> (StatusCode, String) {
+    (plugin_platform_error_status(&message), message)
 }
 
 pub(super) async fn handle_app_plugin_command(
@@ -116,141 +101,89 @@ pub(super) async fn handle_app_plugin_command(
         "install_plugin" => {
             let plugin = payload_field::<AppInstallPluginRequest>(&request.payload, "plugin")?
                 .into_plugin_row();
-            let db = crate::db::acquire_db(&state.db);
-            db.install_plugin(&plugin).map_err(|e| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Failed to install plugin: {e}"),
-                )
-            })?;
+            plugin_platform(state, false)?
+                .install_plugin(&plugin)
+                .map_err(map_plugin_platform_error)?;
             serde_json::Value::Null
         }
         "install_plugin_from_local" => {
             let source_path =
                 std::path::PathBuf::from(payload_string(&request.payload, "sourcePath")?);
-            let app_data_dir = app_data_dir(state)?;
-            let plugin = crate::plugin_installation::install_local_plugin_bundle(
-                &source_path,
-                &app_data_dir,
-            )
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
-            let db = crate::db::acquire_db(&state.db);
-            db.install_plugin(&plugin).map_err(|e| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Failed to install local plugin: {e}"),
-                )
-            })?;
+            let plugin = plugin_platform(state, true)?
+                .install_local_plugin_bundle(&source_path)
+                .map_err(map_plugin_platform_error)?;
             json_value(plugin)?
         }
         "install_plugin_from_npm" => {
             let package_name = payload_string(&request.payload, "packageName")?;
-            let app_data_dir = app_data_dir(state)?;
-            let plugin =
-                crate::plugin_installation::install_npm_plugin_bundle(&package_name, &app_data_dir)
-                    .await
-                    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
-            let db = crate::db::acquire_db(&state.db);
-            db.install_plugin(&plugin).map_err(|e| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Failed to install npm plugin: {e}"),
-                )
-            })?;
+            let plugin = plugin_platform(state, true)?
+                .install_npm_plugin_bundle(&package_name)
+                .await
+                .map_err(map_plugin_platform_error)?;
             json_value(plugin)?
         }
         "uninstall_plugin" => {
             let plugin_id = payload_string(&request.payload, "pluginId")?;
-            let plugin = {
-                let db = crate::db::acquire_db(&state.db);
-                db.get_plugin(&plugin_id).map_err(|e| {
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        format!("Failed to read plugin before uninstall: {e}"),
-                    )
-                })?
-            };
-            if let Some(plugin) = plugin.as_ref() {
-                let app_data_dir = app_data_dir(state)?;
-                crate::plugin_installation::uninstall_managed_plugin(plugin, &app_data_dir)
-                    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
-            }
-            let db = crate::db::acquire_db(&state.db);
-            db.uninstall_plugin(&plugin_id).map_err(|e| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Failed to uninstall plugin: {e}"),
-                )
-            })?;
+            plugin_platform(state, true)?
+                .uninstall_plugin(&plugin_id)
+                .map_err(map_plugin_platform_error)?;
             serde_json::Value::Null
         }
         "get_plugin" => {
             let plugin_id = payload_string(&request.payload, "pluginId")?;
-            let db = crate::db::acquire_db(&state.db);
-            json_value(db.get_plugin(&plugin_id).map_err(|e| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Failed to get plugin: {e}"),
-                )
-            })?)?
+            json_value(
+                plugin_platform(state, false)?
+                    .plugin(&plugin_id)
+                    .map_err(map_plugin_platform_error)?,
+            )?
         }
-        "list_plugins" => {
-            let db = crate::db::acquire_db(&state.db);
-            json_value(db.list_plugins().map_err(|e| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Failed to list plugins: {e}"),
-                )
-            })?)?
-        }
+        "list_plugins" => json_value(
+            plugin_platform(state, false)?
+                .plugins()
+                .map_err(map_plugin_platform_error)?,
+        )?,
         "set_plugin_enabled" => {
             let project_id = payload_string(&request.payload, "projectId")?;
             let plugin_id = payload_string(&request.payload, "pluginId")?;
             let enabled = payload_bool(&request.payload, "enabled")?;
-            let db = crate::db::acquire_db(&state.db);
-            db.set_plugin_enabled(&project_id, &plugin_id, enabled)
-                .map_err(|e| {
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        format!("Failed to set plugin enabled: {e}"),
-                    )
-                })?;
+            plugin_platform(state, false)?
+                .set_plugin_enabled(&project_id, &plugin_id, enabled)
+                .map_err(map_plugin_platform_error)?;
             serde_json::Value::Null
         }
         "get_enabled_plugins" => {
             let project_id = payload_string(&request.payload, "projectId")?;
-            let db = crate::db::acquire_db(&state.db);
-            json_value(db.get_enabled_plugins(&project_id).map_err(|e| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Failed to get enabled plugins: {e}"),
-                )
-            })?)?
+            json_value(
+                plugin_platform(state, false)?
+                    .enabled_plugins(&project_id)
+                    .map_err(map_plugin_platform_error)?,
+            )?
         }
         "get_plugin_storage" => {
             let plugin_id = payload_string(&request.payload, "pluginId")?;
             let key = payload_string(&request.payload, "key")?;
-            let db = crate::db::acquire_db(&state.db);
-            json_value(db.get_plugin_storage(&plugin_id, &key).map_err(|e| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Failed to get plugin storage: {e}"),
-                )
-            })?)?
+            json_value(
+                plugin_platform(state, false)?
+                    .plugin_storage(&plugin_id, &key)
+                    .map_err(map_plugin_platform_error)?,
+            )?
         }
         "set_plugin_storage" => {
             let plugin_id = payload_string(&request.payload, "pluginId")?;
             let key = payload_string(&request.payload, "key")?;
             let value = payload_string(&request.payload, "value")?;
-            let db = crate::db::acquire_db(&state.db);
-            db.set_plugin_storage(&plugin_id, &key, &value)
-                .map_err(|e| {
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        format!("Failed to set plugin storage: {e}"),
-                    )
-                })?;
+            plugin_platform(state, false)?
+                .set_plugin_storage(&plugin_id, &key, &value)
+                .map_err(map_plugin_platform_error)?;
             serde_json::Value::Null
+        }
+        "resolve_plugin_asset_root" => {
+            let plugin_id = payload_string(&request.payload, "pluginId")?;
+            json_value(
+                plugin_platform(state, false)?
+                    .resolve_plugin_asset_root(&plugin_id)
+                    .map_err(map_plugin_platform_error)?,
+            )?
         }
         "plugin_invoke" => {
             let plugin_id = payload_string(&request.payload, "pluginId")?;
@@ -260,54 +193,16 @@ pub(super) async fn handle_app_plugin_command(
                 .get("payload")
                 .cloned()
                 .unwrap_or(serde_json::Value::Null);
-            let plugin = {
-                let db = crate::db::acquire_db(&state.db);
-                db.get_plugin(&plugin_id)
-                    .map_err(|e| {
-                        (
-                            StatusCode::INTERNAL_SERVER_ERROR,
-                            format!("Failed to load plugin metadata: {e}"),
-                        )
-                    })?
-                    .ok_or_else(|| {
-                        (
-                            StatusCode::NOT_FOUND,
-                            format!("Unknown plugin: {plugin_id}"),
-                        )
-                    })?
-            };
-            let backend_entry = plugin.backend_entry.clone().ok_or_else(|| {
-                (
-                    StatusCode::BAD_REQUEST,
-                    format!("Plugin backend not configured for {plugin_id}"),
-                )
-            })?;
-            let install_root = app_resolve_plugin_install_root(&plugin)
-                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
-            let backend_path = app_resolve_backend_entry_path(&install_root, &backend_entry)
-                .map_err(|e| (StatusCode::BAD_REQUEST, e))?;
-            let plugin_host = state.plugin_host.as_ref().ok_or_else(|| {
-                (
-                    StatusCode::SERVICE_UNAVAILABLE,
-                    "plugin host state is not available".to_string(),
-                )
-            })?;
-            plugin_host
-                .invoke_backend(&plugin_id, &command, &backend_path, payload)
+            plugin_platform(state, false)?
+                .invoke_backend(&plugin_id, &command, payload)
                 .await
-                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?
+                .map_err(map_plugin_platform_error)?
         }
         "stop_plugin_sidecar" => {
-            let plugin_host = state.plugin_host.as_ref().ok_or_else(|| {
-                (
-                    StatusCode::SERVICE_UNAVAILABLE,
-                    "plugin host state is not available".to_string(),
-                )
-            })?;
-            plugin_host
+            plugin_platform(state, false)?
                 .stop_sidecar()
                 .await
-                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
+                .map_err(map_plugin_platform_error)?;
             serde_json::Value::Null
         }
         _ => return Ok(None),

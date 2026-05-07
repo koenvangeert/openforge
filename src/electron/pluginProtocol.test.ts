@@ -102,7 +102,7 @@ describe('Electron plugin:// protocol security contract', () => {
     expect(await svelteResponse.text()).toBe('export const svelteFromResources = true;')
   })
 
-  it('loads an external plugin asset via authenticated sidecar metadata and preserves MIME/CORS headers', async () => {
+  it('loads an external plugin asset via authenticated Rust asset-root resolution and preserves MIME/CORS headers', async () => {
     const workspaceRoot = await tempWorkspace()
     const installRoot = join(workspaceRoot, 'installed-plugin')
     await mkdir(join(installRoot, 'assets'), { recursive: true })
@@ -110,8 +110,8 @@ describe('Electron plugin:// protocol security contract', () => {
 
     const fetch = vi.fn(async () => new Response(JSON.stringify({
       value: {
-        id: 'com.example.plugin',
-        install_path: installRoot,
+        plugin_id: 'com.example.plugin',
+        asset_root: installRoot,
         is_builtin: false,
       },
     }), { status: 200 }))
@@ -130,12 +130,39 @@ describe('Electron plugin:// protocol security contract', () => {
         Authorization: 'Bearer secret-token',
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ command: 'get_plugin', payload: { pluginId: 'com.example.plugin' } }),
+      body: JSON.stringify({ command: 'resolve_plugin_asset_root', payload: { pluginId: 'com.example.plugin' } }),
     })
     expect(response.status).toBe(200)
     expect(response.headers.get('Content-Type')).toBe('application/javascript')
     expect(response.headers.get('Access-Control-Allow-Origin')).toBe('*')
     expect(await response.text()).toBe('export const ok = true;')
+  })
+
+  it('uses Rust-resolved asset roots for builtin plugins instead of Electron builtin path mapping', async () => {
+    const workspaceRoot = await tempWorkspace()
+    const installRoot = join(await tempWorkspace(), 'rust-resolved-builtin')
+    await mkdir(join(installRoot, 'dist'), { recursive: true })
+    await writeFile(join(installRoot, 'dist', 'index.js'), 'export const builtin = true;')
+
+    const fetch = vi.fn(async () => new Response(JSON.stringify({
+      value: {
+        plugin_id: 'com.openforge.file-viewer',
+        asset_root: installRoot,
+        is_builtin: true,
+      },
+    }), { status: 200 }))
+
+    const response = await handlePluginProtocolRequest('plugin://com.openforge.file-viewer/dist/index.js', {
+      workspaceRoot,
+      sidecarConfig,
+      fetch,
+      readFile,
+      realpath,
+    })
+
+    expect(response.status).toBe(200)
+    expect(await response.text()).toBe('export const builtin = true;')
+    expect(fetch).toHaveBeenCalledOnce()
   })
 
   it('rejects invalid plugin ids and traversal paths with the same forbidden response shape as Tauri', async () => {
@@ -160,6 +187,32 @@ describe('Electron plugin:// protocol security contract', () => {
     expect(fetch).not.toHaveBeenCalled()
   })
 
+  it('rejects sidecar asset-root responses that do not match the requested plugin id', async () => {
+    const workspaceRoot = await tempWorkspace()
+    const installRoot = join(await tempWorkspace(), 'other-plugin')
+    await mkdir(installRoot, { recursive: true })
+    await writeFile(join(installRoot, 'index.js'), 'export const wrong = true;')
+
+    const fetch = vi.fn(async () => new Response(JSON.stringify({
+      value: {
+        plugin_id: 'com.example.other-plugin',
+        asset_root: installRoot,
+        is_builtin: false,
+      },
+    }), { status: 200 }))
+
+    const response = await handlePluginProtocolRequest('plugin://com.example.plugin/index.js', {
+      workspaceRoot,
+      sidecarConfig,
+      fetch,
+      readFile,
+      realpath,
+    })
+
+    expect(response.status).toBe(403)
+    expect(await response.text()).toBe('Unknown plugin: com.example.plugin')
+  })
+
   it('rejects canonicalized plugin asset paths that escape the plugin install root', async () => {
     const workspaceRoot = await tempWorkspace()
     const installRoot = join(workspaceRoot, 'installed-plugin')
@@ -171,8 +224,8 @@ describe('Electron plugin:// protocol security contract', () => {
 
     const fetch = vi.fn(async () => new Response(JSON.stringify({
       value: {
-        id: 'com.example.plugin',
-        install_path: installRoot,
+        plugin_id: 'com.example.plugin',
+        asset_root: installRoot,
         is_builtin: false,
       },
     }), { status: 200 }))

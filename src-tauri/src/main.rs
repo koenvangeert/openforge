@@ -22,6 +22,7 @@ mod opencode_client;
 mod pi_extension;
 mod plugin_host;
 mod plugin_installation;
+mod plugin_platform;
 mod plugin_rpc;
 mod provider_runtime;
 pub mod providers;
