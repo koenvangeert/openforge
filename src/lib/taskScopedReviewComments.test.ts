@@ -6,6 +6,7 @@ import {
 	clearPendingSelfReviewComments,
 	getPendingSelfReviewComments,
 	pendingSelfReviewCommentsByTask,
+	selfReviewStateByTask,
 	setPendingSelfReviewComments,
 } from "./taskScopedReviewComments";
 
@@ -25,7 +26,7 @@ const taskTwoComment: ReviewSubmissionComment = {
 
 describe("task-scoped self-review pending comments", () => {
 	beforeEach(() => {
-		pendingSelfReviewCommentsByTask.set(new Map());
+		selfReviewStateByTask.set(new Map());
 	});
 
 	it("keeps pending inline review comments isolated by task id", () => {

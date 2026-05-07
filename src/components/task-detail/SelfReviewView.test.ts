@@ -10,9 +10,6 @@ import type {
 } from "../../lib/types";
 
 vi.mock("../../lib/stores", () => ({
-	selfReviewDiffFiles: writable([]),
-	selfReviewGeneralComments: writable([]),
-	selfReviewArchivedComments: writable([]),
 	pendingManualComments: writable([]),
 	ticketPrs: writable(new Map()),
 	taskDraftNotes: writable(new Map()),
@@ -72,13 +69,13 @@ import {
 	getTaskCommits,
 	getTaskDiff,
 } from "../../lib/ipc";
+import { pendingManualComments, ticketPrs } from "../../lib/stores";
 import {
-	pendingManualComments,
-	selfReviewArchivedComments,
-	selfReviewDiffFiles,
-	selfReviewGeneralComments,
-	ticketPrs,
-} from "../../lib/stores";
+	selfReviewStateByTask,
+	setSelfReviewArchivedComments,
+	setSelfReviewDiffFiles,
+	setSelfReviewGeneralComments,
+} from "../../lib/taskScopedSelfReviewState";
 import { createVirtualizer } from "../../lib/useVirtualizer.svelte";
 import { clearTaskReviewPaneState, getTaskReviewPaneState } from "../../lib/taskReviewPaneState";
 
@@ -110,9 +107,7 @@ const baseDiff: PrFileDiff = {
 
 describe("SelfReviewView uncommitted toggle", () => {
 	beforeEach(() => {
-		selfReviewDiffFiles.set([]);
-		selfReviewGeneralComments.set([]);
-		selfReviewArchivedComments.set([]);
+		selfReviewStateByTask.set(new Map());
 		pendingManualComments.set([]);
 		ticketPrs.set(new Map());
 		vi.clearAllMocks();
@@ -274,9 +269,7 @@ describe("SelfReviewView uncommitted toggle", () => {
 
 describe("SelfReviewView integration — performance fixes", () => {
 	beforeEach(() => {
-		selfReviewDiffFiles.set([]);
-		selfReviewGeneralComments.set([]);
-		selfReviewArchivedComments.set([]);
+		selfReviewStateByTask.set(new Map());
 		pendingManualComments.set([]);
 		ticketPrs.set(new Map());
 		vi.clearAllMocks();
@@ -443,9 +436,7 @@ describe("SelfReviewView integration — performance fixes", () => {
 describe("SelfReviewView pane restoration", () => {
 	beforeEach(() => {
 		clearTaskReviewPaneState();
-		selfReviewDiffFiles.set([]);
-		selfReviewGeneralComments.set([]);
-		selfReviewArchivedComments.set([]);
+		selfReviewStateByTask.set(new Map());
 		pendingManualComments.set([]);
 		ticketPrs.set(new Map());
 		vi.clearAllMocks();
@@ -523,9 +514,9 @@ describe("SelfReviewView pane restoration", () => {
 
 describe("SelfReviewView — hide addressed comments", () => {
 	beforeEach(() => {
-		selfReviewDiffFiles.set([baseDiff]);
-		selfReviewGeneralComments.set([]);
-		selfReviewArchivedComments.set([]);
+		setSelfReviewDiffFiles("task-1", [baseDiff]);
+		setSelfReviewGeneralComments("task-1", []);
+		setSelfReviewArchivedComments("task-1", []);
 		pendingManualComments.set([]);
 		ticketPrs.set(new Map());
 		vi.clearAllMocks();

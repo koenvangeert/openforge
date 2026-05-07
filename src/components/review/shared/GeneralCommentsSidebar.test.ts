@@ -3,7 +3,14 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { get } from 'svelte/store'
 import { requireElement } from '../../../test-utils/dom'
 import GeneralCommentsSidebar from './GeneralCommentsSidebar.svelte'
-import { selfReviewGeneralComments, selfReviewArchivedComments, taskDraftNotes } from '../../../lib/stores'
+import { taskDraftNotes } from '../../../lib/stores'
+import {
+  getSelfReviewArchivedComments,
+  getSelfReviewGeneralComments,
+  selfReviewStateByTask,
+  setSelfReviewArchivedComments,
+  setSelfReviewGeneralComments,
+} from '../../../lib/taskScopedSelfReviewState'
 import type { SelfReviewComment } from '../../../lib/types'
 import {
   getActiveSelfReviewComments,
@@ -50,15 +57,14 @@ const mockArchivedComment: SelfReviewComment = {
 
 describe('GeneralCommentsSidebar', () => {
   beforeEach(() => {
-    selfReviewGeneralComments.set([])
-    selfReviewArchivedComments.set([])
+    selfReviewStateByTask.set(new Map())
     taskDraftNotes.set(new Map())
     vi.clearAllMocks()
   })
 
   it('skips IPC calls when stores already have data', async () => {
-    selfReviewGeneralComments.set([mockComment])
-    selfReviewArchivedComments.set([mockArchivedComment])
+    setSelfReviewGeneralComments('task-1', [mockComment])
+    setSelfReviewArchivedComments('task-1', [mockArchivedComment])
 
     render(GeneralCommentsSidebar, { props: { taskId: 'task-1' } })
 
@@ -72,8 +78,7 @@ describe('GeneralCommentsSidebar', () => {
     mockGetActiveSelfReviewComments.mockResolvedValue([mockComment])
     mockGetArchivedSelfReviewComments.mockResolvedValue([mockArchivedComment])
 
-    selfReviewGeneralComments.set([])
-    selfReviewArchivedComments.set([])
+    selfReviewStateByTask.set(new Map())
 
     render(GeneralCommentsSidebar, { props: { taskId: 'task-1' } })
 
@@ -82,8 +87,8 @@ describe('GeneralCommentsSidebar', () => {
     expect(mockGetActiveSelfReviewComments).toHaveBeenCalledWith('task-1')
     expect(mockGetArchivedSelfReviewComments).toHaveBeenCalledWith('task-1')
 
-    expect(get(selfReviewGeneralComments).length).toBe(1)
-    expect(get(selfReviewArchivedComments).length).toBe(1)
+    expect(getSelfReviewGeneralComments('task-1').length).toBe(1)
+    expect(getSelfReviewArchivedComments('task-1').length).toBe(1)
   })
 
   it('forces reload when add comment is clicked', async () => {
@@ -91,8 +96,8 @@ describe('GeneralCommentsSidebar', () => {
     mockGetArchivedSelfReviewComments.mockResolvedValue([mockArchivedComment])
     mockAddSelfReviewComment.mockResolvedValue(1)
 
-    selfReviewGeneralComments.set([mockComment])
-    selfReviewArchivedComments.set([mockArchivedComment])
+    setSelfReviewGeneralComments('task-1', [mockComment])
+    setSelfReviewArchivedComments('task-1', [mockArchivedComment])
 
     vi.clearAllMocks()
 
@@ -138,8 +143,8 @@ describe('GeneralCommentsSidebar', () => {
     mockGetArchivedSelfReviewComments.mockResolvedValue([mockArchivedComment])
     mockAddSelfReviewComment.mockResolvedValue(1)
 
-    selfReviewGeneralComments.set([mockComment])
-    selfReviewArchivedComments.set([mockArchivedComment])
+    setSelfReviewGeneralComments('task-1', [mockComment])
+    setSelfReviewArchivedComments('task-1', [mockArchivedComment])
 
     vi.clearAllMocks()
 
@@ -163,8 +168,8 @@ describe('GeneralCommentsSidebar', () => {
   })
 
   it('renders comments when stores have data', async () => {
-    selfReviewGeneralComments.set([mockComment])
-    selfReviewArchivedComments.set([mockArchivedComment])
+    setSelfReviewGeneralComments('task-1', [mockComment])
+    setSelfReviewArchivedComments('task-1', [mockArchivedComment])
 
     render(GeneralCommentsSidebar, { props: { taskId: 'task-1' } })
 
@@ -202,8 +207,7 @@ describe('GeneralCommentsSidebar', () => {
   describe('draft persistence', () => {
     beforeEach(() => {
       taskDraftNotes.set(new Map())
-      selfReviewGeneralComments.set([])
-      selfReviewArchivedComments.set([])
+      selfReviewStateByTask.set(new Map())
       vi.clearAllMocks()
       mockGetActiveSelfReviewComments.mockResolvedValue([])
       mockGetArchivedSelfReviewComments.mockResolvedValue([])

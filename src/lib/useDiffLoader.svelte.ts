@@ -7,13 +7,14 @@ import {
 	getTaskCommits,
 	getTaskDiff,
 } from "./ipc";
+import { ticketPrs } from "./stores";
 import {
-	selfReviewArchivedComments,
-	selfReviewDiffFiles,
-	selfReviewGeneralComments,
-	ticketPrs,
-} from "./stores";
-import { mergePendingSelfReviewComments } from "./taskScopedReviewComments";
+	mergePendingSelfReviewComments,
+	resetLoadedSelfReviewState,
+	setSelfReviewArchivedComments,
+	setSelfReviewDiffFiles,
+	setSelfReviewGeneralComments,
+} from "./taskScopedSelfReviewState";
 import type { CommitInfo, PrComment, PullRequestInfo } from "./types";
 
 // ============================================================================
@@ -73,18 +74,20 @@ export function createDiffLoader(deps: {
 					? await getCommitDiff(taskId, selectedCommitSha)
 					: await getTaskDiff(taskId, deps.getIncludeUncommitted());
 			if (isStale(generation)) return;
-			selfReviewDiffFiles.set(diffs);
+			setSelfReviewDiffFiles(taskId, diffs);
 
 			if (selectedCommitSha === null) {
 				const activeComments = await getActiveSelfReviewComments(taskId);
 				if (isStale(generation)) return;
-				selfReviewGeneralComments.set(
+				setSelfReviewGeneralComments(
+					taskId,
 					activeComments.filter((c) => c.comment_type === "general"),
 				);
 
 				const archivedComments = await getArchivedSelfReviewComments(taskId);
 				if (isStale(generation)) return;
-				selfReviewArchivedComments.set(
+				setSelfReviewArchivedComments(
+					taskId,
 					archivedComments.filter((c) => c.comment_type === "general"),
 				);
 
@@ -138,7 +141,7 @@ export function createDiffLoader(deps: {
 	async function selectCommit(sha: string | null): Promise<void> {
 		selectedCommitSha = sha;
 		deps.onSelectedCommitShaChange?.(sha);
-		selfReviewDiffFiles.set([]);
+		setSelfReviewDiffFiles(deps.getTaskId(), []);
 		await refresh();
 	}
 
@@ -151,7 +154,7 @@ export function createDiffLoader(deps: {
 					? await getCommitDiff(taskId, selectedCommitSha)
 					: await getTaskDiff(taskId, deps.getIncludeUncommitted());
 			if (isStale(generation)) return;
-			selfReviewDiffFiles.set(diffs);
+			setSelfReviewDiffFiles(taskId, diffs);
 		} catch (e) {
 			if (isStale(generation)) return;
 			console.error("Failed to refresh diff:", e);
@@ -169,9 +172,7 @@ export function createDiffLoader(deps: {
 		error = null;
 		prComments = [];
 		linkedPr = null;
-		selfReviewDiffFiles.set([]);
-		selfReviewGeneralComments.set([]);
-		selfReviewArchivedComments.set([]);
+		resetLoadedSelfReviewState(deps.getTaskId());
 		selectedCommitSha = null;
 		commits = [];
 	}

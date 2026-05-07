@@ -1,13 +1,8 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte'
-import { writable } from 'svelte/store'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ReviewSubmissionComment } from '../../lib/types'
+import { selfReviewStateByTask } from '../../lib/taskScopedSelfReviewState'
 import SendToAgentPanel from './SendToAgentPanel.svelte'
-
-vi.mock('../../lib/stores', () => ({
-  selfReviewGeneralComments: writable([]),
-  selfReviewArchivedComments: writable([]),
-}))
 
 vi.mock('../../lib/ipc', () => ({
   archiveSelfReviewComments: vi.fn().mockResolvedValue(undefined),
@@ -21,6 +16,7 @@ describe('SendToAgentPanel', () => {
   ]
 
   beforeEach(() => {
+    selfReviewStateByTask.set(new Map())
     vi.clearAllMocks()
   })
 

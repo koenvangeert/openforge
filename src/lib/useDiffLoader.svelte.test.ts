@@ -1,4 +1,4 @@
-import { get, writable } from "svelte/store";
+import { writable } from "svelte/store";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type {
 	CommitInfo,
@@ -13,9 +13,6 @@ import type {
 // ============================================================================
 
 vi.mock("./stores", () => ({
-	selfReviewDiffFiles: writable<PrFileDiff[]>([]),
-	selfReviewGeneralComments: writable<SelfReviewComment[]>([]),
-	selfReviewArchivedComments: writable<SelfReviewComment[]>([]),
 	ticketPrs: writable<Map<string, PullRequestInfo[]>>(new Map()),
 }));
 
@@ -35,17 +32,15 @@ vi.mock("./ipc", () => ({
 }));
 
 import * as ipc from "./ipc";
-import {
-	selfReviewArchivedComments,
-	selfReviewDiffFiles,
-	selfReviewGeneralComments,
-	ticketPrs,
-} from "./stores";
+import { ticketPrs } from "./stores";
 import {
 	getPendingSelfReviewComments,
-	pendingSelfReviewCommentsByTask,
+	getSelfReviewArchivedComments,
+	getSelfReviewDiffFiles,
+	getSelfReviewGeneralComments,
+	selfReviewStateByTask,
 	setPendingSelfReviewComments,
-} from "./taskScopedReviewComments";
+} from "./taskScopedSelfReviewState";
 import { createDiffLoader } from "./useDiffLoader.svelte";
 
 const mockGetTaskDiff = vi.mocked(ipc.getTaskDiff);
@@ -137,10 +132,7 @@ describe("createDiffLoader", () => {
 
 	beforeEach(() => {
 		vi.clearAllMocks();
-		selfReviewDiffFiles.set([]);
-		selfReviewGeneralComments.set([]);
-		selfReviewArchivedComments.set([]);
-		pendingSelfReviewCommentsByTask.set(new Map());
+		selfReviewStateByTask.set(new Map());
 		ticketPrs.set(new Map());
 
 		mockGetTaskDiff.mockResolvedValue([]);
@@ -185,7 +177,7 @@ describe("createDiffLoader", () => {
 		expect(loader.isLoading).toBe(false);
 	});
 
-	it("loadDiff populates selfReviewDiffFiles store on success", async () => {
+	it("loadDiff populates scoped self-review diff files on success", async () => {
 		mockGetTaskDiff.mockResolvedValue([baseDiff]);
 
 		const loader = createDiffLoader({
@@ -195,7 +187,7 @@ describe("createDiffLoader", () => {
 
 		await loader.loadDiff();
 
-		expect(get(selfReviewDiffFiles)).toEqual([baseDiff]);
+		expect(getSelfReviewDiffFiles("task-1")).toEqual([baseDiff]);
 	});
 
 	it("loadDiff populates prComments from linked PR", async () => {
@@ -256,7 +248,7 @@ describe("createDiffLoader", () => {
 		await loader.refresh();
 
 		expect(mockGetTaskDiff).toHaveBeenCalledWith("task-1", false);
-		expect(get(selfReviewDiffFiles)).toEqual([baseDiff]);
+		expect(getSelfReviewDiffFiles("task-1")).toEqual([baseDiff]);
 	});
 
 	it("refresh sets human-readable error on failure", async () => {
@@ -290,14 +282,14 @@ describe("createDiffLoader", () => {
 		});
 
 		await loader.loadDiff();
-		expect(get(selfReviewDiffFiles)).toEqual([baseDiff]);
+		expect(getSelfReviewDiffFiles("task-1")).toEqual([baseDiff]);
 		setPendingSelfReviewComments("task-1", [pendingInlineComment]);
 
 		loader.cleanup();
 
-		expect(get(selfReviewDiffFiles)).toEqual([]);
-		expect(get(selfReviewGeneralComments)).toEqual([]);
-		expect(get(selfReviewArchivedComments)).toEqual([]);
+		expect(getSelfReviewDiffFiles("task-1")).toEqual([]);
+		expect(getSelfReviewGeneralComments("task-1")).toEqual([]);
+		expect(getSelfReviewArchivedComments("task-1")).toEqual([]);
 		expect(getPendingSelfReviewComments("task-1")).toEqual([pendingInlineComment]);
 
 		const remountedLoader = createDiffLoader({
@@ -380,7 +372,7 @@ describe("createDiffLoader", () => {
 
 		expect(mockGetTaskDiff).toHaveBeenCalledWith("task-1", false);
 		expect(mockGetCommitDiff).not.toHaveBeenCalled();
-		expect(get(selfReviewDiffFiles)).toEqual([baseDiff]);
+		expect(getSelfReviewDiffFiles("task-1")).toEqual([baseDiff]);
 	});
 
 	it("loadDiff with commit selected calls getCommitDiff, not getTaskDiff", async () => {
@@ -424,12 +416,12 @@ describe("createDiffLoader", () => {
 		});
 
 		await loader.loadDiff();
-		expect(get(selfReviewDiffFiles)).toHaveLength(1);
+		expect(getSelfReviewDiffFiles("task-1")).toHaveLength(1);
 
 		await loader.selectCommit("abc1234");
 
 		expect(loader.selectedCommitSha).toBe("abc1234");
-		expect(get(selfReviewDiffFiles)).toEqual([
+		expect(getSelfReviewDiffFiles("task-1")).toEqual([
 			{ ...baseDiff, filename: "src/other.rs" },
 		]);
 	});
@@ -484,13 +476,13 @@ describe("createDiffLoader", () => {
 		await secondSelection;
 
 		expect(loader.selectedCommitSha).toBe("second-sha");
-		expect(get(selfReviewDiffFiles)).toEqual(secondDiff);
+		expect(getSelfReviewDiffFiles("task-1")).toEqual(secondDiff);
 
 		resolveFirst(firstDiff);
 		await firstSelection;
 
 		expect(loader.selectedCommitSha).toBe("second-sha");
-		expect(get(selfReviewDiffFiles)).toEqual(secondDiff);
+		expect(getSelfReviewDiffFiles("task-1")).toEqual(secondDiff);
 	});
 
 	it("ignores stale request failures after a newer commit selection starts", async () => {
@@ -531,7 +523,7 @@ describe("createDiffLoader", () => {
 
 		expect(loader.error).toBeNull();
 		expect(loader.isLoading).toBe(false);
-		expect(get(selfReviewDiffFiles)).toEqual(secondDiff);
+		expect(getSelfReviewDiffFiles("task-1")).toEqual(secondDiff);
 	});
 
 	it("refresh in commit mode uses getCommitDiff", async () => {
@@ -592,10 +584,10 @@ describe("createDiffLoader", () => {
 
 		expect(loader.isLoading).toBe(false);
 		expect(loader.error).toBeNull();
-		expect(get(selfReviewDiffFiles)).toEqual([]);
+		expect(getSelfReviewDiffFiles("task-1")).toEqual([]);
 	});
 
-	it("loadDiff populates general comments and archived comments stores", async () => {
+	it("loadDiff populates scoped general and archived comments", async () => {
 		const generalComment = {
 			...baseSelfReviewComment,
 			comment_type: "general",
@@ -621,8 +613,8 @@ describe("createDiffLoader", () => {
 
 		await loader.loadDiff();
 
-		expect(get(selfReviewGeneralComments)).toEqual([generalComment]);
-		expect(get(selfReviewArchivedComments)).toEqual([generalComment]);
+		expect(getSelfReviewGeneralComments("task-1")).toEqual([generalComment]);
+		expect(getSelfReviewArchivedComments("task-1")).toEqual([generalComment]);
 		expect(getPendingSelfReviewComments("task-1")).toEqual([
 			{
 				path: "src/main.rs",

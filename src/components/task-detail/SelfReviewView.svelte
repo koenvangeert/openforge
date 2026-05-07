@@ -1,14 +1,13 @@
 <script lang="ts">
   import { onMount, onDestroy, tick } from 'svelte'
-  import { get } from 'svelte/store'
-  import { selfReviewDiffFiles, selfReviewGeneralComments } from '../../lib/stores'
+  import { selfReviewStateByTask, setPendingSelfReviewComments } from '../../lib/taskScopedSelfReviewState'
   import { getTaskFileContents, getTaskBatchFileContents, getCommitFileContents, getCommitBatchFileContents, openUrl } from '../../lib/ipc'
   import { timeAgo } from '../../lib/timeAgo'
   import { createDiffLoader } from '../../lib/useDiffLoader.svelte'
   import { createCommentSelection } from '../../lib/useCommentSelection.svelte'
   import { prCommentsToReviewComments } from '../../lib/diffComments'
   import { getTaskReviewPaneState, updateTaskReviewPaneState } from '../../lib/taskReviewPaneState'
-  import { pendingSelfReviewCommentsByTask, setPendingSelfReviewComments } from '../../lib/taskScopedReviewComments'
+
   import type { Task, PrFileDiff, ReviewSubmissionComment } from '../../lib/types'
   import type { FileContents } from '../../lib/diffAdapter'
   import FileTree from '../review/shared/FileTree.svelte'
@@ -54,8 +53,11 @@
     getPrComments: () => diffLoader.prComments,
   })
 
+  let selfReviewState = $derived($selfReviewStateByTask.get(task.id))
+  let selfReviewDiffFiles = $derived(selfReviewState?.diffFiles ?? [])
+  let selfReviewGeneralComments = $derived(selfReviewState?.generalComments ?? [])
   let inlineReviewComments = $derived(prCommentsToReviewComments(diffLoader.prComments))
-  let pendingInlineComments = $derived($pendingSelfReviewCommentsByTask.get(task.id) ?? [])
+  let pendingInlineComments = $derived(selfReviewState?.pendingInlineComments ?? [])
   let visibleComments = $derived(showAddressed ? diffLoader.prComments : commentSelection.unaddressedComments)
 
   let hasAutoOpened = false
@@ -135,7 +137,7 @@
 
   onMount(async () => {
     await diffLoader.loadDiff()
-    if (get(selfReviewDiffFiles).length === 0 && !includeUncommitted) {
+    if (selfReviewDiffFiles.length === 0 && !includeUncommitted) {
       includeUncommitted = true
       await diffLoader.refresh()
     }
@@ -161,7 +163,7 @@
             <div class="px-2 py-1.5 text-[0.65rem] uppercase tracking-wider font-semibold text-base-content/50 border-b border-base-300 bg-base-200">Files</div>
             <div class="flex-1 overflow-hidden">
               {#if fileTreeVisible}
-                <FileTree files={$selfReviewDiffFiles} onSelectFile={handleFileSelect} />
+                <FileTree files={selfReviewDiffFiles} onSelectFile={handleFileSelect} />
               {:else}
                 <div class="h-full flex flex-col items-center justify-center gap-2 text-center px-3 text-base-content/50">
                   <div class="text-xs">File explorer hidden</div>
@@ -238,7 +240,7 @@
           <span class="text-5xl">⚠</span>
           <span>{diffLoader.error}</span>
         </div>
-      {:else if $selfReviewDiffFiles.length === 0}
+      {:else if selfReviewDiffFiles.length === 0}
             <div class="flex flex-col items-center justify-center flex-1 gap-4 text-base-content/50 text-center p-10">
               <span class="text-6xl">📂</span>
               <h3 class="text-xl font-semibold text-base-content m-0">No changes for current selection</h3>
@@ -253,7 +255,7 @@
           {:else}
             <DiffViewer
               bind:this={diffViewer}
-              files={$selfReviewDiffFiles}
+              files={selfReviewDiffFiles}
               existingComments={inlineReviewComments}
               pendingComments={pendingInlineComments}
               onPendingCommentsChange={handlePendingInlineCommentsChange}
@@ -293,7 +295,7 @@
                 <button class="flex-1 px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-center transition-colors {sidebarTab === 'notes' ? 'text-primary border-b-2 border-primary bg-base-100' : 'text-base-content/50 hover:text-base-content hover:bg-base-content/5'}"
                   onclick={() => { sidebarTab = 'notes' }}>
                   Notes
-                  {#if $selfReviewGeneralComments.length > 0}<span class="badge badge-ghost badge-xs ml-1">{$selfReviewGeneralComments.length}</span>{/if}
+                  {#if selfReviewGeneralComments.length > 0}<span class="badge badge-ghost badge-xs ml-1">{selfReviewGeneralComments.length}</span>{/if}
                 </button>
               </div>
               <div class="flex-1 overflow-hidden flex flex-col" class:hidden={sidebarTab !== 'pr'}>
