@@ -169,6 +169,49 @@ async fn handles_fs_self_review_and_agent_review_db_commands() {
 }
 
 #[tokio::test]
+async fn fs_read_file_treats_gitignore_dotfile_as_text() {
+    let (state, path) = test_state("app_invoke_gitignore_dotfile_text_preview");
+    let temp_dir = tempfile::tempdir().expect("temp project dir");
+    std::fs::write(
+        temp_dir.path().join(".gitignore"),
+        "target/\nnode_modules/\n",
+    )
+    .expect("write gitignore");
+    std::fs::write(temp_dir.path().join("extensionless"), "plain text\n")
+        .expect("write extensionless file");
+
+    let project_id = {
+        let db = state.db.lock().expect("db lock");
+        db.create_project("Open Forge", temp_dir.path().to_str().expect("utf8 path"))
+            .expect("create project")
+            .id
+    };
+
+    let file = invoke_ok(
+        &state,
+        "fs_read_file",
+        json!({ "projectId": project_id, "filePath": ".gitignore" }),
+    )
+    .await;
+
+    assert_eq!(file["type"], "text");
+    assert_eq!(file["content"], "target/\nnode_modules/\n");
+    assert_eq!(file["mimeType"], "text/plain");
+
+    let extensionless = invoke_ok(
+        &state,
+        "fs_read_file",
+        json!({ "projectId": project_id, "filePath": "extensionless" }),
+    )
+    .await;
+    assert_eq!(extensionless["type"], "binary");
+    assert_eq!(extensionless["content"], "");
+    assert_eq!(extensionless["mimeType"], serde_json::Value::Null);
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
 async fn handles_git_workspace_extraction_commands() {
     let (state, path) = test_state("app_invoke_git_workspace_extraction");
     let repo_dir = tempfile::tempdir().expect("temp git repo");
