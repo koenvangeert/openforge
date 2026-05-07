@@ -698,6 +698,66 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_emitter_uses_runtime_app_event_adapter_once_when_app_and_sender_share_bus() {
+        let manager = PtyManager::new();
+        let bus = crate::app_events::AppEventBus::new(16, 16);
+        let app = crate::backend_runtime::AppHandle::new();
+        app.set_app_event_adapter(Arc::new(crate::app_events::InMemoryAppEventAdapter::new(
+            bus.clone(),
+        )));
+        let mut events = bus.subscribe(None).expect("subscribe should work");
+        let (output_tx, output_rx) = tokio::sync::mpsc::unbounded_channel();
+        let ring = Arc::new(std::sync::Mutex::new(RingBuffer::new(128)));
+        let tmp_dir = tempfile::tempdir().expect("tempdir should succeed");
+
+        spawn_batched_pty_event_emitter(
+            output_rx,
+            PtyEventEmitterConfig {
+                session_key: "task-dedupe-shell-0".to_string(),
+                instance_id: 7,
+                app_handle: Some(app),
+                app_event_tx: Some(bus.sender()),
+                ring_buffer: ring,
+                exit_action: PtyExitAction::Cleanup {
+                    sessions: Arc::clone(&manager.sessions),
+                    last_output: Arc::clone(&manager.last_output),
+                    output_buffers: Arc::clone(&manager.output_buffers),
+                    pid_file: tmp_dir.path().join("task-dedupe-shell-0.pid"),
+                    emit_agent_exit: false,
+                },
+            },
+        );
+
+        output_tx
+            .send(Some("deduped live output".to_string()))
+            .expect("output should send");
+
+        let crate::app_events::AppEventFrame::Event(received) =
+            tokio::time::timeout(tokio::time::Duration::from_secs(1), events.recv())
+                .await
+                .expect("pty output should be emitted")
+                .expect("pty output frame should be available")
+        else {
+            panic!("expected pty output event frame");
+        };
+
+        assert_eq!(received.event_name, "pty-output-task-dedupe-shell-0");
+        assert_eq!(received.payload["data"], "deduped live output");
+        assert_eq!(received.payload["instance_id"], 7);
+
+        if let Ok(Some(crate::app_events::AppEventFrame::Event(duplicate))) =
+            tokio::time::timeout(tokio::time::Duration::from_millis(50), events.recv()).await
+        {
+            assert_ne!(
+                duplicate.event_name, "pty-output-task-dedupe-shell-0",
+                "PTY output must not be published twice when the app handle is backed by the same app event bus as app_event_tx"
+            );
+        }
+
+        drop(output_tx);
+    }
+
+    #[tokio::test]
     async fn test_cleanup_exit_action_cleans_shell_state_without_agent_event() {
         let manager = PtyManager::new();
         let pty_system = native_pty_system();

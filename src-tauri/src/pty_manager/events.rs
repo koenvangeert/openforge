@@ -1,4 +1,4 @@
-use crate::app_events::{publish_app_event, AppEventSender};
+use crate::app_events::{publish_app_event_to_runtime, AppEventSender};
 use log::{info, warn};
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -254,16 +254,6 @@ pub(super) struct PtyEventEmitterConfig {
     pub(super) exit_action: PtyExitAction,
 }
 
-fn emit_backend_pty_event(
-    app_handle: &crate::backend_runtime::AppHandle,
-    event_name: &str,
-    payload: &serde_json::Value,
-) -> PtyEmitResult {
-    app_handle
-        .emit(event_name, payload)
-        .map_err(|e| e.to_string())
-}
-
 pub(super) fn spawn_batched_pty_event_emitter(
     mut rx: PtyOutputReceiver,
     config: PtyEventEmitterConfig,
@@ -288,12 +278,8 @@ pub(super) fn spawn_batched_pty_event_emitter(
         interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
         let mut emit_pty_event = |event_name: &str, payload: &serde_json::Value| {
-            publish_app_event(&app_event_tx, event_name, payload);
-            if let Some(app_handle) = app_handle.as_ref() {
-                emit_backend_pty_event(app_handle, event_name, payload)
-            } else {
-                Ok(())
-            }
+            publish_app_event_to_runtime(app_handle.as_ref(), &app_event_tx, event_name, payload);
+            Ok(())
         };
 
         loop {
@@ -329,16 +315,10 @@ pub(super) fn spawn_batched_pty_event_emitter(
                             info!("[PTY] key={} emitter received exit signal", session_key);
                             let exit_event_name = format!("pty-exit-{}", session_key);
                             let exit_payload = serde_json::json!({"instance_id": instance_id});
-                            publish_app_event(&app_event_tx, &exit_event_name, &exit_payload);
-                            if let Some(app_handle) = app_handle.as_ref() {
-                                let _ = app_handle.emit(&exit_event_name, exit_payload);
-                            }
+                            publish_app_event_to_runtime(app_handle.as_ref(), &app_event_tx, &exit_event_name, &exit_payload);
                             if let Some(success) = agent_success {
                                 let payload = serde_json::json!({"task_id": &session_key, "success": success});
-                                publish_app_event(&app_event_tx, "agent-pty-exited", &payload);
-                                if let Some(app_handle) = app_handle.as_ref() {
-                                    let _ = app_handle.emit("agent-pty-exited", payload);
-                                }
+                                publish_app_event_to_runtime(app_handle.as_ref(), &app_event_tx, "agent-pty-exited", &payload);
                             }
                             break;
                         }
