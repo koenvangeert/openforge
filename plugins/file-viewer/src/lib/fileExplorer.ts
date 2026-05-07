@@ -1,4 +1,4 @@
-import type { FileContent, FileEntry } from './types'
+import type { FileContent, FileEntry } from '@openforge/plugin-sdk/domain'
 
 export interface FileBrowserProjectState {
   rootEntries: FileEntry[]
