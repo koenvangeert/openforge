@@ -521,9 +521,9 @@
                       </div>
                     {/snippet}
                     {#snippet renderWidgetLine({ lineNumber, side, diffFile, onClose }: { lineNumber: number; side: SplitSide; diffFile: import('@git-diff-view/core').DiffFile; onClose: () => void })}
-                      <div class="p-3 mx-4 my-2 bg-base-100 border border-base-300 rounded-md">
+                      <div class="review-inline-comment-form p-3 mx-4 my-2 bg-base-100 border border-base-300 rounded-md">
                         <textarea
-                          class="textarea textarea-bordered w-full min-h-[60px] text-[0.8rem] resize-y"
+                          class="textarea textarea-bordered w-full min-h-[60px] text-[0.8rem] leading-relaxed resize-y"
                           placeholder="Leave a comment… (⇧Enter to submit)"
                           rows="3"
                           bind:value={commentText}
@@ -535,16 +535,18 @@
                             }
                           }}
                         ></textarea>
-                        <div class="flex justify-end gap-2 mt-2">
+                        <div class="flex justify-end gap-2.5 mt-2">
                           <button
-                            class="btn btn-ghost btn-xs border border-base-300"
+                            type="button"
+                            class="btn btn-sm border border-base-300 hover:border-primary hover:text-primary"
                             onclick={() => {
                               onClose()
                             }}
                           >Cancel</button>
-                           <button
-                             class="btn btn-primary btn-xs"
-                             onclick={() => submitInlineComment(file.filename, lineNumber, side, onClose)}
+                          <button
+                            type="button"
+                            class="btn btn-primary btn-sm"
+                            onclick={() => submitInlineComment(file.filename, lineNumber, side, onClose)}
                           >Add Comment</button>
                         </div>
                       </div>
