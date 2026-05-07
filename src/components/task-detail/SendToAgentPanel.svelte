@@ -1,5 +1,9 @@
 <script lang="ts">
-  import { selfReviewGeneralComments, selfReviewArchivedComments } from '../../lib/stores'
+  import {
+    selfReviewStateByTask,
+    setSelfReviewArchivedComments,
+    setSelfReviewGeneralComments,
+  } from '../../lib/taskScopedSelfReviewState'
   import { archiveSelfReviewComments, getActiveSelfReviewComments, getArchivedSelfReviewComments } from '../../lib/ipc'
   import { compileReviewPrompt } from '../../lib/reviewPrompt'
   import type { PrComment, ReviewSubmissionComment } from '../../lib/types'
@@ -22,8 +26,10 @@
   let error = $state<string | null>(null)
   let successMessage = $state<string | null>(null)
 
+  let selfReviewState = $derived($selfReviewStateByTask.get(taskId))
+  let selfReviewGeneralComments = $derived(selfReviewState?.generalComments ?? [])
   let inlineCount = $derived(pendingInlineComments.length)
-  let generalCount = $derived($selfReviewGeneralComments.length)
+  let generalCount = $derived(selfReviewGeneralComments.length)
   let prCommentCount = $derived(selectedPrComments.length)
   let hasComments = $derived(inlineCount > 0 || generalCount > 0 || prCommentCount > 0)
   let isAgentBusy = $derived(agentStatus === 'running' || agentStatus === 'paused')
@@ -33,7 +39,7 @@
     if (!canSend) return
 
     const inlineComments = pendingInlineComments.map(c => ({ path: c.path, line: c.line, body: c.body }))
-    const generalComments = $selfReviewGeneralComments.map(c => ({ body: c.body }))
+    const generalComments = selfReviewGeneralComments.map(c => ({ body: c.body }))
     const prReviewComments = selectedPrComments.map(c => ({
       body: c.body,
       author: c.author,
@@ -55,11 +61,11 @@
 
       // Reload archived comments into store
       const archived = await getArchivedSelfReviewComments(taskId)
-      selfReviewArchivedComments.set(archived)
+      setSelfReviewArchivedComments(taskId, archived.filter(c => c.comment_type === 'general'))
 
       // Reload active comments (should be empty after archive)
       const active = await getActiveSelfReviewComments(taskId)
-      selfReviewGeneralComments.set(active.filter(c => c.comment_type === 'general'))
+      setSelfReviewGeneralComments(taskId, active.filter(c => c.comment_type === 'general'))
 
       successMessage = 'Feedback sent to agent!'
       setTimeout(() => {

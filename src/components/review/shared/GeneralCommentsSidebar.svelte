@@ -1,7 +1,12 @@
 <script lang="ts">
   import { onDestroy } from 'svelte'
   import { get } from 'svelte/store'
-  import { selfReviewGeneralComments, selfReviewArchivedComments, taskDraftNotes } from '../../../lib/stores'
+  import { taskDraftNotes } from '../../../lib/stores'
+  import {
+    selfReviewStateByTask,
+    setSelfReviewArchivedComments,
+    setSelfReviewGeneralComments,
+  } from '../../../lib/taskScopedSelfReviewState'
   import {
     addSelfReviewComment,
     deleteSelfReviewComment,
@@ -29,7 +34,10 @@
   let textareaEl = $state<HTMLTextAreaElement | null>(null)
   let prevTaskId = ''
 
-  let archivedCount = $derived($selfReviewArchivedComments.length)
+  let selfReviewState = $derived($selfReviewStateByTask.get(taskId))
+  let selfReviewGeneralComments = $derived(selfReviewState?.generalComments ?? [])
+  let selfReviewArchivedComments = $derived(selfReviewState?.archivedComments ?? [])
+  let archivedCount = $derived(selfReviewArchivedComments.length)
   let canAdd = $derived(newCommentBody.trim().length > 0 && !isAdding)
 
   function saveDraft(id: string, body: string) {
@@ -44,7 +52,7 @@
 
   async function loadComments(force = false) {
     // Skip IPC calls if stores already have data (unless forced)
-    if (!force && ($selfReviewGeneralComments.length > 0 || $selfReviewArchivedComments.length > 0)) {
+    if (!force && (selfReviewGeneralComments.length > 0 || selfReviewArchivedComments.length > 0)) {
       return
     }
 
@@ -54,8 +62,8 @@
         getActiveSelfReviewComments(taskId),
         getArchivedSelfReviewComments(taskId)
       ])
-      $selfReviewGeneralComments = active.filter((c: SelfReviewComment) => c.comment_type === 'general')
-      $selfReviewArchivedComments = archived.filter((c: SelfReviewComment) => c.comment_type === 'general')
+      setSelfReviewGeneralComments(taskId, active.filter((c: SelfReviewComment) => c.comment_type === 'general'))
+      setSelfReviewArchivedComments(taskId, archived.filter((c: SelfReviewComment) => c.comment_type === 'general'))
     } catch (e) {
       console.error('Failed to load self-review comments:', e)
       loadError = 'Failed to load comments.'
@@ -89,8 +97,9 @@
     isDeleting = commentId
     try {
       await deleteSelfReviewComment(commentId)
-      $selfReviewGeneralComments = $selfReviewGeneralComments.filter(
-        (c: SelfReviewComment) => c.id !== commentId
+      setSelfReviewGeneralComments(
+        taskId,
+        selfReviewGeneralComments.filter((c: SelfReviewComment) => c.id !== commentId)
       )
     } catch (e) {
       console.error('Failed to delete comment:', e)
@@ -157,7 +166,7 @@
       </button>
       {#if archivedExpanded}
         <div class="flex flex-col px-3 pb-3 max-h-[220px] overflow-y-auto">
-          {#each $selfReviewArchivedComments as comment (comment.id)}
+          {#each selfReviewArchivedComments as comment (comment.id)}
             <div class="flex flex-col gap-1.5 px-1 py-2 border-b border-base-300 opacity-50 last:border-b-0">
               <div class="flex items-center gap-2">
                 <span class="text-[0.7rem] font-semibold text-primary/70 tabular-nums">#{comment.id}</span>
@@ -179,13 +188,13 @@
         <span class="shrink-0">⚠</span>
         <span>{loadError}</span>
       </div>
-    {:else if $selfReviewGeneralComments.length === 0}
+    {:else if selfReviewGeneralComments.length === 0}
       <div class="flex flex-col items-center justify-center gap-2.5 flex-1 px-4 py-8 text-center">
         <span class="text-2xl opacity-40">📝</span>
         <p class="m-0 text-xs text-base-content/50 leading-relaxed">No comments yet. Add notes from manual testing.</p>
       </div>
     {:else}
-      {#each $selfReviewGeneralComments as comment, i (comment.id)}
+      {#each selfReviewGeneralComments as comment, i (comment.id)}
         <div class="flex flex-col gap-1.5 px-3 py-2.5 bg-base-100 border border-base-300 rounded-lg mb-2 last:mb-0">
           <div class="flex items-center gap-2">
             <span class="text-[0.7rem] font-semibold text-primary/70 tabular-nums">#{i + 1}</span>
