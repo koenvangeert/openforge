@@ -1,5 +1,4 @@
-import type { AppEventForwarder } from './eventForwarder.js'
-import type { SidecarHandle, SidecarLaunchConfig } from './sidecar.js'
+import type { SidecarLaunchConfig, SidecarReadinessHandle } from './sidecar.js'
 
 export type BootFailurePolicy = 'fail' | 'continue'
 
@@ -8,7 +7,7 @@ export interface BootLifecyclePolicy {
   missingSidecar: BootFailurePolicy
   /** Sidecar launch/readiness failures stay strict unless explicitly degraded. */
   sidecarFailure: BootFailurePolicy
-  /** Initial event stream readiness may degrade so the renderer can still launch. */
+  /** Initial event stream readiness is owned by the Sidecar Readiness Module. */
   eventStreamFailure: BootFailurePolicy
 }
 
@@ -44,10 +43,9 @@ export interface BootLifecycleAdapter {
   waitForAppReady(): Promise<void>
   resolveSidecarPath(): string | null
   createSidecarLaunchConfig(sidecarPath: string): SidecarLaunchConfig
-  startSidecar(config: SidecarLaunchConfig): Promise<SidecarHandle>
+  startSidecar(config: SidecarLaunchConfig): Promise<SidecarReadinessHandle>
   registerPluginProtocolHandler(sidecarConfig: SidecarLaunchConfig | null): void
   applyRendererCsp(sidecarConfig: SidecarLaunchConfig | null): void
-  createAppEventForwarder(sidecarConfig: SidecarLaunchConfig): AppEventForwarder
   createMainWindow(): Promise<unknown>
   quit(): void
 }
@@ -60,8 +58,7 @@ export interface BootLifecycleOptions {
 }
 
 export interface BootResult {
-  sidecar: SidecarHandle | null
-  appEventForwarder: AppEventForwarder | null
+  sidecar: SidecarReadinessHandle | null
   mainWindow: unknown | null
   degradations: BootDegradation[]
 }
@@ -90,12 +87,10 @@ export async function bootOpenForgeDesktop(
   const logger = options.logger ?? DEFAULT_LOGGER
   const platform = options.platform ?? process.platform
   const degradations: BootDegradation[] = []
-  let sidecar: SidecarHandle | null = null
-  let appEventForwarder: AppEventForwarder | null = null
+  let sidecar: SidecarReadinessHandle | null = null
   let mainWindow: unknown | null = null
 
   const cleanupStartedResources = async (): Promise<void> => {
-    appEventForwarder?.stop()
     await sidecar?.stop()
   }
 
@@ -114,7 +109,6 @@ export async function bootOpenForgeDesktop(
   })
 
   adapter.onBeforeQuit(() => {
-    appEventForwarder?.stop()
     void sidecar?.stop()
   })
 
@@ -143,25 +137,8 @@ export async function bootOpenForgeDesktop(
     adapter.registerPluginProtocolHandler(sidecar?.config ?? null)
     adapter.applyRendererCsp(sidecar?.config ?? null)
 
-    if (sidecar) {
-      appEventForwarder = adapter.createAppEventForwarder(sidecar.config)
-      const eventForwarderRun = appEventForwarder.start()
-      void eventForwarderRun.catch(error => {
-        logger.error('[electron] Rust app event stream failed:', error)
-      })
-
-      try {
-        await appEventForwarder.ready()
-        logger.info('[electron] Rust app event stream connected')
-      } catch (error) {
-        logger.error('[electron] Rust app event stream failed:', error)
-        if (policy.eventStreamFailure === 'fail') throw error
-        degradations.push({ kind: 'event-stream-unavailable', reason: reasonFromError(error) })
-      }
-    }
-
     mainWindow = await adapter.createMainWindow()
-    return { sidecar, appEventForwarder, mainWindow, degradations }
+    return { sidecar, mainWindow, degradations }
   } catch (error) {
     await cleanupStartedResources()
     throw error

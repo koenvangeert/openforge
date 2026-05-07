@@ -30,6 +30,7 @@ fn test_state(name: &str) -> (AppState, std::path::PathBuf) {
             whisper: Some(Arc::new(WhisperManager::with_active_model(
                 WhisperModelSize::Small,
             ))),
+            sidecar_readiness: SidecarReadinessState::new(),
         },
         path,
     )

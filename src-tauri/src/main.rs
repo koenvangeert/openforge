@@ -160,6 +160,7 @@ pub(crate) fn load_resume_targets(db: &db::Database) -> rusqlite::Result<Vec<Res
 async fn resume_task_servers(
     app: crate::backend_runtime::AppHandle,
     http_ready: tokio::sync::oneshot::Receiver<()>,
+    sidecar_readiness: http_server::SidecarReadinessState,
 ) {
     // Wait for the HTTP server to be listening so Claude Code hooks don't get connection-refused
     match http_ready.await {
@@ -176,6 +177,9 @@ async fn resume_task_servers(
             Ok(targets) => targets,
             Err(e) => {
                 error!("[startup] Failed to get resumable task workspaces: {}", e);
+                sidecar_readiness.mark_startup_resume_degraded(format!(
+                    "failed to get resumable task workspaces: {e}"
+                ));
                 let _ = app.emit("startup-resume-complete", ());
                 return;
             }
@@ -183,9 +187,12 @@ async fn resume_task_servers(
     };
 
     if resume_targets.is_empty() {
+        sidecar_readiness.mark_startup_resume_complete();
         let _ = app.emit("startup-resume-complete", ());
         return;
     }
+
+    sidecar_readiness.mark_startup_resume_running(resume_targets.len());
 
     info!(
         "[startup] Resuming servers for {} task(s)",
@@ -318,6 +325,8 @@ async fn resume_task_servers(
                     }),
                 );
 
+                sidecar_readiness.record_startup_resume_success();
+
                 info!(
                     "[startup] Resumed {} for task {} (port {})",
                     provider_name, target.task_id, result.port
@@ -328,6 +337,10 @@ async fn resume_task_servers(
                     "[startup] Failed to resume {} for task {}: {}",
                     provider_name, target.task_id, e
                 );
+                sidecar_readiness.record_startup_resume_failure(format!(
+                    "failed to resume {provider_name} for task {}: {e}",
+                    target.task_id
+                ));
 
                 // Mark provider sessions as interrupted on failure for providers that do not
                 // have an external status source to reconcile against after startup.
@@ -357,6 +370,7 @@ async fn resume_task_servers(
         }
     }
 
+    sidecar_readiness.mark_startup_resume_complete();
     let _ = app.emit("startup-resume-complete", ());
     info!("[startup] Resume complete, emitted startup-resume-complete event");
 }
@@ -671,6 +685,7 @@ fn run_electron_sidecar() -> Result<(), Box<dyn std::error::Error>> {
     let server_manager = server_manager::ServerManager::new();
     let sse_bridge_manager = sse_bridge::SseBridgeManager::new();
     let whisper_manager = Arc::new(WhisperManager::with_active_model(whisper_model_pref));
+    let sidecar_readiness = http_server::SidecarReadinessState::new();
     let (http_ready_tx, http_ready_rx) = tokio::sync::oneshot::channel::<()>();
     let app = http_server::electron_sidecar_app_handle(app_data_dir.clone(), resource_dir.clone());
     app.manage(db_arc.clone());
@@ -688,7 +703,11 @@ fn run_electron_sidecar() -> Result<(), Box<dyn std::error::Error>> {
         .enable_all()
         .build()?
         .block_on(async move {
-            tokio::spawn(resume_task_servers(app.clone(), http_ready_rx));
+            tokio::spawn(resume_task_servers(
+                app.clone(),
+                http_ready_rx,
+                sidecar_readiness.clone(),
+            ));
 
             let startup_project_id = {
                 let db_lock = db_arc
@@ -717,6 +736,7 @@ fn run_electron_sidecar() -> Result<(), Box<dyn std::error::Error>> {
                 server_manager,
                 sse_bridge_manager,
                 whisper_manager,
+                sidecar_readiness,
                 http_ready_tx,
             )
             .await

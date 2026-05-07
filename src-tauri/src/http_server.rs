@@ -21,7 +21,13 @@ use axum::{
 use futures::{Stream, StreamExt};
 use log::{error, info, warn};
 use serde::{Deserialize, Serialize};
-use std::{convert::Infallible, net::SocketAddr, path::PathBuf, sync::Mutex, time::Duration};
+use std::{
+    convert::Infallible,
+    net::SocketAddr,
+    path::PathBuf,
+    sync::{Arc, Mutex},
+    time::Duration,
+};
 
 const APP_INVOKE_MAX_BODY_BYTES: usize = 96 * 1024 * 1024;
 const APP_EVENT_KEEPALIVE_TEXT: &str = "openforge-event-stream-keepalive";
@@ -51,6 +57,115 @@ pub struct AppState {
     pub app_event_tx: Option<AppEventSender>,
     pub app_event_bus: Option<AppEventBus>,
     pub whisper: Option<std::sync::Arc<WhisperManager>>,
+    pub sidecar_readiness: SidecarReadinessState,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StartupResumeReadiness {
+    pub phase: String,
+    pub target_count: Option<usize>,
+    pub resumed_count: Option<usize>,
+    pub failed_count: Option<usize>,
+    pub completed_at: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SidecarDegradedState {
+    pub area: String,
+    pub message: String,
+    pub since: String,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct SidecarReadinessState {
+    startup_resume: Arc<Mutex<StartupResumeReadiness>>,
+    degraded: Arc<Mutex<Vec<SidecarDegradedState>>>,
+}
+
+impl Default for StartupResumeReadiness {
+    fn default() -> Self {
+        Self {
+            phase: "pending".to_string(),
+            target_count: None,
+            resumed_count: None,
+            failed_count: None,
+            completed_at: None,
+        }
+    }
+}
+
+impl SidecarReadinessState {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn startup_resume(&self) -> StartupResumeReadiness {
+        self.startup_resume
+            .lock()
+            .map(|state| state.clone())
+            .unwrap_or_default()
+    }
+
+    pub fn degraded(&self) -> Vec<SidecarDegradedState> {
+        self.degraded
+            .lock()
+            .map(|state| state.clone())
+            .unwrap_or_default()
+    }
+
+    pub fn mark_startup_resume_running(&self, target_count: usize) {
+        if let Ok(mut state) = self.startup_resume.lock() {
+            state.phase = "running".to_string();
+            state.target_count = Some(target_count);
+            state.resumed_count = Some(0);
+            state.failed_count = Some(0);
+            state.completed_at = None;
+        }
+    }
+
+    pub fn record_startup_resume_success(&self) {
+        if let Ok(mut state) = self.startup_resume.lock() {
+            state.resumed_count = Some(state.resumed_count.unwrap_or(0) + 1);
+        }
+    }
+
+    pub fn record_startup_resume_failure(&self, message: impl Into<String>) {
+        if let Ok(mut state) = self.startup_resume.lock() {
+            state.failed_count = Some(state.failed_count.unwrap_or(0) + 1);
+        }
+        self.mark_degraded("startupResume", message);
+    }
+
+    pub fn mark_startup_resume_complete(&self) {
+        if let Ok(mut state) = self.startup_resume.lock() {
+            if state.failed_count.unwrap_or(0) > 0 {
+                state.phase = "degraded".to_string();
+            } else {
+                state.phase = "complete".to_string();
+            }
+            state.completed_at = Some(chrono::Utc::now().to_rfc3339());
+        }
+    }
+
+    pub fn mark_startup_resume_degraded(&self, message: impl Into<String>) {
+        if let Ok(mut state) = self.startup_resume.lock() {
+            state.phase = "degraded".to_string();
+            state.completed_at = Some(chrono::Utc::now().to_rfc3339());
+        }
+        self.mark_degraded("startupResume", message);
+    }
+
+    fn mark_degraded(&self, area: impl Into<String>, message: impl Into<String>) {
+        if let Ok(mut degraded) = self.degraded.lock() {
+            degraded.push(SidecarDegradedState {
+                area: area.into(),
+                message: message.into(),
+                since: chrono::Utc::now().to_rfc3339(),
+            });
+        }
+    }
 }
 
 /// Response containing the created task ID
@@ -83,6 +198,22 @@ pub struct GetTaskInfoResponse {
     pub prompt: Option<String>,
     pub summary: Option<String>,
     pub status: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AppReadinessEventsResponse {
+    pub available: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AppReadinessResponse {
+    pub status: &'static str,
+    pub version: &'static str,
+    pub events: AppReadinessEventsResponse,
+    pub startup_resume: StartupResumeReadiness,
+    pub degraded: Vec<SidecarDegradedState>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -701,6 +832,22 @@ async fn app_health_handler(
     }))
 }
 
+async fn app_readiness_handler(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<AppReadinessResponse>, (StatusCode, String)> {
+    require_backend_token(&state, &headers)?;
+    Ok(Json(AppReadinessResponse {
+        status: "ok",
+        version: env!("CARGO_PKG_VERSION"),
+        events: AppReadinessEventsResponse {
+            available: state.app_event_bus.is_some() || state.app_event_tx.is_some(),
+        },
+        startup_resume: state.sidecar_readiness.startup_resume(),
+        degraded: state.sidecar_readiness.degraded(),
+    }))
+}
+
 async fn app_events_handler(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -769,6 +916,7 @@ async fn app_invoke_handler(
 pub fn create_router(state: AppState) -> Router {
     Router::new()
         .route("/app/health", get(app_health_handler))
+        .route("/app/readiness", get(app_readiness_handler))
         .route("/app/events", get(app_events_handler))
         .route(
             "/app/invoke",
@@ -826,6 +974,7 @@ pub async fn start_http_sidecar_server(
     server_manager: ServerManager,
     sse_bridge_manager: SseBridgeManager,
     whisper: std::sync::Arc<WhisperManager>,
+    sidecar_readiness: SidecarReadinessState,
     ready_tx: tokio::sync::oneshot::Sender<()>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     start_http_server_with_app_state(
@@ -835,6 +984,7 @@ pub async fn start_http_sidecar_server(
         server_manager,
         sse_bridge_manager,
         Some(whisper),
+        sidecar_readiness,
         true,
         ready_tx,
     )
@@ -848,6 +998,7 @@ async fn start_http_server_with_app_state(
     server_manager: ServerManager,
     sse_bridge_manager: SseBridgeManager,
     whisper: Option<std::sync::Arc<WhisperManager>>,
+    sidecar_readiness: SidecarReadinessState,
     is_electron_sidecar: bool,
     ready_tx: tokio::sync::oneshot::Sender<()>,
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -886,6 +1037,7 @@ async fn start_http_server_with_app_state(
         app_event_tx: Some(app_event_tx.clone()),
         app_event_bus: Some(app_event_bus),
         whisper,
+        sidecar_readiness,
     };
 
     if is_electron_sidecar {

@@ -1,18 +1,34 @@
 import { EventEmitter } from 'node:events'
 import { describe, expect, it, vi } from 'vitest'
-import { createSidecarLaunchConfig, startSidecar, stopSidecar, waitForSidecarHealth } from './sidecar'
-import type { ChildProcessLike } from './sidecar'
+import { createSidecarLaunchConfig, startSidecar, startSidecarReadiness, stopSidecar, waitForSidecarHealth } from './sidecar'
+import type { ChildProcessLike, SidecarEventEnvelopeLike, SidecarEventStreamAdapter } from './sidecar'
 
 class FakeChild extends EventEmitter implements ChildProcessLike {
   killed = false
   killCalls: string[] = []
   stdout = new EventEmitter()
   stderr = new EventEmitter()
+  pid = 4242
 
   kill(signal?: NodeJS.Signals): boolean {
     this.killCalls.push(signal ?? 'SIGTERM')
     this.killed = true
     return true
+  }
+}
+
+class ScriptedEventStream implements SidecarEventStreamAdapter {
+  private listener: ((envelope: SidecarEventEnvelopeLike) => void) | null = null
+  start = vi.fn(async () => undefined)
+  ready = vi.fn(async () => undefined)
+  stop = vi.fn()
+
+  onEvent(listener: (envelope: SidecarEventEnvelopeLike) => void): void {
+    this.listener = listener
+  }
+
+  emit(envelope: SidecarEventEnvelopeLike): void {
+    this.listener?.(envelope)
   }
 }
 
@@ -131,5 +147,127 @@ describe('Electron Rust sidecar supervision', () => {
     await stopSidecar(child, { graceMs: 1, sleep })
 
     expect(child.killCalls).toEqual(['SIGTERM', 'SIGKILL'])
+  })
+
+  it('deepens readiness by waiting for authenticated readiness and the app event stream', async () => {
+    const child = new FakeChild()
+    const eventStream = new ScriptedEventStream()
+    const spawn = vi.fn(() => child)
+    const fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        status: 'ok',
+        version: '0.1.0',
+        events: { available: true },
+        startupResume: { phase: 'running', targetCount: 2, resumedCount: 1, failedCount: 0 },
+        degraded: [],
+      }),
+    })
+    const sleep = vi.fn(async () => undefined)
+
+    const handle = await startSidecarReadiness(createSidecarLaunchConfig({ token: 'token-123', port: 17642 }), {
+      spawn,
+      fetch,
+      sleep,
+      createEventStream: vi.fn(() => eventStream),
+    })
+
+    expect(fetch).toHaveBeenCalledWith('http://127.0.0.1:17642/app/readiness', {
+      headers: { Authorization: 'Bearer token-123' },
+    })
+    expect(eventStream.start).toHaveBeenCalled()
+    expect(eventStream.ready).toHaveBeenCalled()
+    expect(handle.snapshot()).toMatchObject({
+      identity: {
+        readinessUrl: 'http://127.0.0.1:17642/app/readiness',
+        eventUrl: 'http://127.0.0.1:17642/app/events',
+        pid: 4242,
+        rustVersion: '0.1.0',
+      },
+      http: { available: true, authenticated: true },
+      events: { available: true },
+      startupResume: { phase: 'running', targetCount: 2, resumedCount: 1, failedCount: 0 },
+      process: { state: 'running' },
+    })
+  })
+
+  it('tracks startup-resume completion and post-ready process degradation behind the readiness seam', async () => {
+    const child = new FakeChild()
+    const eventStream = new ScriptedEventStream()
+    const spawn = vi.fn(() => child)
+    const fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ status: 'ok', events: { available: true }, startupResume: { phase: 'pending' } }),
+    })
+    const sleep = vi.fn(async () => undefined)
+
+    const handle = await startSidecarReadiness(createSidecarLaunchConfig({ token: 'token-123', port: 17642 }), {
+      spawn,
+      fetch,
+      sleep,
+      createEventStream: vi.fn(() => eventStream),
+    })
+
+    eventStream.emit({ id: 'lifecycle:startup-resume-complete', eventName: 'startup-resume-complete', payload: {} })
+    expect(handle.snapshot().startupResume.phase).toBe('complete')
+    expect(handle.snapshot().events.lastEventId).toBe('lifecycle:startup-resume-complete')
+
+    child.emit('exit', 7, null)
+    expect(handle.snapshot().process).toMatchObject({ state: 'exited', exitCode: 7, signal: null })
+    expect(handle.snapshot().degraded).toEqual(expect.arrayContaining([
+      expect.objectContaining({ area: 'process', message: 'sidecar process exited with code 7' }),
+    ]))
+  })
+
+  it('preserves degraded startup-resume readiness when the completion event arrives later', async () => {
+    const child = new FakeChild()
+    const eventStream = new ScriptedEventStream()
+    const spawn = vi.fn(() => child)
+    const fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        status: 'ok',
+        events: { available: true },
+        startupResume: { phase: 'degraded', targetCount: 2, resumedCount: 1, failedCount: 1 },
+        degraded: [{ area: 'startupResume', message: 'failed to resume task', since: '2026-05-07T00:00:00.000Z' }],
+      }),
+    })
+    const sleep = vi.fn(async () => undefined)
+
+    const handle = await startSidecarReadiness(createSidecarLaunchConfig({ token: 'token-123', port: 17642 }), {
+      spawn,
+      fetch,
+      sleep,
+      createEventStream: vi.fn(() => eventStream),
+    })
+
+    eventStream.emit({ id: 'lifecycle:startup-resume-complete', eventName: 'startup-resume-complete', payload: {} })
+
+    expect(handle.snapshot().startupResume).toMatchObject({
+      phase: 'degraded',
+      targetCount: 2,
+      resumedCount: 1,
+      failedCount: 1,
+      completedAt: expect.any(String),
+    })
+    expect(handle.snapshot().events.lastEventId).toBe('lifecycle:startup-resume-complete')
+  })
+
+  it('cleans up the process when authenticated readiness fails', async () => {
+    const child = new FakeChild()
+    const spawn = vi.fn(() => child)
+    const fetch = vi.fn().mockResolvedValue({ ok: false, status: 401, text: async () => 'missing backend token' })
+    const sleep = vi.fn(async () => undefined)
+
+    await expect(startSidecarReadiness(createSidecarLaunchConfig({ token: 'token-123', port: 17642 }), {
+      spawn,
+      fetch,
+      sleep,
+      healthTimeoutMs: 1,
+      healthIntervalMs: 1,
+      createEventStream: vi.fn(() => new ScriptedEventStream()),
+    })).rejects.toThrow('sidecar did not become ready: sidecar readiness check failed: missing backend token')
+
+    expect(child.killCalls).toContain('SIGTERM')
   })
 })
