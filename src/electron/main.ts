@@ -1,29 +1,7 @@
-import { spawn } from 'node:child_process'
-import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
-import { app, BrowserWindow, ipcMain, protocol, session, shell } from 'electron'
-import { createMainWindowOptions } from './windowConfig.js'
-import { createPreloadPath } from './preloadPath.js'
-import { loadAndRevealMainWindow } from './windowStartup.js'
-import { shouldGrantMediaPermission, trustedRendererOrigins } from './mediaPermission.js'
-import { asChildProcessLike, createSidecarLaunchConfig, startSidecar } from './sidecar.js'
-import { handleElectronInvoke } from './backendBridge.js'
-import { createAppEventForwarder } from './eventForwarder.js'
-import { trustedRendererUrlFromEnv } from './rendererUrl.js'
-import { resolveElectronSidecarPath } from './sidecarPath.js'
-import { configureElectronUserDataPath } from './runtimePaths.js'
-import {
-  applyElectronRendererCsp,
-  createElectronRendererCsp,
-  registerPluginProtocolHandler,
-  registerPluginProtocolSchemeAsPrivileged,
-  resolveHostRuntimeRoot,
-} from './pluginProtocol.js'
-import type { AppEventForwarder } from './eventForwarder.js'
-import type { SidecarHandle } from './sidecar.js'
-
-let sidecar: SidecarHandle | null = null
-let appEventForwarder: AppEventForwarder | null = null
+import { fileURLToPath } from 'node:url'
+import { bootOpenForgeDesktop } from './bootLifecycle.js'
+import { createElectronBootAdapter } from './electronBootAdapter.js'
 
 function currentDir(): string {
   return dirname(fileURLToPath(import.meta.url))
@@ -33,109 +11,16 @@ function workspaceRoot(): string {
   return join(currentDir(), '..')
 }
 
-async function createMainWindow(): Promise<BrowserWindow> {
-  const preloadPath = createPreloadPath(currentDir())
-  const window = new BrowserWindow(createMainWindowOptions(preloadPath))
-
-  const rendererUrl = trustedRendererUrlFromEnv()
-  const trustedOrigins = trustedRendererOrigins(rendererUrl)
-  const mainWebContentsId = window.webContents.id
-  window.webContents.session.setPermissionRequestHandler((webContents, permission, callback, details) => {
-    callback(shouldGrantMediaPermission({
-      permission,
-      isMainWindowWebContents: webContents.id === mainWebContentsId,
-      requestingUrl: details.requestingUrl,
-      trustedOrigins,
-      mediaTypes: 'mediaTypes' in details ? details.mediaTypes : undefined,
-    }))
-  })
-
-  console.log(`[electron] Loading renderer from ${rendererUrl ?? 'packaged dist/index.html'}`)
-  await loadAndRevealMainWindow(window, rendererUrl
-    ? { rendererUrl }
-    : { filePath: join(currentDir(), '..', 'dist', 'index.html') })
-  return window
-}
-
-function registerSkeletonIpc(): void {
-  ipcMain.handle('openforge:invoke', async (_event, request: unknown) => handleElectronInvoke(
-    request as { command?: unknown; payload?: unknown },
-    {
-      sidecarConfig: sidecar?.config ?? null,
-      fetch: (url, init) => fetch(url, init),
-      openExternal: (url) => shell.openExternal(url),
-    },
-  ))
-}
-
-async function bootSidecar(): Promise<void> {
-  const sidecarPath = resolveElectronSidecarPath(process.env, currentDir())
-  if (!sidecarPath) {
-    if (!process.env.OPENFORGE_ELECTRON_DEV_DISABLE_SIDECAR) {
-      console.warn('[electron] no bundled sidecar found and OPENFORGE_SIDECAR_PATH is not set; skipping sidecar launch for skeleton dev mode')
-    }
-    return
-  }
-
-  const config = createSidecarLaunchConfig({
-    executablePath: sidecarPath,
-    port: Number(process.env.OPENFORGE_BACKEND_PORT ?? 17642),
-    processEnv: process.env,
-  })
-
-  console.log(`[electron] Starting Rust sidecar: ${config.command} --host ${config.host} --port ${config.port}`)
-  sidecar = await startSidecar(config, {
-    spawn: (command, args, options) => asChildProcessLike(spawn(command, [...args], options)),
-    fetch: (url, init) => fetch(url, init),
-    sleep: (ms) => new Promise(resolve => setTimeout(resolve, ms)),
-    logSidecarOutput: true,
-  })
-  console.log(`[electron] Rust sidecar is ready at ${config.healthUrl}`)
-}
-
-registerPluginProtocolSchemeAsPrivileged(protocol)
-registerSkeletonIpc()
-const isolatedUserDataDir = configureElectronUserDataPath(app, process.env)
-if (isolatedUserDataDir) {
-  console.log(`[electron] Using isolated user data directory ${isolatedUserDataDir}`)
-}
-
-app.whenReady().then(async () => {
-  await bootSidecar()
-  registerPluginProtocolHandler(protocol, {
-    workspaceRoot: workspaceRoot(),
-    hostRuntimeRoot: resolveHostRuntimeRoot(currentDir()),
-    sidecarConfig: sidecar?.config ?? null,
-    fetch: (url, init) => fetch(url, init),
-  })
-  applyElectronRendererCsp(session.defaultSession, createElectronRendererCsp(sidecar?.config ?? null))
-
-  if (sidecar) {
-    appEventForwarder = createAppEventForwarder({
-      sidecarConfig: sidecar.config,
-      fetch: (url, init) => fetch(url, init),
-      windows: () => BrowserWindow.getAllWindows(),
-    })
-    const eventForwarderRun = appEventForwarder.start()
-    try {
-      await appEventForwarder.ready()
-      console.log('[electron] Rust app event stream connected')
-    } catch (error) {
-      console.error('[electron] Rust app event stream failed:', error)
-    }
-    void eventForwarderRun.catch(error => {
-      console.error('[electron] Rust app event stream failed:', error)
-    })
-  }
-
-  await createMainWindow()
+const adapter = createElectronBootAdapter({
+  currentDir: currentDir(),
+  workspaceRoot: workspaceRoot(),
+  env: process.env,
 })
 
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit()
-})
-
-app.on('before-quit', () => {
-  appEventForwarder?.stop()
-  void sidecar?.stop()
+void bootOpenForgeDesktop(adapter, {
+  platform: process.platform,
+  warnOnMissingSidecar: !process.env.OPENFORGE_ELECTRON_DEV_DISABLE_SIDECAR,
+}).catch(error => {
+  console.error('[electron] OpenForge boot failed:', error)
+  adapter.quit()
 })
