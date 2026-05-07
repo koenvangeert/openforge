@@ -173,7 +173,7 @@ export const appShellEventContracts = [
 export const dynamicShellEventContracts = [
   {
     eventPattern: 'pty-output-{taskId}',
-    currentSubscribers: ['src/lib/terminalPool.ts', 'src/lib/usePtyBridge.svelte.ts'],
+    currentSubscribers: ['src/lib/terminalPool.ts'],
     currentProducers: ['src-tauri/src/pty_manager.rs'],
     payload: '{ task_id: string; data: string; instance_id: number }',
     producer: 'rust-backend',
@@ -182,7 +182,7 @@ export const dynamicShellEventContracts = [
   },
   {
     eventPattern: 'pty-exit-{taskId}',
-    currentSubscribers: ['src/lib/terminalPool.ts', 'src/lib/usePtyBridge.svelte.ts'],
+    currentSubscribers: ['src/lib/terminalPool.ts'],
     currentProducers: ['src-tauri/src/pty_manager.rs'],
     payload: '{ instance_id: number }',
     producer: 'rust-backend',
@@ -191,7 +191,7 @@ export const dynamicShellEventContracts = [
   },
   {
     eventPattern: 'pty-output-{taskId}-shell-{terminalIndex}',
-    currentSubscribers: ['src/components/task-detail/TerminalTabs.svelte', 'src/components/task-detail/TaskTerminal.svelte', 'src/lib/terminalPool.ts', 'src/lib/plugin/pluginRegistry.ts'],
+    currentSubscribers: ['src/lib/terminalPool.ts', 'src/lib/plugin/pluginRegistry.ts'],
     currentProducers: ['src-tauri/src/pty_manager.rs'],
     payload: '{ task_id: string; data: string; instance_id: number }',
     producer: 'rust-backend',
@@ -200,7 +200,7 @@ export const dynamicShellEventContracts = [
   },
   {
     eventPattern: 'pty-exit-{taskId}-shell-{terminalIndex}',
-    currentSubscribers: ['src/components/task-detail/TerminalTabs.svelte', 'src/components/task-detail/TaskTerminal.svelte', 'src/lib/terminalPool.ts', 'src/lib/plugin/pluginRegistry.ts'],
+    currentSubscribers: ['src/components/task-detail/TaskTerminal.svelte', 'src/lib/terminalPool.ts', 'src/lib/plugin/pluginRegistry.ts'],
     currentProducers: ['src-tauri/src/pty_manager.rs'],
     payload: '{ instance_id: number }',
     producer: 'rust-backend',
