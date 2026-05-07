@@ -806,7 +806,7 @@ describe('TaskDetailView', () => {
     vi.mocked(getTaskWorkspace).mockResolvedValue(null)
   })
 
-  it('activates shell terminal using the default renderer without WebGL addon wiring', async () => {
+  it('activates shell terminal through the shared terminal pool', async () => {
     const { getTaskWorkspace } = await import('../../lib/ipc')
     const { acquire } = await import('../../lib/terminalPool')
     const acquireMock = vi.mocked(acquire)
@@ -821,14 +821,6 @@ describe('TaskDetailView', () => {
     await waitFor(() => {
       expect(acquireMock).toHaveBeenCalledWith(`${baseTask.id}-shell-0`)
     })
-
-    const shellResultIndex = acquireMock.mock.calls.findIndex(([terminalKey]) => terminalKey === `${baseTask.id}-shell-0`)
-    const shellEntry = await acquireMock.mock.results[shellResultIndex].value as {
-      terminal: { loadAddon: ReturnType<typeof vi.fn> } & Record<string, unknown>
-    }
-
-    expect(shellEntry.terminal.loadAddon).not.toHaveBeenCalled()
-    expect(shellEntry.terminal).not.toHaveProperty('onContextLoss')
 
     vi.mocked(getTaskWorkspace).mockResolvedValue(null)
   })

@@ -289,7 +289,7 @@ describe('TerminalTabs', () => {
     })
   })
 
-  it('renders shell terminals without WebGL renderer wiring props', async () => {
+  it('renders shell terminals without renderer lifecycle props', async () => {
     render(TerminalTabs, {
       props: {
         taskId: 'T-1',
