@@ -42,6 +42,8 @@ type TerminalPoolEntry = Awaited<ReturnType<typeof acquire>>;
 const listenCallbacks = new Map<string, ListenCallback>();
 const unlistenFns: UnlistenMock[] = [];
 let webLinksHandler: ((event: MouseEvent, uri: string) => void) | null = null;
+let webglConstructorShouldThrow = false;
+let webglLoadShouldThrow = false;
 let fontLoadMock: Mock;
 const originalDocumentFonts = document.fonts;
 
@@ -140,7 +142,14 @@ vi.mock("@xterm/xterm", () => {
 		write = vi.fn();
 		dispose = vi.fn();
 		onData = vi.fn().mockReturnValue({ dispose: vi.fn() });
-		loadAddon = vi.fn();
+		loadAddon = vi.fn((addon: unknown) => {
+			if (
+				webglLoadShouldThrow &&
+				Object.getPrototypeOf(addon)?.constructor?.name === "WebglAddon"
+			) {
+				throw new Error("WebGL renderer load failed");
+			}
+		});
 		refresh = vi.fn();
 		focus = vi.fn();
 		reset = vi.fn();
@@ -169,6 +178,22 @@ vi.mock("@xterm/addon-web-links", () => {
 	}
 
 	return { WebLinksAddon };
+});
+
+vi.mock("@xterm/addon-webgl", () => {
+	class WebglAddon {
+		constructor() {
+			if (webglConstructorShouldThrow) {
+				throw new Error("WebGL renderer unavailable");
+			}
+		}
+
+		onContextLoss = vi.fn();
+		activate = vi.fn();
+		dispose = vi.fn();
+	}
+
+	return { WebglAddon };
 });
 
 vi.mock("./ipc", () => ({
@@ -223,6 +248,8 @@ describe("terminalPool", () => {
 		listenCallbacks.clear();
 		unlistenFns.length = 0;
 		webLinksHandler = null;
+		webglConstructorShouldThrow = false;
+		webglLoadShouldThrow = false;
 		fontLoadMock = vi.fn().mockResolvedValue([]);
 		Object.defineProperty(document, "fonts", {
 			configurable: true,
@@ -287,7 +314,8 @@ describe("terminalPool", () => {
 		const preventDefault = vi.spyOn(event, "preventDefault");
 		const stopPropagation = vi.spyOn(event, "stopPropagation");
 
-		expect(loadAddonSpy).toHaveBeenCalledTimes(2);
+		expect(getLoadedAddonNames(entry)).toContain("WebLinksAddon");
+		expect(loadAddonSpy).toHaveBeenCalledTimes(3);
 		expect(webLinksHandler).not.toBeNull();
 
 		getWebLinksHandler()(event, "https://example.com/pool");
@@ -325,7 +353,7 @@ describe("terminalPool", () => {
 		expect(entry.attached).toBe(true);
 	});
 
-	it("attach keeps xterm on the stable default renderer for both agent and shell terminal keys", async () => {
+	it("loads the WebGL renderer addon for both agent and shell terminal keys", async () => {
 		const agentEntry = await acquire("T-50");
 		const shellEntry = await acquire("T-50-shell-0");
 		const agentWrapper = document.createElement("div");
@@ -341,13 +369,49 @@ describe("terminalPool", () => {
 
 		expect(agentOpenSpy).toHaveBeenCalledWith(agentEntry.hostDiv);
 		expect(shellOpenSpy).toHaveBeenCalledWith(shellEntry.hostDiv);
-		expect(agentLoadAddonSpy).toHaveBeenCalledTimes(2);
-		expect(shellLoadAddonSpy).toHaveBeenCalledTimes(2);
-		expect(getLoadedAddonNames(agentEntry)).toEqual(["FitAddon", "WebLinksAddon"]);
-		expect(getLoadedAddonNames(shellEntry)).toEqual(["FitAddon", "WebLinksAddon"]);
+		expect(agentLoadAddonSpy).toHaveBeenCalledTimes(3);
+		expect(shellLoadAddonSpy).toHaveBeenCalledTimes(3);
+		expect(getLoadedAddonNames(agentEntry)).toEqual(["FitAddon", "WebglAddon", "WebLinksAddon"]);
+		expect(getLoadedAddonNames(shellEntry)).toEqual(["FitAddon", "WebglAddon", "WebLinksAddon"]);
 	});
 
-	it("recoverActiveTerminal refits without changing the stable default renderer", async () => {
+	it("acquire falls back to the default renderer when WebglAddon construction fails", async () => {
+		webglConstructorShouldThrow = true;
+		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+
+		try {
+			const entry = await acquire("task-webgl-constructor-fallback");
+
+			expect(entry).toBeDefined();
+			expect(getLoadedAddonNames(entry)).toEqual(["FitAddon", "WebLinksAddon"]);
+			expect(warnSpy).toHaveBeenCalledWith(
+				"[terminalPool] WebGL renderer unavailable; falling back to the default renderer:",
+				expect.any(Error),
+			);
+		} finally {
+			warnSpy.mockRestore();
+		}
+	});
+
+	it("acquire falls back to the default renderer when WebglAddon load fails", async () => {
+		webglLoadShouldThrow = true;
+		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+
+		try {
+			const entry = await acquire("task-webgl-load-fallback");
+
+			expect(entry).toBeDefined();
+			expect(getLoadedAddonNames(entry)).toEqual(["FitAddon", "WebglAddon", "WebLinksAddon"]);
+			expect(warnSpy).toHaveBeenCalledWith(
+				"[terminalPool] WebGL renderer unavailable; falling back to the default renderer:",
+				expect.any(Error),
+			);
+		} finally {
+			warnSpy.mockRestore();
+		}
+	});
+
+	it("recoverActiveTerminal refits without reloading renderer addons", async () => {
 		const entry = await acquire("task-stable-renderer-recover");
 		const wrapper = document.createElement("div");
 

@@ -1,6 +1,7 @@
 import { listenDesktopEvent, type DesktopUnlistenFn } from './desktopIpc'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'
+import { WebglAddon } from '@xterm/addon-webgl'
 import { Terminal, type ILinkHandler } from '@xterm/xterm'
 import { get } from 'svelte/store'
 import { getPtyBuffer, openUrl, resizePty, writePty } from './ipc'
@@ -170,6 +171,22 @@ function loadWebLinksAddon(terminal: Terminal): void {
   terminal.loadAddon(webLinksAddon)
 }
 
+function loadWebglAddon(terminal: Terminal): void {
+  let webglAddon: WebglAddon | null = null
+
+  try {
+    webglAddon = new WebglAddon()
+    terminal.loadAddon(webglAddon)
+  } catch (error) {
+    try {
+      webglAddon?.dispose()
+    } catch (disposeError) {
+      console.warn('[terminalPool] Failed to dispose unavailable WebGL renderer addon:', disposeError)
+    }
+    console.warn('[terminalPool] WebGL renderer unavailable; falling back to the default renderer:', error)
+  }
+}
+
 async function replayPtyBuffer(entry: PoolEntry): Promise<void> {
   if (entry.needsClear) return
 
@@ -231,6 +248,7 @@ export async function acquire(taskId: string): Promise<PoolEntry> {
 
   const fitAddon = new FitAddon()
   terminal.loadAddon(fitAddon)
+  loadWebglAddon(terminal)
   loadWebLinksAddon(terminal)
 
   const hostDiv = createHostDiv()
