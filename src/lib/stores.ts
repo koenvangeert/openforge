@@ -1,7 +1,6 @@
 import { writable } from "svelte/store";
 import type { Task, AgentSession, PullRequestInfo, Project, AgentEvent, CheckpointNotification, CiFailureNotification, RateLimitNotification, ReviewPullRequest, AuthoredPullRequest, PrFileDiff, AppView, ReviewComment, ReviewSubmissionComment, AgentReviewComment, PrOverviewComment, ProjectAttention, SkillInfo, SkillIdentity } from "./types";
 import type { BoardFilter } from './boardFilters'
-import type { FileBrowserProjectState } from './fileExplorer'
 
 export interface TaskRuntimeInfo {
   workspacePath: string;
@@ -37,7 +36,6 @@ export const error = writable<string | null>(null);
 export const projects = writable<Project[]>([]);
 export const activeProjectId = writable<string | null>(null);
 export const pendingFileReveal = writable<string | null>(null);
-export const fileBrowserStates = writable<Map<string, FileBrowserProjectState>>(new Map());
 export const projectAttention = writable<Map<string, ProjectAttention>>(new Map());
 export const agentEvents = writable<Map<string, AgentEvent[]>>(new Map());
 export const taskRuntimeInfo = writable<Map<string, TaskRuntimeInfo>>(new Map());

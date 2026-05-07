@@ -1,8 +1,13 @@
 <script lang="ts">
-  import { onMount } from 'svelte'
-  import { activeProjectId, pendingFileReveal } from './lib/stores'
+  import { activeProjectId, fileBrowserStates, pendingFileReveal } from './lib/stores'
   import { fsReadDir, fsReadFile } from './lib/ipc'
-  import type { FileEntry, FileContent } from '@openforge/plugin-sdk/domain'
+  import {
+    createEmptyFileBrowserProjectState,
+    flattenFileBrowserEntries,
+    getFileBrowserProjectState,
+    updateFileBrowserProjectState,
+    type FileBrowserProjectState,
+  } from './lib/fileExplorer'
   import ProjectFileTree from './ProjectFileTree.svelte'
   import FileContentViewer from './FileContentViewer.svelte'
   import ResizablePanel from '@openforge/plugin-sdk/ui/ResizablePanel.svelte'
@@ -14,123 +19,229 @@
 
   let { projectName, projectId = null }: Props = $props()
 
-  $effect(() => {
-    $activeProjectId = projectId
-  })
-
-  let rootEntries = $state<FileEntry[]>([])
-  let dirContents = $state<Map<string, FileEntry[]>>(new Map())
-  let expandedPaths = $state<Set<string>>(new Set())
-  let selectedPath = $state<string | null>(null)
-  let fileContent = $state<FileContent | null>(null)
   let loading = $state(true)
   let error = $state<string | null>(null)
-  let hasLoaded = $state(false)
+  let loadedProjectId = $state<string | null>(null)
+  let processingRevealPath = $state<string | null>(null)
+  let failedRevealPath = $state<string | null>(null)
   let activeFileRequestId = 0
 
+  const projectState = $derived.by((): FileBrowserProjectState => {
+    const currentProjectId = $activeProjectId
+    return currentProjectId ? getFileBrowserProjectState($fileBrowserStates, currentProjectId) : createEmptyFileBrowserProjectState()
+  })
+  const hasLoaded = $derived(projectState.rootLoaded)
+  const rootEntries = $derived(projectState.rootEntries)
+  const expandedPaths = $derived(projectState.expandedPaths)
+  const selectedPath = $derived(projectState.selectedPath)
+  const fileContent = $derived(projectState.fileContent)
+  const flatEntries = $derived(flattenFileBrowserEntries(projectState))
+  const selectedEntry = $derived(
+    selectedPath ? flatEntries.find((entry) => entry.path === selectedPath) ?? null : null
+  )
   const selectedFileName = $derived(
     selectedPath ? selectedPath.split('/').at(-1) ?? selectedPath : ''
   )
 
-  async function loadRoot() {
-    const projectId = $activeProjectId
-    if (!projectId) {
-      loading = false
-      return
-    }
+  function updateProjectState(
+    projectId: string,
+    updater: (state: FileBrowserProjectState) => FileBrowserProjectState,
+  ) {
+    fileBrowserStates.update((states) => updateFileBrowserProjectState(states, projectId, updater))
+  }
+
+  async function loadRoot(projectId: string) {
     loading = true
     error = null
     try {
-      rootEntries = await fsReadDir(projectId, null)
+      const entries = await fsReadDir(projectId, null)
+      if ($activeProjectId !== projectId) return
+      updateProjectState(projectId, (state) => ({
+        ...state,
+        rootEntries: entries,
+        rootLoaded: true,
+      }))
     } catch (e) {
-      error = String(e)
+      if ($activeProjectId === projectId) {
+        error = String(e)
+      }
     } finally {
-      loading = false
-      hasLoaded = true
-    }
-  }
-
-  async function toggleDir(path: string) {
-    const projectId = $activeProjectId
-    if (!projectId) return
-
-    const next = new Set(expandedPaths)
-    if (next.has(path)) {
-      next.delete(path)
-    } else {
-      next.add(path)
-      if (!dirContents.has(path)) {
-        try {
-          const entries = await fsReadDir(projectId, path)
-          dirContents = new Map(dirContents).set(path, entries)
-        } catch (e) {
-          error = String(e)
-          return
-        }
+      if ($activeProjectId === projectId) {
+        loading = false
       }
     }
-    expandedPaths = next
   }
 
-  async function selectFile(path: string) {
+  async function toggleDir(path: string): Promise<boolean> {
     const projectId = $activeProjectId
-    if (!projectId) return
+    if (!projectId) return false
+
+    const state = getFileBrowserProjectState($fileBrowserStates, projectId)
+    const nextExpanded = new Set(state.expandedPaths)
+
+    if (nextExpanded.has(path)) {
+      nextExpanded.delete(path)
+      updateProjectState(projectId, (current) => ({
+        ...current,
+        expandedPaths: nextExpanded,
+      }))
+      return true
+    }
+
+    nextExpanded.add(path)
+    if (state.dirContents.has(path)) {
+      updateProjectState(projectId, (current) => ({
+        ...current,
+        expandedPaths: nextExpanded,
+      }))
+      return true
+    }
+
+    try {
+      const entries = await fsReadDir(projectId, path)
+      if ($activeProjectId !== projectId) return false
+      updateProjectState(projectId, (current) => ({
+        ...current,
+        dirContents: new Map(current.dirContents).set(path, entries),
+        expandedPaths: nextExpanded,
+      }))
+      return true
+    } catch (e) {
+      if ($activeProjectId === projectId) {
+        error = String(e)
+      }
+      return false
+    }
+  }
+
+  async function selectFile(path: string): Promise<boolean> {
+    const projectId = $activeProjectId
+    if (!projectId) return false
 
     const requestId = ++activeFileRequestId
-    selectedPath = path
-    fileContent = null
+    updateProjectState(projectId, (state) => ({
+      ...state,
+      selectedPath: path,
+      fileContent: null,
+      contentScrollTop: 0,
+    }))
     error = null
 
     try {
       const nextContent = await fsReadFile(projectId, path)
-      if (requestId !== activeFileRequestId || selectedPath !== path) return
-      fileContent = nextContent
+      const currentState = getFileBrowserProjectState($fileBrowserStates, projectId)
+      if (requestId !== activeFileRequestId || $activeProjectId !== projectId || currentState.selectedPath !== path) return false
+      updateProjectState(projectId, (state) => ({
+        ...state,
+        fileContent: nextContent,
+      }))
+      return true
     } catch (e) {
-      if (requestId !== activeFileRequestId || selectedPath !== path) return
+      const currentState = getFileBrowserProjectState($fileBrowserStates, projectId)
+      if (requestId !== activeFileRequestId || $activeProjectId !== projectId || currentState.selectedPath !== path) return false
       error = String(e)
+      return true
     }
   }
 
-  function flattenEntries(entries: FileEntry[]): FileEntry[] {
-    const result: FileEntry[] = []
-    for (const entry of entries) {
-      result.push(entry)
-      if (entry.isDir && expandedPaths.has(entry.path)) {
-        const children = dirContents.get(entry.path) ?? []
-        result.push(...flattenEntries(children))
-      }
-    }
-    return result
+  function updateTreeScrollTop(scrollTop: number) {
+    const projectId = $activeProjectId
+    if (!projectId) return
+    updateProjectState(projectId, (state) => ({
+      ...state,
+      treeScrollTop: scrollTop,
+    }))
   }
 
-  const flatEntries = $derived(flattenEntries(rootEntries))
-  const selectedEntry = $derived(
-    selectedPath ? flatEntries.find((entry) => entry.path === selectedPath) ?? null : null
-  )
+  function updateContentScrollTop(scrollTop: number) {
+    const projectId = $activeProjectId
+    if (!projectId) return
+    updateProjectState(projectId, (state) => ({
+      ...state,
+      contentScrollTop: scrollTop,
+    }))
+  }
 
   async function revealPath(targetPath: string) {
-    const parts = targetPath.split('/')
-    const parentPaths: string[] = []
-    for (let i = 1; i < parts.length; i++) {
-      parentPaths.push(parts.slice(0, i).join('/'))
-    }
-    for (const parent of parentPaths) {
-      if (!expandedPaths.has(parent)) {
-        await toggleDir(parent)
+    const revealProjectId = $activeProjectId
+    if (!revealProjectId) return
+
+    processingRevealPath = targetPath
+    failedRevealPath = null
+    try {
+      const parts = targetPath.split('/')
+      const parentPaths: string[] = []
+      for (let i = 1; i < parts.length; i++) {
+        parentPaths.push(parts.slice(0, i).join('/'))
       }
+      for (const parent of parentPaths) {
+        if ($activeProjectId !== revealProjectId) {
+          failedRevealPath = targetPath
+          return
+        }
+
+        const currentState = getFileBrowserProjectState($fileBrowserStates, revealProjectId)
+        if (!currentState.expandedPaths.has(parent)) {
+          const expanded = await toggleDir(parent)
+          if (!expanded || $activeProjectId !== revealProjectId) {
+            failedRevealPath = targetPath
+            return
+          }
+        }
+      }
+
+      const selected = await selectFile(targetPath)
+      if (selected && $activeProjectId === revealProjectId) {
+        $pendingFileReveal = null
+      } else {
+        failedRevealPath = targetPath
+      }
+    } finally {
+      processingRevealPath = null
     }
-    await selectFile(targetPath)
-    $pendingFileReveal = null
   }
 
-  onMount(() => {
-    loadRoot()
+  $effect(() => {
+    $activeProjectId = projectId
+  })
+
+  $effect(() => {
+    const currentProjectId = $activeProjectId
+    if (currentProjectId === loadedProjectId) return
+
+    loadedProjectId = currentProjectId
+    activeFileRequestId++
+    error = null
+
+    if (!currentProjectId) {
+      loading = false
+      return
+    }
+
+    const state = getFileBrowserProjectState($fileBrowserStates, currentProjectId)
+    if (state.rootLoaded) {
+      loading = false
+      if (state.selectedPath !== null && state.fileContent === null) {
+        void selectFile(state.selectedPath)
+      }
+    } else {
+      void loadRoot(currentProjectId)
+    }
   })
 
   $effect(() => {
     const path = $pendingFileReveal
-    if (path !== null && hasLoaded) {
-      revealPath(path)
+    if (path === null) {
+      failedRevealPath = null
+      return
+    }
+
+    if (failedRevealPath !== null && failedRevealPath !== path) {
+      failedRevealPath = null
+    }
+
+    if (hasLoaded && processingRevealPath !== path && failedRevealPath !== path) {
+      void revealPath(path)
     }
   })
 </script>
@@ -173,6 +284,8 @@
             {selectedPath}
             onToggleDir={toggleDir}
             onSelectFile={selectFile}
+            initialScrollTop={projectState.treeScrollTop}
+            onScrollTopChange={updateTreeScrollTop}
           />
         {/if}
       </ResizablePanel>
@@ -188,6 +301,8 @@
             fileName={selectedFileName}
             {error}
             modifiedAt={selectedEntry?.modifiedAt ?? null}
+            scrollTop={projectState.contentScrollTop}
+            onScrollTopChange={updateContentScrollTop}
           />
         {/if}
       </div>

@@ -9,9 +9,14 @@
     fileName: string
     error: string | null
     modifiedAt: number | null
+    scrollTop?: number
+    onScrollTopChange?: (scrollTop: number) => void
   }
 
-  let { content, fileName, error, modifiedAt = null }: Props = $props()
+  let { content, fileName, error, modifiedAt = null, scrollTop = 0, onScrollTopChange }: Props = $props()
+
+  let scrollRegion = $state<HTMLDivElement | null>(null)
+  let appliedScrollKey = $state<string | null>(null)
 
   const textLines = $derived(content?.type === 'text' ? content.content.split('\n') : [])
   const language = $derived(getLanguageForFile(fileName))
@@ -35,6 +40,21 @@
       timeStyle: 'short',
     })
   }
+
+  function handleScroll() {
+    if (scrollRegion) {
+      onScrollTopChange?.(scrollRegion.scrollTop)
+    }
+  }
+
+  const scrollKey = $derived(`${fileName}:${content?.type ?? 'none'}:${scrollTop}`)
+
+  $effect(() => {
+    if (scrollRegion && appliedScrollKey !== scrollKey) {
+      scrollRegion.scrollTop = scrollTop
+      appliedScrollKey = scrollKey
+    }
+  })
 </script>
 
 <div class="flex-1 min-h-0 overflow-hidden bg-base-100">
@@ -71,11 +91,23 @@
 
       {#if content.type === 'text'}
         {#if isMarkdown}
-          <div class="flex-1 min-h-0 overflow-auto p-6" role="region" aria-label="Markdown file content">
+          <div
+            class="flex-1 min-h-0 overflow-auto p-6"
+            role="region"
+            aria-label="Markdown file content"
+            bind:this={scrollRegion}
+            onscroll={handleScroll}
+          >
             <MarkdownContent content={content.content} onOpenUrl={openUrl} />
           </div>
         {:else}
-          <div class="flex-1 min-h-0 overflow-auto p-4" role="region" aria-label="File text content">
+          <div
+            class="flex-1 min-h-0 overflow-auto p-4"
+            role="region"
+            aria-label="File text content"
+            bind:this={scrollRegion}
+            onscroll={handleScroll}
+          >
             <div class="font-mono text-sm min-w-max">
               <div class="flex leading-6">
                 <div
@@ -92,7 +124,13 @@
           </div>
         {/if}
       {:else if content.type === 'image'}
-        <div class="flex-1 min-h-0 w-full flex items-center justify-center p-4 overflow-auto" role="region" aria-label="Image file content">
+        <div
+          class="flex-1 min-h-0 w-full flex items-center justify-center p-4 overflow-auto"
+          role="region"
+          aria-label="Image file content"
+          bind:this={scrollRegion}
+          onscroll={handleScroll}
+        >
           <img
             src={`data:${content.mimeType ?? 'image/*'};base64,${content.content}`}
             alt={`${fileName} preview`}

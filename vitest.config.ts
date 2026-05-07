@@ -13,7 +13,12 @@ export default defineConfig({
     pool: 'forks',
     globals: true,
     setupFiles: ['src/test-setup.ts'],
-    include: ['src/**/*.test.ts', 'scripts/**/*.test.mjs', 'src-tauri/src/openforge-cli/**/*.test.js'],
+    include: [
+      'src/**/*.test.ts',
+      'plugins/file-viewer/src/**/*.test.ts',
+      'scripts/**/*.test.mjs',
+      'src-tauri/src/openforge-cli/**/*.test.js',
+    ],
     alias: {
       '@openforge/plugin-sdk/domain': new URL('./packages/plugin-sdk/src/domain.ts', import.meta.url).pathname,
       '@openforge/plugin-sdk/numberParsing': new URL('./packages/plugin-sdk/src/numberParsing.ts', import.meta.url).pathname,
