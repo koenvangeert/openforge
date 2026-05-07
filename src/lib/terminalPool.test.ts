@@ -24,6 +24,7 @@ import {
 	isValidTerminalDimensions,
 	markPtySpawnPending,
 	recoverActiveTerminal,
+	subscribeShellLifecycle,
 	release,
 	releaseAll,
 	releaseAllForTask,
@@ -543,6 +544,29 @@ describe("terminalPool", () => {
 
 		expect(entry.ptyActive).toBe(true);
 		expect(entry.needsClear).toBe(false);
+	});
+
+	it("notifies shell lifecycle subscribers only for accepted pty-exit events", async () => {
+		const entry = await acquire("task-11-lifecycle-subscribe");
+		const listener = vi.fn();
+		entry.ptyActive = true;
+		setCurrentPtyInstance(entry, 2);
+
+		const unsubscribe = subscribeShellLifecycle("task-11-lifecycle-subscribe", listener);
+		const exitCb = getListenCallback("pty-exit-task-11-lifecycle-subscribe");
+
+		exitCb({ payload: { instance_id: 1 } });
+		expect(listener).not.toHaveBeenCalled();
+
+		exitCb({ payload: { instance_id: 2 } });
+
+		expect(listener).toHaveBeenCalledWith({
+			ptyActive: false,
+			shellExited: true,
+			currentPtyInstance: 2,
+		});
+
+		unsubscribe();
 	});
 
 	it("needsClear causes terminal.reset on next pty-output", async () => {
