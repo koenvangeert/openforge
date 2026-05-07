@@ -327,6 +327,7 @@ mod tests {
 
         let skill_content = std::fs::read_to_string(&skill_md).unwrap();
         assert!(skill_content.contains("openforge update-task"));
+        assert!(skill_content.contains("Task summaries are Markdown-formatted"));
         assert!(skill_content.contains("$HOME/.openforge/bin/openforge"));
         assert!(!skill_content.contains("cli.js"));
         assert!(!skill_content.contains("exec node"));
@@ -361,6 +362,7 @@ mod tests {
             assert!(content.contains("name: openforge"));
             assert!(content.contains("OPENFORGE_HTTP_PORT"));
             assert!(content.contains("openforge get-task"));
+            assert!(content.contains("Task summaries are Markdown-formatted"));
             assert!(content.contains("$HOME/.openforge/bin/openforge"));
             assert!(!content.contains("openforge/cli/cli.js"));
             assert!(!content.contains("node \""));

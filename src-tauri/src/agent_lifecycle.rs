@@ -152,6 +152,7 @@ mod tests {
         assert!(prompt.contains("Test Task"));
         assert!(prompt.contains("<openforge_task_management>"));
         assert!(prompt.contains("openforge update-task --task-id \"T-123\" --summary \"...\""));
+        assert!(!prompt.contains("The task summary supports Markdown"));
         assert!(!prompt.contains("openforge_update_task"));
         assert!(prompt.contains("T-123"));
         assert!(!prompt.contains("initial_prompt=\"...\""));
