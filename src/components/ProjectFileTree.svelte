@@ -62,6 +62,7 @@
         <button
           class="w-full flex items-center gap-2 text-xs text-base-content cursor-pointer hover:bg-base-content/5 transition-colors py-1.5 pr-3"
           style="padding-left: {12 + getDepth(entry.path) * 16}px"
+          aria-expanded={isExpanded}
           onclick={() => onToggleDir(entry.path)}
           data-testid="tree-entry"
         >
@@ -77,6 +78,7 @@
         <button
           class="w-full flex items-center gap-2 text-xs text-base-content cursor-pointer transition-colors py-1.5 pr-3 {selectedPath === entry.path ? 'bg-primary/10 border-l-2 border-l-primary' : 'hover:bg-base-content/5'}"
           style="padding-left: {selectedPath === entry.path ? 10 + getDepth(entry.path) * 16 : 12 + getDepth(entry.path) * 16}px"
+          aria-current={selectedPath === entry.path ? 'true' : undefined}
           onclick={() => onSelectFile(entry.path)}
           data-testid="tree-entry"
         >

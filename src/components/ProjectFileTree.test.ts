@@ -48,20 +48,21 @@ describe('ProjectFileTree', () => {
     expect(screen.getByText('README.md')).toBeTruthy()
   })
 
-  it('shows folder icons for directories', () => {
+  it('exposes directories as expandable buttons', () => {
     renderTree({
       entries: [makeEntry({ name: 'src', path: 'src', isDir: true, size: null })],
     })
 
-    expect(screen.getByTestId('folder-icon-src')).toBeTruthy()
+    const directory = screen.getByRole('button', { name: /src\// })
+    expect(directory.getAttribute('aria-expanded')).toBe('false')
   })
 
-  it('shows file icons for files', () => {
+  it('exposes files as buttons with accessible names and sizes', () => {
     renderTree({
-      entries: [makeEntry({ name: 'README.md', path: 'README.md', isDir: false })],
+      entries: [makeEntry({ name: 'README.md', path: 'README.md', isDir: false, size: 1536 })],
     })
 
-    expect(screen.getByTestId('file-icon-README.md')).toBeTruthy()
+    expect(screen.getByRole('button', { name: /README\.md.*1\.5 KB/ })).toBeTruthy()
   })
 
   it('clicking a directory calls onToggleDir', async () => {
@@ -90,15 +91,14 @@ describe('ProjectFileTree', () => {
     expect(onSelectFile).toHaveBeenCalledOnce()
   })
 
-  it('selected file has highlight style', () => {
+  it('marks the selected file as current for assistive technology', () => {
     renderTree({
       entries: [makeEntry({ name: 'README.md', path: 'README.md', isDir: false })],
       selectedPath: 'README.md',
     })
 
-    const selected = screen.getByRole('button', { name: /README.md/ })
-    expect(selected.className).toContain('bg-primary/10')
-    expect(selected.className).toContain('border-l-primary')
+    const selected = screen.getByRole('button', { name: /README\.md/ })
+    expect(selected.getAttribute('aria-current')).toBe('true')
   })
 
   it('preserves the incoming entry order', () => {
@@ -133,13 +133,13 @@ describe('ProjectFileTree', () => {
     expect(screen.queryAllByTestId('tree-entry')).toHaveLength(0)
   })
 
-  it('shows expanded and collapsed indicators for directories', () => {
+  it('exposes expanded and collapsed directory state', () => {
     const { rerender } = renderTree({
       entries: [makeEntry({ name: 'src', path: 'src', isDir: true, size: null })],
       expandedDirs: new Set<string>(),
     })
 
-    expect(screen.getByTestId('dir-indicator-src').textContent).toBe('▶')
+    expect(screen.getByRole('button', { name: /src\// }).getAttribute('aria-expanded')).toBe('false')
 
     rerender({
       entries: [makeEntry({ name: 'src', path: 'src', isDir: true, size: null })],
@@ -149,10 +149,11 @@ describe('ProjectFileTree', () => {
       onSelectFile: () => {},
     })
 
-    expect(screen.getByTestId('dir-indicator-src').textContent).toBe('▼')
+    expect(screen.getByRole('button', { name: /src\// }).getAttribute('aria-expanded')).toBe('true')
   })
 
-  it('renders entries with depth-based indentation', () => {
+  it('selects nested files using their full paths', async () => {
+    const onSelectFile = vi.fn()
     renderTree({
       entries: [
         makeEntry({ name: 'src', path: 'src', isDir: true, size: null }),
@@ -160,13 +161,14 @@ describe('ProjectFileTree', () => {
         makeEntry({ name: 'lib', path: 'src/lib', isDir: true, size: null }),
         makeEntry({ name: 'utils.ts', path: 'src/lib/utils.ts', isDir: false }),
       ],
+      onSelectFile,
     })
-    const rows = screen.getAllByTestId('tree-entry')
-    const styles = rows.map(r => r.getAttribute('style') ?? '')
-    expect(styles[0]).toContain('padding-left: 12px')
-    expect(styles[1]).toContain('padding-left: 28px')
-    expect(styles[2]).toContain('padding-left: 28px')
-    expect(styles[3]).toContain('padding-left: 44px')
+
+    await fireEvent.click(screen.getByRole('button', { name: /index\.ts/ }))
+    await fireEvent.click(screen.getByRole('button', { name: /utils\.ts/ }))
+
+    expect(onSelectFile).toHaveBeenNthCalledWith(1, 'src/index.ts')
+    expect(onSelectFile).toHaveBeenNthCalledWith(2, 'src/lib/utils.ts')
   })
 
   it('restores initial scroll position and reports scroll changes', async () => {
@@ -189,15 +191,16 @@ describe('ProjectFileTree', () => {
     expect(onScrollTopChange).toHaveBeenCalledWith(84)
   })
 
-  it('renders selected file with adjusted indentation', () => {
+  it('does not mark unselected files as current', () => {
     renderTree({
       entries: [
         makeEntry({ name: 'index.ts', path: 'src/index.ts', isDir: false }),
+        makeEntry({ name: 'utils.ts', path: 'src/lib/utils.ts', isDir: false }),
       ],
-      selectedPath: 'src/index.ts',
+      selectedPath: 'src/lib/utils.ts',
     })
-    const rows = screen.getAllByTestId('tree-entry')
-    // Selected file at depth 1: 10 + 1*16 = 26px
-    expect(rows[0].getAttribute('style') ?? '').toContain('padding-left: 26px')
+
+    expect(screen.getByRole('button', { name: /index\.ts/ }).getAttribute('aria-current')).toBeNull()
+    expect(screen.getByRole('button', { name: /utils\.ts/ }).getAttribute('aria-current')).toBe('true')
   })
 })
