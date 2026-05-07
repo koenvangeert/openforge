@@ -1,11 +1,15 @@
 export {
 	appendPendingSelfReviewComment,
 	clearPendingSelfReviewComments,
+	clearSelfReviewInlineCommentDraft,
 	getPendingSelfReviewComments,
+	getSelfReviewInlineCommentDraft,
 	mergePendingSelfReviewComments,
 	mergeReviewSubmissionComments,
 	pendingSelfReviewCommentsByTask,
+	selfReviewInlineCommentDrafts,
 	selfReviewStateByTask,
 	setPendingSelfReviewComments,
+	setSelfReviewInlineCommentDraft,
 	updatePendingSelfReviewComments,
 } from "./taskScopedSelfReviewState";

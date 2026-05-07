@@ -5,20 +5,32 @@ import type { PrFileDiff, ReviewSubmissionComment } from '../../../../lib/types'
 import { requireElement } from '../../../../test-utils/dom'
 import DiffViewer from './DiffViewer.svelte'
 import { buildExtendData } from '../../../../lib/diffComments'
+import { getSelfReviewInlineCommentDraft, selfReviewStateByTask } from '../../../../lib/taskScopedReviewComments'
 
 const { mockDiffView, mockDiffHighlighter } = vi.hoisted(() => ({
   mockDiffView: vi.fn().mockReturnValue(null),
   mockDiffHighlighter: { name: 'test-highlighter', type: 'class' },
 }))
+
+declare global {
+  // eslint-disable-next-line no-var
+  var __diffViewerTestWidget: { lineNumber: number; side: number } | undefined
+}
 // ============================================================================
 // Module Mocks
 // ============================================================================
 
-vi.mock('@git-diff-view/svelte', () => ({
-  DiffView: mockDiffView,
-  DiffModeEnum: { Split: 0, Unified: 1 },
-  SplitSide: { old: 1, new: 2 },
-}))
+vi.mock('@git-diff-view/svelte', async () => {
+  const { default: DiffViewTestMock } = await import('./DiffViewTestMock.svelte')
+  return {
+    DiffView: (anchor: Node, props: Record<string, unknown>) => {
+      mockDiffView(anchor, props)
+      return (DiffViewTestMock as unknown as (anchor: Node, props: Record<string, unknown>) => unknown)(anchor, props)
+    },
+    DiffModeEnum: { Split: 0, Unified: 1 },
+    SplitSide: { old: 1, new: 2 },
+  }
+})
 
 vi.mock('../../../../lib/useDiffWorker.svelte', () => ({
   createDiffWorker: vi.fn().mockReturnValue({
@@ -388,6 +400,101 @@ describe('DiffViewer pending comments source', () => {
     void lastCall?.[1]?.extendData
 
     expect(buildExtendData).toHaveBeenCalledWith('src/test.ts', [], pendingComments, [])
+  })
+})
+
+describe('DiffViewer inline textarea drafts', () => {
+  beforeEach(async () => {
+    vi.clearAllMocks()
+    selfReviewStateByTask.set(new Map())
+    globalThis.__diffViewerTestWidget = undefined
+    const diffFile = { clearId: vi.fn() }
+    const { createDiffWorker } = await import('../../../../lib/useDiffWorker.svelte')
+    vi.mocked(createDiffWorker).mockReturnValue({
+      getDiffFile: () => diffFile as never,
+      processing: false,
+    })
+  })
+
+  function renderOpenInlineWidget(lineNumber: number, side: number) {
+    globalThis.__diffViewerTestWidget = { lineNumber, side }
+  }
+
+  it('restores an open self-review inline textarea draft after the diff viewer remounts', async () => {
+    renderOpenInlineWidget(2, 2)
+    const firstRender = render(DiffViewer, {
+      props: {
+        files: [fileWithPatch],
+        inlineDraftScopeId: 'task-1',
+      },
+    })
+
+    const textarea = await screen.findByPlaceholderText('Leave a comment… (⇧Enter to submit)')
+    await fireEvent.input(textarea, { target: { value: 'draft before add comment' } })
+
+    expect(getSelfReviewInlineCommentDraft('task-1', 'src/test.ts', 2, 'RIGHT')).toBe('draft before add comment')
+
+    firstRender.unmount()
+
+    renderOpenInlineWidget(2, 2)
+    render(DiffViewer, {
+      props: {
+        files: [fileWithPatch],
+        inlineDraftScopeId: 'task-1',
+      },
+    })
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('draft before add comment')).toBeTruthy()
+    })
+  })
+
+  it('does not restore an inline textarea draft for a different task scope', async () => {
+    renderOpenInlineWidget(2, 2)
+    const firstRender = render(DiffViewer, {
+      props: {
+        files: [fileWithPatch],
+        inlineDraftScopeId: 'task-1',
+      },
+    })
+
+    const textarea = await screen.findByPlaceholderText('Leave a comment… (⇧Enter to submit)')
+    await fireEvent.input(textarea, { target: { value: 'task one draft' } })
+    firstRender.unmount()
+
+    renderOpenInlineWidget(2, 2)
+    render(DiffViewer, {
+      props: {
+        files: [fileWithPatch],
+        inlineDraftScopeId: 'task-2',
+      },
+    })
+
+    const taskTwoTextarea = await screen.findByPlaceholderText('Leave a comment… (⇧Enter to submit)')
+    expect(taskTwoTextarea).toBeInstanceOf(HTMLTextAreaElement)
+    expect((taskTwoTextarea as HTMLTextAreaElement).value).toBe('')
+  })
+
+  it('clears the stored inline textarea draft after adding the pending comment', async () => {
+    renderOpenInlineWidget(2, 2)
+    const onPendingCommentsChange = vi.fn()
+    render(DiffViewer, {
+      props: {
+        files: [fileWithPatch],
+        pendingComments: [],
+        onPendingCommentsChange,
+        inlineDraftScopeId: 'task-1',
+      },
+    })
+
+    const textarea = await screen.findByPlaceholderText('Leave a comment… (⇧Enter to submit)')
+    await fireEvent.input(textarea, { target: { value: 'pending comment body' } })
+    await fireEvent.click(screen.getByRole('button', { name: 'Add Comment' }))
+
+    expect(onPendingCommentsChange).toHaveBeenCalledWith([
+      { path: 'src/test.ts', line: 2, side: 'RIGHT', body: 'pending comment body' },
+    ])
+    expect(getSelfReviewInlineCommentDraft('task-1', 'src/test.ts', 2, 'RIGHT')).toBe('')
   })
 })
 

@@ -5,11 +5,14 @@ import type {
 	SelfReviewComment,
 } from "./types";
 
+type ReviewSide = ReviewSubmissionComment["side"];
+
 export interface SelfReviewTaskState {
 	diffFiles: PrFileDiff[];
 	generalComments: SelfReviewComment[];
 	archivedComments: SelfReviewComment[];
 	pendingInlineComments: ReviewSubmissionComment[];
+	inlineCommentDrafts: Map<string, string>;
 }
 
 export const emptySelfReviewTaskState: SelfReviewTaskState = {
@@ -17,6 +20,7 @@ export const emptySelfReviewTaskState: SelfReviewTaskState = {
 	generalComments: [],
 	archivedComments: [],
 	pendingInlineComments: [],
+	inlineCommentDrafts: new Map(),
 };
 
 /**
@@ -44,12 +48,26 @@ export const pendingSelfReviewCommentsByTask = derived(
 	},
 );
 
+export const selfReviewInlineCommentDrafts = derived(
+	selfReviewStateByTask,
+	($stateByTask) => {
+		const drafts = new Map<string, string>();
+		for (const [taskId, state] of $stateByTask) {
+			for (const [draftKey, body] of state.inlineCommentDrafts) {
+				drafts.set(`${taskId}\u0000${draftKey}`, body);
+			}
+		}
+		return drafts;
+	},
+);
+
 function cloneStateForUpdate(current: SelfReviewTaskState): SelfReviewTaskState {
 	return {
 		diffFiles: current.diffFiles,
 		generalComments: current.generalComments,
 		archivedComments: current.archivedComments,
 		pendingInlineComments: current.pendingInlineComments,
+		inlineCommentDrafts: current.inlineCommentDrafts,
 	};
 }
 
@@ -104,6 +122,53 @@ export function setSelfReviewArchivedComments(
 	archivedComments: SelfReviewComment[],
 ): void {
 	updateSelfReviewState(taskId, (state) => ({ ...state, archivedComments }));
+}
+
+function inlineDraftKey(
+	path: string,
+	line: number,
+	side: ReviewSide,
+): string {
+	return `${path}\u0000${line}\u0000${side}`;
+}
+
+export function getSelfReviewInlineCommentDraft(
+	taskId: string,
+	path: string,
+	line: number,
+	side: ReviewSide,
+): string {
+	return getSelfReviewTaskState(taskId).inlineCommentDrafts.get(
+		inlineDraftKey(path, line, side),
+	) ?? "";
+}
+
+export function setSelfReviewInlineCommentDraft(
+	taskId: string,
+	path: string,
+	line: number,
+	side: ReviewSide,
+	body: string,
+): void {
+	updateSelfReviewState(taskId, (state) => {
+		const inlineCommentDrafts = new Map(state.inlineCommentDrafts);
+		const key = inlineDraftKey(path, line, side);
+		if (body.length === 0) {
+			inlineCommentDrafts.delete(key);
+		} else {
+			inlineCommentDrafts.set(key, body);
+		}
+		return { ...state, inlineCommentDrafts };
+	});
+}
+
+export function clearSelfReviewInlineCommentDraft(
+	taskId: string,
+	path: string,
+	line: number,
+	side: ReviewSide,
+): void {
+	setSelfReviewInlineCommentDraft(taskId, path, line, side, "");
 }
 
 export function getPendingSelfReviewComments(
