@@ -1,7 +1,7 @@
 use crate::{
     app_events::{
-        publish_app_event, AppEventBus, AppEventCursor, AppEventEnvelope, AppEventFrame,
-        AppEventSender,
+        publish_app_event_to_runtime, AppEventBus, AppEventCursor, AppEventEnvelope, AppEventFrame,
+        AppEventSender, InMemoryAppEventAdapter,
     },
     db,
     github_client::GitHubClient,
@@ -138,15 +138,21 @@ fn emit_task_changed(state: &AppState, action: &str, task_id: &str, project_id: 
                 "[http_server] Failed to publish task-changed app event: {:?}",
                 error
             ),
-            None => publish_app_event(&state.app_event_tx, "task-changed", &payload),
+            None => publish_app_event_to_runtime(
+                state.app.as_ref(),
+                &state.app_event_tx,
+                "task-changed",
+                &payload,
+            ),
             Some(Ok(_)) => {}
         }
     } else {
-        publish_app_event(&state.app_event_tx, "task-changed", &payload);
-    }
-
-    if let Some(app) = &state.app {
-        let _ = app.emit("task-changed", payload);
+        publish_app_event_to_runtime(
+            state.app.as_ref(),
+            &state.app_event_tx,
+            "task-changed",
+            &payload,
+        );
     }
 }
 
@@ -157,10 +163,12 @@ fn emit_agent_status_changed(state: &AppState, task_id: &str, status: &str, prov
         "provider": provider,
     });
 
-    if let Some(app) = &state.app {
-        let _ = app.emit("agent-status-changed", payload.clone());
-    }
-    publish_app_event(&state.app_event_tx, "agent-status-changed", &payload);
+    publish_app_event_to_runtime(
+        state.app.as_ref(),
+        &state.app_event_tx,
+        "agent-status-changed",
+        &payload,
+    );
 }
 
 fn update_pi_session_status_for_pty(
@@ -465,16 +473,16 @@ async fn handle_hook(
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     if let Some(task_id) = &payload.claude_task_id {
         let payload_value = serde_json::to_value(&payload).unwrap_or(serde_json::json!({}));
-        if let Some(app) = &state.app {
-            let _ = app.emit(
-                "claude-hook-event",
-                serde_json::json!({
-                    "task_id": task_id,
-                    "event_type": event_type,
-                    "payload": payload_value
-                }),
-            );
-        }
+        publish_app_event_to_runtime(
+            state.app.as_ref(),
+            &state.app_event_tx,
+            "claude-hook-event",
+            &serde_json::json!({
+                "task_id": task_id,
+                "event_type": event_type,
+                "payload": payload_value
+            }),
+        );
 
         let status_update: Option<String> = {
             let db = state.db.lock().unwrap();
@@ -851,6 +859,11 @@ async fn start_http_server_with_app_state(
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
     let app_event_bus = AppEventBus::new(1024, 1024);
     let app_event_tx = app_event_bus.sender();
+    if let Some(app) = app.as_ref() {
+        app.set_app_event_adapter(std::sync::Arc::new(InMemoryAppEventAdapter::new(
+            app_event_bus.clone(),
+        )));
+    }
     let github_client = app
         .as_ref()
         .and_then(|app| app.try_state::<GitHubClient>())
