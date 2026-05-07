@@ -34,4 +34,5 @@ Use `--worktree "$PWD"` with `create-task` when the project can be inferred from
 
 - Create follow-up tasks for real cleanup or missing work; do not create tasks for trivial preferences.
 - Update the active task with a concise implementation summary before finishing.
+- Task summaries are Markdown-formatted; use short paragraphs or bullets when they improve readability.
 - The CLI prints JSON so you can pass results back into your reasoning without scraping UI text.
