@@ -69,6 +69,10 @@ export function readOpenForgeDataIdentity(repoRoot = repoRootFromScript()) {
   return validateOpenForgeDataIdentity(JSON.parse(readFileSync(manifestPath, 'utf8')))
 }
 
+export function electronPackageIdentityForRepoRoot(repoRoot = repoRootFromScript()) {
+  return readOpenForgeDataIdentity(repoRoot).packageIdentity
+}
+
 export const OPENFORGE_DATA_IDENTITY = readOpenForgeDataIdentity()
 export const OPENFORGE_APP_DATA_IDENTIFIER = OPENFORGE_DATA_IDENTITY.dataIdentity.appDataIdentifier
 export const OPENFORGE_APP_DATA_DIR_ENV = OPENFORGE_DATA_IDENTITY.dataIdentity.appDataDirEnv

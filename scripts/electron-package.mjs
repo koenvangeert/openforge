@@ -10,6 +10,7 @@ import {
   ELECTRON_APP_PACKAGE_NAME,
   ELECTRON_BUNDLE_IDENTIFIER,
   ELECTRON_TEMPLATE_APP_NAME,
+  electronPackageIdentityForRepoRoot,
 } from './data-identity.mjs'
 
 export const APP_NAME = MANIFEST_APP_NAME
@@ -81,16 +82,17 @@ async function assertExists(path, label) {
 }
 
 export function electronBundlePath(repoRoot = repoRootFromScript()) {
-  return resolveRustSidecarLayout({ repoRoot, appName: APP_NAME }).electronAppPath
+  const packageIdentity = electronPackageIdentityForRepoRoot(repoRoot)
+  return resolveRustSidecarLayout({ repoRoot, appName: packageIdentity.appName }).electronAppPath
 }
 
 export function sidecarBinaryPathForTarget(repoRoot = repoRootFromScript(), cargoBuildTarget = '') {
   return resolveRustSidecarLayout({ repoRoot }).releaseSidecarBinaryPath({ cargoBuildTarget })
 }
 
-export function createElectronAppPackageJson({ version = '0.0.1' } = {}) {
+export function createElectronAppPackageJson({ version = '0.0.1', packageName = ELECTRON_APP_PACKAGE_NAME } = {}) {
   return {
-    name: ELECTRON_APP_PACKAGE_NAME,
+    name: packageName,
     version,
     type: 'module',
     main: 'dist-electron/main.js',
@@ -173,22 +175,23 @@ async function copyIcon(rustSidecarLayout, resourcesDir) {
   await cp(rustSidecarLayout.iconPath, join(resourcesDir, 'electron.icns'))
 }
 
-async function updateInfoPlist(appPath) {
+async function updateInfoPlist(appPath, { appName = APP_NAME, bundleIdentifier = ELECTRON_BUNDLE_IDENTIFIER } = {}) {
   const plistPath = join(appPath, 'Contents', 'Info.plist')
   let plist = await readFile(plistPath, 'utf8')
-  plist = updatePlistStringValue(plist, 'CFBundleExecutable', APP_NAME)
-  plist = updatePlistStringValue(plist, 'CFBundleName', APP_NAME)
-  plist = updatePlistStringValue(plist, 'CFBundleDisplayName', APP_NAME)
-  plist = updatePlistStringValue(plist, 'CFBundleIdentifier', ELECTRON_BUNDLE_IDENTIFIER)
+  plist = updatePlistStringValue(plist, 'CFBundleExecutable', appName)
+  plist = updatePlistStringValue(plist, 'CFBundleName', appName)
+  plist = updatePlistStringValue(plist, 'CFBundleDisplayName', appName)
+  plist = updatePlistStringValue(plist, 'CFBundleIdentifier', bundleIdentifier)
   plist = updatePlistBooleanValue(plist, 'ApplePressAndHoldEnabled', false)
   await writeFile(plistPath, plist)
 }
 
 export async function packageElectronApp({
   repoRoot = repoRootFromScript(),
-  rustSidecarLayout = resolveRustSidecarLayout({ repoRoot, appName: APP_NAME }),
+  packageIdentity = electronPackageIdentityForRepoRoot(repoRoot),
+  rustSidecarLayout = resolveRustSidecarLayout({ repoRoot, appName: packageIdentity.appName }),
   outputAppPath = rustSidecarLayout.electronAppPath,
-  electronTemplatePath = join(repoRoot, 'node_modules', 'electron', 'dist', ELECTRON_APP_NAME),
+  electronTemplatePath = join(repoRoot, 'node_modules', 'electron', 'dist', packageIdentity.electronTemplateAppName),
   cargoBuildTarget = process.env.CARGO_BUILD_TARGET ?? '',
   sidecarBinaryPath = rustSidecarLayout.releaseSidecarBinaryPath({ cargoBuildTarget }),
   readExecutableArchitectures = readDarwinExecutableArchitectures,
@@ -208,11 +211,11 @@ export async function packageElectronApp({
   const macosDir = join(outputAppPath, 'Contents', 'MacOS')
   const resourcesDir = join(outputAppPath, 'Contents', 'Resources')
   const electronExecutablePath = join(macosDir, 'Electron')
-  const openForgeExecutablePath = join(macosDir, APP_NAME)
+  const appExecutablePath = join(macosDir, packageIdentity.appName)
   if (await pathExists(electronExecutablePath)) {
-    await rename(electronExecutablePath, openForgeExecutablePath)
+    await rename(electronExecutablePath, appExecutablePath)
   }
-  await chmod(openForgeExecutablePath, 0o755)
+  await chmod(appExecutablePath, 0o755)
 
   const sidecarTargetPath = join(macosDir, 'openforge-sidecar')
   await cp(sidecarBinaryPath, sidecarTargetPath)
@@ -220,7 +223,7 @@ export async function packageElectronApp({
 
   await assertPackageArchitectureCompatibility({
     cargoBuildTarget,
-    appExecutablePath: openForgeExecutablePath,
+    appExecutablePath,
     sidecarPath: sidecarTargetPath,
     readExecutableArchitectures,
   })
@@ -232,9 +235,15 @@ export async function packageElectronApp({
   await cp(electronDist, join(appResourcesPath, 'dist-electron'), { recursive: true })
 
   const rootPackage = JSON.parse(await readFile(join(repoRoot, 'package.json'), 'utf8').catch(() => '{"version":"0.0.1"}'))
-  await writeFile(join(appResourcesPath, 'package.json'), `${JSON.stringify(createElectronAppPackageJson({ version: rootPackage.version ?? '0.0.1' }), null, 2)}\n`)
+  await writeFile(join(appResourcesPath, 'package.json'), `${JSON.stringify(createElectronAppPackageJson({
+    version: rootPackage.version ?? '0.0.1',
+    packageName: packageIdentity.electronAppPackageName,
+  }), null, 2)}\n`)
 
-  await updateInfoPlist(outputAppPath)
+  await updateInfoPlist(outputAppPath, {
+    appName: packageIdentity.appName,
+    bundleIdentifier: packageIdentity.bundleIdentifier,
+  })
   await copyIcon(rustSidecarLayout, resourcesDir)
 
   return { appPath: outputAppPath, sidecarPath: sidecarTargetPath }
@@ -244,13 +253,18 @@ async function runBuildCommand(command, args, options) {
   await waitForExit(spawnCommand(command, args, options), `${command} ${args.join(' ')}`)
 }
 
-export async function buildAndPackageElectronApp({
-  repoRoot = repoRootFromScript(),
-  rustSidecarLayout = resolveRustSidecarLayout({ repoRoot, appName: APP_NAME }),
-  cargoBuildTarget = process.env.CARGO_BUILD_TARGET ?? '',
-  runCommand = runBuildCommand,
-  packageApp = packageElectronApp,
-} = {}) {
+export async function buildAndPackageElectronApp(options = {}) {
+  const {
+    repoRoot = repoRootFromScript(),
+    cargoBuildTarget = process.env.CARGO_BUILD_TARGET ?? '',
+    runCommand = runBuildCommand,
+    packageApp = packageElectronApp,
+  } = options
+  const packageIdentity = options.packageIdentity
+    ?? (!options.rustSidecarLayout || packageApp === packageElectronApp ? electronPackageIdentityForRepoRoot(repoRoot) : null)
+  const rustSidecarLayout = options.rustSidecarLayout
+    ?? resolveRustSidecarLayout({ repoRoot, appName: packageIdentity.appName })
+
   await runCommand('pnpm', ['build:plugins'], { cwd: repoRoot })
   await runCommand('pnpm', ['build'], { cwd: repoRoot })
   await runCommand('pnpm', ['electron:build'], { cwd: repoRoot })
@@ -261,6 +275,7 @@ export async function buildAndPackageElectronApp({
   return packageApp({
     repoRoot,
     rustSidecarLayout,
+    ...(packageIdentity ? { packageIdentity } : {}),
     sidecarBinaryPath: rustSidecarLayout.releaseSidecarBinaryPath({ cargoBuildTarget }),
     cargoBuildTarget,
   })
