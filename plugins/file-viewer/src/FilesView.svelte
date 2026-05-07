@@ -9,9 +9,10 @@
 
   interface Props {
     projectName: string
+    projectId: string | null
   }
 
-  let { projectName, projectId = null }: Props & { projectId?: string | null } = $props()
+  let { projectName, projectId = null }: Props = $props()
 
   $effect(() => {
     $activeProjectId = projectId
