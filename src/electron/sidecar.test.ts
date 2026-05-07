@@ -219,6 +219,40 @@ describe('Electron Rust sidecar supervision', () => {
     ]))
   })
 
+  it('preserves degraded startup-resume readiness when the completion event arrives later', async () => {
+    const child = new FakeChild()
+    const eventStream = new ScriptedEventStream()
+    const spawn = vi.fn(() => child)
+    const fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        status: 'ok',
+        events: { available: true },
+        startupResume: { phase: 'degraded', targetCount: 2, resumedCount: 1, failedCount: 1 },
+        degraded: [{ area: 'startupResume', message: 'failed to resume task', since: '2026-05-07T00:00:00.000Z' }],
+      }),
+    })
+    const sleep = vi.fn(async () => undefined)
+
+    const handle = await startSidecarReadiness(createSidecarLaunchConfig({ token: 'token-123', port: 17642 }), {
+      spawn,
+      fetch,
+      sleep,
+      createEventStream: vi.fn(() => eventStream),
+    })
+
+    eventStream.emit({ id: 'lifecycle:startup-resume-complete', eventName: 'startup-resume-complete', payload: {} })
+
+    expect(handle.snapshot().startupResume).toMatchObject({
+      phase: 'degraded',
+      targetCount: 2,
+      resumedCount: 1,
+      failedCount: 1,
+      completedAt: expect.any(String),
+    })
+    expect(handle.snapshot().events.lastEventId).toBe('lifecycle:startup-resume-complete')
+  })
+
   it('cleans up the process when authenticated readiness fails', async () => {
     const child = new FakeChild()
     const spawn = vi.fn(() => child)

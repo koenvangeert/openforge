@@ -468,7 +468,7 @@ function applyReadinessEvent(snapshot: SidecarReadinessSnapshot, envelope: Sidec
   if (envelope.eventName === 'startup-resume-complete') {
     snapshot.startupResume = {
       ...snapshot.startupResume,
-      phase: 'complete',
+      phase: snapshot.startupResume.phase === 'degraded' ? 'degraded' : 'complete',
       completedAt: new Date().toISOString(),
     }
   }
