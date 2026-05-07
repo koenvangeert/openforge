@@ -1,9 +1,10 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { toGitDiffViewData } from '../../../../lib/diffAdapter'
-import type { PrFileDiff } from '../../../../lib/types'
+import type { PrFileDiff, ReviewSubmissionComment } from '../../../../lib/types'
 import { requireElement } from '../../../../test-utils/dom'
 import DiffViewer from './DiffViewer.svelte'
+import { buildExtendData } from '../../../../lib/diffComments'
 
 const { mockDiffView, mockDiffHighlighter } = vi.hoisted(() => ({
   mockDiffView: vi.fn().mockReturnValue(null),
@@ -361,6 +362,34 @@ const fileWithPatch2: PrFileDiff = {
   is_truncated: false,
   patch_line_count: null,
 }
+
+describe('DiffViewer pending comments source', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('uses provided pending comments instead of the global PR review pending comments', async () => {
+    const diffFile = { clearId: vi.fn() }
+    const { createDiffWorker } = await import('../../../../lib/useDiffWorker.svelte')
+    vi.mocked(createDiffWorker).mockReturnValue({
+      getDiffFile: () => diffFile as never,
+      processing: false,
+    })
+    const pendingComments: ReviewSubmissionComment[] = [
+      { path: 'src/test.ts', line: 2, side: 'RIGHT', body: 'task scoped comment' },
+    ]
+
+    render(DiffViewer, { props: { files: [fileWithPatch], pendingComments, onPendingCommentsChange: vi.fn() } })
+
+    await waitFor(() => {
+      expect(mockDiffView).toHaveBeenCalled()
+    })
+    const lastCall = mockDiffView.mock.calls.at(-1)
+    void lastCall?.[1]?.extendData
+
+    expect(buildExtendData).toHaveBeenCalledWith('src/test.ts', [], pendingComments, [])
+  })
+})
 
 describe('DiffViewer scroll restoration', () => {
   beforeEach(() => {

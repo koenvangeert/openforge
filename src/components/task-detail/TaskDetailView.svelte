@@ -291,7 +291,9 @@
     {#if activeView === 'code' || activeView === 'review'}
       <div data-testid="upper-area" class="flex flex-1 overflow-hidden max-[800px]:flex-col">
         {#if activeView === 'review'}
-          <SelfReviewView {task} {agentStatus} onSendToAgent={handleSendToAgent} />
+          {#key task.id}
+            <SelfReviewView {task} {agentStatus} onSendToAgent={handleSendToAgent} />
+          {/key}
         {:else}
           <div class="relative flex-1 p-5 overflow-hidden max-[800px]:p-4">
             {#key task.id}

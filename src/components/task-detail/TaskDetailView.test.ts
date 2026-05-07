@@ -1306,6 +1306,41 @@ describe('TaskDetailView', () => {
        vi.mocked(getTaskWorkspace).mockResolvedValue(null)
      })
 
+     it('remounts the review pane when switching tasks while review is active', async () => {
+       const { getTaskWorkspace } = await import('../../lib/ipc')
+       const { createDiffLoader } = await import('../../lib/useDiffLoader.svelte')
+       vi.mocked(getTaskWorkspace).mockResolvedValue(createTaskWorkspaceInfo({ workspace_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' }))
+       const firstCleanup = vi.fn()
+       const secondCleanup = vi.fn()
+       const makeLoader = (cleanup: () => void) => ({
+         get isLoading() { return false },
+         get error() { return null },
+         get prComments() { return [] },
+         get linkedPr() { return null },
+         get commits() { return [] },
+         get selectedCommitSha() { return null },
+         loadDiff: vi.fn().mockResolvedValue(undefined),
+         loadCommits: vi.fn().mockResolvedValue(undefined),
+         selectCommit: vi.fn().mockResolvedValue(undefined),
+         refresh: vi.fn().mockResolvedValue(undefined),
+         cleanup,
+       })
+       vi.mocked(createDiffLoader)
+         .mockReturnValueOnce(makeLoader(() => firstCleanup()))
+         .mockReturnValueOnce(makeLoader(() => secondCleanup()))
+       taskActiveView.set(new Map([['T-42', 'review'], ['T-99', 'review']]))
+
+       const { rerender } = render(TaskDetailView, { props: { task: baseTask, onRunAction: mockOnRunAction } })
+       await waitFor(() => expect(screen.getByText('review_view')).toBeTruthy())
+
+       await rerender({ task: secondaryTask, onRunAction: mockOnRunAction })
+
+       await waitFor(() => expect(firstCleanup).toHaveBeenCalled())
+       expect(vi.mocked(createDiffLoader).mock.calls.at(-1)?.[0].getTaskId()).toBe('T-99')
+
+       vi.mocked(getTaskWorkspace).mockResolvedValue(null)
+     })
+
      it('active tab persists per task via taskActiveView store', async () => {
        const { getTaskWorkspace } = await import('../../lib/ipc')
        vi.mocked(getTaskWorkspace).mockResolvedValue(createTaskWorkspaceInfo({ workspace_path: '/tmp/wt', repo_path: '/repo', branch_name: 'b' }))

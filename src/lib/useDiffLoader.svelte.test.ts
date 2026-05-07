@@ -16,9 +16,6 @@ vi.mock("./stores", () => ({
 	selfReviewDiffFiles: writable<PrFileDiff[]>([]),
 	selfReviewGeneralComments: writable<SelfReviewComment[]>([]),
 	selfReviewArchivedComments: writable<SelfReviewComment[]>([]),
-	pendingManualComments: writable<
-		{ path: string; line: number; body: string; side: string }[]
-	>([]),
 	ticketPrs: writable<Map<string, PullRequestInfo[]>>(new Map()),
 }));
 
@@ -39,12 +36,16 @@ vi.mock("./ipc", () => ({
 
 import * as ipc from "./ipc";
 import {
-	pendingManualComments,
 	selfReviewArchivedComments,
 	selfReviewDiffFiles,
 	selfReviewGeneralComments,
 	ticketPrs,
 } from "./stores";
+import {
+	getPendingSelfReviewComments,
+	pendingSelfReviewCommentsByTask,
+	setPendingSelfReviewComments,
+} from "./taskScopedReviewComments";
 import { createDiffLoader } from "./useDiffLoader.svelte";
 
 const mockGetTaskDiff = vi.mocked(ipc.getTaskDiff);
@@ -139,7 +140,7 @@ describe("createDiffLoader", () => {
 		selfReviewDiffFiles.set([]);
 		selfReviewGeneralComments.set([]);
 		selfReviewArchivedComments.set([]);
-		pendingManualComments.set([]);
+		pendingSelfReviewCommentsByTask.set(new Map());
 		ticketPrs.set(new Map());
 
 		mockGetTaskDiff.mockResolvedValue([]);
@@ -272,10 +273,16 @@ describe("createDiffLoader", () => {
 		expect(loader.isLoading).toBe(false);
 	});
 
-	it("cleanup clears all store state", async () => {
+	it("preserves pending inline comments across review tab unmount and remount", async () => {
 		mockGetTaskDiff.mockResolvedValue([baseDiff]);
 		mockGetActiveSelfReviewComments.mockResolvedValue([baseSelfReviewComment]);
 		mockGetArchivedSelfReviewComments.mockResolvedValue([]);
+		const pendingInlineComment = {
+			path: "src/main.rs",
+			line: 42,
+			side: "RIGHT",
+			body: "Please double-check this before sending to the agent",
+		};
 
 		const loader = createDiffLoader({
 			getTaskId: () => "task-1",
@@ -284,13 +291,71 @@ describe("createDiffLoader", () => {
 
 		await loader.loadDiff();
 		expect(get(selfReviewDiffFiles)).toEqual([baseDiff]);
+		setPendingSelfReviewComments("task-1", [pendingInlineComment]);
 
 		loader.cleanup();
 
 		expect(get(selfReviewDiffFiles)).toEqual([]);
 		expect(get(selfReviewGeneralComments)).toEqual([]);
 		expect(get(selfReviewArchivedComments)).toEqual([]);
-		expect(get(pendingManualComments)).toEqual([]);
+		expect(getPendingSelfReviewComments("task-1")).toEqual([pendingInlineComment]);
+
+		const remountedLoader = createDiffLoader({
+			getTaskId: () => "task-1",
+			getIncludeUncommitted: () => false,
+		});
+		await remountedLoader.loadDiff();
+
+		expect(getPendingSelfReviewComments("task-1")).toEqual([pendingInlineComment]);
+	});
+
+	it("keeps pending inline comments isolated when switching between tasks", async () => {
+		mockGetTaskDiff.mockResolvedValue([baseDiff]);
+		const taskOneComment = {
+			path: "src/task-one.ts",
+			line: 12,
+			side: "RIGHT",
+			body: "task one feedback",
+		};
+		const taskTwoComment = {
+			path: "src/task-two.ts",
+			line: 34,
+			side: "RIGHT",
+			body: "task two feedback",
+		};
+		setPendingSelfReviewComments("task-1", [taskOneComment]);
+		setPendingSelfReviewComments("task-2", [taskTwoComment]);
+
+		const taskTwoLoader = createDiffLoader({
+			getTaskId: () => "task-2",
+			getIncludeUncommitted: () => false,
+		});
+		await taskTwoLoader.loadDiff();
+		taskTwoLoader.cleanup();
+
+		expect(getPendingSelfReviewComments("task-1")).toEqual([taskOneComment]);
+		expect(getPendingSelfReviewComments("task-2")).toEqual([taskTwoComment]);
+	});
+
+	it("preserves pending inline comments when remounting a selected commit diff", async () => {
+		mockGetCommitDiff.mockResolvedValue([baseDiff]);
+		const pendingInlineComment = {
+			path: "src/main.rs",
+			line: 42,
+			side: "RIGHT",
+			body: "Keep this feedback on commit view",
+		};
+		setPendingSelfReviewComments("task-1", [pendingInlineComment]);
+
+		const loader = createDiffLoader({
+			getTaskId: () => "task-1",
+			getIncludeUncommitted: () => false,
+			initialSelectedCommitSha: "abc1234",
+		});
+		await loader.loadDiff();
+
+		expect(mockGetCommitDiff).toHaveBeenCalledWith("task-1", "abc1234");
+		expect(getPendingSelfReviewComments("task-1")).toEqual([pendingInlineComment]);
 	});
 
 	it("starts with empty commits and null selectedCommitSha", () => {
@@ -558,7 +623,7 @@ describe("createDiffLoader", () => {
 
 		expect(get(selfReviewGeneralComments)).toEqual([generalComment]);
 		expect(get(selfReviewArchivedComments)).toEqual([generalComment]);
-		expect(get(pendingManualComments)).toEqual([
+		expect(getPendingSelfReviewComments("task-1")).toEqual([
 			{
 				path: "src/main.rs",
 				line: 5,

@@ -8,12 +8,12 @@ import {
 	getTaskDiff,
 } from "./ipc";
 import {
-	pendingManualComments,
 	selfReviewArchivedComments,
 	selfReviewDiffFiles,
 	selfReviewGeneralComments,
 	ticketPrs,
 } from "./stores";
+import { mergePendingSelfReviewComments } from "./taskScopedReviewComments";
 import type { CommitInfo, PrComment, PullRequestInfo } from "./types";
 
 // ============================================================================
@@ -88,16 +88,15 @@ export function createDiffLoader(deps: {
 					archivedComments.filter((c) => c.comment_type === "general"),
 				);
 
-				pendingManualComments.set(
-					activeComments
-						.filter((c) => c.comment_type === "inline")
-						.map((c) => ({
-							path: c.file_path!,
-							line: c.line_number!,
-							body: c.body,
-							side: "RIGHT",
-						})),
-				);
+				const activeInlineComments = activeComments
+					.filter((c) => c.comment_type === "inline")
+					.map((c) => ({
+						path: c.file_path!,
+						line: c.line_number!,
+						body: c.body,
+						side: "RIGHT",
+					}));
+				mergePendingSelfReviewComments(taskId, activeInlineComments);
 
 				const taskPrs = get(ticketPrs).get(taskId) || [];
 				const openPrs = taskPrs
@@ -173,7 +172,6 @@ export function createDiffLoader(deps: {
 		selfReviewDiffFiles.set([]);
 		selfReviewGeneralComments.set([]);
 		selfReviewArchivedComments.set([]);
-		pendingManualComments.set([]);
 		selectedCommitSha = null;
 		commits = [];
 	}
