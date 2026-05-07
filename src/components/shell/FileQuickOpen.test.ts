@@ -1,15 +1,14 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/svelte'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { writable, get } from 'svelte/store'
+import { writable } from 'svelte/store'
 
 const mockActiveProjectId = writable<string | null>('test-project-id')
-const mockPendingFileReveal = writable<string | null>(null)
 const mockFsSearchFiles = vi.fn<(projectId: string, query: string, limit: number) => Promise<string[]>>()
 const mockNavigate = vi.fn()
+const mockRevealFileInFileViewer = vi.fn<(path: string) => void>()
 
 vi.mock('../../lib/stores', () => ({
   activeProjectId: mockActiveProjectId,
-  pendingFileReveal: mockPendingFileReveal,
 }))
 
 vi.mock('../../lib/ipc', () => ({
@@ -18,6 +17,11 @@ vi.mock('../../lib/ipc', () => ({
 
 vi.mock('../../lib/router.svelte', () => ({
   useAppRouter: () => ({ navigate: mockNavigate }),
+}))
+
+vi.mock('../../lib/fileViewerPlugin', () => ({
+  FILE_VIEWER_VIEW_KEY: 'plugin:com.openforge.file-viewer:files',
+  revealFileInFileViewer: mockRevealFileInFileViewer,
 }))
 
 Element.prototype.scrollIntoView = vi.fn()
@@ -39,7 +43,6 @@ describe('FileQuickOpen', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockActiveProjectId.set('test-project-id')
-    mockPendingFileReveal.set(null)
     mockFsSearchFiles.mockResolvedValue([])
   })
 
@@ -115,7 +118,7 @@ describe('FileQuickOpen', () => {
     await fireEvent.keyDown(dialog, { key: 'ArrowDown' })
     await fireEvent.keyDown(dialog, { key: 'Enter' })
 
-    expect(get(mockPendingFileReveal)).toBe('b.ts')
+    expect(mockRevealFileInFileViewer).toHaveBeenCalledWith('b.ts')
     expect(mockNavigate).toHaveBeenCalledWith('plugin:com.openforge.file-viewer:files')
     expect(onClose).toHaveBeenCalledOnce()
   })
@@ -178,7 +181,7 @@ describe('FileQuickOpen', () => {
     await fireEvent.keyDown(dialog, { key: 'j', ctrlKey: true })
     await fireEvent.keyDown(dialog, { key: 'Enter' })
 
-    expect(get(mockPendingFileReveal)).toBe('b.ts')
+    expect(mockRevealFileInFileViewer).toHaveBeenCalledWith('b.ts')
   })
 
   it('displays file name and directory path for results', async () => {

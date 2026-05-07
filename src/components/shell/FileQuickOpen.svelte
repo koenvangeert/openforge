@@ -1,8 +1,8 @@
 <script lang="ts">
   import { onDestroy } from 'svelte'
-  import { activeProjectId, pendingFileReveal } from '../../lib/stores'
+  import { activeProjectId } from '../../lib/stores'
   import { fsSearchFiles } from '../../lib/ipc'
-  import { FILE_VIEWER_VIEW_KEY } from '../../lib/fileViewerPlugin'
+  import { FILE_VIEWER_VIEW_KEY, revealFileInFileViewer } from '../../lib/fileViewerPlugin'
   import { useListNavigation } from '../../lib/useListNavigation.svelte'
   import { useAppRouter } from '../../lib/router.svelte'
   import PaletteModal from './PaletteModal.svelte'
@@ -77,7 +77,7 @@
   }
 
   function handleSelectFile(path: string) {
-    $pendingFileReveal = path
+    revealFileInFileViewer(path)
     router.navigate(FILE_VIEWER_VIEW_KEY)
     closeModal()
   }
