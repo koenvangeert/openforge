@@ -3,13 +3,19 @@ import { describe, expect, it } from 'vitest'
 import { getOpenCodeSessionUpdate } from './opencodeSessionEvents'
 
 describe('getOpenCodeSessionUpdate', () => {
-  it('does not mark a raw session.idle event as completed', () => {
-    expect(getOpenCodeSessionUpdate('session.idle', '{"type":"session.idle"}')).toBeNull()
+  it('maps a raw session.idle event to completed', () => {
+    expect(getOpenCodeSessionUpdate('session.idle', '{"type":"session.idle"}')).toEqual({
+      status: 'completed',
+      checkpoint_data: null,
+    })
   })
 
-  it('does not mark a raw session.status idle payload as completed', () => {
+  it('maps a raw session.status idle payload to completed', () => {
     const payload = JSON.stringify({ properties: { status: { type: 'idle' } } })
-    expect(getOpenCodeSessionUpdate('session.status', payload)).toBeNull()
+    expect(getOpenCodeSessionUpdate('session.status', payload)).toEqual({
+      status: 'completed',
+      checkpoint_data: null,
+    })
   })
 
   it('maps busy session.status payloads to running', () => {

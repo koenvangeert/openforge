@@ -17,7 +17,10 @@ function isInputResolvedEvent(eventType: string): boolean {
 
 export function getOpenCodeSessionUpdate(eventType: string, data: string): OpenCodeSessionUpdate | null {
   if (eventType === 'session.idle') {
-    return null
+    return {
+      status: 'completed',
+      checkpoint_data: null,
+    }
   }
 
   if (eventType === 'session.status') {
@@ -28,6 +31,13 @@ export function getOpenCodeSessionUpdate(eventType: string, data: string): OpenC
       if (statusType === 'busy' || statusType === 'retry') {
         return {
           status: 'running',
+          checkpoint_data: null,
+        }
+      }
+
+      if (statusType === 'idle') {
+        return {
+          status: 'completed',
           checkpoint_data: null,
         }
       }
