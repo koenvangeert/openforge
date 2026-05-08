@@ -117,6 +117,10 @@ pub(crate) fn load_resume_targets(db: &db::Database) -> rusqlite::Result<Vec<Res
     Ok(targets)
 }
 
+fn startup_resume_database_lock_message(context: &str, error: impl std::fmt::Display) -> String {
+    format!("{context}: database lock error: {error}")
+}
+
 async fn resume_task_servers(
     app: crate::backend_runtime::AppHandle,
     http_ready: tokio::sync::oneshot::Receiver<()>,
@@ -132,7 +136,19 @@ async fn resume_task_servers(
 
     let resume_targets = {
         let db = app.state::<Arc<Mutex<db::Database>>>();
-        let db_lock = db.lock().unwrap();
+        let db_lock = match db.lock() {
+            Ok(db_lock) => db_lock,
+            Err(e) => {
+                let message = startup_resume_database_lock_message(
+                    "failed to get resumable task workspaces",
+                    e,
+                );
+                error!("[startup] {message}");
+                sidecar_readiness.mark_startup_resume_degraded(message);
+                let _ = app.emit("startup-resume-complete", ());
+                return;
+            }
+        };
         match load_resume_targets(&db_lock) {
             Ok(targets) => targets,
             Err(e) => {
@@ -172,7 +188,26 @@ async fn resume_task_servers(
         // Look up the latest session to determine which provider to use
         let latest_session = {
             let db = app.state::<Arc<Mutex<db::Database>>>();
-            let db_lock = db.lock().unwrap();
+            let db_lock = match db.lock() {
+                Ok(db_lock) => db_lock,
+                Err(e) => {
+                    let message = startup_resume_database_lock_message(
+                        &format!("failed to load latest session for task {}", target.task_id),
+                        e,
+                    );
+                    error!("[startup] {message}");
+                    sidecar_readiness.record_startup_resume_failure(message);
+                    let _ = app.emit(
+                        "server-resumed",
+                        serde_json::json!({
+                            "task_id": target.task_id,
+                            "port": 0,
+                            "workspace_path": target.workspace_path,
+                        }),
+                    );
+                    continue;
+                }
+            };
             db_lock
                 .get_latest_session_for_ticket(&target.task_id)
                 .ok()
@@ -244,34 +279,47 @@ async fn resume_task_servers(
                     .await;
 
                     let db = app.state::<Arc<Mutex<db::Database>>>();
-                    let db_lock = db.lock().unwrap();
-
-                    if provider_name == "pi" {
-                        if let (Some(session), Some(pi_session_id)) =
-                            (latest_session.as_ref(), result.pi_session_id.as_deref())
-                        {
-                            if session.pi_session_id.as_deref() != Some(pi_session_id) {
-                                if let Err(e) =
-                                    db_lock.set_agent_session_pi_id(&session.id, pi_session_id)
+                    match db.lock() {
+                        Ok(db_lock) => {
+                            if provider_name == "pi" {
+                                if let (Some(session), Some(pi_session_id)) =
+                                    (latest_session.as_ref(), result.pi_session_id.as_deref())
                                 {
-                                    warn!(
-                                        "[startup] Failed to persist resumed Pi session id for {}: {}",
-                                        target.task_id, e
-                                    );
+                                    if session.pi_session_id.as_deref() != Some(pi_session_id) {
+                                        if let Err(e) = db_lock
+                                            .set_agent_session_pi_id(&session.id, pi_session_id)
+                                        {
+                                            warn!(
+                                                "[startup] Failed to persist resumed Pi session id for {}: {}",
+                                                target.task_id, e
+                                            );
+                                        }
+                                    }
                                 }
                             }
-                        }
-                    }
 
-                    restore_resumed_session_state(
-                        &db_lock,
-                        latest_session.as_ref(),
-                        &target,
-                        provider_name,
-                        result.port,
-                        result.pty_instance_id,
-                        resume_persistence,
-                    );
+                            restore_resumed_session_state(
+                                &db_lock,
+                                latest_session.as_ref(),
+                                &target,
+                                provider_name,
+                                result.port,
+                                result.pty_instance_id,
+                                resume_persistence,
+                            );
+                        }
+                        Err(e) => {
+                            let message = startup_resume_database_lock_message(
+                                &format!(
+                                    "failed to persist resumed session state for task {}",
+                                    target.task_id
+                                ),
+                                e,
+                            );
+                            error!("[startup] {message}");
+                            sidecar_readiness.record_startup_resume_failure(message);
+                        }
+                    };
                 }
 
                 let _ = app.emit(
@@ -305,14 +353,28 @@ async fn resume_task_servers(
                 if matches!(provider_name, "claude-code" | "pi" | "opencode") {
                     if let Some(ref session) = latest_session {
                         let db = app.state::<Arc<Mutex<db::Database>>>();
-                        let db_lock = db.lock().unwrap();
-                        let _ = db_lock.update_agent_session(
-                            &session.id,
-                            &session.stage,
-                            "interrupted",
-                            None,
-                            Some("App restarted"),
-                        );
+                        match db.lock() {
+                            Ok(db_lock) => {
+                                let _ = db_lock.update_agent_session(
+                                    &session.id,
+                                    &session.stage,
+                                    "interrupted",
+                                    None,
+                                    Some("App restarted"),
+                                );
+                            }
+                            Err(e) => {
+                                let message = startup_resume_database_lock_message(
+                                    &format!(
+                                        "failed to mark resumed session interrupted for task {}",
+                                        target.task_id
+                                    ),
+                                    e,
+                                );
+                                warn!("[startup] {message}");
+                                sidecar_readiness.record_startup_resume_failure(message);
+                            }
+                        };
                     }
                 }
 
@@ -710,11 +772,38 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::{
-        load_resume_targets, restore_resumed_session_state, should_start_project_root_server,
-        sidecar_app_data_dir_from_override, ResumeSessionPersistence, ResumeTarget,
+        load_resume_targets, restore_resumed_session_state, resume_task_servers,
+        should_start_project_root_server, sidecar_app_data_dir_from_override,
+        ResumeSessionPersistence, ResumeTarget,
     };
+    use crate::app_events::{AppEventError, AppEventId, EmitReceipt, RustAppEventAdapter};
     use crate::db::test_helpers::make_test_db;
     use std::fs;
+    use std::sync::{Arc, Mutex};
+
+    #[derive(Default)]
+    struct RecordingEventAdapter {
+        events: Mutex<Vec<String>>,
+    }
+
+    impl RustAppEventAdapter for RecordingEventAdapter {
+        fn emit(
+            &self,
+            event_name: &str,
+            _payload: serde_json::Value,
+        ) -> Result<EmitReceipt, AppEventError> {
+            self.events
+                .lock()
+                .expect("recording event adapter lock poisoned")
+                .push(event_name.to_string());
+            Ok(EmitReceipt {
+                id: AppEventId {
+                    epoch: "test".to_string(),
+                    seq: 1,
+                },
+            })
+        }
+    }
 
     #[test]
     fn sidecar_app_data_dir_uses_override_and_creates_dir() {
@@ -727,6 +816,45 @@ mod tests {
 
         assert_eq!(resolved, isolated_dir);
         assert!(resolved.is_dir());
+    }
+
+    #[tokio::test]
+    async fn resume_task_servers_reports_degraded_readiness_when_initial_database_lock_is_poisoned()
+    {
+        let (db, path) = make_test_db("resume_task_servers_poisoned_initial_lock");
+        let db = Arc::new(Mutex::new(db));
+        let poison_db = Arc::clone(&db);
+        let _ = std::thread::spawn(move || {
+            let _guard = poison_db.lock().expect("lock test database before panic");
+            panic!("poison test database lock");
+        })
+        .join();
+
+        let app = crate::backend_runtime::AppHandle::new();
+        app.manage(Arc::clone(&db));
+        let event_adapter = Arc::new(RecordingEventAdapter::default());
+        app.set_app_event_adapter(event_adapter.clone());
+        let sidecar_readiness = crate::http_server::SidecarReadinessState::new();
+        let (http_ready_tx, http_ready_rx) = tokio::sync::oneshot::channel();
+        http_ready_tx.send(()).expect("send http ready signal");
+
+        resume_task_servers(app, http_ready_rx, sidecar_readiness.clone()).await;
+
+        let startup_resume = sidecar_readiness.startup_resume();
+        assert_eq!(startup_resume.phase, "degraded");
+        assert!(sidecar_readiness
+            .degraded()
+            .iter()
+            .any(|state| state.area == "startupResume"
+                && state.message.contains("database lock error")));
+        assert!(event_adapter
+            .events
+            .lock()
+            .expect("read recorded events")
+            .iter()
+            .any(|event| event == "startup-resume-complete"));
+
+        let _ = fs::remove_file(path);
     }
 
     #[test]
