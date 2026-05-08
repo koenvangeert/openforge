@@ -33,14 +33,15 @@ async function postOpenForgeEvent(event) {
   if (!interestingEvents.has(event.type)) return
 
   try {
-    await fetch(`http://127.0.0.1:${port}/hooks/opencode-event`, {
+    await fetch(`http://127.0.0.1:${port}/hooks/agent-lifecycle`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
+        provider: "opencode",
         task_id: taskId,
         pty_instance_id: ptyInstanceId,
+        provider_session_id: sessionIdFromEvent(event),
         event_type: event.type,
-        session_id: sessionIdFromEvent(event),
         status_type: statusTypeFromEvent(event),
       }),
     })

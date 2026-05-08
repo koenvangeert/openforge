@@ -1,7 +1,7 @@
 use super::*;
 
 #[tokio::test]
-async fn resume_startup_sessions_publishes_completion_event() {
+async fn resume_startup_sessions_command_is_compatibility_noop() {
     let (state, path) = test_state("app_invoke_resume_startup_sessions");
     let mut receiver = state
         .app_event_tx
@@ -11,8 +11,7 @@ async fn resume_startup_sessions_publishes_completion_event() {
 
     invoke_ok(&state, "resume_startup_sessions", json!({})).await;
 
-    let received = receiver.recv().await.expect("startup completion event");
-    assert_eq!(received.event_name, "startup-resume-complete");
+    assert!(receiver.try_recv().is_err());
 
     let _ = std::fs::remove_file(path);
 }

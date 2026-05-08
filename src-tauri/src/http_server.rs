@@ -247,14 +247,7 @@ pub struct OpenCodePluginEventPayload {
     pub status_type: Option<String>,
 }
 
-fn session_matches_pty_instance(session: &db::AgentSessionRow, pty_instance_id: u64) -> bool {
-    session
-        .checkpoint_data
-        .as_deref()
-        .and_then(|data| serde_json::from_str::<serde_json::Value>(data).ok())
-        .and_then(|value| value.get("pty_instance_id").and_then(|id| id.as_u64()))
-        == Some(pty_instance_id)
-}
+pub type AgentLifecycleNotificationPayload = crate::agent_lifecycle::AgentLifecycleNotification;
 
 fn emit_task_changed(state: &AppState, action: &str, task_id: &str, project_id: Option<&str>) {
     let mut payload = serde_json::json!({
@@ -309,44 +302,34 @@ fn emit_agent_status_changed(state: &AppState, task_id: &str, status: &str, prov
     );
 }
 
-fn update_pi_session_status_for_pty(
+fn record_agent_lifecycle_notification(
     state: &AppState,
-    task_id: &str,
-    pty_instance_id: u64,
-    target_status: &str,
-    eligible_statuses: &[&str],
-) -> Option<String> {
+    notification: &crate::agent_lifecycle::AgentLifecycleNotification,
+) -> Option<crate::agent_lifecycle::AgentLifecycleStatusChange> {
     let db = state.db.lock().unwrap();
-    if let Ok(Some(session)) = db.get_latest_session_for_ticket(task_id) {
-        if session.provider == "pi"
-            && eligible_statuses.contains(&session.status.as_str())
-            && session_matches_pty_instance(&session, pty_instance_id)
-        {
-            if session.status == target_status {
-                return Some(target_status.to_string());
-            }
-
-            if let Err(e) = db.update_agent_session(
-                &session.id,
-                &session.stage,
-                target_status,
-                session.checkpoint_data.as_deref(),
-                None,
-            ) {
-                error!(
-                    "[http_server] Failed to update Pi session for task {} to {}: {}",
-                    task_id, target_status, e
-                );
-                None
-            } else {
-                Some(target_status.to_string())
-            }
-        } else {
+    match crate::agent_lifecycle::apply_agent_lifecycle_notification(&db, notification) {
+        Ok(status_change) => status_change,
+        Err(error) => {
+            error!(
+                "[http_server] Failed to apply {} lifecycle notification for task {}: {}",
+                notification.provider, notification.task_id, error
+            );
             None
         }
-    } else {
-        None
     }
+}
+
+async fn handle_agent_lifecycle_notification(
+    state: AppState,
+    notification: crate::agent_lifecycle::AgentLifecycleNotification,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    let status_change = record_agent_lifecycle_notification(&state, &notification);
+
+    if let Some(change) = status_change {
+        emit_agent_status_changed(&state, &change.task_id, &change.status, &change.provider);
+    }
+
+    Ok(Json(serde_json::json!({ "status": "ok" })))
 }
 
 /// Resolve project_id from request parameters, failing if no project can be determined.
@@ -582,25 +565,9 @@ pub async fn get_project_attention_handler(
     Ok(Json(attention))
 }
 
+#[cfg(test)]
 pub(crate) fn map_hook_to_status(event_type: &str, current_status: &str) -> Option<String> {
-    match event_type {
-        "pre-tool-use" | "post-tool-use" => {
-            if current_status != "running" {
-                Some("running".to_string())
-            } else {
-                None
-            }
-        }
-        "stop" | "session-end" => Some("completed".to_string()),
-        "notification-permission" => {
-            if current_status == "running" {
-                Some("paused".to_string())
-            } else {
-                None
-            }
-        }
-        _ => None,
-    }
+    crate::agent_lifecycle::claude_status_from_event(event_type, current_status)
 }
 
 async fn handle_hook(
@@ -621,48 +588,16 @@ async fn handle_hook(
             }),
         );
 
-        let status_update: Option<String> = {
-            let db = state.db.lock().unwrap();
-            if let Ok(Some(session)) = db.get_latest_session_for_ticket(task_id) {
-                if session.provider == "claude-code" {
-                    // Persist the Claude session ID on first hook so session can be resumed later
-                    if session.claude_session_id.is_none() {
-                        if let Some(ref sid) = payload.session_id {
-                            if !sid.is_empty() {
-                                if let Err(e) = db.set_agent_session_claude_id(&session.id, sid) {
-                                    error!("[http_server] Failed to set claude_session_id for session {}: {}", session.id, e);
-                                }
-                            }
-                        }
-                    }
-
-                    if let Some(new_status) = map_hook_to_status(event_type, &session.status) {
-                        if let Err(e) = db.update_agent_session(
-                            &session.id,
-                            &session.stage,
-                            &new_status,
-                            None,
-                            None,
-                        ) {
-                            error!(
-                                "[http_server] Failed to update session status for task {}: {}",
-                                task_id, e
-                            );
-                        }
-                        Some(new_status)
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                }
-            } else {
-                None
-            }
+        let notification = crate::agent_lifecycle::AgentLifecycleNotification {
+            provider: "claude-code".to_string(),
+            task_id: task_id.clone(),
+            pty_instance_id: None,
+            provider_session_id: payload.session_id.clone(),
+            event_type: event_type.to_string(),
+            status_type: None,
         };
-
-        if let Some(new_status) = status_update {
-            emit_agent_status_changed(&state, &task_id, &new_status, "claude-code");
+        if let Some(change) = record_agent_lifecycle_notification(&state, &notification) {
+            emit_agent_status_changed(&state, &change.task_id, &change.status, &change.provider);
         }
     } else {
         warn!(
@@ -678,62 +613,44 @@ pub async fn pi_agent_start_handler(
     State(state): State<AppState>,
     Json(payload): Json<PiAgentLifecyclePayload>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
-    let status_update = update_pi_session_status_for_pty(
-        &state,
-        &payload.task_id,
-        payload.pty_instance_id,
-        "running",
-        &["completed", "paused", "interrupted", "running"],
-    );
-
-    if let Some(new_status) = status_update {
-        emit_agent_status_changed(&state, &payload.task_id, &new_status, "pi");
-    }
-
-    Ok(Json(serde_json::json!({ "status": "ok" })))
+    handle_agent_lifecycle_notification(
+        state,
+        crate::agent_lifecycle::AgentLifecycleNotification {
+            provider: "pi".to_string(),
+            task_id: payload.task_id,
+            pty_instance_id: Some(payload.pty_instance_id),
+            provider_session_id: None,
+            event_type: "agent.start".to_string(),
+            status_type: None,
+        },
+    )
+    .await
 }
 
 pub async fn pi_agent_end_handler(
     State(state): State<AppState>,
     Json(payload): Json<PiAgentLifecyclePayload>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
-    let status_update = update_pi_session_status_for_pty(
-        &state,
-        &payload.task_id,
-        payload.pty_instance_id,
-        "completed",
-        &["running", "paused"],
-    );
-
-    if let Some(new_status) = status_update {
-        emit_agent_status_changed(&state, &payload.task_id, &new_status, "pi");
-    }
-
-    Ok(Json(serde_json::json!({ "status": "ok" })))
+    handle_agent_lifecycle_notification(
+        state,
+        crate::agent_lifecycle::AgentLifecycleNotification {
+            provider: "pi".to_string(),
+            task_id: payload.task_id,
+            pty_instance_id: Some(payload.pty_instance_id),
+            provider_session_id: None,
+            event_type: "agent.end".to_string(),
+            status_type: None,
+        },
+    )
+    .await
 }
 
+#[cfg(test)]
 fn opencode_status_from_event(
     event_type: &str,
     status_type: Option<&str>,
 ) -> Option<(&'static str, &'static [&'static str])> {
-    match (event_type, status_type) {
-        ("session.status", Some("busy" | "retry" | "running"))
-        | ("session.created" | "session.updated" | "message.updated", _)
-        | ("tool.execute.before" | "tool.execute.after", _) => Some((
-            "running",
-            &["completed", "paused", "interrupted", "running"],
-        )),
-        ("session.status", Some("error" | "failed")) | ("session.error", _) => {
-            Some(("failed", &["running", "paused"]))
-        }
-        // Do not complete on idle hook events: OpenCode can emit idle for a
-        // parent while descendant work is still settling. The PTY process exit
-        // is the completion signal for `opencode run`, which preserves the old
-        // SSE bridge's conservative descendant-completion guard without
-        // requiring OpenForge to own an OpenCode server client.
-        ("session.status", Some("idle")) | ("session.idle", _) => None,
-        _ => None,
-    }
+    crate::agent_lifecycle::opencode_status_from_event(event_type, status_type)
 }
 
 pub async fn opencode_event_handler(
@@ -752,53 +669,23 @@ pub async fn opencode_event_handler(
         }),
     );
 
-    let status_update = {
-        let db = state.db.lock().unwrap();
-        let Ok(Some(session)) = db.get_latest_session_for_ticket(&payload.task_id) else {
-            return Ok(Json(serde_json::json!({ "status": "ok" })));
-        };
-        if session.provider != "opencode"
-            || !session_matches_pty_instance(&session, payload.pty_instance_id)
-        {
-            return Ok(Json(serde_json::json!({ "status": "ok" })));
-        }
-
-        if session.opencode_session_id.is_none() {
-            if let Some(session_id) = payload.session_id.as_deref().filter(|id| !id.is_empty()) {
-                if let Err(error) = db.set_agent_session_opencode_id(&session.id, session_id) {
-                    error!(
-                        "[http_server] Failed to set opencode_session_id for session {}: {}",
-                        session.id, error
-                    );
-                }
-            }
-        }
-
-        let Some((new_status, allowed_current_statuses)) =
-            opencode_status_from_event(&payload.event_type, payload.status_type.as_deref())
-        else {
-            return Ok(Json(serde_json::json!({ "status": "ok" })));
-        };
-        if !allowed_current_statuses.contains(&session.status.as_str()) {
-            None
-        } else if let Err(error) =
-            db.update_agent_session(&session.id, &session.stage, new_status, None, None)
-        {
-            error!(
-                "[http_server] Failed to update OpenCode session status for task {}: {}",
-                payload.task_id, error
-            );
-            None
-        } else {
-            Some(new_status.to_string())
-        }
+    let notification = crate::agent_lifecycle::AgentLifecycleNotification {
+        provider: "opencode".to_string(),
+        task_id: payload.task_id,
+        pty_instance_id: Some(payload.pty_instance_id),
+        provider_session_id: payload.session_id,
+        event_type: payload.event_type,
+        status_type: payload.status_type,
     };
 
-    if let Some(new_status) = status_update {
-        emit_agent_status_changed(&state, &payload.task_id, &new_status, "opencode");
-    }
+    handle_agent_lifecycle_notification(state, notification).await
+}
 
-    Ok(Json(serde_json::json!({ "status": "ok" })))
+pub async fn agent_lifecycle_handler(
+    State(state): State<AppState>,
+    Json(payload): Json<AgentLifecycleNotificationPayload>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    handle_agent_lifecycle_notification(state, payload).await
 }
 
 pub async fn hook_stop_handler(
@@ -1023,6 +910,7 @@ pub fn create_router(state: AppState) -> Router {
         .route("/projects", get(get_projects_handler))
         .route("/tasks", get(get_tasks_handler))
         .route("/project/:id/attention", get(get_project_attention_handler))
+        .route("/hooks/agent-lifecycle", post(agent_lifecycle_handler))
         .route("/hooks/pi-agent-start", post(pi_agent_start_handler))
         .route("/hooks/pi-agent-end", post(pi_agent_end_handler))
         .route("/hooks/opencode-event", post(opencode_event_handler))

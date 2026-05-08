@@ -82,36 +82,26 @@ pub fn ensure_workspace_trusted(cwd: &Path) -> Result<(), Box<dyn std::error::Er
     Ok(())
 }
 
+fn lifecycle_hook_command(port: u16, event_type: &str, include_tool_name: bool) -> String {
+    let tool_name_field = if include_tool_name {
+        ",\"tool_name\":\"'\"$CLAUDE_TOOL_NAME\"'\""
+    } else {
+        ""
+    };
+    format!(
+        "curl -s -X POST http://127.0.0.1:{}/hooks/agent-lifecycle -H 'Content-Type: application/json' -d '{{\"provider\":\"claude-code\",\"task_id\":\"'\"$CLAUDE_TASK_ID\"'\",\"provider_session_id\":\"'\"$CLAUDE_SESSION_ID\"'\",\"event_type\":\"{}\"{} }}' ",
+        port, event_type, tool_name_field
+    )
+}
+
 fn build_hooks_json(port: u16) -> Value {
-    let pre_tool_use_cmd = format!(
-        "curl -s -X POST http://127.0.0.1:{}/hooks/pre-tool-use -H 'Content-Type: application/json' -d '{{\"session_id\":\"'\"$CLAUDE_SESSION_ID\"'\",\"tool_name\":\"'\"$CLAUDE_TOOL_NAME\"'\",\"CLAUDE_TASK_ID\":\"'\"$CLAUDE_TASK_ID\"'\"}}' ",
-        port
-    );
-
-    let post_tool_use_cmd = format!(
-        "curl -s -X POST http://127.0.0.1:{}/hooks/post-tool-use -H 'Content-Type: application/json' -d '{{\"session_id\":\"'\"$CLAUDE_SESSION_ID\"'\",\"tool_name\":\"'\"$CLAUDE_TOOL_NAME\"'\",\"CLAUDE_TASK_ID\":\"'\"$CLAUDE_TASK_ID\"'\"}}' ",
-        port
-    );
-
-    let stop_cmd = format!(
-        "curl -s -X POST http://127.0.0.1:{}/hooks/stop -H 'Content-Type: application/json' -d '{{\"session_id\":\"'\"$CLAUDE_SESSION_ID\"'\",\"CLAUDE_TASK_ID\":\"'\"$CLAUDE_TASK_ID\"'\"}}' ",
-        port
-    );
-
-    let session_end_cmd = format!(
-        "curl -s -X POST http://127.0.0.1:{}/hooks/session-end -H 'Content-Type: application/json' -d '{{\"session_id\":\"'\"$CLAUDE_SESSION_ID\"'\",\"CLAUDE_TASK_ID\":\"'\"$CLAUDE_TASK_ID\"'\"}}' ",
-        port
-    );
-
-    let notification_permission_cmd = format!(
-        "curl -s -X POST http://127.0.0.1:{}/hooks/notification-permission -H 'Content-Type: application/json' -d '{{\"session_id\":\"'\"$CLAUDE_SESSION_ID\"'\",\"CLAUDE_TASK_ID\":\"'\"$CLAUDE_TASK_ID\"'\"}}' ",
-        port
-    );
-
-    let notification_cmd = format!(
-        "curl -s -X POST http://127.0.0.1:{}/hooks/notification -H 'Content-Type: application/json' -d '{{\"session_id\":\"'\"$CLAUDE_SESSION_ID\"'\",\"CLAUDE_TASK_ID\":\"'\"$CLAUDE_TASK_ID\"'\"}}' ",
-        port
-    );
+    let pre_tool_use_cmd = lifecycle_hook_command(port, "pre-tool-use", true);
+    let post_tool_use_cmd = lifecycle_hook_command(port, "post-tool-use", true);
+    let stop_cmd = lifecycle_hook_command(port, "stop", false);
+    let session_end_cmd = lifecycle_hook_command(port, "session-end", false);
+    let notification_permission_cmd =
+        lifecycle_hook_command(port, "notification-permission", false);
+    let notification_cmd = lifecycle_hook_command(port, "notification", false);
 
     json!({
         "hooks": {
@@ -402,16 +392,16 @@ mod tests {
 
         // Single-entry hooks (index 0)
         let hook_entries = [
-            ("PreToolUse", 0, "/hooks/pre-tool-use"),
-            ("PostToolUse", 0, "/hooks/post-tool-use"),
-            ("Stop", 0, "/hooks/stop"),
-            ("SessionEnd", 0, "/hooks/session-end"),
+            ("PreToolUse", 0, "pre-tool-use"),
+            ("PostToolUse", 0, "post-tool-use"),
+            ("Stop", 0, "stop"),
+            ("SessionEnd", 0, "session-end"),
             // Notification[0] = permission matcher, Notification[1] = catch-all
-            ("Notification", 0, "/hooks/notification-permission"),
-            ("Notification", 1, "/hooks/notification"),
+            ("Notification", 0, "notification-permission"),
+            ("Notification", 1, "notification"),
         ];
 
-        for (hook_key, idx, expected_route) in &hook_entries {
+        for (hook_key, idx, expected_event_type) in &hook_entries {
             let cmd = json["hooks"][hook_key][idx]["hooks"][0]["command"]
                 .as_str()
                 .unwrap_or_else(|| panic!("Missing command for {}[{}]", hook_key, idx));
@@ -425,11 +415,25 @@ mod tests {
                 cmd
             );
             assert!(
-                cmd.contains(expected_route),
-                "{}[{}] command should POST to {}, got: {}",
+                cmd.contains("/hooks/agent-lifecycle"),
+                "{}[{}] command should POST to agent lifecycle seam, got: {}",
                 hook_key,
                 idx,
-                expected_route,
+                cmd
+            );
+            assert!(
+                cmd.contains("\"provider\":\"claude-code\""),
+                "{}[{}] command should identify the Claude Code provider, got: {}",
+                hook_key,
+                idx,
+                cmd
+            );
+            assert!(
+                cmd.contains(&format!("\"event_type\":\"{}\"", expected_event_type)),
+                "{}[{}] command should include event type {}, got: {}",
+                hook_key,
+                idx,
+                expected_event_type,
                 cmd
             );
             assert!(

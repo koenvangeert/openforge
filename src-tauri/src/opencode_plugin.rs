@@ -26,10 +26,12 @@ mod tests {
         assert!(OPENCODE_PLUGIN_SOURCE.contains("OPENFORGE_TASK_ID"));
         assert!(OPENCODE_PLUGIN_SOURCE.contains("OPENFORGE_PTY_INSTANCE_ID"));
         assert!(OPENCODE_PLUGIN_SOURCE.contains("OPENFORGE_HTTP_PORT"));
-        assert!(OPENCODE_PLUGIN_SOURCE.contains("/hooks/opencode-event"));
+        assert!(OPENCODE_PLUGIN_SOURCE.contains("/hooks/agent-lifecycle"));
+        assert!(OPENCODE_PLUGIN_SOURCE.contains("provider: \"opencode\""));
         assert!(OPENCODE_PLUGIN_SOURCE.contains("session.created"));
         assert!(OPENCODE_PLUGIN_SOURCE.contains("session.idle"));
         assert!(OPENCODE_PLUGIN_SOURCE.contains("session.error"));
+        assert!(OPENCODE_PLUGIN_SOURCE.contains("provider_session_id"));
         assert!(OPENCODE_PLUGIN_SOURCE.contains("status_type"));
     }
 

@@ -1,4 +1,164 @@
-use crate::db;
+use crate::db::{self, AgentSessionRow};
+use serde::{Deserialize, Serialize};
+
+/// Provider-agnostic lifecycle notification sent by installed agent adapters.
+///
+/// This is the seam between provider plugins/extensions/hooks and OpenForge's
+/// session state. Existing provider-specific HTTP routes are compatibility
+/// adapters that translate into this interface.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AgentLifecycleNotification {
+    pub provider: String,
+    pub task_id: String,
+    #[serde(default)]
+    pub pty_instance_id: Option<u64>,
+    #[serde(default)]
+    pub provider_session_id: Option<String>,
+    pub event_type: String,
+    #[serde(default)]
+    pub status_type: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AgentLifecycleStatusChange {
+    pub task_id: String,
+    pub status: String,
+    pub provider: String,
+}
+
+pub fn session_matches_pty_instance(session: &AgentSessionRow, pty_instance_id: u64) -> bool {
+    session
+        .checkpoint_data
+        .as_deref()
+        .and_then(|data| serde_json::from_str::<serde_json::Value>(data).ok())
+        .and_then(|value| value.get("pty_instance_id").and_then(|id| id.as_u64()))
+        == Some(pty_instance_id)
+}
+
+pub fn claude_status_from_event(event_type: &str, current_status: &str) -> Option<String> {
+    match event_type {
+        "pre-tool-use" | "post-tool-use" => {
+            if current_status != "running" {
+                Some("running".to_string())
+            } else {
+                None
+            }
+        }
+        "stop" | "session-end" => Some("completed".to_string()),
+        "notification-permission" if current_status == "running" => Some("paused".to_string()),
+        "notification" => None,
+        _ => None,
+    }
+}
+
+pub(crate) fn opencode_status_from_event(
+    event_type: &str,
+    status_type: Option<&str>,
+) -> Option<(&'static str, &'static [&'static str])> {
+    match (event_type, status_type) {
+        ("session.status", Some("busy" | "retry" | "running"))
+        | ("session.created" | "session.updated" | "message.updated", _)
+        | ("tool.execute.before" | "tool.execute.after", _) => Some((
+            "running",
+            &["completed", "paused", "interrupted", "running"],
+        )),
+        ("session.status", Some("error" | "failed")) | ("session.error", _) => {
+            Some(("failed", &["running", "paused"]))
+        }
+        ("session.status", Some("idle")) | ("session.idle", _) => None,
+        _ => None,
+    }
+}
+
+fn pi_status_from_event(event_type: &str) -> Option<(&'static str, &'static [&'static str])> {
+    match event_type {
+        "agent.start" => Some((
+            "running",
+            &["completed", "paused", "interrupted", "running"],
+        )),
+        "agent.end" => Some(("completed", &["running", "paused"])),
+        _ => None,
+    }
+}
+
+fn provider_status_from_notification(
+    notification: &AgentLifecycleNotification,
+    current_status: &str,
+) -> Option<(String, &'static [&'static str])> {
+    match notification.provider.as_str() {
+        "claude-code" => claude_status_from_event(&notification.event_type, current_status)
+            .map(|status| (status, &[] as &[_])),
+        "pi" => pi_status_from_event(&notification.event_type)
+            .map(|(status, eligible)| (status.to_string(), eligible)),
+        "opencode" => opencode_status_from_event(
+            &notification.event_type,
+            notification.status_type.as_deref(),
+        )
+        .map(|(status, eligible)| (status.to_string(), eligible)),
+        _ => None,
+    }
+}
+
+pub fn apply_agent_lifecycle_notification(
+    db: &db::Database,
+    notification: &AgentLifecycleNotification,
+) -> Result<Option<AgentLifecycleStatusChange>, String> {
+    let Some(session) = db
+        .get_latest_session_for_ticket(&notification.task_id)
+        .map_err(|e| format!("failed to load latest agent session: {e}"))?
+    else {
+        return Ok(None);
+    };
+
+    if session.provider != notification.provider {
+        return Ok(None);
+    }
+
+    if matches!(notification.provider.as_str(), "pi" | "opencode") {
+        let Some(pty_instance_id) = notification.pty_instance_id else {
+            return Ok(None);
+        };
+        if !session_matches_pty_instance(&session, pty_instance_id) {
+            return Ok(None);
+        }
+    }
+
+    if let Some(provider_session_id) = notification
+        .provider_session_id
+        .as_deref()
+        .filter(|id| !id.is_empty())
+    {
+        db.set_agent_session_provider_id(&session.id, &notification.provider, provider_session_id)
+            .map_err(|e| format!("failed to persist provider session id: {e}"))?;
+    }
+
+    let Some((target_status, eligible_statuses)) =
+        provider_status_from_notification(notification, &session.status)
+    else {
+        return Ok(None);
+    };
+
+    if !eligible_statuses.is_empty() && !eligible_statuses.contains(&session.status.as_str()) {
+        return Ok(None);
+    }
+
+    if session.status != target_status {
+        db.update_agent_session(
+            &session.id,
+            &session.stage,
+            &target_status,
+            session.checkpoint_data.as_deref(),
+            None,
+        )
+        .map_err(|e| format!("failed to update agent session status: {e}"))?;
+    }
+
+    Ok(Some(AgentLifecycleStatusChange {
+        task_id: notification.task_id.clone(),
+        status: target_status,
+        provider: notification.provider.clone(),
+    }))
+}
 
 pub fn build_task_prompt(
     task: &db::TaskRow,

@@ -56,29 +56,6 @@ pub(crate) struct ResumeTarget {
     pub(crate) branch_name: Option<String>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[allow(dead_code)]
-pub(crate) enum ResumeSessionPersistence {
-    LeaveExisting,
-    Running,
-    Completed,
-}
-
-pub(crate) async fn resolve_resume_session_persistence(
-    provider_name: &str,
-    _latest_session: Option<&db::AgentSessionRow>,
-    _port: u16,
-) -> ResumeSessionPersistence {
-    if provider_name == "opencode" {
-        // OpenForge no longer owns an `opencode serve` process to query during
-        // startup. OpenCode status is reconciled through the installed plugin
-        // hooks as the CLI process resumes, matching Claude Code and Pi.
-        return ResumeSessionPersistence::Running;
-    }
-
-    ResumeSessionPersistence::Running
-}
-
 pub(crate) fn load_resume_targets(db: &db::Database) -> rusqlite::Result<Vec<ResumeTarget>> {
     let mut targets: Vec<ResumeTarget> = db
         .get_resumable_task_workspaces()?
@@ -124,6 +101,7 @@ async fn resume_task_sessions(
     app: crate::backend_runtime::AppHandle,
     http_ready: tokio::sync::oneshot::Receiver<()>,
     sidecar_readiness: http_server::SidecarReadinessState,
+    stale_running_session_cutoff: i64,
 ) {
     // Wait for the HTTP server to be listening so Claude Code hooks don't get connection-refused
     match http_ready.await {
@@ -162,6 +140,7 @@ async fn resume_task_sessions(
     };
 
     if resume_targets.is_empty() {
+        mark_unresumed_running_sessions_interrupted(&app, stale_running_session_cutoff);
         sidecar_readiness.mark_startup_resume_complete();
         let _ = app.emit("startup-resume-complete", ());
         return;
@@ -269,13 +248,6 @@ async fn resume_task_sessions(
         {
             Ok(result) => {
                 {
-                    let resume_persistence = resolve_resume_session_persistence(
-                        provider_name,
-                        latest_session.as_ref(),
-                        result.port,
-                    )
-                    .await;
-
                     let db = app.state::<Arc<Mutex<db::Database>>>();
                     match db.lock() {
                         Ok(db_lock) => {
@@ -303,7 +275,6 @@ async fn resume_task_sessions(
                                 provider_name,
                                 result.port,
                                 result.pty_instance_id,
-                                resume_persistence,
                             );
                         }
                         Err(e) => {
@@ -386,9 +357,40 @@ async fn resume_task_sessions(
         }
     }
 
+    mark_unresumed_running_sessions_interrupted(&app, stale_running_session_cutoff);
     sidecar_readiness.mark_startup_resume_complete();
     let _ = app.emit("startup-resume-complete", ());
     info!("[startup] Resume complete, emitted startup-resume-complete event");
+}
+
+fn mark_unresumed_running_sessions_interrupted(
+    app: &crate::backend_runtime::AppHandle,
+    stale_running_session_cutoff: i64,
+) {
+    let db = app.state::<Arc<Mutex<db::Database>>>();
+    let db_lock = match db.lock() {
+        Ok(db_lock) => db_lock,
+        Err(e) => {
+            warn!(
+                "[startup] Failed to mark unresumed running sessions: database lock error: {}",
+                e
+            );
+            return;
+        }
+    };
+
+    match db_lock.mark_running_sessions_interrupted_before(stale_running_session_cutoff) {
+        Ok(count) if count > 0 => {
+            info!(
+                "[startup] Marked {} unresumed running sessions as interrupted",
+                count
+            );
+        }
+        Ok(_) => {}
+        Err(e) => {
+            warn!("[startup] Failed to mark stale sessions: {}", e);
+        }
+    }
 }
 
 pub(crate) fn restore_resumed_session_state(
@@ -398,7 +400,6 @@ pub(crate) fn restore_resumed_session_state(
     provider_name: &str,
     port: u16,
     pty_instance_id: Option<u64>,
-    resume_persistence: ResumeSessionPersistence,
 ) {
     if let Err(e) = db.upsert_task_workspace_record(
         &target.task_id,
@@ -438,15 +439,9 @@ pub(crate) fn restore_resumed_session_state(
             .to_string()
         });
 
-        let persisted_status = if provider_name == "opencode" {
-            match resume_persistence {
-                ResumeSessionPersistence::LeaveExisting => None,
-                ResumeSessionPersistence::Running => Some("running"),
-                ResumeSessionPersistence::Completed => Some("completed"),
-            }
-        } else if matches!(session.status.as_str(), "interrupted" | "running") {
+        let persisted_status = if matches!(session.status.as_str(), "interrupted" | "running") {
             Some("running")
-        } else if provider_name == "pi"
+        } else if matches!(provider_name, "pi" | "opencode")
             && pty_checkpoint_data.is_some()
             && matches!(session.status.as_str(), "completed" | "paused")
         {
@@ -482,6 +477,13 @@ pub(crate) fn restore_resumed_session_state(
 
 fn database_filename() -> &'static str {
     data_identity::database_filename()
+}
+
+fn current_unix_timestamp_seconds() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("time went backwards")
+        .as_secs() as i64
 }
 
 fn initialize_database(app_data_dir: &Path) -> db::Database {
@@ -546,19 +548,6 @@ fn migrate_github_token_to_secure_store(database: &db::Database) {
 
 fn run_database_startup_maintenance(database: &db::Database) {
     migrate_github_token_to_secure_store(database);
-
-    match database.mark_running_sessions_interrupted() {
-        Ok(count) if count > 0 => {
-            info!(
-                "[startup] Marked {} stale running sessions as interrupted",
-                count
-            );
-        }
-        Ok(_) => {}
-        Err(e) => {
-            warn!("[startup] Failed to mark stale sessions: {}", e);
-        }
-    }
 
     match database.clear_stale_worktree_servers() {
         Ok(count) if count > 0 => {
@@ -626,6 +615,7 @@ fn run_electron_sidecar() -> Result<(), Box<dyn std::error::Error>> {
     let app_data_dir = sidecar_app_data_dir().map_err(std::io::Error::other)?;
     let resource_dir = sidecar_resource_dir().map_err(std::io::Error::other)?;
     let database = initialize_database(&app_data_dir);
+    let stale_running_session_cutoff = current_unix_timestamp_seconds();
     run_database_startup_maintenance(&database);
     if let Err(e) = cli_installer::install_openforge_cli() {
         warn!("[startup] Failed to install OpenForge CLI: {}", e);
@@ -661,6 +651,7 @@ fn run_electron_sidecar() -> Result<(), Box<dyn std::error::Error>> {
                 app.clone(),
                 http_ready_rx,
                 sidecar_readiness.clone(),
+                stale_running_session_cutoff,
             ));
 
             http_server::start_http_sidecar_server(
@@ -686,7 +677,7 @@ fn main() {
 mod tests {
     use super::{
         load_resume_targets, restore_resumed_session_state, resume_task_sessions,
-        sidecar_app_data_dir_from_override, ResumeSessionPersistence, ResumeTarget,
+        sidecar_app_data_dir_from_override, ResumeTarget,
     };
     use crate::app_events::{AppEventError, AppEventId, EmitReceipt, RustAppEventAdapter};
     use crate::db::test_helpers::make_test_db;
@@ -750,7 +741,7 @@ mod tests {
         let (http_ready_tx, http_ready_rx) = tokio::sync::oneshot::channel();
         http_ready_tx.send(()).expect("send http ready signal");
 
-        resume_task_sessions(app, http_ready_rx, sidecar_readiness.clone()).await;
+        resume_task_sessions(app, http_ready_rx, sidecar_readiness.clone(), 0).await;
 
         let startup_resume = sidecar_readiness.startup_resume();
         assert_eq!(startup_resume.phase, "degraded");
@@ -770,7 +761,7 @@ mod tests {
     }
 
     #[test]
-    fn restore_resumed_session_state_keeps_interrupted_opencode_session_without_confirmed_running_status(
+    fn restore_resumed_session_state_marks_interrupted_opencode_session_running_like_other_tty_providers(
     ) {
         let (db, path) = make_test_db("restore_resumed_session_state");
 
@@ -824,26 +815,15 @@ mod tests {
             branch_name: Some("t-100".to_string()),
         };
 
-        restore_resumed_session_state(
-            &db,
-            Some(&session),
-            &target,
-            "opencode",
-            4312,
-            None,
-            ResumeSessionPersistence::LeaveExisting,
-        );
+        restore_resumed_session_state(&db, Some(&session), &target, "opencode", 4312, None);
 
         let restored = db
             .get_latest_session_for_ticket(&task.id)
             .expect("get restored session failed")
             .expect("missing restored session");
-        assert_eq!(restored.status, "interrupted");
+        assert_eq!(restored.status, "running");
         assert_eq!(restored.stage, "implement");
-        assert_eq!(
-            restored.error_message,
-            Some("Session interrupted by app restart".to_string())
-        );
+        assert_eq!(restored.error_message, None);
 
         let worktree = db
             .get_worktree_for_task(&task.id)
@@ -858,6 +838,145 @@ mod tests {
         assert_eq!(workspace.workspace_path, "/tmp/test-repo/.worktrees/T-100");
         assert_eq!(workspace.opencode_port, None);
         assert_eq!(workspace.kind, "git_worktree");
+
+        drop(db);
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn restore_resumed_opencode_session_becomes_running_after_tty_resume() {
+        let (db, path) = make_test_db("restore_resumed_opencode_tty_running");
+
+        let project = db
+            .create_project("Test Project", "/tmp/test-repo")
+            .expect("create project failed");
+        let task = db
+            .create_task(
+                "Resume OpenCode TTY",
+                "doing",
+                Some(&project.id),
+                Some("Resume OpenCode TTY"),
+                Some("opencode"),
+            )
+            .expect("create task failed");
+        db.create_worktree_record(
+            &task.id,
+            &project.id,
+            "/tmp/test-repo",
+            "/tmp/test-repo/.worktrees/T-201",
+            "t-201",
+        )
+        .expect("create worktree failed");
+        db.create_agent_session(
+            "ses-oc-201",
+            &task.id,
+            Some("oc-ses-201"),
+            "implement",
+            "running",
+            "opencode",
+        )
+        .expect("create opencode session failed");
+        db.mark_running_sessions_interrupted()
+            .expect("mark interrupted failed");
+
+        let session = db
+            .get_latest_session_for_ticket(&task.id)
+            .expect("get latest session failed")
+            .expect("missing latest session");
+        assert_eq!(session.status, "interrupted");
+
+        let target = ResumeTarget {
+            task_id: task.id.clone(),
+            project_id: project.id.clone(),
+            repo_path: "/tmp/test-repo".to_string(),
+            workspace_path: "/tmp/test-repo/.worktrees/T-201".to_string(),
+            kind: "git_worktree".to_string(),
+            branch_name: Some("t-201".to_string()),
+        };
+
+        restore_resumed_session_state(&db, Some(&session), &target, "opencode", 0, Some(42));
+
+        let restored = db
+            .get_agent_session("ses-oc-201")
+            .expect("get restored opencode session failed")
+            .expect("missing restored opencode session");
+        assert_eq!(restored.status, "running");
+        assert_eq!(
+            restored.checkpoint_data,
+            Some(r#"{"pty_instance_id":42}"#.to_string())
+        );
+        assert_eq!(restored.error_message, None);
+
+        drop(db);
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn restore_resumed_opencode_session_refreshes_checkpoint_for_completed_session() {
+        let (db, path) = make_test_db("restore_resumed_opencode_completed_checkpoint");
+
+        let project = db
+            .create_project("Test Project", "/tmp/test-repo")
+            .expect("create project failed");
+        let task = db
+            .create_task(
+                "Resume completed OpenCode",
+                "doing",
+                Some(&project.id),
+                Some("Resume completed OpenCode"),
+                Some("opencode"),
+            )
+            .expect("create task failed");
+        db.create_worktree_record(
+            &task.id,
+            &project.id,
+            "/tmp/test-repo",
+            "/tmp/test-repo/.worktrees/T-202",
+            "t-202",
+        )
+        .expect("create worktree failed");
+        db.create_agent_session(
+            "ses-oc-202",
+            &task.id,
+            Some("oc-ses-202"),
+            "implement",
+            "completed",
+            "opencode",
+        )
+        .expect("create opencode session failed");
+        db.update_agent_session(
+            "ses-oc-202",
+            "implement",
+            "completed",
+            Some(r#"{"pty_instance_id":41}"#),
+            None,
+        )
+        .expect("seed old checkpoint failed");
+
+        let session = db
+            .get_latest_session_for_ticket(&task.id)
+            .expect("get latest session failed")
+            .expect("missing latest session");
+        let target = ResumeTarget {
+            task_id: task.id.clone(),
+            project_id: project.id.clone(),
+            repo_path: "/tmp/test-repo".to_string(),
+            workspace_path: "/tmp/test-repo/.worktrees/T-202".to_string(),
+            kind: "git_worktree".to_string(),
+            branch_name: Some("t-202".to_string()),
+        };
+
+        restore_resumed_session_state(&db, Some(&session), &target, "opencode", 0, Some(42));
+
+        let restored = db
+            .get_agent_session("ses-oc-202")
+            .expect("get restored opencode session failed")
+            .expect("missing restored opencode session");
+        assert_eq!(restored.status, "completed");
+        assert_eq!(
+            restored.checkpoint_data,
+            Some(r#"{"pty_instance_id":42}"#.to_string())
+        );
 
         drop(db);
         let _ = fs::remove_file(path);
@@ -913,15 +1032,7 @@ mod tests {
             branch_name: Some("t-200".to_string()),
         };
 
-        restore_resumed_session_state(
-            &db,
-            Some(&session),
-            &target,
-            "pi",
-            0,
-            Some(42),
-            ResumeSessionPersistence::Running,
-        );
+        restore_resumed_session_state(&db, Some(&session), &target, "pi", 0, Some(42));
 
         let restored = db
             .get_agent_session("ses-pi-200")
