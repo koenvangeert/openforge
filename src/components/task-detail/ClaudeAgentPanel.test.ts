@@ -70,6 +70,8 @@ const { mockPoolEntry, mockShellLifecycleState } = vi.hoisted(() => ({
   },
   mockShellLifecycleState: {
     ptyActive: false,
+    shellExited: false,
+    currentPtyInstance: null as number | null,
   },
 }))
 
@@ -78,7 +80,13 @@ vi.mock('../../lib/terminalPool', () => ({
   attach: vi.fn(),
   detach: vi.fn(),
   release: vi.fn(),
+  getShellLifecycleState: vi.fn().mockImplementation(() => ({ ...mockShellLifecycleState })),
   isPtyActive: vi.fn().mockImplementation(() => mockShellLifecycleState.ptyActive),
+  updateShellLifecycleState: vi.fn().mockImplementation((_taskId: string, state: typeof mockShellLifecycleState) => {
+    mockShellLifecycleState.ptyActive = state.ptyActive
+    mockShellLifecycleState.shellExited = state.shellExited
+    mockShellLifecycleState.currentPtyInstance = state.currentPtyInstance
+  }),
 }))
 
 import ClaudeAgentPanel from './ClaudeAgentPanel.svelte'
