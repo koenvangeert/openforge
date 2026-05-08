@@ -9,7 +9,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-use super::commands::{build_claude_args, build_opencode_run_args, build_pi_args, get_shell_path};
+use super::commands::{build_claude_args, build_opencode_tui_args, build_pi_args, get_shell_path};
 use super::events::{
     spawn_batched_pty_event_emitter, spawn_pty_output_reader, PtyEventEmitterConfig, PtyExitAction,
     RingBuffer, SharedRingBuffer, CLAUDE_BUFFER_CAPACITY,
@@ -92,7 +92,7 @@ impl PtyManager {
         let model_name = model.map(|model| format!("{}/{}", model.provider_id, model.model_id));
 
         let mut cmd = CommandBuilder::new("opencode");
-        for arg in build_opencode_run_args(
+        for arg in build_opencode_tui_args(
             prompt,
             resume_session_id,
             continue_session,

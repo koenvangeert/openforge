@@ -46,10 +46,6 @@
     }
 
     status = getAgentPanelStatusFromSessionStatus(session.status)
-
-    // OpenCode output is produced by the provider-owned `opencode run` PTY.
-    // The terminal pool replays any in-memory buffer and subscribes to new
-    // PTY events; OpenForge no longer starts `opencode attach` sessions.
   })
 
   $effect(() => {
