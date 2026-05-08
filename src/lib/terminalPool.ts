@@ -23,6 +23,8 @@ export interface PoolEntry {
   attached: boolean
   spawnPending: boolean
   currentPtyInstance: number | null
+  webglAddon: WebglAddon | null
+  webglUnavailable: boolean
 }
 
 export interface TerminalTab {
@@ -171,18 +173,23 @@ function loadWebLinksAddon(terminal: Terminal): void {
   terminal.loadAddon(webLinksAddon)
 }
 
-function loadWebglAddon(terminal: Terminal): void {
+function loadWebglAddon(entry: PoolEntry): void {
+  if (entry.webglAddon || entry.webglUnavailable) return
+
   let webglAddon: WebglAddon | null = null
 
   try {
     webglAddon = new WebglAddon()
-    terminal.loadAddon(webglAddon)
+    entry.terminal.loadAddon(webglAddon)
+    entry.webglAddon = webglAddon
   } catch (error) {
     try {
       webglAddon?.dispose()
     } catch (disposeError) {
       console.warn('[terminalPool] Failed to dispose unavailable WebGL renderer addon:', disposeError)
     }
+    entry.webglAddon = null
+    entry.webglUnavailable = true
     console.warn('[terminalPool] WebGL renderer unavailable; falling back to the default renderer:', error)
   }
 }
@@ -248,7 +255,6 @@ export async function acquire(taskId: string): Promise<PoolEntry> {
 
   const fitAddon = new FitAddon()
   terminal.loadAddon(fitAddon)
-  loadWebglAddon(terminal)
   loadWebLinksAddon(terminal)
 
   const hostDiv = createHostDiv()
@@ -276,6 +282,8 @@ export async function acquire(taskId: string): Promise<PoolEntry> {
     attached: false,
     spawnPending: false,
     currentPtyInstance: null,
+    webglAddon: null,
+    webglUnavailable: false,
   }
 
   // Replay buffered output from backend
@@ -339,6 +347,10 @@ export async function attach(entry: PoolEntry, wrapperEl: HTMLDivElement): Promi
   if (!openedTerminals.has(entry.terminal)) {
     entry.terminal.open(entry.hostDiv)
     openedTerminals.add(entry.terminal)
+    // Load WebGL only after xterm has opened against a DOM-attached host with
+    // preloaded fonts. The WebGL renderer builds its glyph atlas from measured
+    // font/cell metrics; loading it during acquire() can produce shifted glyphs.
+    loadWebglAddon(entry)
   }
 
   // Set up ResizeObserver

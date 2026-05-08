@@ -314,8 +314,8 @@ describe("terminalPool", () => {
 		const preventDefault = vi.spyOn(event, "preventDefault");
 		const stopPropagation = vi.spyOn(event, "stopPropagation");
 
-		expect(getLoadedAddonNames(entry)).toContain("WebLinksAddon");
-		expect(loadAddonSpy).toHaveBeenCalledTimes(3);
+		expect(getLoadedAddonNames(entry)).toEqual(["FitAddon", "WebLinksAddon"]);
+		expect(loadAddonSpy).toHaveBeenCalledTimes(2);
 		expect(webLinksHandler).not.toBeNull();
 
 		getWebLinksHandler()(event, "https://example.com/pool");
@@ -353,6 +353,23 @@ describe("terminalPool", () => {
 		expect(entry.attached).toBe(true);
 	});
 
+	it("defers WebGL renderer loading until the terminal opens on an attached host", async () => {
+		const entry = await acquire("task-webgl-deferred");
+		const { loadAddon: loadAddonSpy, open: openSpy } = getTerminalMocks(entry);
+
+		expect(openSpy).not.toHaveBeenCalled();
+		expect(getLoadedAddonNames(entry)).toEqual(["FitAddon", "WebLinksAddon"]);
+
+		const wrapper = document.createElement("div");
+		await attach(entry, wrapper);
+
+		expect(openSpy).toHaveBeenCalledWith(entry.hostDiv);
+		expect(getLoadedAddonNames(entry)).toEqual(["FitAddon", "WebLinksAddon", "WebglAddon"]);
+		expect(openSpy.mock.invocationCallOrder[0]).toBeLessThan(
+			loadAddonSpy.mock.invocationCallOrder[2],
+		);
+	});
+
 	it("loads the WebGL renderer addon for both agent and shell terminal keys", async () => {
 		const agentEntry = await acquire("T-50");
 		const shellEntry = await acquire("T-50-shell-0");
@@ -371,16 +388,19 @@ describe("terminalPool", () => {
 		expect(shellOpenSpy).toHaveBeenCalledWith(shellEntry.hostDiv);
 		expect(agentLoadAddonSpy).toHaveBeenCalledTimes(3);
 		expect(shellLoadAddonSpy).toHaveBeenCalledTimes(3);
-		expect(getLoadedAddonNames(agentEntry)).toEqual(["FitAddon", "WebglAddon", "WebLinksAddon"]);
-		expect(getLoadedAddonNames(shellEntry)).toEqual(["FitAddon", "WebglAddon", "WebLinksAddon"]);
+		expect(getLoadedAddonNames(agentEntry)).toEqual(["FitAddon", "WebLinksAddon", "WebglAddon"]);
+		expect(getLoadedAddonNames(shellEntry)).toEqual(["FitAddon", "WebLinksAddon", "WebglAddon"]);
 	});
 
-	it("acquire falls back to the default renderer when WebglAddon construction fails", async () => {
+	it("attach falls back to the default renderer when WebglAddon construction fails", async () => {
 		webglConstructorShouldThrow = true;
 		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
 
 		try {
 			const entry = await acquire("task-webgl-constructor-fallback");
+			const wrapper = document.createElement("div");
+
+			await attach(entry, wrapper);
 
 			expect(entry).toBeDefined();
 			expect(getLoadedAddonNames(entry)).toEqual(["FitAddon", "WebLinksAddon"]);
@@ -393,15 +413,18 @@ describe("terminalPool", () => {
 		}
 	});
 
-	it("acquire falls back to the default renderer when WebglAddon load fails", async () => {
+	it("attach falls back to the default renderer when WebglAddon load fails", async () => {
 		webglLoadShouldThrow = true;
 		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
 
 		try {
 			const entry = await acquire("task-webgl-load-fallback");
+			const wrapper = document.createElement("div");
+
+			await attach(entry, wrapper);
 
 			expect(entry).toBeDefined();
-			expect(getLoadedAddonNames(entry)).toEqual(["FitAddon", "WebglAddon", "WebLinksAddon"]);
+			expect(getLoadedAddonNames(entry)).toEqual(["FitAddon", "WebLinksAddon", "WebglAddon"]);
 			expect(warnSpy).toHaveBeenCalledWith(
 				"[terminalPool] WebGL renderer unavailable; falling back to the default renderer:",
 				expect.any(Error),
