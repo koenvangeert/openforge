@@ -91,7 +91,6 @@ mod tests {
         assert!(!is_secret("github_username"));
         assert!(!is_secret("external_base_url"));
         assert!(!is_secret("external_username"));
-        assert!(!is_secret("opencode_port"));
         assert!(!is_secret(""));
     }
 

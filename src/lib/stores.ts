@@ -4,7 +4,6 @@ import type { BoardFilter } from './boardFilters'
 
 export interface TaskRuntimeInfo {
   workspacePath: string;
-  opencodePort: number | null;
 }
 
 export const tasks = writable<Task[]>([]);

@@ -518,7 +518,7 @@ fn legacy_delivery_class(event_name: &str) -> DeliveryClass {
         DeliveryClass::RealtimeLossy
     } else if event_name.starts_with("pty-exit-")
         || event_name.starts_with("plugin:")
-        || matches!(event_name, "server-resumed" | "startup-resume-complete")
+        || matches!(event_name, "session-resumed" | "startup-resume-complete")
     {
         DeliveryClass::Lifecycle
     } else if matches!(
@@ -538,7 +538,7 @@ fn legacy_ordering_key(event_name: &str, payload: &serde_json::Value) -> Option<
     {
         return Some(format!("pty:{session_key}"));
     }
-    if matches!(event_name, "server-resumed" | "startup-resume-complete") {
+    if matches!(event_name, "session-resumed" | "startup-resume-complete") {
         return Some(format!("lifecycle:{event_name}"));
     }
     payload
@@ -704,10 +704,9 @@ mod tests {
         .expect("non-lifecycle event should publish through adapter");
 
         app.emit(
-            "server-resumed",
+            "session-resumed",
             serde_json::json!({
                 "task_id": "T-boot",
-                "port": 17642,
                 "workspace_path": "/tmp/openforge/T-boot"
             }),
         )
@@ -722,14 +721,14 @@ mod tests {
             panic!("expected replayed lifecycle event");
         };
 
-        assert_eq!(received.event_name, "server-resumed");
+        assert_eq!(received.event_name, "session-resumed");
         assert_eq!(received.payload["task_id"], "T-boot");
         assert_eq!(received.id.as_ref().expect("id should be assigned").seq, 2);
         let meta = received.meta.as_ref().expect("meta should be assigned");
         assert_eq!(meta.delivery, DeliveryClass::Lifecycle);
         assert_eq!(
             meta.ordering_key.as_deref(),
-            Some("lifecycle:server-resumed")
+            Some("lifecycle:session-resumed")
         );
     }
 

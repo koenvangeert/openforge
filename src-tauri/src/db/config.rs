@@ -34,18 +34,16 @@ mod tests {
     fn test_config_operations() {
         let (db, path) = make_test_db("config_ops");
 
-        // Test getting default config
+        // Legacy OpenCode server port config is no longer seeded for new databases.
         let port = db
             .get_config("opencode_port")
             .expect("Failed to get config");
-        assert_eq!(port, Some("4096".to_string()));
+        assert_eq!(port, None);
 
         // Test setting config
-        db.set_config("opencode_port", "8080")
+        db.set_config("custom_port", "8080")
             .expect("Failed to set config");
-        let port = db
-            .get_config("opencode_port")
-            .expect("Failed to get config");
+        let port = db.get_config("custom_port").expect("Failed to get config");
         assert_eq!(port, Some("8080".to_string()));
 
         // Test non-existent key

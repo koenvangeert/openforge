@@ -166,10 +166,6 @@ export async function getLatestSessions(taskIds: string[]): Promise<AgentSession
   return invoke<AgentSession[]>("get_latest_sessions", { taskIds });
 }
 
-export async function getSessionOutput(taskId: string): Promise<string> {
-  return invoke<string>("get_session_output", { taskId });
-}
-
 export async function getGithubUsername(): Promise<string> {
   return invoke<string>("get_github_username");
 }

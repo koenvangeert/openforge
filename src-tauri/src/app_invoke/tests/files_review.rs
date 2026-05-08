@@ -342,7 +342,7 @@ async fn returns_explicit_blockers_for_live_review_commands() {
         .await
         .expect_err("live review command should report missing runtime state");
     assert_eq!(err.0, StatusCode::NOT_IMPLEMENTED);
-    assert!(err.1.contains("requires provider and server manager state"));
+    assert!(err.1.contains("requires provider runtime state"));
 
     let _ = std::fs::remove_file(path);
 }

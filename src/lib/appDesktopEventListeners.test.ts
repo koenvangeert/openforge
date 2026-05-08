@@ -144,16 +144,16 @@ describe('registerAppDesktopEventListeners', () => {
     expect(deps.loadProjectAttention).toHaveBeenCalledOnce()
   })
 
-  it('records runtime info and latest session on server-resumed', async () => {
+  it('records runtime info and latest session on session-resumed without legacy OpenCode server port state', async () => {
     const { deps, handlers } = createHarness()
     vi.mocked(getLatestSession).mockResolvedValue(createSession({ id: 'session-resumed' }))
 
     await registerAppDesktopEventListeners(deps)
-    await handlers.get('server-resumed')?.({
-      payload: { task_id: 'task-1', port: 1234, workspace_path: '/tmp/work' },
+    await handlers.get('session-resumed')?.({
+      payload: { task_id: 'task-1', workspace_path: '/tmp/work' },
     })
 
-    expect(get(taskRuntimeInfo).get('task-1')).toEqual({ workspacePath: '/tmp/work', opencodePort: 1234 })
+    expect(get(taskRuntimeInfo).get('task-1')).toEqual({ workspacePath: '/tmp/work' })
     expect(get(activeSessions).get('task-1')?.id).toBe('session-resumed')
   })
 

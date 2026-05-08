@@ -4,7 +4,6 @@ use crate::{
     http_server::{electron_sidecar_app_handle, AppInvokeRequest, AppState, SidecarReadinessState},
     plugin_host::PluginHost,
     pty_manager::PtyManager,
-    server_manager::ServerManager,
     whisper_manager::{WhisperManager, WhisperModelSize},
 };
 use axum::http::StatusCode;
@@ -19,7 +18,6 @@ pub(crate) fn test_state(name: &str) -> (AppState, std::path::PathBuf) {
             db: Arc::new(Mutex::new(db)),
             backend_token: Some("test-token".to_string()),
             pty_manager: Some(PtyManager::new()),
-            server_manager: Some(ServerManager::new()),
             github_client: GitHubClient::new(),
             plugin_host: Some(PluginHost::new(AppHandle::new())),
             app_event_tx: Some(app_event_tx),

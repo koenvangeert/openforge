@@ -89,16 +89,15 @@ fn publish_task_changed_payload(state: &AppState, payload: serde_json::Value) {
     );
 }
 
-fn publish_server_resumed(state: &AppState, task_id: &str, port: u16, workspace_path: &str) {
+fn publish_session_resumed(state: &AppState, task_id: &str, workspace_path: &str) {
     let payload = serde_json::json!({
         "task_id": task_id,
-        "port": port,
         "workspace_path": workspace_path,
     });
     publish_app_event_to_runtime(
         state.app.as_ref(),
         &state.app_event_tx,
-        "server-resumed",
+        "session-resumed",
         &payload,
     );
 }

@@ -9,10 +9,6 @@ pub(super) async fn cleanup_task_runtime_for_app(
         let _ = pty_manager.kill_pty(task_id).await;
         pty_manager.kill_shells_for_task(task_id).await;
     }
-    if let Some(server_manager) = state.server_manager.as_ref() {
-        let _ = server_manager.stop_server(task_id).await;
-    }
-
     let worktree = {
         let db = crate::db::acquire_db(&state.db);
         db.get_worktree_for_task(task_id).map_err(|e| {
@@ -160,7 +156,7 @@ pub(super) async fn handle_app_resume_startup_sessions_command(
                                 Some("App restarted"),
                             );
                         }
-                        publish_server_resumed(state, &target.task_id, 0, &target.workspace_path);
+                        publish_session_resumed(state, &target.task_id, &target.workspace_path);
                         continue;
                     }
                 };
@@ -180,7 +176,7 @@ pub(super) async fn handle_app_resume_startup_sessions_command(
                             "[startup] Failed to generate Claude hooks for task {}: {}",
                             target.task_id, e
                         );
-                        publish_server_resumed(state, &target.task_id, 0, &target.workspace_path);
+                        publish_session_resumed(state, &target.task_id, &target.workspace_path);
                         continue;
                     }
                 };
@@ -215,7 +211,7 @@ pub(super) async fn handle_app_resume_startup_sessions_command(
                             Some("App restarted"),
                         );
                     }
-                    publish_server_resumed(state, &target.task_id, 0, &target.workspace_path);
+                    publish_session_resumed(state, &target.task_id, &target.workspace_path);
                     continue;
                 }
                 crate::providers::ProviderSessionResult {
@@ -257,7 +253,7 @@ pub(super) async fn handle_app_resume_startup_sessions_command(
                                 Some("App restarted"),
                             );
                         }
-                        publish_server_resumed(state, &target.task_id, 0, &target.workspace_path);
+                        publish_session_resumed(state, &target.task_id, &target.workspace_path);
                         continue;
                     }
                 };
@@ -310,7 +306,7 @@ pub(super) async fn handle_app_resume_startup_sessions_command(
             );
         }
 
-        publish_server_resumed(state, &target.task_id, result.port, &target.workspace_path);
+        publish_session_resumed(state, &target.task_id, &target.workspace_path);
         info!(
             "[startup] Resumed {} for task {} (port {})",
             provider_name, target.task_id, result.port

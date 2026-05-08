@@ -1,5 +1,4 @@
 use super::*;
-use crate::opencode_client::OpenCodeClient;
 use crate::provider_runtime;
 use crate::providers::Provider;
 
@@ -16,12 +15,7 @@ fn project_runtime_context(
 }
 
 fn runtime_error(error: String) -> (StatusCode, String) {
-    let status = if error == "Server manager is not available" {
-        StatusCode::SERVICE_UNAVAILABLE
-    } else {
-        StatusCode::INTERNAL_SERVER_ERROR
-    };
-    (status, error)
+    (StatusCode::INTERNAL_SERVER_ERROR, error)
 }
 
 async fn list_opencode_commands(
@@ -30,13 +24,9 @@ async fn list_opencode_commands(
 ) -> AppResult<serde_json::Value> {
     let context = project_runtime_context(state, project_id)?;
     json_value(
-        provider_runtime::list_runtime_commands(
-            state.server_manager.as_ref(),
-            project_id,
-            &context,
-        )
-        .await
-        .map_err(runtime_error)?,
+        provider_runtime::list_runtime_commands(project_id, &context)
+            .await
+            .map_err(runtime_error)?,
     )
 }
 
@@ -47,21 +37,16 @@ async fn search_opencode_files(
 ) -> AppResult<serde_json::Value> {
     let context = project_runtime_context(state, project_id)?;
     json_value(
-        provider_runtime::search_runtime_files(
-            state.server_manager.as_ref(),
-            project_id,
-            &context,
-            query,
-        )
-        .await
-        .map_err(runtime_error)?,
+        provider_runtime::search_runtime_files(project_id, &context, query)
+            .await
+            .map_err(runtime_error)?,
     )
 }
 
 async fn list_opencode_agents(state: &AppState, project_id: &str) -> AppResult<serde_json::Value> {
     let context = project_runtime_context(state, project_id)?;
     json_value(
-        provider_runtime::list_runtime_agents(state.server_manager.as_ref(), project_id, &context)
+        provider_runtime::list_runtime_agents(project_id, &context)
             .await
             .map_err(runtime_error)?,
     )
@@ -70,7 +55,7 @@ async fn list_opencode_agents(state: &AppState, project_id: &str) -> AppResult<s
 async fn list_opencode_models(state: &AppState, project_id: &str) -> AppResult<serde_json::Value> {
     let context = project_runtime_context(state, project_id)?;
     json_value(
-        provider_runtime::list_runtime_models(state.server_manager.as_ref(), project_id, &context)
+        provider_runtime::list_runtime_models(project_id, &context)
             .await
             .map_err(runtime_error)?,
     )
@@ -79,7 +64,7 @@ async fn list_opencode_models(state: &AppState, project_id: &str) -> AppResult<s
 async fn list_opencode_skills(state: &AppState, project_id: &str) -> AppResult<serde_json::Value> {
     let context = project_runtime_context(state, project_id)?;
     json_value(
-        provider_runtime::list_runtime_skills(state.server_manager.as_ref(), project_id, &context)
+        provider_runtime::list_runtime_skills(project_id, &context)
             .await
             .map_err(runtime_error)?,
     )
@@ -176,72 +161,6 @@ async fn abort_session(
     Ok(serde_json::Value::Null)
 }
 
-async fn get_session_output(
-    state: &AppState,
-    request: &AppInvokeRequest,
-) -> AppResult<serde_json::Value> {
-    let task_id = payload_string(&request.payload, "taskId")?;
-    if let Some(pty_manager) = state.pty_manager.as_ref() {
-        if let Some(output) = pty_manager.get_pty_buffer(&task_id).await {
-            return json_value(output);
-        }
-    }
-
-    let context = {
-        let db = crate::db::acquire_db(&state.db);
-        provider_runtime::session_output_context(&db, &task_id).map_err(|error| {
-            let status = if error.starts_with("No session found") {
-                StatusCode::NOT_FOUND
-            } else if error == "Session has no OpenCode session ID" {
-                StatusCode::BAD_REQUEST
-            } else {
-                StatusCode::INTERNAL_SERVER_ERROR
-            };
-            (status, error)
-        })?
-    };
-
-    let Some(server_manager) = state.server_manager.as_ref() else {
-        return Err((
-            StatusCode::SERVICE_UNAVAILABLE,
-            "Server manager is not available".to_string(),
-        ));
-    };
-
-    let (port, spawned_server) = provider_runtime::session_output_server_port(
-        server_manager,
-        &task_id,
-        context.workspace_path.as_deref(),
-    )
-    .await
-    .map_err(|error| {
-        let status = if error == "No workspace found for this task" {
-            StatusCode::NOT_FOUND
-        } else if error == "OpenCode server is not managed by OpenForge" {
-            StatusCode::SERVICE_UNAVAILABLE
-        } else {
-            StatusCode::INTERNAL_SERVER_ERROR
-        };
-        (status, error)
-    })?;
-
-    let client = OpenCodeClient::with_base_url(format!("http://127.0.0.1:{port}"));
-    let messages = client
-        .get_session_messages(&context.opencode_session_id)
-        .await
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to fetch session messages: {e}"),
-            )
-        })?;
-
-    let output = provider_runtime::assistant_text_from_messages(&messages);
-
-    let _ = spawned_server;
-    json_value(output)
-}
-
 fn get_worktree_for_task(
     state: &AppState,
     request: &AppInvokeRequest,
@@ -273,7 +192,6 @@ pub(super) async fn handle_app_runtime_command(
         )?,
         "get_worktree_for_task" => get_worktree_for_task(state, request)?,
         "abort_session" => abort_session(state, request).await?,
-        "get_session_output" => get_session_output(state, request).await?,
         "list_opencode_commands" => {
             let project_id = payload_string(&request.payload, "projectId")?;
             list_opencode_commands(state, &project_id).await?

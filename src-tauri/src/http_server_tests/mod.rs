@@ -21,7 +21,6 @@ fn test_state(name: &str) -> (AppState, std::path::PathBuf) {
             db: Arc::new(Mutex::new(db)),
             backend_token: Some("test-token".to_string()),
             pty_manager: Some(PtyManager::new()),
-            server_manager: Some(ServerManager::new()),
             github_client: GitHubClient::new(),
             plugin_host: Some(PluginHost::new(crate::backend_runtime::AppHandle::new())),
             app_event_tx: Some(app_event_tx),

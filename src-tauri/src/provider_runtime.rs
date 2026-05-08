@@ -7,7 +7,6 @@ use crate::opencode_client::{AgentInfo, CommandInfo, ProviderModelInfo, SkillInf
 use crate::providers::{
     claude_code::ClaudeCodeProvider, opencode::OpenCodeProvider, pi::PiProvider,
 };
-use crate::server_manager::ServerManager;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
@@ -25,11 +24,6 @@ pub(crate) struct AbortSessionPolicy {
     pub(crate) ignore_unknown_provider: bool,
 }
 
-pub(crate) struct SessionOutputContext {
-    pub(crate) opencode_session_id: String,
-    pub(crate) workspace_path: Option<String>,
-}
-
 pub(crate) fn load_project_runtime_context(
     db: &db::Database,
     project_id: &str,
@@ -44,18 +38,6 @@ pub(crate) fn load_project_runtime_context(
         provider,
         project_path,
     })
-}
-
-#[allow(dead_code)]
-pub(crate) async fn ensure_project_discovery_server(
-    _server_manager: Option<&ServerManager>,
-    _project_id: &str,
-    _context: &ProjectRuntimeContext,
-) -> Result<Option<u16>, String> {
-    // OpenForge does not own OpenCode server lifecycle. Discovery for OpenCode
-    // is local, like Claude Code and Pi; runtime server communication happens
-    // via the installed OpenCode plugin hooks.
-    Ok(None)
 }
 
 pub(crate) fn provider_commands(
@@ -98,7 +80,6 @@ pub(crate) fn provider_agents(
 }
 
 pub(crate) async fn list_runtime_commands(
-    server_manager: Option<&ServerManager>,
     project_id: &str,
     context: &ProjectRuntimeContext,
 ) -> Result<Vec<CommandInfo>, String> {
@@ -106,17 +87,16 @@ pub(crate) async fn list_runtime_commands(
         return Ok(commands);
     }
 
-    let _ = (server_manager, project_id);
+    let _ = project_id;
     Ok(Vec::new())
 }
 
 pub(crate) async fn search_runtime_files(
-    server_manager: Option<&ServerManager>,
     project_id: &str,
     context: &ProjectRuntimeContext,
     query: &str,
 ) -> Result<Vec<String>, String> {
-    let _ = (server_manager, project_id);
+    let _ = project_id;
     if matches!(context.provider.as_str(), "claude-code" | "pi" | "opencode") {
         return Ok(context
             .project_path
@@ -129,7 +109,6 @@ pub(crate) async fn search_runtime_files(
 }
 
 pub(crate) async fn list_runtime_agents(
-    server_manager: Option<&ServerManager>,
     project_id: &str,
     context: &ProjectRuntimeContext,
 ) -> Result<Vec<AgentInfo>, String> {
@@ -137,27 +116,25 @@ pub(crate) async fn list_runtime_agents(
         return Ok(agents);
     }
 
-    let _ = (server_manager, project_id);
+    let _ = project_id;
     Ok(Vec::new())
 }
 
 pub(crate) async fn list_runtime_models(
-    server_manager: Option<&ServerManager>,
     project_id: &str,
     context: &ProjectRuntimeContext,
 ) -> Result<Vec<ProviderModelInfo>, String> {
-    let _ = (server_manager, project_id, context);
+    let _ = (project_id, context);
     Ok(Vec::new())
 }
 
 pub(crate) async fn list_runtime_skills(
-    server_manager: Option<&ServerManager>,
     project_id: &str,
     context: &ProjectRuntimeContext,
 ) -> Result<Vec<SkillInfo>, String> {
     let mut skills_map = HashMap::<String, SkillInfo>::new();
 
-    let _ = (server_manager, project_id);
+    let _ = project_id;
 
     if let Some(project_path) = context.project_path.as_deref() {
         for skill in scan_skill_directories_for_root(Path::new(project_path), "project") {
@@ -218,7 +195,7 @@ pub(crate) fn legacy_worktree_from_task_workspace(
         repo_path: workspace.repo_path,
         worktree_path: workspace.workspace_path,
         branch_name: workspace.branch_name.unwrap_or_default(),
-        opencode_port: workspace.opencode_port,
+        opencode_port: None,
         opencode_pid: None,
         status: workspace.status,
         created_at: workspace.created_at,
@@ -239,7 +216,7 @@ pub(crate) fn task_workspace_from_legacy(
         kind: "git_worktree".to_string(),
         branch_name: Some(workspace.branch_name),
         provider_name,
-        opencode_port: workspace.opencode_port,
+        opencode_port: None,
         status: workspace.status,
         created_at: workspace.created_at,
         updated_at: workspace.updated_at,
@@ -313,87 +290,9 @@ pub(crate) fn tauri_abort_session_policy(provider: &str) -> AbortSessionPolicy {
     }
 }
 
-pub(crate) fn session_output_context(
-    db: &db::Database,
-    task_id: &str,
-) -> Result<SessionOutputContext, String> {
-    let session = db
-        .get_latest_session_for_ticket(task_id)
-        .map_err(|e| format!("Failed to get session: {e}"))?
-        .ok_or_else(|| format!("No session found for task {task_id}"))?;
-    let opencode_session_id = session
-        .opencode_session_id
-        .ok_or_else(|| "Session has no OpenCode session ID".to_string())?;
-    let workspace_path = db
-        .get_task_workspace_for_task(task_id)
-        .map_err(|e| format!("Failed to get task workspace: {e}"))?
-        .map(|workspace| workspace.workspace_path)
-        .or_else(|| {
-            db.get_worktree_for_task(task_id)
-                .ok()
-                .flatten()
-                .map(|workspace| workspace.worktree_path)
-        });
-
-    Ok(SessionOutputContext {
-        opencode_session_id,
-        workspace_path,
-    })
-}
-
-/// Resolve a managed OpenCode server port for legacy session-output recovery.
-///
-/// Current OpenCode runs do not have an OpenForge-owned server port; their
-/// terminal output comes from the provider-owned `opencode run` PTY buffer.
-/// This returns `SERVICE_UNAVAILABLE` through app-invoke when a pre-migration
-/// managed server is not present, keeping the compatibility boundary explicit.
-pub(crate) async fn session_output_server_port(
-    server_manager: &ServerManager,
-    task_id: &str,
-    _workspace_path: Option<&str>,
-) -> Result<(u16, bool), String> {
-    let Some(port) = server_manager.get_server_port(task_id).await else {
-        return Err("OpenCode server is not managed by OpenForge".to_string());
-    };
-
-    Ok((port, false))
-}
-
-pub(crate) fn assistant_text_from_messages(messages: &[serde_json::Value]) -> String {
-    let mut output = String::new();
-    for message in messages {
-        let role = message
-            .get("role")
-            .and_then(|role| role.as_str())
-            .unwrap_or("");
-        if role != "assistant" {
-            continue;
-        }
-
-        let Some(parts) = message.get("parts").and_then(|parts| parts.as_array()) else {
-            continue;
-        };
-        for part in parts {
-            let part_type = part
-                .get("type")
-                .and_then(|value| value.as_str())
-                .unwrap_or("");
-            if part_type == "text" {
-                if let Some(text) = part.get("text").and_then(|value| value.as_str()) {
-                    output.push_str(text);
-                }
-            }
-        }
-    }
-
-    output
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
-
     fn task_workspace(branch_name: Option<&str>) -> db::TaskWorkspaceRow {
         db::TaskWorkspaceRow {
             id: 1,
@@ -425,21 +324,6 @@ mod tests {
             created_at: 11,
             updated_at: 22,
         }
-    }
-
-    #[test]
-    fn extracts_only_assistant_text_parts_in_order() {
-        let messages = vec![
-            json!({"role":"user","parts":[{"type":"text","text":"ignore"}]}),
-            json!({"role":"assistant","parts":[
-                {"type":"text","text":"hello "},
-                {"type":"tool","text":"ignore"},
-                {"type":"text","text":"world"}
-            ]}),
-            json!({"role":"assistant","parts":[{"type":"text","text":"!"}]}),
-        ];
-
-        assert_eq!(assistant_text_from_messages(&messages), "hello world!");
     }
 
     #[test]
@@ -478,7 +362,7 @@ mod tests {
         assert_eq!(worktree.repo_path, "/tmp/repo");
         assert_eq!(worktree.worktree_path, "/tmp/workspace");
         assert_eq!(worktree.branch_name, "");
-        assert_eq!(worktree.opencode_port, Some(1234));
+        assert_eq!(worktree.opencode_port, None);
         assert_eq!(worktree.opencode_pid, None);
         assert_eq!(worktree.status, "running");
         assert_eq!(worktree.created_at, 11);
@@ -497,7 +381,7 @@ mod tests {
         assert_eq!(workspace.kind, "git_worktree");
         assert_eq!(workspace.branch_name, Some("branch-a".to_string()));
         assert_eq!(workspace.provider_name, "pi");
-        assert_eq!(workspace.opencode_port, Some(1234));
+        assert_eq!(workspace.opencode_port, None);
         assert_eq!(workspace.status, "running");
         assert_eq!(workspace.created_at, 11);
         assert_eq!(workspace.updated_at, 22);

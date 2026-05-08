@@ -41,10 +41,6 @@
         })
       }
     },
-    onOutputLoaded: (output) => {
-      if (!poolEntry || poolEntry.ptyActive) return
-      poolEntry.terminal.write(output)
-    },
   })
 
   let session = $derived($activeSessions.get(taskId) || null)
