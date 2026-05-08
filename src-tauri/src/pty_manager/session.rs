@@ -192,7 +192,6 @@ impl PtyManager {
                     output_buffers: Arc::clone(&self.output_buffers),
                     pid_file,
                     emit_agent_exit: true,
-                    preserve_output_buffer: true,
                 },
             },
         );
@@ -371,7 +370,6 @@ impl PtyManager {
                     output_buffers: Arc::clone(&self.output_buffers),
                     pid_file,
                     emit_agent_exit: true,
-                    preserve_output_buffer: true,
                 },
             },
         );
@@ -513,7 +511,6 @@ impl PtyManager {
                     output_buffers: Arc::clone(&self.output_buffers),
                     pid_file,
                     emit_agent_exit: true,
-                    preserve_output_buffer: true,
                 },
             },
         );
@@ -648,7 +645,6 @@ impl PtyManager {
                     output_buffers: Arc::clone(&self.output_buffers),
                     pid_file,
                     emit_agent_exit: false,
-                    preserve_output_buffer: false,
                 },
             },
         );

@@ -724,7 +724,6 @@ mod tests {
                     output_buffers: Arc::clone(&manager.output_buffers),
                     pid_file: tmp_dir.path().join("task-dedupe-shell-0.pid"),
                     emit_agent_exit: false,
-                    preserve_output_buffer: false,
                 },
             },
         );
@@ -829,7 +828,6 @@ mod tests {
                     output_buffers: Arc::clone(&manager.output_buffers),
                     pid_file: pid_file.clone(),
                     emit_agent_exit: false,
-                    preserve_output_buffer: false,
                 },
             },
         );
@@ -935,7 +933,6 @@ mod tests {
             &pid_file,
             key,
             1,
-            true,
         )
         .await;
 
@@ -1016,7 +1013,6 @@ mod tests {
             &pid_file,
             "task-1",
             1,
-            false,
         )
         .await;
 
