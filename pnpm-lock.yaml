@@ -183,6 +183,9 @@ importers:
       '@sveltejs/vite-plugin-svelte':
         specifier: ^7.0.0
         version: 7.0.0(svelte@5.55.5)(vite@8.0.9(@types/node@24.12.2)(esbuild@0.27.3)(jiti@2.6.1)(yaml@2.8.4))
+      '@testing-library/svelte':
+        specifier: ^5.3.1
+        version: 5.3.1(svelte@5.55.5)(vite@8.0.9(@types/node@24.12.2)(esbuild@0.27.3)(jiti@2.6.1)(yaml@2.8.4))(vitest@4.1.5(@opentelemetry/api@1.9.1)(@types/node@24.12.2)(jsdom@28.1.0)(vite@8.0.9(@types/node@24.12.2)(esbuild@0.27.3)(jiti@2.6.1)(yaml@2.8.4)))
       svelte:
         specifier: ^5.0.0
         version: 5.55.5
@@ -4744,6 +4747,15 @@ snapshots:
     optionalDependencies:
       vite: 8.0.9(@types/node@20.19.33)(esbuild@0.27.3)(jiti@2.6.1)(yaml@2.8.4)
       vitest: 4.1.5(@opentelemetry/api@1.9.1)(@types/node@20.19.33)(jsdom@28.1.0)(vite@8.0.9(@types/node@20.19.33)(esbuild@0.27.3)(jiti@2.6.1)(yaml@2.8.4))
+
+  '@testing-library/svelte@5.3.1(svelte@5.55.5)(vite@8.0.9(@types/node@24.12.2)(esbuild@0.27.3)(jiti@2.6.1)(yaml@2.8.4))(vitest@4.1.5(@opentelemetry/api@1.9.1)(@types/node@24.12.2)(jsdom@28.1.0)(vite@8.0.9(@types/node@24.12.2)(esbuild@0.27.3)(jiti@2.6.1)(yaml@2.8.4)))':
+    dependencies:
+      '@testing-library/dom': 10.4.1
+      '@testing-library/svelte-core': 1.0.0(svelte@5.55.5)
+      svelte: 5.55.5
+    optionalDependencies:
+      vite: 8.0.9(@types/node@24.12.2)(esbuild@0.27.3)(jiti@2.6.1)(yaml@2.8.4)
+      vitest: 4.1.5(@opentelemetry/api@1.9.1)(@types/node@24.12.2)(jsdom@28.1.0)(vite@8.0.9(@types/node@24.12.2)(esbuild@0.27.3)(jiti@2.6.1)(yaml@2.8.4))
 
   '@tokenizer/inflate@0.4.1':
     dependencies:

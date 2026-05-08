@@ -1,20 +1,15 @@
 <script lang="ts">
-  import { marked } from 'marked'
-  import { sanitizeHtml } from '../sanitize'
+  import { renderMarkdownHtml } from '../markdown'
 
   interface Props {
     content: string
+    imageBaseUrl?: string | null
     onOpenUrl?: (url: string) => void | Promise<void>
   }
 
-  let { content, onOpenUrl }: Props = $props()
+  let { content, imageBaseUrl = null, onOpenUrl }: Props = $props()
 
-  marked.setOptions({
-    gfm: true,
-    breaks: true,
-  })
-
-  let html = $derived(sanitizeHtml(marked.parse(content) as string))
+  let html = $derived(renderMarkdownHtml(content, { imageBaseUrl }))
 
   function handleClick(e: MouseEvent) {
     if (!(e.target instanceof Element)) return
