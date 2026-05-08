@@ -37,6 +37,7 @@ vi.mock('../../lib/boardFilters', () => ({
 
 vi.mock('../../lib/stores', () => ({
   activeProjectId: writable('test-project-id'),
+  activeProjectColorId: writable<string | null>(null),
   projects: writable([
     {
       id: 'test-project-id',
@@ -59,7 +60,7 @@ import {
   setProjectConfig,
   updateProject,
 } from '../../lib/ipc'
-import { activeProjectId, projects } from '../../lib/stores'
+import { activeProjectColorId, activeProjectId, projects } from '../../lib/stores'
 import PluginSlotTestView from '../plugin/PluginSlotTestView.svelte'
 import { clearComponentRegistry, registerRenderableContributionComponent } from '../../lib/plugin/componentRegistry'
 import { enabledPluginIds, installedPlugins } from '../../lib/plugin/pluginStore'
@@ -84,6 +85,7 @@ describe('SettingsView', () => {
     vi.mocked(loadActions).mockResolvedValue([])
 
     activeProjectId.set('test-project-id')
+    activeProjectColorId.set(null)
     projects.set([
       {
         id: 'test-project-id',
@@ -277,6 +279,18 @@ describe('SettingsView', () => {
 
     afterEach(() => {
       vi.useRealTimers()
+    })
+
+    it('updates the shared active project color before debounced persistence', async () => {
+      render(SettingsView, { props: defaultProps })
+
+      await vi.advanceTimersByTimeAsync(50)
+      vi.mocked(setProjectConfig).mockClear()
+
+      await fireEvent.click(screen.getByTitle('Violet'))
+
+      expect(get(activeProjectColorId)).toBe('violet')
+      expect(vi.mocked(setProjectConfig)).not.toHaveBeenCalled()
     })
 
     it('saves project settings after debounce when a field changes', async () => {

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy, tick } from 'svelte'
-  import { activeProjectId, projects, codeCleanupTasksEnabled, error } from '../../lib/stores'
+  import { activeProjectColorId, activeProjectId, projects, codeCleanupTasksEnabled, error } from '../../lib/stores'
   import {
     deleteProject,
     setWhisperModel,
@@ -92,6 +92,12 @@
   function handleCodeCleanupTasksToggle() {
     isCodeCleanupTasksEnabled = !isCodeCleanupTasksEnabled
     $codeCleanupTasksEnabled = isCodeCleanupTasksEnabled
+  }
+
+  function handleProjectColorChange(value: string) {
+    projectColor = value
+    $activeProjectColorId = value
+    scheduleSave()
   }
 
   // UI state
@@ -393,7 +399,7 @@
           onProjectPathChange={(v) => { projectPath = v; scheduleSave() }}
           onAiProviderChange={(v) => { aiProvider = v; scheduleSave() }}
           onUseWorktreesChange={() => { useWorktrees = !useWorktrees; scheduleSave() }}
-          onProjectColorChange={(v) => { projectColor = v; scheduleSave() }}
+          onProjectColorChange={handleProjectColorChange}
         />
 
         <SettingsFocusFilterCard
