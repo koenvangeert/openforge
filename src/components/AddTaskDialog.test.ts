@@ -2,7 +2,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/svelte'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import AddTaskDialog from './AddTaskDialog.svelte'
 import type { Action, Task } from '../lib/types'
-import { createTask, updateTask, getProjectConfig, listOpenCodeAgents } from '../lib/ipc'
+import { createTask, updateTask, getProjectConfig } from '../lib/ipc'
 import { loadActions } from '../lib/actions'
 
 vi.mock('../lib/ipc', () => ({
@@ -20,11 +20,7 @@ vi.mock('../lib/ipc', () => ({
   }),
   updateTask: vi.fn().mockResolvedValue(undefined),
   getProjectConfig: vi.fn().mockResolvedValue('claude-code'),
-  listOpenCodeAgents: vi.fn().mockResolvedValue([
-    { name: 'agent-1', hidden: false, mode: null },
-    { name: 'agent-2', hidden: false, mode: null },
-  ]),
-  }))
+}))
 
 vi.mock('../lib/actions', () => ({
   loadActions: vi.fn().mockResolvedValue([
@@ -57,10 +53,6 @@ describe('AddTaskDialog', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(getProjectConfig).mockImplementation(async () => 'claude-code')
-    vi.mocked(listOpenCodeAgents).mockResolvedValue([
-      { name: 'agent-1', hidden: false, mode: null },
-      { name: 'agent-2', hidden: false, mode: null },
-    ])
     vi.mocked(loadActions).mockResolvedValue([
       { id: 'act-1', name: 'Test Action', prompt: 'Do test', builtin: false, enabled: true },
     ])
@@ -156,7 +148,7 @@ describe('AddTaskDialog', () => {
     })
   })
 
-  it('does not load or pass through an agent when starting a task for opencode', async () => {
+  it('uses direct task creation defaults and no agent when starting a task for opencode', async () => {
     const onRunAction = vi.fn()
     vi.mocked(getProjectConfig).mockResolvedValue('opencode')
     render(AddTaskDialog, { props: { mode: 'create', onRunAction } })
@@ -164,7 +156,6 @@ describe('AddTaskDialog', () => {
     const textbox = await screen.findByRole('textbox')
 
     await waitFor(() => {
-      expect(listOpenCodeAgents).not.toHaveBeenCalled()
       expect(screen.queryByRole('combobox')).toBeNull()
     })
 
