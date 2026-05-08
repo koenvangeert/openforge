@@ -146,26 +146,8 @@ async fn abort_session(
             "PTY manager is not available".to_string(),
         ));
     };
-    let Some(server_manager) = state.server_manager.as_ref() else {
-        return Err((
-            StatusCode::SERVICE_UNAVAILABLE,
-            "Server manager is not available".to_string(),
-        ));
-    };
-    let Some(sse_bridge_manager) = state.sse_bridge_manager.as_ref() else {
-        return Err((
-            StatusCode::SERVICE_UNAVAILABLE,
-            "SSE bridge manager is not available".to_string(),
-        ));
-    };
-
     let policy = provider_runtime::app_invoke_abort_session_policy(&session.provider);
-    match Provider::from_name(
-        &session.provider,
-        pty_manager.clone(),
-        server_manager.clone(),
-        sse_bridge_manager.clone(),
-    ) {
+    match Provider::from_name(&session.provider, pty_manager.clone()) {
         Ok(provider) => {
             let _ = provider.abort(&session.ticket_id, &session).await;
         }
@@ -289,15 +271,6 @@ pub(super) async fn handle_app_runtime_command(
                 .await
                 .map_err(string_error)?,
         )?,
-        "get_agents" => {
-            let client = OpenCodeClient::with_base_url("http://127.0.0.1:4096".to_string());
-            json_value(client.list_agents().await.map_err(|e| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Failed to get agents: {e}"),
-                )
-            })?)?
-        }
         "get_worktree_for_task" => get_worktree_for_task(state, request)?,
         "abort_session" => abort_session(state, request).await?,
         "get_session_output" => get_session_output(state, request).await?,

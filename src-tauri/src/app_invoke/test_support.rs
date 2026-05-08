@@ -5,7 +5,6 @@ use crate::{
     plugin_host::PluginHost,
     pty_manager::PtyManager,
     server_manager::ServerManager,
-    sse_bridge::SseBridgeManager,
     whisper_manager::{WhisperManager, WhisperModelSize},
 };
 use axum::http::StatusCode;
@@ -21,7 +20,6 @@ pub(crate) fn test_state(name: &str) -> (AppState, std::path::PathBuf) {
             backend_token: Some("test-token".to_string()),
             pty_manager: Some(PtyManager::new()),
             server_manager: Some(ServerManager::new()),
-            sse_bridge_manager: Some(SseBridgeManager::new()),
             github_client: GitHubClient::new(),
             plugin_host: Some(PluginHost::new(AppHandle::new())),
             app_event_tx: Some(app_event_tx),

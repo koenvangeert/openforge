@@ -1,6 +1,6 @@
 import { get } from 'svelte/store'
-import { activeSessions, taskRuntimeInfo } from './stores'
-import { getLatestSession, getTaskWorkspace } from './ipc'
+import { activeSessions } from './stores'
+import { getLatestSession, getSessionOutput } from './ipc'
 
 export interface SessionHistoryHandle {
   readonly loadingHistory: boolean
@@ -9,9 +9,8 @@ export interface SessionHistoryHandle {
 
 export function createSessionHistory(deps: {
   taskId: string
-  getOpencodePort: () => number | null
-  setOpencodePort: (port: number) => void
   onStatusUpdate: (status: 'complete' | 'error' | 'idle', errorMessage?: string | null) => void
+  onOutputLoaded?: (output: string) => void
 }): SessionHistoryHandle {
   let loadingHistory = $state(false)
 
@@ -37,16 +36,6 @@ export function createSessionHistory(deps: {
 
       if (!existingSession) return
 
-      if (!deps.getOpencodePort()) {
-        const runtimeInfo = get(taskRuntimeInfo).get(deps.taskId)
-        if (runtimeInfo?.opencodePort) {
-          deps.setOpencodePort(runtimeInfo.opencodePort)
-        } else {
-          const workspace = await getTaskWorkspace(deps.taskId)
-          if (workspace?.opencode_port) deps.setOpencodePort(workspace.opencode_port)
-        }
-      }
-
       if (
         existingSession.status !== 'completed' &&
         existingSession.status !== 'failed' &&
@@ -60,6 +49,15 @@ export function createSessionHistory(deps: {
         deps.onStatusUpdate('idle')
       } else {
         deps.onStatusUpdate('error', existingSession.error_message)
+      }
+
+      if (existingSession.provider === 'opencode' && deps.onOutputLoaded) {
+        try {
+          const output = await getSessionOutput(deps.taskId)
+          if (output) deps.onOutputLoaded(output)
+        } catch (e) {
+          console.error('[useSessionHistory] Failed to load legacy OpenCode session output:', e)
+        }
       }
     } catch (e) {
       console.error('[useSessionHistory] Failed to load session history:', e)

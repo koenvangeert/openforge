@@ -33,7 +33,6 @@ mod runtime_checks;
 mod secure_store;
 mod self_review_runtime;
 mod server_manager;
-mod sse_bridge;
 mod user_environment;
 mod whisper_manager;
 use log::{debug, error, info, warn};
@@ -64,25 +63,6 @@ pub(crate) enum ResumeSessionPersistence {
     LeaveExisting,
     Running,
     Completed,
-}
-
-#[cfg(test)]
-fn opencode_resume_persistence(
-    opencode_session_id: Option<&str>,
-    statuses: &std::collections::HashMap<String, opencode_client::SessionStatusInfo>,
-) -> ResumeSessionPersistence {
-    let Some(session_id) = opencode_session_id else {
-        return ResumeSessionPersistence::LeaveExisting;
-    };
-
-    match statuses
-        .get(session_id)
-        .map(|status| status.status_type.as_str())
-    {
-        Some("busy") | Some("retry") => ResumeSessionPersistence::Running,
-        Some("idle") => ResumeSessionPersistence::Completed,
-        _ => ResumeSessionPersistence::LeaveExisting,
-    }
 }
 
 pub(crate) async fn resolve_resume_session_persistence(
@@ -230,8 +210,6 @@ async fn resume_task_servers(
         let provider = match providers::Provider::from_name(
             provider_name,
             app.state::<PtyManager>().inner().clone(),
-            app.state::<server_manager::ServerManager>().inner().clone(),
-            app.state::<sse_bridge::SseBridgeManager>().inner().clone(),
         ) {
             Ok(p) => p,
             Err(e) => {
@@ -665,7 +643,6 @@ fn run_electron_sidecar() -> Result<(), Box<dyn std::error::Error>> {
     let db_arc = Arc::new(Mutex::new(database));
     let pty_manager = PtyManager::new();
     let server_manager = server_manager::ServerManager::new();
-    let sse_bridge_manager = sse_bridge::SseBridgeManager::new();
     let whisper_manager = Arc::new(WhisperManager::with_active_model(whisper_model_pref));
     let sidecar_readiness = http_server::SidecarReadinessState::new();
     let (http_ready_tx, http_ready_rx) = tokio::sync::oneshot::channel::<()>();
@@ -673,7 +650,6 @@ fn run_electron_sidecar() -> Result<(), Box<dyn std::error::Error>> {
     app.manage(db_arc.clone());
     app.manage(pty_manager.clone());
     app.manage(server_manager.clone());
-    app.manage(sse_bridge_manager.clone());
     app.manage(github_client::GitHubClient::new());
 
     println!(
@@ -716,7 +692,6 @@ fn run_electron_sidecar() -> Result<(), Box<dyn std::error::Error>> {
                 db_arc,
                 pty_manager,
                 server_manager,
-                sse_bridge_manager,
                 whisper_manager,
                 sidecar_readiness,
                 http_ready_tx,
@@ -735,13 +710,10 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::{
-        load_resume_targets, opencode_resume_persistence, restore_resumed_session_state,
-        should_start_project_root_server, sidecar_app_data_dir_from_override,
-        ResumeSessionPersistence, ResumeTarget,
+        load_resume_targets, restore_resumed_session_state, should_start_project_root_server,
+        sidecar_app_data_dir_from_override, ResumeSessionPersistence, ResumeTarget,
     };
     use crate::db::test_helpers::make_test_db;
-    use crate::opencode_client::SessionStatusInfo;
-    use std::collections::HashMap;
     use std::fs;
 
     #[test]
@@ -787,36 +759,6 @@ mod tests {
             Some("/tmp/project"),
             Some(4100)
         ));
-    }
-
-    #[test]
-    fn opencode_resume_persistence_marks_busy_status_running() {
-        let statuses = HashMap::from([(
-            "oc-ses-100".to_string(),
-            SessionStatusInfo {
-                status_type: "busy".to_string(),
-            },
-        )]);
-
-        assert_eq!(
-            opencode_resume_persistence(Some("oc-ses-100"), &statuses),
-            ResumeSessionPersistence::Running
-        );
-    }
-
-    #[test]
-    fn opencode_resume_persistence_marks_idle_status_completed() {
-        let statuses = HashMap::from([(
-            "oc-ses-100".to_string(),
-            SessionStatusInfo {
-                status_type: "idle".to_string(),
-            },
-        )]);
-
-        assert_eq!(
-            opencode_resume_persistence(Some("oc-ses-100"), &statuses),
-            ResumeSessionPersistence::Completed
-        );
     }
 
     #[test]

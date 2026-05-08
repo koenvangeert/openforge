@@ -53,14 +53,14 @@ pub(crate) fn build_pi_args(
     args
 }
 
-pub(crate) fn build_opencode_run_args(
+pub(crate) fn build_opencode_tui_args(
     prompt: &str,
     resume_session_id: Option<&str>,
     continue_session: bool,
     agent: Option<&str>,
     model: Option<&str>,
 ) -> Vec<String> {
-    let mut args = vec!["run".to_string()];
+    let mut args = Vec::new();
     if let Some(session_id) = resume_session_id {
         args.push("--session".to_string());
         args.push(session_id.to_string());
@@ -75,9 +75,8 @@ pub(crate) fn build_opencode_run_args(
         args.push("--model".to_string());
         args.push(model.to_string());
     }
-    args.push("--title".to_string());
-    args.push("OpenForge task".to_string());
     if !prompt.is_empty() {
+        args.push("--prompt".to_string());
         args.push(prompt.to_string());
     }
     args
@@ -110,9 +109,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn opencode_run_args_use_cli_session_without_attaching_to_openforge_server() {
+    fn opencode_tui_args_use_prompt_without_attaching_to_openforge_server() {
         assert_eq!(
-            build_opencode_run_args(
+            build_opencode_tui_args(
                 "fix the bug",
                 Some("oc-session-1"),
                 false,
@@ -120,25 +119,23 @@ mod tests {
                 Some("anthropic/claude-sonnet-4"),
             ),
             vec![
-                "run",
                 "--session",
                 "oc-session-1",
                 "--agent",
                 "build",
                 "--model",
                 "anthropic/claude-sonnet-4",
-                "--title",
-                "OpenForge task",
+                "--prompt",
                 "fix the bug",
             ]
         );
     }
 
     #[test]
-    fn opencode_run_args_continue_without_prompt_for_startup_resume() {
+    fn opencode_tui_args_continue_without_prompt_for_startup_resume() {
         assert_eq!(
-            build_opencode_run_args("", None, true, None, None),
-            vec!["run", "--continue", "--title", "OpenForge task"]
+            build_opencode_tui_args("", None, true, None, None),
+            vec!["--continue"]
         );
     }
 }

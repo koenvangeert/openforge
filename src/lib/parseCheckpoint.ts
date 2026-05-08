@@ -1,3 +1,11 @@
+function isPtyInstanceMetadataOnly(parsed: unknown): boolean {
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return false
+
+  const metadataKeys = new Set(['pty_instance_id', 'ptyInstanceId'])
+  const keys = Object.keys(parsed)
+  return keys.length > 0 && keys.every(key => metadataKeys.has(key))
+}
+
 export function parseCheckpointQuestion(checkpointData: string | null): string | null {
   if (checkpointData === null || checkpointData === undefined || checkpointData === '') {
     return null;
@@ -5,6 +13,8 @@ export function parseCheckpointQuestion(checkpointData: string | null): string |
 
   try {
     const parsed = JSON.parse(checkpointData);
+
+    if (isPtyInstanceMetadataOnly(parsed)) return null
 
     const firstQuestion = Array.isArray(parsed.properties?.questions)
       ? parsed.properties.questions[0]

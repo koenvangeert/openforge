@@ -106,7 +106,6 @@ vi.mock('../../lib/ipc', () => ({
   getProjectConfig: vi.fn().mockResolvedValue(null),
   setProjectConfig: vi.fn().mockResolvedValue(undefined),
   getLatestSession: vi.fn().mockResolvedValue(null),
-  spawnPty: vi.fn().mockResolvedValue(1),
   spawnShellPty: vi.fn().mockResolvedValue(1),
   getPtyBuffer: vi.fn().mockResolvedValue(null),
   writePty: vi.fn().mockResolvedValue(undefined),

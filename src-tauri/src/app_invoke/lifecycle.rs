@@ -1,48 +1,5 @@
 use super::*;
 
-#[cfg(test)]
-pub(crate) enum ExistingSseBridge {
-    Error,
-    TreatAsResumed,
-}
-
-#[cfg(test)]
-pub(crate) async fn start_opencode_sse_bridge_for_app(
-    state: &AppState,
-    task_id: &str,
-    opencode_session_id: Option<String>,
-    port: u16,
-    existing_bridge: ExistingSseBridge,
-) -> Result<(), (StatusCode, String)> {
-    let Some(sse_bridge_manager) = state.sse_bridge_manager.as_ref() else {
-        return Err((
-            StatusCode::SERVICE_UNAVAILABLE,
-            "SSE bridge manager is not available".to_string(),
-        ));
-    };
-
-    sse_bridge_manager
-        .start_bridge_with_app_events(
-            state.app.clone(),
-            state.db.clone(),
-            state.app_event_tx.clone(),
-            task_id.to_string(),
-            opencode_session_id,
-            port,
-        )
-        .await
-        .or_else(|e| match (existing_bridge, e) {
-            (ExistingSseBridge::TreatAsResumed, SseBridgeError::AlreadyRunning(task_id)) => {
-                info!(
-                    "[app_invoke] OpenCode SSE bridge already running for task {}; treating resume as idempotent",
-                    task_id
-                );
-                Ok(())
-            }
-            (_, e) => Err((StatusCode::INTERNAL_SERVER_ERROR, e.to_string())),
-        })
-}
-
 pub(super) async fn cleanup_task_runtime_for_app(
     state: &AppState,
     task_id: &str,
@@ -51,9 +8,6 @@ pub(super) async fn cleanup_task_runtime_for_app(
     if let Some(pty_manager) = state.pty_manager.as_ref() {
         let _ = pty_manager.kill_pty(task_id).await;
         pty_manager.kill_shells_for_task(task_id).await;
-    }
-    if let Some(sse_bridge_manager) = state.sse_bridge_manager.as_ref() {
-        sse_bridge_manager.stop_bridge(task_id).await;
     }
     if let Some(server_manager) = state.server_manager.as_ref() {
         let _ = server_manager.stop_server(task_id).await;

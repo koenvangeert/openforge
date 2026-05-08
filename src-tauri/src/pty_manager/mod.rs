@@ -1064,6 +1064,87 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_agent_pty_exit_preserves_output_buffer_for_later_replay() {
+        let manager = PtyManager::new();
+        let pty_system = native_pty_system();
+        let size = PtySize {
+            rows: 24,
+            cols: 80,
+            pixel_width: 0,
+            pixel_height: 0,
+        };
+        let pair = pty_system.openpty(size).expect("openpty should succeed");
+
+        let shell = get_shell_path();
+        let mut cmd = CommandBuilder::new(&shell);
+        cmd.arg("-lc");
+        cmd.arg("true");
+        let child = pair
+            .slave
+            .spawn_command(cmd)
+            .expect("spawn command should succeed");
+        drop(pair.slave);
+
+        let writer = pair
+            .master
+            .take_writer()
+            .expect("take writer should succeed");
+
+        let key = "agent-task-1";
+        {
+            let mut sessions = manager.sessions.lock().await;
+            sessions.insert(
+                key.to_string(),
+                PtySession {
+                    child,
+                    master: pair.master,
+                    writer,
+                    instance_id: 1,
+                },
+            );
+        }
+
+        let ring = Arc::new(std::sync::Mutex::new(RingBuffer::new(128)));
+        {
+            let mut buf = ring.lock().expect("ring buffer should lock");
+            buf.push(b"previous opencode tty output");
+        }
+        {
+            let mut buffers = manager.output_buffers.lock().await;
+            buffers.insert(key.to_string(), Arc::clone(&ring));
+        }
+        {
+            let mut times = manager.last_output.lock().await;
+            times.insert(key.to_string(), Arc::new(AtomicU64::new(123)));
+        }
+
+        let tmp_dir = tempfile::tempdir().expect("tempdir should succeed");
+        let pid_file = tmp_dir.path().join("agent-task-1-pty.pid");
+        std::fs::write(&pid_file, "1234").expect("pid file should write");
+
+        let success = finalize_pty_exit(
+            &manager.sessions,
+            &manager.last_output,
+            &manager.output_buffers,
+            &pid_file,
+            key,
+            1,
+        )
+        .await;
+
+        assert!(success, "test process should exit successfully");
+        assert_eq!(
+            manager.get_pty_buffer(key).await,
+            Some("previous opencode tty output".to_string()),
+            "agent PTY output should remain replayable after process exit"
+        );
+        assert!(
+            !manager.last_output.lock().await.contains_key(key),
+            "liveness timestamps should still be cleaned up after exit"
+        );
+    }
+
+    #[tokio::test]
     async fn test_finalize_pty_exit_ignores_stale_instance() {
         let manager = PtyManager::new();
         let pty_system = native_pty_system();

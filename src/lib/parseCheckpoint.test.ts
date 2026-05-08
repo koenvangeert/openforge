@@ -19,6 +19,10 @@ describe('parseCheckpointQuestion', () => {
     expect(parseCheckpointQuestion('{"unknown":"data"}')).toBe('Agent is waiting for input')
   })
 
+  it('ignores PTY instance metadata used for provider-owned terminal tracking', () => {
+    expect(parseCheckpointQuestion('{"pty_instance_id":42}')).toBeNull()
+  })
+
   it('extracts properties.description', () => {
     const data = JSON.stringify({ properties: { description: 'Allow file write?' } })
     expect(parseCheckpointQuestion(data)).toBe('Allow file write?')

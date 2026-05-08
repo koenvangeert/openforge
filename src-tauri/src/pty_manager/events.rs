@@ -10,7 +10,7 @@ use super::session::{LastOutputTimes, PtyOutputBuffers, PtySessions};
 pub(super) async fn finalize_pty_exit(
     sessions: &PtySessions,
     last_output: &LastOutputTimes,
-    output_buffers: &PtyOutputBuffers,
+    _output_buffers: &PtyOutputBuffers,
     pid_file: &Path,
     session_key: &str,
     instance_id: u64,
@@ -31,11 +31,6 @@ pub(super) async fn finalize_pty_exit(
     let Some(mut session) = removed_session else {
         return false;
     };
-
-    {
-        let mut buffers = output_buffers.lock().await;
-        buffers.remove(session_key);
-    }
 
     {
         let mut times = last_output.lock().await;
@@ -308,6 +303,10 @@ pub(super) fn spawn_batched_pty_event_emitter(
                                         &session_key,
                                         instance_id,
                                     ).await;
+                                    if success && !emit_agent_exit {
+                                        let mut buffers = output_buffers.lock().await;
+                                        buffers.remove(&session_key);
+                                    }
                                     emit_agent_exit.then_some(success)
                                 }
                             };

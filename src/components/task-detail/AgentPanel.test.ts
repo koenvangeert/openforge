@@ -38,7 +38,6 @@ vi.mock('../../lib/ipc', () => ({
   abortImplementation: vi.fn().mockResolvedValue(undefined),
   getLatestSession: vi.fn().mockResolvedValue(null),
   getWorktreeForTask: vi.fn().mockResolvedValue(null),
-  spawnPty: vi.fn().mockResolvedValue(1),
   writePty: vi.fn().mockResolvedValue(undefined),
   resizePty: vi.fn().mockResolvedValue(undefined),
   killPty: vi.fn().mockResolvedValue(undefined),
@@ -52,7 +51,7 @@ vi.mock('../../lib/audioRecorder', () => ({
 }))
 
 // Mock terminalPool to avoid xterm constructor issues in test environment
-const { listenCallbacks, mockPoolEntry, mockSessionHistoryPort, mockShellLifecycleState } = vi.hoisted(() => ({
+const { listenCallbacks, mockPoolEntry, mockShellLifecycleState } = vi.hoisted(() => ({
   listenCallbacks: new Map<string, DesktopEventCallback[]>(),
   mockPoolEntry: {
     taskId: '',
@@ -67,7 +66,6 @@ const { listenCallbacks, mockPoolEntry, mockSessionHistoryPort, mockShellLifecyc
     resizeTimeout: null,
     attached: false,
   },
-  mockSessionHistoryPort: { value: null as number | null },
   mockShellLifecycleState: {
     ptyActive: false,
     shellExited: false,
@@ -103,33 +101,21 @@ vi.mock('../../lib/terminalPool', () => ({
 }))
 
 vi.mock('../../lib/useSessionHistory.svelte', () => ({
-  createSessionHistory: vi.fn((deps: { setOpencodePort: (port: number) => void }) => ({
+  createSessionHistory: vi.fn(() => ({
     get loadingHistory() { return false },
-    loadSessionHistory: vi.fn().mockImplementation(async () => {
-      if (mockSessionHistoryPort.value !== null) {
-        deps.setOpencodePort(mockSessionHistoryPort.value)
-      }
-    }),
+    loadSessionHistory: vi.fn().mockResolvedValue(undefined),
   })),
 }))
 
 import AgentPanel from './AgentPanel.svelte'
 import { activeSessions } from '../../lib/stores'
-import { killPty, spawnPty } from '../../lib/ipc'
+import { killPty } from '../../lib/ipc'
 import { updateShellLifecycleState } from '../../lib/terminalPool'
-
-function emitDesktopEvent(eventName: string, payload: unknown = {}) {
-  const callbacks = listenCallbacks.get(eventName) || []
-  for (const cb of callbacks) {
-    cb({ payload })
-  }
-}
 
 describe('AgentPanel (router)', () => {
   beforeEach(() => {
     activeSessions.set(new Map())
     listenCallbacks.clear()
-    mockSessionHistoryPort.value = null
     mockPoolEntry.ptyActive = false
     mockPoolEntry.needsClear = false
     mockShellLifecycleState.ptyActive = false
@@ -234,7 +220,6 @@ describe('AgentPanel starting animation', () => {
   beforeEach(() => {
     activeSessions.set(new Map())
     listenCallbacks.clear()
-    mockSessionHistoryPort.value = null
     mockPoolEntry.ptyActive = false
     mockPoolEntry.needsClear = false
     mockShellLifecycleState.ptyActive = false
@@ -289,7 +274,6 @@ describe('OpenCodeAgentPanel (via router)', () => {
   beforeEach(() => {
     activeSessions.set(new Map())
     listenCallbacks.clear()
-    mockSessionHistoryPort.value = null
     mockPoolEntry.ptyActive = false
     mockPoolEntry.needsClear = false
     mockShellLifecycleState.ptyActive = false
@@ -398,89 +382,7 @@ describe('OpenCodeAgentPanel (via router)', () => {
     expect(screen.getByText('completed')).toBeTruthy()
   })
 
-  it('attaches a PTY for completed sessions when mounted', async () => {
-    mockSessionHistoryPort.value = 4173
-
-    const session: AgentSession = {
-      id: 'ses-1',
-      ticket_id: 'T-1',
-      opencode_session_id: 'oc-sess-1',
-      stage: 'implement',
-      status: 'completed',
-      checkpoint_data: null,
-      error_message: null,
-      created_at: 1000,
-      updated_at: 2000,
-      provider: 'opencode',
-      claude_session_id: null,
-    pi_session_id: null,
-    }
-
-    activeSessions.set(new Map([['T-1', session]]))
-
-    render(AgentPanel, { props: { taskId: 'T-1' } })
-
-    await vi.waitFor(() => {
-      expect(spawnPty).toHaveBeenCalledWith('T-1', 4173, 'oc-sess-1', 80, 24)
-    })
-  })
-
-  it('attaches a PTY for interrupted sessions when mounted', async () => {
-    mockSessionHistoryPort.value = 4173
-
-    const session: AgentSession = {
-      id: 'ses-1',
-      ticket_id: 'T-1',
-      opencode_session_id: 'oc-sess-1',
-      stage: 'implement',
-      status: 'interrupted',
-      checkpoint_data: null,
-      error_message: 'App restarted',
-      created_at: 1000,
-      updated_at: 2000,
-      provider: 'opencode',
-      claude_session_id: null,
-    pi_session_id: null,
-    }
-
-    activeSessions.set(new Map([['T-1', session]]))
-
-    render(AgentPanel, { props: { taskId: 'T-1' } })
-
-    await vi.waitFor(() => {
-      expect(spawnPty).toHaveBeenCalledWith('T-1', 4173, 'oc-sess-1', 80, 24)
-    })
-  })
-
-  it('attaches a PTY for failed sessions when mounted', async () => {
-    mockSessionHistoryPort.value = 4173
-
-    const session: AgentSession = {
-      id: 'ses-1',
-      ticket_id: 'T-1',
-      opencode_session_id: 'oc-sess-1',
-      stage: 'implement',
-      status: 'failed',
-      checkpoint_data: null,
-      error_message: 'Agent crashed',
-      created_at: 1000,
-      updated_at: 2000,
-      provider: 'opencode',
-      claude_session_id: null,
-    pi_session_id: null,
-    }
-
-    activeSessions.set(new Map([['T-1', session]]))
-
-    render(AgentPanel, { props: { taskId: 'T-1' } })
-
-    await vi.waitFor(() => {
-      expect(spawnPty).toHaveBeenCalledWith('T-1', 4173, 'oc-sess-1', 80, 24)
-    })
-  })
-
-  it('does not respawn a PTY when lifecycle state is already active', async () => {
-    mockSessionHistoryPort.value = 4173
+  it('relies on the provider-owned OpenCode PTY for mounted sessions', async () => {
     mockPoolEntry.ptyActive = false
     mockShellLifecycleState.ptyActive = true
 
@@ -496,7 +398,7 @@ describe('OpenCodeAgentPanel (via router)', () => {
       updated_at: 2000,
       provider: 'opencode',
       claude_session_id: null,
-    pi_session_id: null,
+      pi_session_id: null,
     }
 
     activeSessions.set(new Map([['T-1', session]]))
@@ -506,42 +408,6 @@ describe('OpenCodeAgentPanel (via router)', () => {
     await vi.waitFor(() => {
       expect(screen.getByText('running')).toBeTruthy()
     })
-
-    expect(spawnPty).not.toHaveBeenCalled()
-  })
-
-  it('does not reattach a PTY when action-complete fires', async () => {
-    mockSessionHistoryPort.value = 4173
-
-    const session: AgentSession = {
-      id: 'ses-1',
-      ticket_id: 'T-1',
-      opencode_session_id: 'oc-sess-1',
-      stage: 'implement',
-      status: 'running',
-      checkpoint_data: null,
-      error_message: null,
-      created_at: 1000,
-      updated_at: 2000,
-      provider: 'opencode',
-      claude_session_id: null,
-    pi_session_id: null,
-    }
-
-    activeSessions.set(new Map([['T-1', session]]))
-
-    render(AgentPanel, { props: { taskId: 'T-1' } })
-
-    await vi.waitFor(() => {
-      expect(spawnPty).toHaveBeenCalledTimes(1)
-    })
-
-    vi.mocked(spawnPty).mockClear()
-    mockPoolEntry.ptyActive = false
-
-    emitDesktopEvent('action-complete', { task_id: 'T-1' })
-
-    expect(spawnPty).not.toHaveBeenCalled()
   })
 
   it('updates lifecycle state through terminalPool when aborting', async () => {
@@ -624,6 +490,28 @@ describe('OpenCodeAgentPanel (via router)', () => {
 
     render(AgentPanel, { props: { taskId: 'T-1' } })
     expect(screen.getByText('Agent is waiting for input')).toBeTruthy()
+  })
+
+  it('does not show question banner for PTY instance metadata', () => {
+    const session: AgentSession = {
+      id: 'ses-1',
+      ticket_id: 'T-1',
+      opencode_session_id: null,
+      stage: 'implement',
+      status: 'running',
+      checkpoint_data: '{"pty_instance_id":42}',
+      error_message: null,
+      created_at: 1000,
+      updated_at: 2000,
+      provider: 'opencode',
+      claude_session_id: null,
+      pi_session_id: null,
+    }
+
+    activeSessions.set(new Map([['T-1', session]]))
+
+    render(AgentPanel, { props: { taskId: 'T-1' } })
+    expect(screen.queryByText('Agent is waiting for input')).toBeNull()
   })
 
   it('does not show question banner when session is running', () => {

@@ -21,7 +21,6 @@ which = "6.0"
 base64 = "0.22"
 chrono = "0.4"
 uuid = { version = "1", features = ["v4"] }
-eventsource-client = "0.16"
 git2 = { version = "0.20", default-features = false }
 futures = "0.3"
 dashmap = "6"

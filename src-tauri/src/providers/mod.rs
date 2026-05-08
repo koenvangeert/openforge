@@ -39,18 +39,10 @@ impl Provider {
     /// Construct a `Provider` from the provider name string stored in the DB.
     ///
     /// Returns `Err` if the name is unrecognised.
-    pub fn from_name(
-        name: &str,
-        pty_mgr: crate::pty_manager::PtyManager,
-        server_mgr: crate::server_manager::ServerManager,
-        sse_mgr: crate::sse_bridge::SseBridgeManager,
-    ) -> Result<Self, String> {
+    pub fn from_name(name: &str, pty_mgr: crate::pty_manager::PtyManager) -> Result<Self, String> {
         match name {
             "claude-code" => Ok(Provider::ClaudeCode(ClaudeCodeProvider::new(pty_mgr))),
-            "opencode" => {
-                let _ = (server_mgr, sse_mgr);
-                Ok(Provider::OpenCode(OpenCodeProvider::new(pty_mgr)))
-            }
+            "opencode" => Ok(Provider::OpenCode(OpenCodeProvider::new(pty_mgr))),
             "pi" => Ok(Provider::Pi(PiProvider::new(pty_mgr))),
             other => Err(format!("Unknown provider: {}", other)),
         }
@@ -399,48 +391,28 @@ mod tests {
 
     #[test]
     fn test_from_name_claude_code() {
-        let result = Provider::from_name(
-            "claude-code",
-            crate::pty_manager::PtyManager::new(),
-            crate::server_manager::ServerManager::new(),
-            crate::sse_bridge::SseBridgeManager::new(),
-        );
+        let result = Provider::from_name("claude-code", crate::pty_manager::PtyManager::new());
         assert!(result.is_ok());
         assert_eq!(result.unwrap().provider_name(), "claude-code");
     }
 
     #[test]
     fn test_from_name_opencode() {
-        let result = Provider::from_name(
-            "opencode",
-            crate::pty_manager::PtyManager::new(),
-            crate::server_manager::ServerManager::new(),
-            crate::sse_bridge::SseBridgeManager::new(),
-        );
+        let result = Provider::from_name("opencode", crate::pty_manager::PtyManager::new());
         assert!(result.is_ok());
         assert_eq!(result.unwrap().provider_name(), "opencode");
     }
 
     #[test]
     fn test_pi_provider_from_name() {
-        let result = Provider::from_name(
-            "pi",
-            crate::pty_manager::PtyManager::new(),
-            crate::server_manager::ServerManager::new(),
-            crate::sse_bridge::SseBridgeManager::new(),
-        );
+        let result = Provider::from_name("pi", crate::pty_manager::PtyManager::new());
         assert!(result.is_ok());
         assert_eq!(result.unwrap().provider_name(), "pi");
     }
 
     #[test]
     fn test_from_name_unknown() {
-        let result = Provider::from_name(
-            "unknown-provider",
-            crate::pty_manager::PtyManager::new(),
-            crate::server_manager::ServerManager::new(),
-            crate::sse_bridge::SseBridgeManager::new(),
-        );
+        let result = Provider::from_name("unknown-provider", crate::pty_manager::PtyManager::new());
         assert!(result.is_err());
         assert!(result.err().unwrap().contains("Unknown provider"));
     }
