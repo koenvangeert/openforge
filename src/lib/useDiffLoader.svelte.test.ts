@@ -54,6 +54,15 @@ const mockGetArchivedSelfReviewComments = vi.mocked(
 );
 const mockGetPrComments = vi.mocked(ipc.getPrComments);
 
+async function withSuppressedExpectedConsoleError(run: () => Promise<void>) {
+	const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+	try {
+		await run();
+	} finally {
+		consoleErrorSpy.mockRestore();
+	}
+}
+
 // ============================================================================
 // Fixtures
 // ============================================================================
@@ -210,17 +219,19 @@ describe("createDiffLoader", () => {
 	});
 
 	it("loadDiff sets human-readable error on failure", async () => {
-		mockGetTaskDiff.mockRejectedValue(new Error("network error"));
+		await withSuppressedExpectedConsoleError(async () => {
+			mockGetTaskDiff.mockRejectedValue(new Error("network error"));
 
-		const loader = createDiffLoader({
-			getTaskId: () => "task-1",
-			getIncludeUncommitted: () => false,
+			const loader = createDiffLoader({
+				getTaskId: () => "task-1",
+				getIncludeUncommitted: () => false,
+			});
+
+			await loader.loadDiff();
+
+			expect(loader.error).toBe("Failed to load diff. Please try again.");
+			expect(loader.isLoading).toBe(false);
 		});
-
-		await loader.loadDiff();
-
-		expect(loader.error).toBe("Failed to load diff. Please try again.");
-		expect(loader.isLoading).toBe(false);
 	});
 
 	it("loadDiff calls IPC with correct taskId and includeUncommitted", async () => {
@@ -252,17 +263,19 @@ describe("createDiffLoader", () => {
 	});
 
 	it("refresh sets human-readable error on failure", async () => {
-		mockGetTaskDiff.mockRejectedValue(new Error("network error"));
+		await withSuppressedExpectedConsoleError(async () => {
+			mockGetTaskDiff.mockRejectedValue(new Error("network error"));
 
-		const loader = createDiffLoader({
-			getTaskId: () => "task-1",
-			getIncludeUncommitted: () => false,
+			const loader = createDiffLoader({
+				getTaskId: () => "task-1",
+				getIncludeUncommitted: () => false,
+			});
+
+			await loader.refresh();
+
+			expect(loader.error).toBe("Failed to refresh diff.");
+			expect(loader.isLoading).toBe(false);
 		});
-
-		await loader.refresh();
-
-		expect(loader.error).toBe("Failed to refresh diff.");
-		expect(loader.isLoading).toBe(false);
 	});
 
 	it("preserves pending inline comments across review tab unmount and remount", async () => {
