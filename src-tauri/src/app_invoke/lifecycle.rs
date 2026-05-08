@@ -63,9 +63,10 @@ pub(super) async fn handle_app_resume_startup_sessions_command(
         return Ok(None);
     }
 
-    // Startup resume is owned by the sidecar startup task in `main.rs`.
-    // This command remains as a compatibility no-op for older renderer flows so
-    // provider resume orchestration has one authoritative implementation.
+    // Startup resume orchestration is owned by `crate::startup_resume` and is
+    // launched once by the sidecar startup task. This command remains as a
+    // compatibility no-op for older renderer flows so provider PTY resume,
+    // persistence, events, and failure handling cannot diverge.
     Ok(Some(serde_json::Value::Null))
 }
 
