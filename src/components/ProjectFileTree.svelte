@@ -1,5 +1,7 @@
 <script lang="ts">
-  import { FileText, Folder, FolderOpen } from 'lucide-svelte'
+  import FileText from 'lucide-svelte/icons/file-text'
+  import Folder from 'lucide-svelte/icons/folder'
+  import FolderOpen from 'lucide-svelte/icons/folder-open'
   import type { FileEntry } from '../lib/types'
 
   interface Props {
