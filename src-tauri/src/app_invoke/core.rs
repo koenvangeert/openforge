@@ -207,7 +207,6 @@ pub(super) async fn handle_app_unmatched_command(
             let initial_prompt = payload_string(&request.payload, "initialPrompt")?;
             let status = payload_string(&request.payload, "status")?;
             let project_id = payload_optional_string(&request.payload, "projectId")?;
-            let agent = payload_optional_string(&request.payload, "agent")?;
             let permission_mode = payload_optional_string(&request.payload, "permissionMode")?;
             let task = db
                 .create_task(
@@ -215,7 +214,6 @@ pub(super) async fn handle_app_unmatched_command(
                     &status,
                     project_id.as_deref(),
                     None,
-                    agent.as_deref(),
                     permission_mode.as_deref(),
                 )
                 .map_err(|e| {

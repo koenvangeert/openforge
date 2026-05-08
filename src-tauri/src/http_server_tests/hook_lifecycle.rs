@@ -11,7 +11,7 @@ async fn test_pi_agent_status_changes_publish_to_app_event_stream() {
     let task_id = {
         let db = state.db.lock().expect("db lock");
         let task = db
-            .create_task("Pi task", "doing", None, None, None, None)
+            .create_task("Pi task", "doing", None, None, None)
             .expect("create task");
         db.create_agent_session("ses-pi", &task.id, None, "implement", "completed", "pi")
             .expect("create session");
@@ -55,7 +55,7 @@ async fn test_pi_agent_end_hook_marks_running_pi_session_completed() {
             .create_project("Project", "/tmp/project")
             .expect("create project");
         let task = db
-            .create_task("Task A", "doing", Some(&project.id), None, None, None)
+            .create_task("Task A", "doing", Some(&project.id), None, None)
             .expect("create task");
         db.create_agent_session(
             "ses-pi-running",
@@ -120,7 +120,7 @@ async fn test_pi_agent_start_hook_marks_completed_pi_session_running() {
             .create_project("Project", "/tmp/project")
             .expect("create project");
         let task = db
-            .create_task("Task A", "doing", Some(&project.id), None, None, None)
+            .create_task("Task A", "doing", Some(&project.id), None, None)
             .expect("create task");
         db.create_agent_session(
             "ses-pi-completed",
@@ -185,7 +185,7 @@ fn test_pi_status_update_emits_when_matching_session_already_has_target_status()
             .create_project("Project", "/tmp/project")
             .expect("create project");
         let task = db
-            .create_task("Task A", "doing", Some(&project.id), None, None, None)
+            .create_task("Task A", "doing", Some(&project.id), None, None)
             .expect("create task");
         db.create_agent_session(
             "ses-pi-running",
@@ -237,7 +237,7 @@ async fn test_pi_agent_start_hook_ignores_stale_pty_instance() {
             .create_project("Project", "/tmp/project")
             .expect("create project");
         let task = db
-            .create_task("Task A", "doing", Some(&project.id), None, None, None)
+            .create_task("Task A", "doing", Some(&project.id), None, None)
             .expect("create task");
         db.create_agent_session(
             "ses-pi-completed",
@@ -297,7 +297,7 @@ async fn test_pi_agent_end_hook_ignores_stale_pty_instance() {
             .create_project("Project", "/tmp/project")
             .expect("create project");
         let task = db
-            .create_task("Task A", "doing", Some(&project.id), None, None, None)
+            .create_task("Task A", "doing", Some(&project.id), None, None)
             .expect("create task");
         db.create_agent_session(
             "ses-pi-running",
@@ -621,7 +621,7 @@ async fn opencode_hook_stores_session_id_and_does_not_complete_on_idle_status() 
     let task_id = {
         let db = state.db.lock().expect("lock db");
         let task = db
-            .create_task("OpenCode task", "doing", None, None, None, None)
+            .create_task("OpenCode task", "doing", None, None, None)
             .expect("create task");
         db.create_agent_session(
             "ses-opencode-running",
@@ -678,7 +678,7 @@ async fn opencode_hook_marks_error_status_failed() {
     let task_id = {
         let db = state.db.lock().expect("lock db");
         let task = db
-            .create_task("OpenCode task", "doing", None, None, None, None)
+            .create_task("OpenCode task", "doing", None, None, None)
             .expect("create task");
         db.create_agent_session(
             "ses-opencode-error",

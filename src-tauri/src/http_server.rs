@@ -415,7 +415,6 @@ pub async fn create_task_handler(
             Some(&project_id),
             None,
             None,
-            None,
         )
         .map_err(|e| {
             (

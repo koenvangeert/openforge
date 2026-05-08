@@ -4,14 +4,10 @@ interface TaskDialogAgentSelectorOptions {
   availableAgents: readonly string[]
 }
 
-export function shouldLoadTaskDialogAgents(aiProvider: string | null): boolean {
-  return aiProvider !== null && aiProvider !== 'claude-code'
+export function shouldLoadTaskDialogAgents(_aiProvider: string | null): boolean {
+  return false
 }
 
-export function shouldShowTaskDialogAgentSelector({
-  isEditing,
-  aiProvider,
-  availableAgents,
-}: TaskDialogAgentSelectorOptions): boolean {
-  return !isEditing && shouldLoadTaskDialogAgents(aiProvider) && availableAgents.length > 0
+export function shouldShowTaskDialogAgentSelector(_options: TaskDialogAgentSelectorOptions): boolean {
+  return false
 }

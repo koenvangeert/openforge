@@ -90,7 +90,7 @@ describe('AddTaskDialog', () => {
     await fireEvent.click(await screen.findByRole('button', { name: /Start Task/ }))
 
     await waitFor(() => {
-      expect(createTask).toHaveBeenCalledWith('Start me', 'backlog', 'test-project-id', null, 'default')
+      expect(createTask).toHaveBeenCalledWith('Start me', 'backlog', 'test-project-id', 'default')
       expect(onClose).toHaveBeenCalledTimes(1)
       expect(onRunAction).toHaveBeenCalledWith('T-1', '', null)
     })
@@ -111,7 +111,7 @@ describe('AddTaskDialog', () => {
     await fireEvent.click(submitBtn)
     
     await waitFor(() => {
-      expect(createTask).toHaveBeenCalledWith('My new task', 'backlog', 'test-project-id', null, 'default')
+      expect(createTask).toHaveBeenCalledWith('My new task', 'backlog', 'test-project-id', 'default')
       expect(onTaskSaved).toHaveBeenCalled()
     })
   })
@@ -156,22 +156,24 @@ describe('AddTaskDialog', () => {
     })
   })
 
-  it('uses the selected opencode agent when starting a task', async () => {
+  it('does not load or pass through an agent when starting a task for opencode', async () => {
     const onRunAction = vi.fn()
     vi.mocked(getProjectConfig).mockResolvedValue('opencode')
     render(AddTaskDialog, { props: { mode: 'create', onRunAction } })
 
-    const agentSelector = await screen.findByRole('combobox')
-    await fireEvent.click(agentSelector)
-    await fireEvent.click(await screen.findByRole('option', { name: 'agent-1' }))
-
     const textbox = await screen.findByRole('textbox')
-    await fireEvent.input(textbox, { target: { value: 'Task for agent' } })
+
+    await waitFor(() => {
+      expect(listOpenCodeAgents).not.toHaveBeenCalled()
+      expect(screen.queryByRole('combobox')).toBeNull()
+    })
+
+    await fireEvent.input(textbox, { target: { value: 'Task for default agent' } })
     await fireEvent.click(await screen.findByRole('button', { name: /Start Task/ }))
 
     await waitFor(() => {
-      expect(createTask).toHaveBeenCalledWith('Task for agent', 'backlog', 'test-project-id', 'agent-1', 'default')
-      expect(onRunAction).toHaveBeenCalledWith('T-1', '', 'agent-1')
+      expect(createTask).toHaveBeenCalledWith('Task for default agent', 'backlog', 'test-project-id', 'default')
+      expect(onRunAction).toHaveBeenCalledWith('T-1', '', null)
     })
   })
 
@@ -186,7 +188,7 @@ describe('AddTaskDialog', () => {
     await fireEvent.click(actionButton)
 
     await waitFor(() => {
-      expect(createTask).toHaveBeenCalledWith('Task with action', 'backlog', 'test-project-id', null, 'default')
+      expect(createTask).toHaveBeenCalledWith('Task with action', 'backlog', 'test-project-id', 'default')
       expect(onRunAction).toHaveBeenCalledWith('T-1', 'Do test', null)
     })
   })
@@ -202,7 +204,7 @@ describe('AddTaskDialog', () => {
     await fireEvent.click(startBtn)
     
     await waitFor(() => {
-      expect(createTask).toHaveBeenCalledWith('Task to start', 'backlog', 'test-project-id', null, 'default')
+      expect(createTask).toHaveBeenCalledWith('Task to start', 'backlog', 'test-project-id', 'default')
       expect(onRunAction).toHaveBeenCalledWith('T-1', '', null)
     })
   })

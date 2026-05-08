@@ -13,21 +13,21 @@ describe('taskDialogVisibility', () => {
     ).toBe(false)
   })
 
-  it('shows the agent selector for non-claude providers with available agents', () => {
+  it('does not show the agent selector for non-claude providers even when agents exist', () => {
     expect(
       shouldShowTaskDialogAgentSelector({
         isEditing: false,
         aiProvider: 'opencode',
         availableAgents: ['alpha'],
       }),
-    ).toBe(true)
+    ).toBe(false)
   })
 
   it('does not load agent options for claude code', () => {
     expect(shouldLoadTaskDialogAgents('claude-code')).toBe(false)
   })
 
-  it('loads agent options for opencode', () => {
-    expect(shouldLoadTaskDialogAgents('opencode')).toBe(true)
+  it('does not load agent options for opencode', () => {
+    expect(shouldLoadTaskDialogAgents('opencode')).toBe(false)
   })
 })

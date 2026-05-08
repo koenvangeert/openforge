@@ -26,10 +26,10 @@ async fn handles_agent_lifecycle_followups() {
             .create_project("Lifecycle Project", "/tmp/openforge-lifecycle")
             .expect("create project");
         let pi_task = db
-            .create_task("pi task", "doing", Some(&project.id), None, None, None)
+            .create_task("pi task", "doing", Some(&project.id), None, None)
             .expect("create pi task");
         let claude_task = db
-            .create_task("claude task", "doing", Some(&project.id), None, None, None)
+            .create_task("claude task", "doing", Some(&project.id), None, None)
             .expect("create claude task");
         db.create_agent_session(
             "session-pi",
@@ -115,7 +115,7 @@ async fn finalize_claude_session_completes_successful_opencode_pty_run() {
     let task_id = {
         let db = crate::db::acquire_db(&state.db);
         let task = db
-            .create_task("OpenCode task", "doing", None, None, None, None)
+            .create_task("OpenCode task", "doing", None, None, None)
             .expect("create task");
         db.create_agent_session(
             "session-opencode",

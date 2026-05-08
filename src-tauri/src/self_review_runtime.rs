@@ -547,14 +547,7 @@ mod tests {
             .create_project("Test Project", "/tmp/test-repo")
             .expect("create project failed");
         let task = db
-            .create_task(
-                "No worktree task",
-                "doing",
-                Some(&project.id),
-                None,
-                None,
-                None,
-            )
+            .create_task("No worktree task", "doing", Some(&project.id), None, None)
             .expect("create task failed");
 
         db.create_task_workspace_record(
@@ -586,14 +579,7 @@ mod tests {
             .create_project("Test Project", "/tmp/test-repo")
             .expect("create project failed");
         let task = db
-            .create_task(
-                "Both sources task",
-                "doing",
-                Some(&project.id),
-                None,
-                None,
-                None,
-            )
+            .create_task("Both sources task", "doing", Some(&project.id), None, None)
             .expect("create task failed");
 
         db.create_worktree_record(
@@ -638,7 +624,6 @@ mod tests {
                 Some(&project.id),
                 None,
                 None,
-                None,
             )
             .expect("create task failed");
 
@@ -680,7 +665,6 @@ mod tests {
                 "Task with no workspace",
                 "doing",
                 Some(&project.id),
-                None,
                 None,
                 None,
             )

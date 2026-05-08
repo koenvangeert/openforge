@@ -31,12 +31,12 @@ async fn handles_config_projects_tasks_and_unmatched_commands() {
             "initialPrompt": "Plan migration",
             "status": "backlog",
             "projectId": project_id,
-            "agent": null,
             "permissionMode": null,
         }),
     )
     .await;
     assert_eq!(task["initial_prompt"], "Plan migration");
+    assert_eq!(task["agent"], serde_json::Value::Null);
     let task_id = task["id"].as_str().expect("task id");
 
     let tasks = invoke_ok(&state, "get_tasks", serde_json::Value::Null).await;
@@ -90,7 +90,7 @@ async fn handles_config_projects_tasks_and_unmatched_commands() {
 
     let done_task = {
         let db = crate::db::acquire_db(&state.db);
-        db.create_task("Done task", "done", Some(project_id), None, None, None)
+        db.create_task("Done task", "done", Some(project_id), None, None)
             .expect("create done task")
     };
     assert_eq!(
@@ -121,6 +121,44 @@ async fn handles_config_projects_tasks_and_unmatched_commands() {
     let _ = std::fs::remove_file(path);
 }
 
+#[tokio::test]
+async fn create_task_ignores_legacy_agent_payload() {
+    let (state, path) = test_state("app_invoke_create_task_ignores_agent");
+    let project = invoke_ok(
+        &state,
+        "create_project",
+        json!({ "name": "Open Forge", "path": "/tmp/openforge" }),
+    )
+    .await;
+    let project_id = project["id"].as_str().expect("project id");
+
+    let task = invoke_ok(
+        &state,
+        "create_task",
+        json!({
+            "initialPrompt": "No selected agent",
+            "status": "backlog",
+            "projectId": project_id,
+            "agent": "legacy-selected-agent",
+            "permissionMode": "default",
+        }),
+    )
+    .await;
+
+    assert_eq!(task["agent"], serde_json::Value::Null);
+    assert_eq!(task["permission_mode"], "default");
+
+    let task_id = task["id"].as_str().expect("task id");
+    let persisted = crate::db::acquire_db(&state.db)
+        .get_task(task_id)
+        .expect("get task")
+        .expect("task exists");
+    assert_eq!(persisted.agent, None);
+    assert_eq!(persisted.permission_mode.as_deref(), Some("default"));
+
+    let _ = std::fs::remove_file(path);
+}
+
 async fn task_workspace_value(
     task_id: &str,
     state: &crate::http_server::AppState,
@@ -141,7 +179,6 @@ async fn task_workspace_hides_legacy_worktree_server_port_fallback() {
                 "Legacy worktree task",
                 "doing",
                 Some(&project.id),
-                None,
                 None,
                 None,
             )
@@ -192,7 +229,6 @@ async fn task_workspace_prefers_task_workspace_over_legacy_worktree() {
                 "Task workspace task",
                 "doing",
                 Some(&project.id),
-                None,
                 None,
                 None,
             )

@@ -49,9 +49,9 @@ async fn test_get_tasks_handler_returns_tasks_for_project() {
         let project = db
             .create_project("Project", "/tmp/project")
             .expect("create project");
-        db.create_task("Task A", "backlog", Some(&project.id), None, None, None)
+        db.create_task("Task A", "backlog", Some(&project.id), None, None)
             .expect("create task a");
-        db.create_task("Task B", "doing", Some(&project.id), None, None, None)
+        db.create_task("Task B", "doing", Some(&project.id), None, None)
             .expect("create task b");
     }
 
@@ -83,16 +83,9 @@ async fn test_get_tasks_handler_filters_by_state() {
         let project = db
             .create_project("Project", "/tmp/project")
             .expect("create project");
-        db.create_task(
-            "Task backlog",
-            "backlog",
-            Some(&project.id),
-            None,
-            None,
-            None,
-        )
-        .expect("create backlog task");
-        db.create_task("Task doing", "doing", Some(&project.id), None, None, None)
+        db.create_task("Task backlog", "backlog", Some(&project.id), None, None)
+            .expect("create backlog task");
+        db.create_task("Task doing", "doing", Some(&project.id), None, None)
             .expect("create doing task");
     }
 
@@ -152,16 +145,9 @@ async fn test_update_task_handler_updates_summary_without_changing_initial_promp
         let project = db
             .create_project("Project", "/tmp/project")
             .expect("create project");
-        db.create_task(
-            "Original prompt",
-            "backlog",
-            Some(&project.id),
-            None,
-            None,
-            None,
-        )
-        .expect("create task")
-        .id
+        db.create_task("Original prompt", "backlog", Some(&project.id), None, None)
+            .expect("create task")
+            .id
     };
 
     let router = create_router(state.clone());
@@ -207,14 +193,7 @@ async fn test_update_task_handler_rejects_initial_prompt_and_preserves_task() {
             .create_project("Project", "/tmp/project")
             .expect("create project");
         let task = db
-            .create_task(
-                "Original prompt",
-                "backlog",
-                Some(&project.id),
-                None,
-                None,
-                None,
-            )
+            .create_task("Original prompt", "backlog", Some(&project.id), None, None)
             .expect("create task");
         db.update_task_summary(&task.id, "Existing Summary")
             .expect("seed summary");

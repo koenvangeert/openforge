@@ -22,7 +22,7 @@ async fn handles_fs_self_review_and_agent_review_db_commands() {
             .create_project("Open Forge", temp_dir.path().to_str().expect("utf8 path"))
             .expect("create project");
         let task = db
-            .create_task("Review task", "doing", Some(&project.id), None, None, None)
+            .create_task("Review task", "doing", Some(&project.id), None, None)
             .expect("create task");
         db.upsert_review_pr(
             88,
@@ -251,7 +251,7 @@ async fn handles_git_workspace_extraction_commands() {
             .create_project("Git Project", repo_path.to_str().expect("repo path"))
             .expect("create project");
         let task = db
-            .create_task("Review diff", "doing", Some(&project.id), None, None, None)
+            .create_task("Review diff", "doing", Some(&project.id), None, None)
             .expect("create task");
         db.create_task_workspace_record(
             &task.id,
