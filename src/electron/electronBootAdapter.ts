@@ -67,6 +67,7 @@ export function createElectronBootAdapter(options: ElectronBootAdapterOptions): 
           sidecarConfig: context.getSidecarConfig(),
           fetch: (url, init) => fetch(url, init),
           openExternal: (url) => shell.openExternal(url),
+          quitApp: () => app.quit(),
         },
       ))
     },

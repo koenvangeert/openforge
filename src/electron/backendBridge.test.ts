@@ -32,6 +32,21 @@ describe('Electron backend bridge command forwarding', () => {
     expect(fetch).not.toHaveBeenCalled()
   })
 
+  it('keeps quit_app shell-owned so Electron before-quit shutdown cleanup runs', async () => {
+    const fetch = vi.fn()
+    const openExternal = vi.fn(async () => undefined)
+    const quitApp = vi.fn(async () => undefined)
+
+    await expect(handleElectronInvoke(
+      { command: 'quit_app', payload: null },
+      { sidecarConfig: sidecarConfig(), fetch, openExternal, quitApp },
+    )).resolves.toBeUndefined()
+
+    expect(quitApp).toHaveBeenCalledTimes(1)
+    expect(openExternal).not.toHaveBeenCalled()
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
   it('forwards config/projects/tasks commands to the authenticated sidecar app IPC route', async () => {
     const fetch = vi.fn(async () => ({
       ok: true,

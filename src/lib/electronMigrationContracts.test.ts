@@ -206,9 +206,13 @@ describe('Electron migration Phase 0 contract inventory', () => {
     })
   })
 
-  it('classifies the shell-owned open URL command for Electron main while leaving backend commands on the Rust sidecar', () => {
+  it('classifies the shell-owned app shell commands for Electron main while leaving backend commands on the Rust sidecar', () => {
     expect(ipcCommandContracts.find(contract => contract.functionName === 'openUrl')).toMatchObject({
       ipcCommand: 'open_url',
+      targetOwner: 'electron-main',
+    })
+    expect(ipcCommandContracts.find(contract => contract.functionName === 'quitApp')).toMatchObject({
+      ipcCommand: 'quit_app',
       targetOwner: 'electron-main',
     })
     expect(ipcCommandContracts.find(contract => contract.functionName === 'createTask')).toMatchObject({
