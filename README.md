@@ -127,6 +127,11 @@ Seeding only copies the development database (`openforge_dev.db`) into the workt
 # Frontend tests
 pnpm test
 
+# Focus a Vitest run on one file or pattern (no `--` separator)
+pnpm test src/components/ProjectFileTree.test.ts
+# or
+pnpm exec vitest run src/components/ProjectFileTree.test.ts
+
 # Rust tests
 cd "$(node scripts/rust-sidecar-layout.mjs backend-crate-root)" && cargo test
 

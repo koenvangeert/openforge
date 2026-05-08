@@ -94,7 +94,7 @@ describe('Electron-only desktop cutover', () => {
       'pnpm dev for frontend-only Vite',
     ]))
     expect(profile.workflows.map(workflow => workflow.name)).toContain('electron-shell-verification')
-    expect(profile.workflows.find(workflow => workflow.name === 'electron-shell-verification')?.steps.join('\n')).toContain('pnpm test -- src/electron')
+    expect(profile.workflows.find(workflow => workflow.name === 'electron-shell-verification')?.steps.join('\n')).toContain('pnpm test src/electron')
     expect(profile.workflows.find(workflow => workflow.name === 'release')?.steps.join('\n')).toContain('pnpm electron:package')
     expect(profile.bottlenecks.map(bottleneck => bottleneck.location).join('\n')).toContain('src/electron/main.ts')
     expect(readText('.a5c/project-profile.md')).toContain('### electron-shell-verification')

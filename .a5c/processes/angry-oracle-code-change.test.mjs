@@ -152,7 +152,7 @@ describe('angry oracle code-change process', () => {
     const result = await runProcess(
       {
         request: 'Fix task detail rendering',
-        verificationCommands: ['pnpm test -- src/components/TaskDetails.test.ts'],
+        verificationCommands: ['pnpm test src/components/TaskDetails.test.ts'],
         targetOracleScore: 90,
         maxOracleIterations: 1
       },
@@ -174,13 +174,13 @@ describe('angry oracle code-change process', () => {
           }
           if (task === runVerificationCommandTask) {
             taskOrder.push('automated-verification');
-            assert.equal(args.command, 'pnpm test -- src/components/TaskDetails.test.ts');
+            assert.equal(args.command, 'pnpm test src/components/TaskDetails.test.ts');
             return { status: 'ok' };
           }
           if (task === manualAppVerificationTask) {
             taskOrder.push('manual-verification');
             assert.deepEqual(args.verificationResults, [
-              { command: 'pnpm test -- src/components/TaskDetails.test.ts', status: 'ok' }
+              { command: 'pnpm test src/components/TaskDetails.test.ts', status: 'ok' }
             ]);
             return manualVerification;
           }

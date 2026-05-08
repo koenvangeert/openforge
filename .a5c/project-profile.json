@@ -252,8 +252,8 @@
       "name": "electron-shell-verification",
       "description": "Verify Electron shell, preload, sidecar bridge, and packaging contracts.",
       "steps": [
-        "pnpm test -- src/electron",
-        "pnpm test -- scripts/electron-cutover.test.mjs scripts/electron-dev.test.mjs scripts/electron-package.test.mjs"
+        "pnpm test src/electron",
+        "pnpm test scripts/electron-cutover.test.mjs scripts/electron-dev.test.mjs scripts/electron-package.test.mjs"
       ],
       "triggers": [
         "local quality gate",
@@ -342,7 +342,7 @@
       },
       {
         "name": "Electron shell contract tests",
-        "command": "pnpm test -- src/electron && pnpm test -- scripts/electron-cutover.test.mjs scripts/electron-dev.test.mjs scripts/electron-package.test.mjs",
+        "command": "pnpm test src/electron && pnpm test scripts/electron-cutover.test.mjs scripts/electron-dev.test.mjs scripts/electron-package.test.mjs",
         "config": "src/electron/*.test.ts, scripts/electron-*.test.mjs"
       },
       {

@@ -98,8 +98,8 @@ Verify TypeScript/Svelte business logic.
 Verify Electron shell, preload, sidecar bridge, and packaging contracts.
 **Triggers:** local quality gate, GitHub Actions pull_request/push
 
-1. `pnpm test -- src/electron`
-2. `pnpm test -- scripts/electron-cutover.test.mjs scripts/electron-dev.test.mjs scripts/electron-package.test.mjs`
+1. `pnpm test src/electron`
+2. `pnpm test scripts/electron-cutover.test.mjs scripts/electron-dev.test.mjs scripts/electron-package.test.mjs`
 
 ### rust-verification
 
