@@ -75,8 +75,6 @@ pub(crate) fn build_opencode_tui_args(
         args.push("--model".to_string());
         args.push(model.to_string());
     }
-    args.push("--title".to_string());
-    args.push("OpenForge task".to_string());
     if !prompt.is_empty() {
         args.push("--prompt".to_string());
         args.push(prompt.to_string());
@@ -127,8 +125,6 @@ mod tests {
                 "build",
                 "--model",
                 "anthropic/claude-sonnet-4",
-                "--title",
-                "OpenForge task",
                 "--prompt",
                 "fix the bug",
             ]
@@ -139,7 +135,7 @@ mod tests {
     fn opencode_tui_args_continue_without_prompt_for_startup_resume() {
         assert_eq!(
             build_opencode_tui_args("", None, true, None, None),
-            vec!["--continue", "--title", "OpenForge task"]
+            vec!["--continue"]
         );
     }
 }

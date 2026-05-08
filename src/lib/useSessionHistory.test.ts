@@ -8,11 +8,12 @@ vi.mock('./stores', () => ({
 
 vi.mock('./ipc', () => ({
   getLatestSession: vi.fn().mockResolvedValue(null),
+  getSessionOutput: vi.fn().mockResolvedValue(''),
 }))
 
 import { createSessionHistory } from './useSessionHistory.svelte'
 import { activeSessions } from './stores'
-import { getLatestSession } from './ipc'
+import { getLatestSession, getSessionOutput } from './ipc'
 
 const baseSession: AgentSession = {
   id: 'ses-1',
@@ -31,13 +32,16 @@ const baseSession: AgentSession = {
 
 describe('createSessionHistory', () => {
   let onStatusUpdate: (status: 'complete' | 'error' | 'idle', errorMessage?: string | null) => void
+  let onOutputLoaded: (output: string) => void
   const taskId = 'T-1'
 
   beforeEach(() => {
     vi.clearAllMocks()
     onStatusUpdate = vi.fn<(status: 'complete' | 'error' | 'idle', errorMessage?: string | null) => void>()
+    onOutputLoaded = vi.fn<(output: string) => void>()
     activeSessions.set(new Map())
     vi.mocked(getLatestSession).mockResolvedValue(null)
+    vi.mocked(getSessionOutput).mockResolvedValue('')
   })
 
   it('starts with loadingHistory = false', () => {
@@ -63,6 +67,24 @@ describe('createSessionHistory', () => {
     const history = createSessionHistory({ taskId, onStatusUpdate })
     await history.loadSessionHistory()
     expect(onStatusUpdate).toHaveBeenCalledWith('complete')
+  })
+
+  it('loads legacy OpenCode session output for terminal sessions when requested', async () => {
+    vi.mocked(getLatestSession).mockResolvedValue({ ...baseSession, status: 'completed' })
+    vi.mocked(getSessionOutput).mockResolvedValue('previous tty output')
+    const history = createSessionHistory({ taskId, onStatusUpdate, onOutputLoaded })
+    await history.loadSessionHistory()
+    expect(getSessionOutput).toHaveBeenCalledWith(taskId)
+    expect(onOutputLoaded).toHaveBeenCalledWith('previous tty output')
+  })
+
+  it('ignores legacy OpenCode session output failures while preserving status history', async () => {
+    vi.mocked(getLatestSession).mockResolvedValue({ ...baseSession, status: 'completed' })
+    vi.mocked(getSessionOutput).mockRejectedValue(new Error('legacy server unavailable'))
+    const history = createSessionHistory({ taskId, onStatusUpdate, onOutputLoaded })
+    await history.loadSessionHistory()
+    expect(onStatusUpdate).toHaveBeenCalledWith('complete')
+    expect(onOutputLoaded).not.toHaveBeenCalled()
   })
 
   it('calls onStatusUpdate("idle") for paused session from DB', async () => {

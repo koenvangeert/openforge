@@ -14,6 +14,7 @@ pub(super) async fn finalize_pty_exit(
     pid_file: &Path,
     session_key: &str,
     instance_id: u64,
+    preserve_output_buffer: bool,
 ) -> bool {
     let removed_session = {
         let mut sessions = sessions.lock().await;
@@ -32,7 +33,7 @@ pub(super) async fn finalize_pty_exit(
         return false;
     };
 
-    {
+    if !preserve_output_buffer {
         let mut buffers = output_buffers.lock().await;
         buffers.remove(session_key);
     }
@@ -242,6 +243,7 @@ pub(super) enum PtyExitAction {
         output_buffers: PtyOutputBuffers,
         pid_file: PathBuf,
         emit_agent_exit: bool,
+        preserve_output_buffer: bool,
     },
 }
 
@@ -299,6 +301,7 @@ pub(super) fn spawn_batched_pty_event_emitter(
                                     output_buffers,
                                     pid_file,
                                     emit_agent_exit,
+                                    preserve_output_buffer,
                                 } => {
                                     let success = finalize_pty_exit(
                                         &sessions,
@@ -307,6 +310,7 @@ pub(super) fn spawn_batched_pty_event_emitter(
                                         &pid_file,
                                         &session_key,
                                         instance_id,
+                                        preserve_output_buffer,
                                     ).await;
                                     emit_agent_exit.then_some(success)
                                 }

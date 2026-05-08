@@ -33,6 +33,17 @@
     taskId: untrack(() => taskId),
     onStatusUpdate: (s) => {
       status = s
+      if ((s === 'complete' || s === 'error') && poolEntry) {
+        updateShellLifecycleState(taskId, {
+          ptyActive: false,
+          shellExited: true,
+          currentPtyInstance: poolEntry.currentPtyInstance,
+        })
+      }
+    },
+    onOutputLoaded: (output) => {
+      if (!poolEntry || poolEntry.ptyActive) return
+      poolEntry.terminal.write(output)
     },
   })
 
