@@ -207,15 +207,22 @@ fn test_pi_status_update_emits_when_matching_session_already_has_target_status()
         task.id
     };
 
-    let status_update = update_pi_session_status_for_pty(
+    let status_update = record_agent_lifecycle_notification(
         &state,
-        &task_id,
-        42,
-        "running",
-        &["completed", "paused", "interrupted", "running"],
+        &crate::agent_lifecycle::AgentLifecycleNotification {
+            provider: "pi".to_string(),
+            task_id: task_id.clone(),
+            pty_instance_id: Some(42),
+            provider_session_id: None,
+            event_type: "agent.start".to_string(),
+            status_type: None,
+        },
     );
 
-    assert_eq!(status_update, Some("running".to_string()));
+    assert_eq!(
+        status_update.map(|change| change.status),
+        Some("running".to_string())
+    );
     let session = state
         .db
         .lock()
@@ -616,6 +623,181 @@ fn opencode_status_events_preserve_payload_semantics_without_idle_completion() {
 }
 
 #[tokio::test]
+async fn agent_lifecycle_route_updates_opencode_status_through_shared_seam() {
+    let (state, path) = test_state("agent_lifecycle_route_opencode_running");
+    let task_id = {
+        let db = state.db.lock().expect("lock db");
+        let task = db
+            .create_task("OpenCode task", "doing", None, None, None)
+            .expect("create task");
+        db.create_agent_session(
+            "ses-opencode-completed-shared",
+            &task.id,
+            None,
+            "implementing",
+            "completed",
+            "opencode",
+        )
+        .expect("create opencode session");
+        db.update_agent_session(
+            "ses-opencode-completed-shared",
+            "implementing",
+            "completed",
+            Some(r#"{"pty_instance_id":88}"#),
+            None,
+        )
+        .expect("store pty instance");
+        task.id
+    };
+
+    let router = create_router(state.clone());
+    let response = router
+        .oneshot(
+            Request::builder()
+                .uri("/hooks/agent-lifecycle")
+                .method("POST")
+                .header("content-type", "application/json")
+                .body(Body::from(format!(
+                    r#"{{"provider":"opencode","task_id":"{}","pty_instance_id":88,"provider_session_id":"oc-shared-88","event_type":"session.status","status_type":"busy"}}"#,
+                    task_id
+                )))
+                .expect("build request"),
+        )
+        .await
+        .expect("request should succeed");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let session = state
+        .db
+        .lock()
+        .expect("lock db")
+        .get_agent_session("ses-opencode-completed-shared")
+        .expect("get session")
+        .expect("session exists");
+    assert_eq!(session.status, "running");
+    assert_eq!(
+        session.opencode_session_id,
+        Some("oc-shared-88".to_string())
+    );
+    assert_eq!(
+        session.checkpoint_data,
+        Some(r#"{"pty_instance_id":88}"#.to_string())
+    );
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
+async fn agent_lifecycle_route_updates_pi_status_through_shared_seam() {
+    let (state, path) = test_state("agent_lifecycle_route_pi_running");
+    let task_id = {
+        let db = state.db.lock().expect("lock db");
+        let task = db
+            .create_task("Pi task", "doing", None, None, None)
+            .expect("create task");
+        db.create_agent_session(
+            "ses-pi-shared",
+            &task.id,
+            None,
+            "implementing",
+            "completed",
+            "pi",
+        )
+        .expect("create pi session");
+        db.update_agent_session(
+            "ses-pi-shared",
+            "implementing",
+            "completed",
+            Some(r#"{"pty_instance_id":89}"#),
+            None,
+        )
+        .expect("store pty instance");
+        task.id
+    };
+
+    let router = create_router(state.clone());
+    let response = router
+        .oneshot(
+            Request::builder()
+                .uri("/hooks/agent-lifecycle")
+                .method("POST")
+                .header("content-type", "application/json")
+                .body(Body::from(format!(
+                    r#"{{"provider":"pi","task_id":"{}","pty_instance_id":89,"event_type":"agent.start"}}"#,
+                    task_id
+                )))
+                .expect("build request"),
+        )
+        .await
+        .expect("request should succeed");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let session = state
+        .db
+        .lock()
+        .expect("lock db")
+        .get_agent_session("ses-pi-shared")
+        .expect("get session")
+        .expect("session exists");
+    assert_eq!(session.status, "running");
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
+async fn agent_lifecycle_route_updates_claude_status_through_shared_seam() {
+    let (state, path) = test_state("agent_lifecycle_route_claude_running");
+    let task_id = {
+        let db = state.db.lock().expect("lock db");
+        let task = db
+            .create_task("Claude task", "doing", None, None, None)
+            .expect("create task");
+        db.create_agent_session(
+            "ses-claude-shared",
+            &task.id,
+            None,
+            "implementing",
+            "completed",
+            "claude-code",
+        )
+        .expect("create claude session");
+        task.id
+    };
+
+    let router = create_router(state.clone());
+    let response = router
+        .oneshot(
+            Request::builder()
+                .uri("/hooks/agent-lifecycle")
+                .method("POST")
+                .header("content-type", "application/json")
+                .body(Body::from(format!(
+                    r#"{{"provider":"claude-code","task_id":"{}","provider_session_id":"claude-shared-90","event_type":"pre-tool-use"}}"#,
+                    task_id
+                )))
+                .expect("build request"),
+        )
+        .await
+        .expect("request should succeed");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let session = state
+        .db
+        .lock()
+        .expect("lock db")
+        .get_agent_session("ses-claude-shared")
+        .expect("get session")
+        .expect("session exists");
+    assert_eq!(session.status, "running");
+    assert_eq!(
+        session.claude_session_id,
+        Some("claude-shared-90".to_string())
+    );
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
 async fn opencode_hook_stores_session_id_and_does_not_complete_on_idle_status() {
     let (state, path) = test_state("opencode_hook_idle_no_complete");
     let task_id = {
@@ -664,6 +846,67 @@ async fn opencode_hook_stores_session_id_and_does_not_complete_on_idle_status() 
         .expect("get session")
         .expect("session exists");
     assert_eq!(session.status, "running");
+    assert_eq!(
+        session.opencode_session_id,
+        Some("oc-session-77".to_string())
+    );
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
+async fn opencode_hook_preserves_checkpoint_when_status_changes() {
+    let (state, path) = test_state("opencode_hook_preserves_checkpoint");
+    let task_id = {
+        let db = state.db.lock().expect("lock db");
+        let task = db
+            .create_task("OpenCode task", "doing", None, None, None)
+            .expect("create task");
+        db.create_agent_session(
+            "ses-opencode-completed",
+            &task.id,
+            None,
+            "implementing",
+            "completed",
+            "opencode",
+        )
+        .expect("create opencode session");
+        db.update_agent_session(
+            "ses-opencode-completed",
+            "implementing",
+            "completed",
+            Some(r#"{"pty_instance_id":77}"#),
+            None,
+        )
+        .expect("store pty instance");
+        task.id
+    };
+
+    let _ = opencode_event_handler(
+        State(state.clone()),
+        Json(OpenCodePluginEventPayload {
+            task_id: task_id.clone(),
+            pty_instance_id: 77,
+            event_type: "session.status".to_string(),
+            session_id: Some("oc-session-77".to_string()),
+            status_type: Some("busy".to_string()),
+        }),
+    )
+    .await
+    .expect("handler response");
+
+    let session = state
+        .db
+        .lock()
+        .expect("lock db")
+        .get_agent_session("ses-opencode-completed")
+        .expect("get session")
+        .expect("session exists");
+    assert_eq!(session.status, "running");
+    assert_eq!(
+        session.checkpoint_data,
+        Some(r#"{"pty_instance_id":77}"#.to_string())
+    );
     assert_eq!(
         session.opencode_session_id,
         Some("oc-session-77".to_string())

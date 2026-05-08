@@ -99,6 +99,20 @@ impl super::Database {
         Ok(())
     }
 
+    pub fn set_agent_session_provider_id(
+        &self,
+        id: &str,
+        provider: &str,
+        provider_session_id: &str,
+    ) -> Result<()> {
+        match provider {
+            "opencode" => self.set_agent_session_opencode_id(id, provider_session_id),
+            "claude-code" => self.set_agent_session_claude_id(id, provider_session_id),
+            "pi" => self.set_agent_session_pi_id(id, provider_session_id),
+            _ => Ok(()),
+        }
+    }
+
     pub fn get_agent_session(&self, id: &str) -> Result<Option<AgentSessionRow>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
@@ -269,14 +283,21 @@ impl super::Database {
     }
 
     pub fn mark_running_sessions_interrupted(&self) -> Result<usize> {
+        self.mark_running_sessions_interrupted_before(i64::MAX)
+    }
+
+    pub fn mark_running_sessions_interrupted_before(
+        &self,
+        cutoff_updated_at: i64,
+    ) -> Result<usize> {
         let conn = self.conn.lock().unwrap();
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .expect("time went backwards")
             .as_secs() as i64;
         conn.execute(
-            "UPDATE agent_sessions SET status = 'interrupted', error_message = 'Session interrupted by app restart', updated_at = ?1 WHERE status = 'running'",
-            rusqlite::params![now],
+            "UPDATE agent_sessions SET status = 'interrupted', error_message = 'Session interrupted by app restart', updated_at = ?1 WHERE status = 'running' AND updated_at < ?2",
+            rusqlite::params![now, cutoff_updated_at],
         )?;
         Ok(conn.changes() as usize)
     }
@@ -505,6 +526,66 @@ mod tests {
 
         drop(db);
         let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_mark_running_sessions_interrupted_before_preserves_recently_restored_sessions() {
+        let (db, path) = make_test_db("mark_interrupted_before");
+        insert_test_task(&db);
+
+        db.create_agent_session(
+            "ses-stale",
+            "T-100",
+            None,
+            "implement",
+            "running",
+            "opencode",
+        )
+        .expect("create stale running failed");
+        db.create_agent_session(
+            "ses-restored",
+            "T-100",
+            None,
+            "implement",
+            "running",
+            "opencode",
+        )
+        .expect("create restored running failed");
+
+        {
+            let conn = db.connection();
+            let conn = conn.lock().expect("lock connection");
+            conn.execute(
+                "UPDATE agent_sessions SET updated_at = 100 WHERE id = 'ses-stale'",
+                [],
+            )
+            .expect("set stale updated_at");
+            conn.execute(
+                "UPDATE agent_sessions SET updated_at = 200 WHERE id = 'ses-restored'",
+                [],
+            )
+            .expect("set restored updated_at");
+        }
+
+        let count = db
+            .mark_running_sessions_interrupted_before(150)
+            .expect("mark interrupted before cutoff failed");
+        assert_eq!(count, 1);
+
+        let stale = db
+            .get_agent_session("ses-stale")
+            .expect("get stale")
+            .unwrap();
+        assert_eq!(stale.status, "interrupted");
+
+        let restored = db
+            .get_agent_session("ses-restored")
+            .expect("get restored")
+            .unwrap();
+        assert_eq!(restored.status, "running");
+
+        drop(db);
+        let _ = std::fs::remove_file(&path);
     }
 
     #[test]

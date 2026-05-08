@@ -23,7 +23,6 @@ use crate::{
 };
 use axum::http::StatusCode;
 use lifecycle::cleanup_task_runtime_for_app;
-use log::{error, info, warn};
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 
@@ -85,29 +84,6 @@ fn publish_task_changed_payload(state: &AppState, payload: serde_json::Value) {
         state.app.as_ref(),
         &state.app_event_tx,
         "task-changed",
-        &payload,
-    );
-}
-
-fn publish_session_resumed(state: &AppState, task_id: &str, workspace_path: &str) {
-    let payload = serde_json::json!({
-        "task_id": task_id,
-        "workspace_path": workspace_path,
-    });
-    publish_app_event_to_runtime(
-        state.app.as_ref(),
-        &state.app_event_tx,
-        "session-resumed",
-        &payload,
-    );
-}
-
-fn publish_startup_resume_complete(state: &AppState) {
-    let payload = serde_json::Value::Null;
-    publish_app_event_to_runtime(
-        state.app.as_ref(),
-        &state.app_event_tx,
-        "startup-resume-complete",
         &payload,
     );
 }
