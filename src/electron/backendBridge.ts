@@ -59,7 +59,6 @@ const SIDECAR_BACKED_COMMANDS = new Set([
   'get_latest_sessions',
   'get_session_status',
   'abort_session',
-  'get_session_output',
   'resume_startup_sessions',
   'start_implementation',
   'abort_implementation',

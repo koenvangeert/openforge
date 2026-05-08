@@ -7,7 +7,6 @@ use crate::{
     github_client::GitHubClient,
     plugin_host::PluginHost,
     pty_manager::PtyManager,
-    server_manager::ServerManager,
     whisper_manager::WhisperManager,
 };
 use axum::{
@@ -50,7 +49,6 @@ pub struct AppState {
     pub db: std::sync::Arc<Mutex<db::Database>>,
     pub backend_token: Option<String>,
     pub pty_manager: Option<PtyManager>,
-    pub server_manager: Option<ServerManager>,
     pub github_client: GitHubClient,
     pub plugin_host: Option<PluginHost>,
     pub app_event_tx: Option<AppEventSender>,
@@ -1115,15 +1113,6 @@ async fn shutdown_sidecar_runtime(state: &AppState) {
         pty_manager.kill_all().await;
     }
 
-    if let Some(server_manager) = &state.server_manager {
-        if let Err(error) = server_manager.stop_all().await {
-            warn!(
-                "[http_server] Failed to stop task servers during shutdown: {}",
-                error
-            );
-        }
-    }
-
     info!("[http_server] Rust sidecar shutdown cleanup completed");
 }
 
@@ -1131,7 +1120,6 @@ pub async fn start_http_sidecar_server(
     app: crate::backend_runtime::AppHandle,
     db: std::sync::Arc<Mutex<db::Database>>,
     pty_manager: PtyManager,
-    server_manager: ServerManager,
     whisper: std::sync::Arc<WhisperManager>,
     sidecar_readiness: SidecarReadinessState,
     ready_tx: tokio::sync::oneshot::Sender<()>,
@@ -1140,7 +1128,6 @@ pub async fn start_http_sidecar_server(
         Some(app),
         db,
         pty_manager,
-        server_manager,
         Some(whisper),
         sidecar_readiness,
         true,
@@ -1153,7 +1140,6 @@ async fn start_http_server_with_app_state(
     app: Option<crate::backend_runtime::AppHandle>,
     db: std::sync::Arc<Mutex<db::Database>>,
     pty_manager: PtyManager,
-    server_manager: ServerManager,
     whisper: Option<std::sync::Arc<WhisperManager>>,
     sidecar_readiness: SidecarReadinessState,
     is_electron_sidecar: bool,
@@ -1187,7 +1173,6 @@ async fn start_http_server_with_app_state(
         db: db.clone(),
         backend_token: std::env::var("OPENFORGE_BACKEND_TOKEN").ok(),
         pty_manager: Some(pty_manager),
-        server_manager: Some(server_manager),
         github_client: github_client.clone(),
         plugin_host,
         app_event_tx: Some(app_event_tx.clone()),

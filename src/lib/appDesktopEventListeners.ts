@@ -127,12 +127,11 @@ export async function registerAppDesktopEventListeners(deps: AppDesktopEventDeps
   )
 
   unlisteners.push(
-    await listen<{ task_id: string; port: number; workspace_path: string }>('server-resumed', async (event) => {
+    await listen<{ task_id: string; workspace_path: string }>('session-resumed', async (event) => {
       const taskId = event.payload.task_id
       const updatedRuntimeInfo = new Map(get(taskRuntimeInfo))
       updatedRuntimeInfo.set(taskId, {
         workspacePath: event.payload.workspace_path,
-        opencodePort: event.payload.port || null,
       })
       taskRuntimeInfo.set(updatedRuntimeInfo)
 
@@ -142,7 +141,7 @@ export async function registerAppDesktopEventListeners(deps: AppDesktopEventDeps
           setActiveSession(taskId, session)
         }
       } catch (e) {
-        console.error('[startup] Failed to load session after server resume for task:', taskId, e)
+        console.error('[startup] Failed to load session after resume for task:', taskId, e)
       }
     }),
   )

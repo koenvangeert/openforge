@@ -220,7 +220,7 @@ pub(super) fn app_agent_review_live_blocker(
 ) -> Result<Option<serde_json::Value>, (StatusCode, String)> {
     Err((
         StatusCode::NOT_IMPLEMENTED,
-        format!("app IPC command requires provider and server manager state before Electron sidecar support: {command}"),
+        format!("app IPC command requires provider runtime state before Electron sidecar support: {command}"),
     ))
 }
 

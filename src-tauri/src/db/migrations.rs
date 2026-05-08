@@ -180,7 +180,6 @@ CREATE INDEX IF NOT EXISTS idx_review_prs_repo ON review_prs(repo_owner, repo_na
 
 INSERT OR IGNORE INTO config (key, value) VALUES ('github_token', '');
 INSERT OR IGNORE INTO config (key, value) VALUES ('github_default_repo', '');
-INSERT OR IGNORE INTO config (key, value) VALUES ('opencode_port', '4096');
 INSERT OR IGNORE INTO config (key, value) VALUES ('opencode_auto_start', 'true');
 INSERT OR IGNORE INTO config (key, value) VALUES ('github_poll_interval', '60');
 INSERT OR IGNORE INTO config (key, value) VALUES ('next_task_id', '1');
@@ -1056,8 +1055,8 @@ mod tests {
             .expect("Failed to count config rows");
 
         assert_eq!(
-            config_count, 9,
-            "All 9 default config values should be inserted"
+            config_count, 8,
+            "All 8 default config values should be inserted"
         );
 
         let jira_columns: i32 = conn

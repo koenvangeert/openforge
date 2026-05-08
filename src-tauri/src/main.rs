@@ -32,7 +32,6 @@ pub mod review_parser;
 mod runtime_checks;
 mod secure_store;
 mod self_review_runtime;
-mod server_manager;
 mod user_environment;
 mod whisper_manager;
 use log::{debug, error, info, warn};
@@ -44,7 +43,7 @@ use std::sync::{Arc, Mutex};
 use whisper_manager::{WhisperManager, WhisperModelSize};
 
 // ============================================================================
-// Startup: Resume OpenCode Servers
+// Startup: Resume Agent Sessions
 // ============================================================================
 
 #[derive(Debug, Clone)]
@@ -121,7 +120,7 @@ fn startup_resume_database_lock_message(context: &str, error: impl std::fmt::Dis
     format!("{context}: database lock error: {error}")
 }
 
-async fn resume_task_servers(
+async fn resume_task_sessions(
     app: crate::backend_runtime::AppHandle,
     http_ready: tokio::sync::oneshot::Receiver<()>,
     sidecar_readiness: http_server::SidecarReadinessState,
@@ -171,7 +170,7 @@ async fn resume_task_servers(
     sidecar_readiness.mark_startup_resume_running(resume_targets.len());
 
     info!(
-        "[startup] Resuming servers for {} task(s)",
+        "[startup] Resuming agent sessions for {} task(s)",
         resume_targets.len()
     );
 
@@ -198,10 +197,9 @@ async fn resume_task_servers(
                     error!("[startup] {message}");
                     sidecar_readiness.record_startup_resume_failure(message);
                     let _ = app.emit(
-                        "server-resumed",
+                        "session-resumed",
                         serde_json::json!({
                             "task_id": target.task_id,
-                            "port": 0,
                             "workspace_path": target.workspace_path,
                         }),
                     );
@@ -323,10 +321,9 @@ async fn resume_task_servers(
                 }
 
                 let _ = app.emit(
-                    "server-resumed",
+                    "session-resumed",
                     serde_json::json!({
                         "task_id": target.task_id,
-                        "port": result.port,
                         "workspace_path": target.workspace_path,
                     }),
                 );
@@ -379,10 +376,9 @@ async fn resume_task_servers(
                 }
 
                 let _ = app.emit(
-                    "server-resumed",
+                    "session-resumed",
                     serde_json::json!({
                         "task_id": target.task_id,
-                        "port": 0,
                         "workspace_path": target.workspace_path,
                     }),
                 );
@@ -393,66 +389,6 @@ async fn resume_task_servers(
     sidecar_readiness.mark_startup_resume_complete();
     let _ = app.emit("startup-resume-complete", ());
     info!("[startup] Resume complete, emitted startup-resume-complete event");
-}
-
-fn should_start_project_root_server(
-    provider: &str,
-    project_path: Option<&str>,
-    existing_port: Option<u16>,
-) -> bool {
-    let _ = (provider, project_path, existing_port);
-    false
-}
-
-async fn start_project_root_server(
-    app: &crate::backend_runtime::AppHandle,
-    project_id: &str,
-) -> Result<(), String> {
-    let (provider, project_path) = {
-        let db = app.state::<Arc<Mutex<db::Database>>>();
-        let db_lock = db
-            .lock()
-            .map_err(|e| format!("database lock error: {}", e))?;
-        let provider = db_lock.resolve_ai_provider(project_id);
-        let project_path = db_lock
-            .get_project(project_id)
-            .map_err(|e| format!("Failed to load project {}: {}", project_id, e))?
-            .map(|project| project.path);
-
-        (provider, project_path)
-    };
-
-    let discovery_task_id = server_manager::discovery_server_task_id(project_id);
-    let server_mgr = app.state::<server_manager::ServerManager>();
-    let existing_port = server_mgr.get_server_port(&discovery_task_id).await;
-
-    if !should_start_project_root_server(&provider, project_path.as_deref(), existing_port) {
-        return Ok(());
-    }
-
-    let project_path = project_path.ok_or_else(|| format!("Project {} has no path", project_id))?;
-
-    server_mgr
-        .spawn_server(&discovery_task_id, std::path::Path::new(&project_path))
-        .await
-        .map(|_| ())
-        .map_err(|e| format!("Failed to start root OpenCode server: {}", e))
-}
-
-fn resolve_startup_project_id(db: &db::Database) -> Result<Option<String>, String> {
-    if let Some(project_id) = db
-        .get_config("active_project_id")
-        .map_err(|e| format!("Failed to read active project config: {}", e))?
-        .filter(|id| !id.is_empty())
-    {
-        return Ok(Some(project_id));
-    }
-
-    let projects = db
-        .get_all_projects()
-        .map_err(|e| format!("Failed to load projects: {}", e))?;
-
-    Ok(projects.first().map(|project| project.id.clone()))
 }
 
 pub(crate) fn restore_resumed_session_state(
@@ -704,14 +640,12 @@ fn run_electron_sidecar() -> Result<(), Box<dyn std::error::Error>> {
 
     let db_arc = Arc::new(Mutex::new(database));
     let pty_manager = PtyManager::new();
-    let server_manager = server_manager::ServerManager::new();
     let whisper_manager = Arc::new(WhisperManager::with_active_model(whisper_model_pref));
     let sidecar_readiness = http_server::SidecarReadinessState::new();
     let (http_ready_tx, http_ready_rx) = tokio::sync::oneshot::channel::<()>();
     let app = http_server::electron_sidecar_app_handle(app_data_dir.clone(), resource_dir.clone());
     app.manage(db_arc.clone());
     app.manage(pty_manager.clone());
-    app.manage(server_manager.clone());
     app.manage(github_client::GitHubClient::new());
 
     println!(
@@ -723,37 +657,16 @@ fn run_electron_sidecar() -> Result<(), Box<dyn std::error::Error>> {
         .enable_all()
         .build()?
         .block_on(async move {
-            tokio::spawn(resume_task_servers(
+            tokio::spawn(resume_task_sessions(
                 app.clone(),
                 http_ready_rx,
                 sidecar_readiness.clone(),
             ));
 
-            let startup_project_id = {
-                let db_lock = db_arc
-                    .lock()
-                    .map_err(|e| std::io::Error::other(format!("database lock error: {e}")))?;
-                resolve_startup_project_id(&db_lock).map_err(std::io::Error::other)?
-            };
-            if let Some(project_id) = startup_project_id {
-                let root_server_app = app.clone();
-                tokio::spawn(async move {
-                    if let Err(error) =
-                        start_project_root_server(&root_server_app, &project_id).await
-                    {
-                        warn!(
-                            "[startup] Failed to start project root server for {}: {}",
-                            project_id, error
-                        );
-                    }
-                });
-            }
-
             http_server::start_http_sidecar_server(
                 app,
                 db_arc,
                 pty_manager,
-                server_manager,
                 whisper_manager,
                 sidecar_readiness,
                 http_ready_tx,
@@ -772,9 +685,8 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::{
-        load_resume_targets, restore_resumed_session_state, resume_task_servers,
-        should_start_project_root_server, sidecar_app_data_dir_from_override,
-        ResumeSessionPersistence, ResumeTarget,
+        load_resume_targets, restore_resumed_session_state, resume_task_sessions,
+        sidecar_app_data_dir_from_override, ResumeSessionPersistence, ResumeTarget,
     };
     use crate::app_events::{AppEventError, AppEventId, EmitReceipt, RustAppEventAdapter};
     use crate::db::test_helpers::make_test_db;
@@ -819,9 +731,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn resume_task_servers_reports_degraded_readiness_when_initial_database_lock_is_poisoned()
-    {
-        let (db, path) = make_test_db("resume_task_servers_poisoned_initial_lock");
+    async fn resume_task_sessions_reports_degraded_readiness_when_initial_database_lock_is_poisoned(
+    ) {
+        let (db, path) = make_test_db("resume_task_sessions_poisoned_initial_lock");
         let db = Arc::new(Mutex::new(db));
         let poison_db = Arc::clone(&db);
         let _ = std::thread::spawn(move || {
@@ -838,7 +750,7 @@ mod tests {
         let (http_ready_tx, http_ready_rx) = tokio::sync::oneshot::channel();
         http_ready_tx.send(()).expect("send http ready signal");
 
-        resume_task_servers(app, http_ready_rx, sidecar_readiness.clone()).await;
+        resume_task_sessions(app, http_ready_rx, sidecar_readiness.clone()).await;
 
         let startup_resume = sidecar_readiness.startup_resume();
         assert_eq!(startup_resume.phase, "degraded");
@@ -855,38 +767,6 @@ mod tests {
             .any(|event| event == "startup-resume-complete"));
 
         let _ = fs::remove_file(path);
-    }
-
-    #[test]
-    fn test_should_not_start_project_root_server_for_opencode_project() {
-        assert!(!should_start_project_root_server(
-            "opencode",
-            Some("/tmp/project"),
-            None
-        ));
-    }
-
-    #[test]
-    fn test_should_not_start_project_root_server_for_claude_project() {
-        assert!(!should_start_project_root_server(
-            "claude-code",
-            Some("/tmp/project"),
-            None
-        ));
-    }
-
-    #[test]
-    fn test_should_not_start_project_root_server_without_project_path() {
-        assert!(!should_start_project_root_server("opencode", None, None));
-    }
-
-    #[test]
-    fn test_should_not_start_project_root_server_when_already_running() {
-        assert!(!should_start_project_root_server(
-            "opencode",
-            Some("/tmp/project"),
-            Some(4100)
-        ));
     }
 
     #[test]

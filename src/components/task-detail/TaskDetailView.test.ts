@@ -665,7 +665,7 @@ describe('TaskDetailView', () => {
 
     taskRuntimeInfo.set(new Map([[
       'T-42',
-      { workspacePath: '/path/to/worktree', opencodePort: null },
+      { workspacePath: '/path/to/worktree' },
     ]]))
 
     await waitFor(() => {

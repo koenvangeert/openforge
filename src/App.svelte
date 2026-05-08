@@ -384,7 +384,6 @@
       const updatedRuntimeInfo = new Map($taskRuntimeInfo)
       updatedRuntimeInfo.set(taskId, {
         workspacePath: result.workspace_path,
-        opencodePort: result.port,
       })
       $taskRuntimeInfo = updatedRuntimeInfo
 

@@ -108,7 +108,7 @@ mod tests {
         let (db, db_path) = super::test_helpers::make_test_db("acquire_db_healthy");
         let mutex = std::sync::Mutex::new(db);
         let guard = super::acquire_db(&mutex);
-        assert!(guard.get_config("opencode_port").is_ok());
+        assert!(guard.get_config("app_mode").is_ok());
         drop(guard);
         drop(mutex);
         let _ = fs::remove_file(&db_path);

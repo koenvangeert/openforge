@@ -34,7 +34,6 @@ async fn accepts_remaining_electron_cutover_ipc_commands() {
             "abort_session",
             json!({ "sessionId": "session-ipc-parity" }),
         ),
-        ("get_session_output", json!({ "taskId": "missing-task" })),
         ("list_opencode_commands", json!({ "projectId": project_id })),
         ("list_opencode_skills", json!({ "projectId": project_id })),
         (
@@ -57,6 +56,18 @@ async fn accepts_remaining_electron_cutover_ipc_commands() {
             "{command} should be routed by app_invoke after Electron cutover"
         );
     }
+
+    let legacy_output_result = invoke(
+        &state,
+        "get_session_output",
+        json!({ "taskId": "missing-task" }),
+    )
+    .await;
+    assert_eq!(
+        legacy_output_result.err().map(|err| err.0),
+        Some(StatusCode::NOT_IMPLEMENTED),
+        "legacy OpenCode REST session output recovery should not be routed after direct TTY migration"
+    );
 
     let _ = std::fs::remove_file(path);
 }
