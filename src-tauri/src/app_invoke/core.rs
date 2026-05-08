@@ -321,7 +321,7 @@ pub(super) async fn handle_app_unmatched_command(
                 )
             })?)?
         }
-        "finalize_claude_session" => {
+        "finalize_agent_session" => {
             let task_id = payload_string(&request.payload, "taskId")?;
             let success = payload_bool(&request.payload, "success")?;
             if let Some(session) = db.get_latest_session_for_ticket(&task_id).map_err(|e| {

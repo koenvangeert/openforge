@@ -10,7 +10,7 @@ import {
   taskSpawned,
   tasks,
 } from './stores'
-import { finalizeClaudeSession, getLatestSession, getTaskDetail } from './ipc'
+import { finalizeAgentSession, getLatestSession, getTaskDetail } from './ipc'
 import { release as releaseTerminal, replayPtyBuffersForActiveTerminals } from './terminalPool'
 import { getOpenCodeSessionUpdate } from './opencodeSessionEvents'
 import { getTaskPromptText } from './taskPrompt'
@@ -294,7 +294,7 @@ export async function registerAppDesktopEventListeners(deps: AppDesktopEventDeps
       const success = event.payload.success
       setTimeout(async () => {
         try {
-          await finalizeClaudeSession(taskId, success)
+          await finalizeAgentSession(taskId, success)
         } catch (e) {
           console.error('[pty-exit] Failed to finalize session for task:', taskId, e)
         }

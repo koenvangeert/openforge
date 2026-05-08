@@ -383,9 +383,10 @@ export async function setWhisperModel(modelSize: WhisperModelSizeId): Promise<vo
   return invoke<void>("set_whisper_model", { modelSize });
 }
 
-export async function finalizeClaudeSession(taskId: string, success: boolean): Promise<void> {
-  return invoke<void>("finalize_claude_session", { taskId, success });
+export async function finalizeAgentSession(taskId: string, success: boolean): Promise<void> {
+  return invoke<void>("finalize_agent_session", { taskId, success });
 }
+
 
 export async function fetchAuthoredPrs(): Promise<AuthoredPullRequest[]> {
   return invoke<AuthoredPullRequest[]>("fetch_authored_prs");

@@ -127,7 +127,7 @@ export const ipcCommandContracts = [
   { functionName: 'downloadWhisperModel', ipcCommand: 'download_whisper_model', payloadKeys: ['modelSize'], targetOwner: 'rust-sidecar', domain: 'whisper-audio' },
   { functionName: 'getAllWhisperModelStatuses', ipcCommand: 'get_all_whisper_model_statuses', payloadKeys: [], targetOwner: 'rust-sidecar', domain: 'whisper-audio' },
   { functionName: 'setWhisperModel', ipcCommand: 'set_whisper_model', payloadKeys: ['modelSize'], targetOwner: 'rust-sidecar', domain: 'whisper-audio' },
-  { functionName: 'finalizeClaudeSession', ipcCommand: 'finalize_claude_session', payloadKeys: ['taskId', 'success'], targetOwner: 'rust-sidecar', domain: 'agent-session-pty' },
+  { functionName: 'finalizeAgentSession', ipcCommand: 'finalize_agent_session', payloadKeys: ['taskId', 'success'], targetOwner: 'rust-sidecar', domain: 'agent-session-pty' },
   { functionName: 'fetchAuthoredPrs', ipcCommand: 'fetch_authored_prs', payloadKeys: [], targetOwner: 'rust-sidecar', domain: 'github-review' },
   { functionName: 'getAuthoredPrs', ipcCommand: 'get_authored_prs', payloadKeys: [], targetOwner: 'rust-sidecar', domain: 'github-review' },
   { functionName: 'fsReadDir', ipcCommand: 'fs_read_dir', payloadKeys: ['projectId', 'dirPath'], targetOwner: 'rust-sidecar', domain: 'files-review' },

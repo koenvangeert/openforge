@@ -198,8 +198,8 @@ vi.mock('./lib/ipc', () => ({
     callOrder.push('getLatestSession')
     return null
   }),
-  finalizeClaudeSession: vi.fn(async () => {
-    callOrder.push('finalizeClaudeSession')
+  finalizeAgentSession: vi.fn(async () => {
+    callOrder.push('finalizeAgentSession')
   }),
   openUrl: vi.fn(),
   abortImplementation: vi.fn(),

@@ -60,7 +60,7 @@ async fn handles_agent_lifecycle_followups() {
     assert_eq!(status["id"], "session-pi");
     invoke_ok(
         &state,
-        "finalize_claude_session",
+        "finalize_agent_session",
         json!({ "taskId": claude_task_id, "success": false }),
     )
     .await;
@@ -109,7 +109,7 @@ async fn start_implementation_reports_missing_task() {
 }
 
 #[tokio::test]
-async fn finalize_claude_session_completes_successful_opencode_pty_run() {
+async fn finalize_agent_session_completes_successful_opencode_pty_run() {
     let (state, path) = test_state("finalize_opencode_success");
     let task_id = {
         let db = crate::db::acquire_db(&state.db);
@@ -130,7 +130,7 @@ async fn finalize_claude_session_completes_successful_opencode_pty_run() {
 
     invoke_ok(
         &state,
-        "finalize_claude_session",
+        "finalize_agent_session",
         json!({ "taskId": task_id, "success": true }),
     )
     .await;

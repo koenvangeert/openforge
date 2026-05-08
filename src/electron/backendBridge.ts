@@ -62,7 +62,7 @@ const SIDECAR_BACKED_COMMANDS = new Set([
   'resume_startup_sessions',
   'start_implementation',
   'abort_implementation',
-  'finalize_claude_session',
+  'finalize_agent_session',
   'pty_spawn_shell',
   'pty_write',
   'pty_resize',
