@@ -1,6 +1,6 @@
 <script lang="ts">
   import { untrack } from 'svelte'
-  import { focusBoardFilters, mergingTaskIds } from '../../lib/stores'
+  import { commandHeld, focusBoardFilters, mergingTaskIds } from '../../lib/stores'
   import { filterTasks, getFilterCounts, DEFAULT_FOCUS_STATES, loadFocusFilterStates } from '../../lib/boardFilters'
   import type { BoardFilter } from '../../lib/boardFilters'
   import { getTaskReasonText } from '../../lib/taskStatePresentation'
@@ -27,9 +27,9 @@
   }
 
   const FILTER_OPTIONS = [
-    { value: 'focus' as BoardFilter, label: 'Focus now' },
-    { value: 'in-progress' as BoardFilter, label: 'In progress' },
-    { value: 'backlog' as BoardFilter, label: 'Backlog' },
+    { value: 'focus' as BoardFilter, label: 'Focus now', shortcut: '⌘1' },
+    { value: 'in-progress' as BoardFilter, label: 'In progress', shortcut: '⌘2' },
+    { value: 'backlog' as BoardFilter, label: 'Backlog', shortcut: '⌘3' },
   ] as const
 
   let { projectId, projectName, tasks, activeSessions, ticketPrs, onOpenTask, onRunAction }: Props = $props()
@@ -187,7 +187,10 @@
               vim.setFocusedIndex(0)
             }}
           >
-            {opt.label} {filterCounts[opt.value]}
+            <span>{opt.label} {filterCounts[opt.value]}</span>
+            {#if $commandHeld}
+              <kbd class="kbd kbd-xs opacity-50 ml-1">{opt.shortcut}</kbd>
+            {/if}
           </button>
         {/each}
       </div>

@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { requireElement } from '../../test-utils/dom'
 import FocusBoard from './FocusBoard.svelte'
 import type { Task, AgentSession, PullRequestInfo, BoardStatus } from '../../lib/types'
-import { focusBoardFilters } from '../../lib/stores'
+import { commandHeld, focusBoardFilters } from '../../lib/stores'
 
 vi.mock('../../lib/ipc', () => ({
   getPrComments: vi.fn().mockResolvedValue([]),
@@ -116,6 +116,7 @@ describe('FocusBoard', () => {
   beforeEach(() => {
     Element.prototype.scrollIntoView = vi.fn()
     vi.clearAllMocks()
+    commandHeld.set(false)
     focusBoardFilters.set(new Map())
   })
 
@@ -349,6 +350,20 @@ describe('FocusBoard', () => {
     await fireEvent.keyDown(window, { key: '3', metaKey: true })
     const chip = screen.getByRole('button', { name: /Backlog 1/i })
     expect(chip.getAttribute('aria-pressed')).toBe('true')
+  })
+
+  it('shows filter shortcut hints when Command is held', async () => {
+    renderBoard()
+
+    expect(screen.queryByText('⌘1')).toBeNull()
+    expect(screen.queryByText('⌘2')).toBeNull()
+    expect(screen.queryByText('⌘3')).toBeNull()
+
+    commandHeld.set(true)
+
+    expect(await screen.findByText('⌘1')).toBeTruthy()
+    expect(screen.getByText('⌘2')).toBeTruthy()
+    expect(screen.getByText('⌘3')).toBeTruthy()
   })
 
   it('restores the previously selected filter when remounted for the same project', async () => {
