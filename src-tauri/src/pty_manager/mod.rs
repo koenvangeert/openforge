@@ -757,6 +757,202 @@ mod tests {
         drop(output_tx);
     }
 
+    async fn collect_bus_events_until_quiet(
+        events: &mut crate::app_events::AppEventSubscription,
+    ) -> Vec<crate::app_events::AppEventEnvelope> {
+        let mut received = Vec::new();
+
+        loop {
+            let timeout = if received.is_empty() {
+                tokio::time::Duration::from_secs(1)
+            } else {
+                tokio::time::Duration::from_millis(50)
+            };
+
+            match tokio::time::timeout(timeout, events.recv()).await {
+                Ok(Some(crate::app_events::AppEventFrame::Event(event))) => received.push(event),
+                Ok(Some(crate::app_events::AppEventFrame::Gap(_))) => continue,
+                Ok(None) | Err(_) => break,
+            }
+        }
+
+        received
+    }
+
+    async fn collect_sender_events_until_quiet(
+        events: &mut tokio::sync::broadcast::Receiver<crate::app_events::AppEventEnvelope>,
+    ) -> Vec<crate::app_events::AppEventEnvelope> {
+        let mut received = Vec::new();
+
+        loop {
+            let timeout = if received.is_empty() {
+                tokio::time::Duration::from_secs(1)
+            } else {
+                tokio::time::Duration::from_millis(50)
+            };
+
+            match tokio::time::timeout(timeout, events.recv()).await {
+                Ok(Ok(event)) => received.push(event),
+                Ok(Err(tokio::sync::broadcast::error::RecvError::Lagged(_))) => continue,
+                Ok(Err(tokio::sync::broadcast::error::RecvError::Closed)) | Err(_) => break,
+            }
+        }
+
+        received
+    }
+
+    fn count_events(events: &[crate::app_events::AppEventEnvelope], event_name: &str) -> usize {
+        events
+            .iter()
+            .filter(|event| event.event_name == event_name)
+            .count()
+    }
+
+    #[tokio::test]
+    async fn test_runtime_adapter_dedupes_pty_exit_when_sender_shares_bus() {
+        let manager = PtyManager::new();
+        let bus = crate::app_events::AppEventBus::new(16, 16);
+        let app = crate::backend_runtime::AppHandle::new();
+        app.set_app_event_adapter(Arc::new(crate::app_events::InMemoryAppEventAdapter::new(
+            bus.clone(),
+        )));
+        let mut events = bus.subscribe(None).expect("subscribe should work");
+        let (output_tx, output_rx) = tokio::sync::mpsc::unbounded_channel();
+        let ring = Arc::new(std::sync::Mutex::new(RingBuffer::new(128)));
+        let tmp_dir = tempfile::tempdir().expect("tempdir should succeed");
+
+        spawn_batched_pty_event_emitter(
+            output_rx,
+            PtyEventEmitterConfig {
+                session_key: "task-dedupe-exit-shell-0".to_string(),
+                instance_id: 8,
+                app_handle: Some(app),
+                app_event_tx: Some(bus.sender()),
+                ring_buffer: ring,
+                exit_action: PtyExitAction::Cleanup {
+                    sessions: Arc::clone(&manager.sessions),
+                    last_output: Arc::clone(&manager.last_output),
+                    output_buffers: Arc::clone(&manager.output_buffers),
+                    pid_file: tmp_dir.path().join("task-dedupe-exit-shell-0.pid"),
+                    emit_agent_exit: false,
+                },
+            },
+        );
+
+        output_tx.send(None).expect("exit signal should send");
+        let received = collect_bus_events_until_quiet(&mut events).await;
+
+        assert_eq!(
+            count_events(&received, "pty-exit-task-dedupe-exit-shell-0"),
+            1,
+            "PTY exit must not be published twice when the app handle is backed by the same app event bus as app_event_tx"
+        );
+        assert_eq!(
+            count_events(&received, "agent-pty-exited"),
+            0,
+            "cleanup-only PTYs must not emit agent-pty-exited"
+        );
+        let exit_event = received
+            .iter()
+            .find(|event| event.event_name == "pty-exit-task-dedupe-exit-shell-0")
+            .expect("pty-exit event should be received");
+        assert_eq!(exit_event.payload["instance_id"], 8);
+    }
+
+    #[tokio::test]
+    async fn test_runtime_adapter_dedupes_agent_pty_exited_when_sender_shares_bus() {
+        let manager = PtyManager::new();
+        let bus = crate::app_events::AppEventBus::new(16, 16);
+        let app = crate::backend_runtime::AppHandle::new();
+        app.set_app_event_adapter(Arc::new(crate::app_events::InMemoryAppEventAdapter::new(
+            bus.clone(),
+        )));
+        let mut events = bus.subscribe(None).expect("subscribe should work");
+        let (output_tx, output_rx) = tokio::sync::mpsc::unbounded_channel();
+        let ring = Arc::new(std::sync::Mutex::new(RingBuffer::new(128)));
+        let tmp_dir = tempfile::tempdir().expect("tempdir should succeed");
+
+        spawn_batched_pty_event_emitter(
+            output_rx,
+            PtyEventEmitterConfig {
+                session_key: "agent-dedupe-exit".to_string(),
+                instance_id: 9,
+                app_handle: Some(app),
+                app_event_tx: Some(bus.sender()),
+                ring_buffer: ring,
+                exit_action: PtyExitAction::Cleanup {
+                    sessions: Arc::clone(&manager.sessions),
+                    last_output: Arc::clone(&manager.last_output),
+                    output_buffers: Arc::clone(&manager.output_buffers),
+                    pid_file: tmp_dir.path().join("agent-dedupe-exit.pid"),
+                    emit_agent_exit: true,
+                },
+            },
+        );
+
+        output_tx.send(None).expect("exit signal should send");
+        let received = collect_bus_events_until_quiet(&mut events).await;
+
+        assert_eq!(
+            count_events(&received, "pty-exit-agent-dedupe-exit"),
+            1,
+            "PTY exit must not be published twice when the app handle is backed by the same app event bus as app_event_tx"
+        );
+        assert_eq!(
+            count_events(&received, "agent-pty-exited"),
+            1,
+            "agent PTY exit must not be published twice when the app handle is backed by the same app event bus as app_event_tx"
+        );
+        let agent_event = received
+            .iter()
+            .find(|event| event.event_name == "agent-pty-exited")
+            .expect("agent-pty-exited event should be received");
+        assert_eq!(agent_event.payload["task_id"], "agent-dedupe-exit");
+        assert_eq!(agent_event.payload["success"], false);
+    }
+
+    #[tokio::test]
+    async fn test_exit_events_fallback_to_sender_without_runtime_adapter() {
+        let manager = PtyManager::new();
+        let app = crate::backend_runtime::AppHandle::new();
+        let (app_event_tx, mut app_event_rx) = tokio::sync::broadcast::channel(8);
+        let (output_tx, output_rx) = tokio::sync::mpsc::unbounded_channel();
+        let ring = Arc::new(std::sync::Mutex::new(RingBuffer::new(128)));
+        let tmp_dir = tempfile::tempdir().expect("tempdir should succeed");
+
+        spawn_batched_pty_event_emitter(
+            output_rx,
+            PtyEventEmitterConfig {
+                session_key: "agent-fallback-exit".to_string(),
+                instance_id: 10,
+                app_handle: Some(app),
+                app_event_tx: Some(app_event_tx),
+                ring_buffer: ring,
+                exit_action: PtyExitAction::Cleanup {
+                    sessions: Arc::clone(&manager.sessions),
+                    last_output: Arc::clone(&manager.last_output),
+                    output_buffers: Arc::clone(&manager.output_buffers),
+                    pid_file: tmp_dir.path().join("agent-fallback-exit.pid"),
+                    emit_agent_exit: true,
+                },
+            },
+        );
+
+        output_tx.send(None).expect("exit signal should send");
+        let received = collect_sender_events_until_quiet(&mut app_event_rx).await;
+
+        assert_eq!(
+            count_events(&received, "pty-exit-agent-fallback-exit"),
+            1,
+            "PTY exit should be published exactly once through the fallback sender"
+        );
+        assert_eq!(
+            count_events(&received, "agent-pty-exited"),
+            1,
+            "agent PTY exit should be published exactly once through the fallback sender"
+        );
+    }
+
     #[tokio::test]
     async fn test_cleanup_exit_action_cleans_shell_state_without_agent_event() {
         let manager = PtyManager::new();
