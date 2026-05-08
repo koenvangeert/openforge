@@ -1,5 +1,5 @@
 Electron desktop app: Svelte 5 + TypeScript renderer (`src/`), Electron main/preload shell (`src/electron/`), Rust sidecar backend currently in `src-tauri/`, SQLite.
-Commands: `pnpm dev` (Vite-only renderer), `pnpm electron:dev` (full Electron app with Rust sidecar), `pnpm electron:build`, `pnpm electron:package`, `pnpm electron:install`, `pnpm test` (vitest), `pnpm exec tsc --noEmit`, `cargo test` (from `src-tauri/`).
+Commands: `pnpm dev` (Vite-only renderer), `pnpm electron:dev` (full Electron app with Rust sidecar), `pnpm electron:build`, `pnpm electron:package`, `pnpm electron:install`, `pnpm test` (vitest), `pnpm exec tsc --noEmit`, `cargo test` (from `src-tauri/`). For focused Vitest runs, use `pnpm test <path-or-pattern>` or `pnpm exec vitest run <path-or-pattern>`; do not use `pnpm test -- <path>` or `pnpm exec vitest run -- -- <path>` because those separator forms can run the broader suite.
 All frontend backend calls go through typed wrappers in `src/lib/ipc.ts`; Svelte code must not call raw Electron, preload, HTTP sidecar endpoints, or other command/sidecar transport APIs directly.
 Electron main owns shell-level IPC, windowing, external URL opening, renderer security, and Rust sidecar supervision. External links must use the `openUrl()` IPC wrapper so Electron main handles `open_url` consistently.
 Svelte 5 runes only: `$state`, `$derived`, `$effect`, `$props()` with a local `Props` interface. Use `on`-prefixed callback props, never the legacy event dispatcher.
@@ -37,7 +37,7 @@ Recommended local Babysitter usage:
 
 Recommended verification gates:
 - Frontend/type changes: `pnpm exec tsc --noEmit` and `pnpm test`.
-- Electron shell changes: targeted `pnpm test -- src/electron` or relevant `scripts/electron-*.test.mjs` tests.
+- Electron shell changes: targeted `pnpm test src/electron` or relevant `scripts/electron-*.test.mjs` tests.
 - Rust sidecar/backend changes: `cargo test` from `src-tauri/`.
 - Plugin platform changes: include built-in plugin build/runtime verification where relevant (`pnpm build:plugins` plus targeted tests).
 

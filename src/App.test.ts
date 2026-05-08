@@ -383,9 +383,8 @@ describe('App onMount initialization order', () => {
 
     await vi.waitFor(() => {
       expect(getProjects).toHaveBeenCalled()
+      expect(get(stores.projects)).toEqual([{ id: 'proj-1', name: 'Test Project', path: '/test' }])
     })
-
-    expect(get(stores.projects)).toEqual([{ id: 'proj-1', name: 'Test Project', path: '/test' }])
   })
 
   it('initializes reviewRequestCount from DB on startup', async () => {
