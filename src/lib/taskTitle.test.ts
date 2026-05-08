@@ -9,6 +9,7 @@ describe('getTaskTitle', () => {
     agent: null,
     summary: null,
     permission_mode: null,
+    depends_on: [],
     project_id: null,
     created_at: 0,
     updated_at: 0

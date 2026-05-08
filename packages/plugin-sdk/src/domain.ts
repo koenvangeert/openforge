@@ -11,6 +11,7 @@ export interface Task {
   summary: string | null;
   agent: string | null;
   permission_mode: string | null;
+  depends_on: string[];
   project_id: string | null;
   created_at: number;
   updated_at: number;

@@ -1,4 +1,4 @@
-use rusqlite::Result;
+use rusqlite::{OptionalExtension, Result};
 use serde::Serialize;
 
 /// Task row from database
@@ -14,6 +14,95 @@ pub struct TaskRow {
     pub summary: Option<String>,
     pub agent: Option<String>,
     pub permission_mode: Option<String>,
+    pub depends_on: Vec<String>,
+}
+
+fn load_task_dependency_ids(conn: &rusqlite::Connection, task_id: &str) -> Result<Vec<String>> {
+    let mut stmt = conn.prepare(
+        "SELECT depends_on_task_id FROM task_dependencies WHERE task_id = ?1 ORDER BY created_at ASC, depends_on_task_id ASC",
+    )?;
+    let rows = stmt.query_map([task_id], |row| row.get(0))?;
+    let mut result = Vec::new();
+    for row in rows {
+        result.push(row?);
+    }
+    Ok(result)
+}
+
+fn task_project_id(conn: &rusqlite::Connection, task_id: &str) -> Result<Option<Option<String>>> {
+    conn.query_row(
+        "SELECT project_id FROM tasks WHERE id = ?1",
+        [task_id],
+        |row| row.get(0),
+    )
+    .optional()
+}
+
+fn dependency_path_exists(
+    conn: &rusqlite::Connection,
+    start_task_id: &str,
+    target_task_id: &str,
+) -> Result<bool> {
+    conn.query_row(
+        r#"
+WITH RECURSIVE dependency_chain(id) AS (
+    SELECT depends_on_task_id FROM task_dependencies WHERE task_id = ?1
+    UNION
+    SELECT task_dependencies.depends_on_task_id
+    FROM task_dependencies
+    INNER JOIN dependency_chain ON task_dependencies.task_id = dependency_chain.id
+)
+SELECT EXISTS(SELECT 1 FROM dependency_chain WHERE id = ?2)
+        "#,
+        rusqlite::params![start_task_id, target_task_id],
+        |row| row.get(0),
+    )
+}
+
+fn validate_dependency(
+    conn: &rusqlite::Connection,
+    task_id: &str,
+    depends_on_task_id: &str,
+) -> Result<()> {
+    if task_id == depends_on_task_id {
+        return Err(rusqlite::Error::InvalidParameterName(
+            "task cannot depend on itself".to_string(),
+        ));
+    }
+
+    let task_project = task_project_id(conn, task_id)?.ok_or_else(|| {
+        rusqlite::Error::InvalidParameterName(format!("task {task_id} does not exist"))
+    })?;
+    let dependency_project = task_project_id(conn, depends_on_task_id)?.ok_or_else(|| {
+        rusqlite::Error::InvalidParameterName(format!(
+            "dependency task {depends_on_task_id} does not exist"
+        ))
+    })?;
+
+    if task_project != dependency_project {
+        return Err(rusqlite::Error::InvalidParameterName(format!(
+            "dependency task {depends_on_task_id} must belong to the same project as {task_id}"
+        )));
+    }
+
+    if dependency_path_exists(conn, depends_on_task_id, task_id)? {
+        return Err(rusqlite::Error::InvalidParameterName(format!(
+            "dependency task {depends_on_task_id} would create a cycle with {task_id}"
+        )));
+    }
+
+    Ok(())
+}
+
+fn dedupe_dependency_ids(dependency_ids: &[String]) -> Vec<String> {
+    let mut result = Vec::new();
+    for dependency_id in dependency_ids {
+        let trimmed = dependency_id.trim();
+        if !trimmed.is_empty() && !result.iter().any(|id| id == trimmed) {
+            result.push(trimmed.to_string());
+        }
+    }
+    result
 }
 
 impl super::Database {
@@ -37,12 +126,15 @@ impl super::Database {
                 summary: row.get(7)?,
                 agent: row.get(8)?,
                 permission_mode: row.get(9)?,
+                depends_on: Vec::new(),
             })
         })?;
 
         let mut result = Vec::new();
         for task in tasks {
-            result.push(task?);
+            let mut task = task?;
+            task.depends_on = load_task_dependency_ids(&conn, &task.id)?;
+            result.push(task);
         }
         Ok(result)
     }
@@ -69,12 +161,15 @@ impl super::Database {
                 summary: row.get(7)?,
                 agent: row.get(8)?,
                 permission_mode: row.get(9)?,
+                depends_on: Vec::new(),
             })
         })?;
 
         let mut result = Vec::new();
         for task in tasks {
-            result.push(task?);
+            let mut task = task?;
+            task.depends_on = load_task_dependency_ids(&conn, &task.id)?;
+            result.push(task);
         }
         Ok(result)
     }
@@ -153,6 +248,7 @@ impl super::Database {
             summary: None,
             agent: None,
             permission_mode: permission_mode.map(|s| s.to_string()),
+            depends_on: Vec::new(),
         })
     }
 
@@ -175,12 +271,15 @@ impl super::Database {
                 summary: row.get(7)?,
                 agent: row.get(8)?,
                 permission_mode: row.get(9)?,
+                depends_on: Vec::new(),
             })
         })?;
 
         let mut result = Vec::new();
         for task in tasks {
-            result.push(task?);
+            let mut task = task?;
+            task.depends_on = load_task_dependency_ids(&conn, &task.id)?;
+            result.push(task);
         }
         Ok(result)
     }
@@ -204,6 +303,7 @@ impl super::Database {
                 summary: row.get(7)?,
                 agent: row.get(8)?,
                 permission_mode: row.get(9)?,
+                depends_on: load_task_dependency_ids(&conn, id)?,
             }))
         } else {
             Ok(None)
@@ -249,6 +349,88 @@ impl super::Database {
         Ok(())
     }
 
+    pub fn add_task_dependency(&self, task_id: &str, depends_on_task_id: &str) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        validate_dependency(&conn, task_id, depends_on_task_id)?;
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("time went backwards")
+            .as_secs() as i64;
+        conn.execute(
+            "INSERT OR IGNORE INTO task_dependencies (task_id, depends_on_task_id, created_at) VALUES (?1, ?2, ?3)",
+            rusqlite::params![task_id, depends_on_task_id, now],
+        )?;
+        conn.execute(
+            "UPDATE tasks SET updated_at = ?1 WHERE id = ?2",
+            rusqlite::params![now, task_id],
+        )?;
+        Ok(())
+    }
+
+    pub fn set_task_dependencies(&self, task_id: &str, dependency_ids: &[String]) -> Result<()> {
+        let mut conn = self.conn.lock().unwrap();
+        task_project_id(&conn, task_id)?.ok_or_else(|| {
+            rusqlite::Error::InvalidParameterName(format!("task {task_id} does not exist"))
+        })?;
+        let dependency_ids = dedupe_dependency_ids(dependency_ids);
+        for dependency_id in &dependency_ids {
+            validate_dependency(&conn, task_id, dependency_id)?;
+        }
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("time went backwards")
+            .as_secs() as i64;
+        let tx = conn.transaction()?;
+        tx.execute(
+            "DELETE FROM task_dependencies WHERE task_id = ?1",
+            rusqlite::params![task_id],
+        )?;
+        for dependency_id in dependency_ids {
+            tx.execute(
+                "INSERT INTO task_dependencies (task_id, depends_on_task_id, created_at) VALUES (?1, ?2, ?3)",
+                rusqlite::params![task_id, dependency_id, now],
+            )?;
+        }
+        tx.execute(
+            "UPDATE tasks SET updated_at = ?1 WHERE id = ?2",
+            rusqlite::params![now, task_id],
+        )?;
+        tx.commit()?;
+        Ok(())
+    }
+
+    pub fn link_task_chain(&self, task_ids: &[String]) -> Result<Vec<(String, String)>> {
+        if task_ids.len() < 2 {
+            return Err(rusqlite::Error::InvalidParameterName(
+                "task chain must contain at least two task ids".to_string(),
+            ));
+        }
+
+        let mut conn = self.conn.lock().unwrap();
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("time went backwards")
+            .as_secs() as i64;
+        let tx = conn.transaction()?;
+        let mut links = Vec::new();
+        for pair in task_ids.windows(2) {
+            let depends_on_task_id = pair[0].trim();
+            let task_id = pair[1].trim();
+            validate_dependency(&tx, task_id, depends_on_task_id)?;
+            tx.execute(
+                "INSERT OR IGNORE INTO task_dependencies (task_id, depends_on_task_id, created_at) VALUES (?1, ?2, ?3)",
+                rusqlite::params![task_id, depends_on_task_id, now],
+            )?;
+            tx.execute(
+                "UPDATE tasks SET updated_at = ?1 WHERE id = ?2",
+                rusqlite::params![now, task_id],
+            )?;
+            links.push((task_id.to_string(), depends_on_task_id.to_string()));
+        }
+        tx.commit()?;
+        Ok(links)
+    }
+
     /// Delete a task and all associated data (sessions, PRs, comments, worktrees, reviews).
     ///
     /// Wrapped in a transaction so all-or-nothing: if any step fails the DB stays consistent.
@@ -274,6 +456,10 @@ impl super::Database {
             )?;
             conn.execute(
                 "DELETE FROM worktrees WHERE task_id = ?1",
+                rusqlite::params![id],
+            )?;
+            conn.execute(
+                "DELETE FROM task_dependencies WHERE task_id = ?1 OR depends_on_task_id = ?1",
                 rusqlite::params![id],
             )?;
             conn.execute("DELETE FROM tasks WHERE id = ?1", rusqlite::params![id])?;
@@ -502,6 +688,144 @@ mod tests {
 
         let updated = db.get_task(&task.id).expect("get failed").unwrap();
         assert_eq!(updated.status, "doing");
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_task_dependencies_round_trip_and_deduplicate() {
+        let (db, path) = make_test_db("task_dependencies_round_trip");
+        db.set_config("task_id_prefix", "T").unwrap();
+        let prerequisite = db
+            .create_task("Prerequisite", "done", None, None, None)
+            .expect("create prerequisite");
+        let dependent = db
+            .create_task("Dependent", "backlog", None, None, None)
+            .expect("create dependent");
+
+        db.set_task_dependencies(
+            &dependent.id,
+            &[prerequisite.id.clone(), prerequisite.id.clone()],
+        )
+        .expect("set dependencies");
+
+        let retrieved = db.get_task(&dependent.id).expect("get failed").unwrap();
+        assert_eq!(retrieved.depends_on, vec![prerequisite.id]);
+
+        let tasks = db.get_all_tasks().expect("get all");
+        let listed = tasks
+            .iter()
+            .find(|task| task.id == dependent.id)
+            .expect("dependent listed");
+        assert_eq!(listed.depends_on, vec!["T-1".to_string()]);
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_task_dependency_validation_rejects_self_unknown_and_cross_project() {
+        let (db, path) = make_test_db("task_dependency_validation");
+        db.set_config("task_id_prefix", "T").unwrap();
+        let project_a = db.create_project("A", "/tmp/a").expect("create project a");
+        let project_b = db.create_project("B", "/tmp/b").expect("create project b");
+        let first = db
+            .create_task("First", "backlog", Some(&project_a.id), None, None)
+            .expect("create first");
+        let second = db
+            .create_task("Second", "backlog", Some(&project_b.id), None, None)
+            .expect("create second");
+
+        assert!(db.add_task_dependency(&first.id, &first.id).is_err());
+        assert!(db.add_task_dependency(&first.id, "T-999").is_err());
+        assert!(db.add_task_dependency(&first.id, &second.id).is_err());
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_set_task_dependencies_rejects_unknown_task_even_when_empty() {
+        let (db, path) = make_test_db("task_dependency_unknown_empty");
+
+        assert!(db.set_task_dependencies("T-404", &[]).is_err());
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_task_dependency_validation_rejects_cycles() {
+        let (db, path) = make_test_db("task_dependency_cycles");
+        db.set_config("task_id_prefix", "T").unwrap();
+        let first = db
+            .create_task("First", "backlog", None, None, None)
+            .expect("create first");
+        let second = db
+            .create_task("Second", "backlog", None, None, None)
+            .expect("create second");
+        let third = db
+            .create_task("Third", "backlog", None, None, None)
+            .expect("create third");
+
+        db.add_task_dependency(&second.id, &first.id)
+            .expect("second depends on first");
+        db.add_task_dependency(&third.id, &second.id)
+            .expect("third depends on second");
+
+        assert!(db.add_task_dependency(&first.id, &third.id).is_err());
+        assert!(db
+            .set_task_dependencies(&first.id, std::slice::from_ref(&third.id))
+            .is_err());
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_link_task_chain_rolls_back_on_invalid_edge() {
+        let (db, path) = make_test_db("task_dependency_chain_rollback");
+        db.set_config("task_id_prefix", "T").unwrap();
+        let project_a = db.create_project("A", "/tmp/a").expect("create project a");
+        let project_b = db.create_project("B", "/tmp/b").expect("create project b");
+        db.create_task("First", "backlog", Some(&project_a.id), None, None)
+            .expect("create first");
+        let second = db
+            .create_task("Second", "backlog", Some(&project_a.id), None, None)
+            .expect("create second");
+        db.create_task("Third", "backlog", Some(&project_b.id), None, None)
+            .expect("create third");
+
+        assert!(db
+            .link_task_chain(&["T-1".to_string(), "T-2".to_string(), "T-3".to_string()])
+            .is_err());
+
+        let second = db.get_task(&second.id).expect("get second").unwrap();
+        assert!(second.depends_on.is_empty());
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_delete_task_removes_dependency_edges() {
+        let (db, path) = make_test_db("delete_task_dependency_edges");
+        db.set_config("task_id_prefix", "T").unwrap();
+        let prerequisite = db
+            .create_task("Prerequisite", "done", None, None, None)
+            .expect("create prerequisite");
+        let dependent = db
+            .create_task("Dependent", "backlog", None, None, None)
+            .expect("create dependent");
+        db.add_task_dependency(&dependent.id, &prerequisite.id)
+            .expect("add dependency");
+
+        db.delete_task(&prerequisite.id)
+            .expect("delete prerequisite");
+
+        let dependent = db.get_task(&dependent.id).expect("get dependent").unwrap();
+        assert!(dependent.depends_on.is_empty());
 
         drop(db);
         let _ = fs::remove_file(&path);

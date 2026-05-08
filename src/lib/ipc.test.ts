@@ -100,6 +100,7 @@ describe("ipc spawnShellPty", () => {
 				summary: null,
 				agent: null,
 				permission_mode: null,
+				depends_on: [],
 				project_id: null,
 				created_at: 1000,
 				updated_at: 1000,
@@ -121,6 +122,7 @@ describe("ipc spawnShellPty", () => {
 				summary: null,
 				agent: null,
 				permission_mode: null,
+				depends_on: [],
 				project_id: null,
 				created_at: 1000,
 				updated_at: 1000,
@@ -139,6 +141,7 @@ describe("ipc spawnShellPty", () => {
 			summary: null,
 			agent: null,
 			permission_mode: null,
+			depends_on: [],
 			project_id: null,
 			created_at: 1000,
 			updated_at: 1000,
@@ -152,6 +155,7 @@ describe("ipc spawnShellPty", () => {
 			status: "doing",
 			projectId: null,
 			permissionMode: null,
+			dependsOn: [],
 		});
 	});
 

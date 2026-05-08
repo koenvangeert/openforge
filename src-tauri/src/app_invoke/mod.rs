@@ -55,6 +55,13 @@ fn payload_string_vec(payload: &serde_json::Value, key: &str) -> AppResult<Vec<S
     payload::string_vec(payload, key).map_err(Into::into)
 }
 
+fn payload_optional_string_vec(
+    payload: &serde_json::Value,
+    key: &str,
+) -> AppResult<Option<Vec<String>>> {
+    payload::optional_string_vec(payload, key).map_err(Into::into)
+}
+
 fn payload_optional_i32(payload: &serde_json::Value, key: &str) -> AppResult<Option<i32>> {
     payload::optional_i32(payload, key).map_err(Into::into)
 }

@@ -72,6 +72,16 @@ pub(crate) fn i64(payload: &serde_json::Value, key: &str) -> Result<i64, AppInvo
         .ok_or_else(|| AppInvokeError::bad_request(format!("payload.{key} must be an integer")))
 }
 
+pub(crate) fn optional_string_vec(
+    payload: &serde_json::Value,
+    key: &str,
+) -> Result<Option<Vec<String>>, AppInvokeError> {
+    match payload.get(key) {
+        None | Some(serde_json::Value::Null) => Ok(None),
+        Some(_) => string_vec(payload, key).map(Some),
+    }
+}
+
 pub(crate) fn string_vec(
     payload: &serde_json::Value,
     key: &str,

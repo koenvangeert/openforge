@@ -88,6 +88,7 @@ const baseTask: Task = {
 	summary: null,
 	agent: null,
 	permission_mode: null,
+	depends_on: [],
 	created_at: Date.now(),
 	updated_at: Date.now(),
 };

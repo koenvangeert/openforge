@@ -99,6 +99,135 @@ describe('OpenForge CLI', () => {
     }
   });
 
+  it('creates tasks with dependency IDs from repeated and comma-separated depends-on flags', async () => {
+    let seenBody = null;
+    const server = createServer((req, res) => {
+      if (req.url !== '/create_task' || req.method !== 'POST') {
+        res.writeHead(404, { 'content-type': 'text/plain' });
+        res.end('not found');
+        return;
+      }
+
+      let body = '';
+      req.on('data', (chunk) => {
+        body += chunk;
+      });
+      req.on('end', () => {
+        seenBody = JSON.parse(body);
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ task_id: 'T-2', project_id: 'P-1', status: 'created' }));
+      });
+    });
+    const port = await listen(server);
+
+    try {
+      const { stdout } = await runCli([
+        'create-task',
+        '--initial-prompt',
+        'Dependent task',
+        '--project-id',
+        'P-1',
+        '--depends-on',
+        'T-1,T-0',
+        '--depends-on',
+        'T-1',
+      ], { OPENFORGE_HTTP_PORT: String(port) });
+
+      expect(JSON.parse(stdout)).toEqual({ task_id: 'T-2', project_id: 'P-1', status: 'created' });
+      expect(seenBody).toEqual({
+        initial_prompt: 'Dependent task',
+        project_id: 'P-1',
+        depends_on: ['T-1', 'T-0'],
+      });
+    } finally {
+      await close(server);
+    }
+  });
+
+  it('sets dependencies for an existing task', async () => {
+    let seenBody = null;
+    const server = createServer((req, res) => {
+      if (req.url !== '/set_task_dependencies' || req.method !== 'POST') {
+        res.writeHead(404, { 'content-type': 'text/plain' });
+        res.end('not found');
+        return;
+      }
+
+      let body = '';
+      req.on('data', (chunk) => {
+        body += chunk;
+      });
+      req.on('end', () => {
+        seenBody = JSON.parse(body);
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ task_id: 'T-2', status: 'updated' }));
+      });
+    });
+    const port = await listen(server);
+
+    try {
+      const { stdout } = await runCli([
+        'set-task-dependencies',
+        '--task-id',
+        'T-2',
+        '--depends-on',
+        'T-1,T-0',
+      ], { OPENFORGE_HTTP_PORT: String(port) });
+
+      expect(JSON.parse(stdout)).toEqual({ task_id: 'T-2', status: 'updated' });
+      expect(seenBody).toEqual({ task_id: 'T-2', depends_on: ['T-1', 'T-0'] });
+    } finally {
+      await close(server);
+    }
+  });
+
+  it('links task chains through one atomic bridge request', async () => {
+    let seenBody = null;
+    const server = createServer((req, res) => {
+      if (req.url !== '/link_task_chain' || req.method !== 'POST') {
+        res.writeHead(404, { 'content-type': 'text/plain' });
+        res.end('not found');
+        return;
+      }
+
+      let body = '';
+      req.on('data', (chunk) => {
+        body += chunk;
+      });
+      req.on('end', () => {
+        seenBody = JSON.parse(body);
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({
+          status: 'updated',
+          links: [
+            { task_id: 'KVG-1133', depends_on: 'KVG-1129' },
+            { task_id: 'KVG-1131', depends_on: 'KVG-1133' },
+          ],
+        }));
+      });
+    });
+    const port = await listen(server);
+
+    try {
+      const { stdout } = await runCli([
+        'link-tasks',
+        '--chain',
+        'KVG-1129 -> KVG-1133 -> KVG-1131',
+      ], { OPENFORGE_HTTP_PORT: String(port) });
+
+      expect(JSON.parse(stdout)).toEqual({
+        status: 'updated',
+        links: [
+          { task_id: 'KVG-1133', depends_on: 'KVG-1129' },
+          { task_id: 'KVG-1131', depends_on: 'KVG-1133' },
+        ],
+      });
+      expect(seenBody).toEqual({ chain: ['KVG-1129', 'KVG-1133', 'KVG-1131'] });
+    } finally {
+      await close(server);
+    }
+  });
+
   it('updates task summaries without sending initial_prompt', async () => {
     let seenBody = null;
     const server = createServer((req, res) => {
