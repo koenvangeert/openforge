@@ -273,7 +273,6 @@ async fn resume_task_sessions(
                                 latest_session.as_ref(),
                                 &target,
                                 provider_name,
-                                result.port,
                                 result.pty_instance_id,
                             );
                         }
@@ -398,7 +397,6 @@ pub(crate) fn restore_resumed_session_state(
     latest_session: Option<&db::AgentSessionRow>,
     target: &ResumeTarget,
     provider_name: &str,
-    port: u16,
     pty_instance_id: Option<u64>,
 ) {
     if let Err(e) = db.upsert_task_workspace_record(
@@ -409,26 +407,12 @@ pub(crate) fn restore_resumed_session_state(
         &target.kind,
         target.branch_name.as_deref(),
         provider_name,
-        if matches!(provider_name, "claude-code" | "opencode") {
-            None
-        } else {
-            Some(port as i64)
-        },
         "active",
     ) {
         warn!(
             "[startup] Failed to update task workspace for {}: {}",
             target.task_id, e
         );
-    }
-
-    if !matches!(provider_name, "claude-code" | "opencode") && target.kind == "git_worktree" {
-        if let Err(e) = db.update_worktree_server(&target.task_id, port as i64, 0) {
-            warn!(
-                "[startup] Failed to update worktree server for {}: {}",
-                target.task_id, e
-            );
-        }
     }
 
     if let Some(session) = latest_session {
@@ -548,35 +532,6 @@ fn migrate_github_token_to_secure_store(database: &db::Database) {
 
 fn run_database_startup_maintenance(database: &db::Database) {
     migrate_github_token_to_secure_store(database);
-
-    match database.clear_stale_worktree_servers() {
-        Ok(count) if count > 0 => {
-            info!(
-                "[startup] Cleared stale server info from {} worktree(s)",
-                count
-            );
-        }
-        Ok(_) => {}
-        Err(e) => {
-            warn!("[startup] Failed to clear stale worktree servers: {}", e);
-        }
-    }
-
-    match database.clear_stale_task_workspace_ports() {
-        Ok(count) if count > 0 => {
-            info!(
-                "[startup] Cleared stale server info from {} task workspace(s)",
-                count
-            );
-        }
-        Ok(_) => {}
-        Err(e) => {
-            warn!(
-                "[startup] Failed to clear stale task workspace ports: {}",
-                e
-            );
-        }
-    }
 }
 
 fn sidecar_app_data_dir() -> Result<PathBuf, String> {
@@ -815,7 +770,7 @@ mod tests {
             branch_name: Some("t-100".to_string()),
         };
 
-        restore_resumed_session_state(&db, Some(&session), &target, "opencode", 4312, None);
+        restore_resumed_session_state(&db, Some(&session), &target, "opencode", None);
 
         let restored = db
             .get_latest_session_for_ticket(&task.id)
@@ -825,18 +780,16 @@ mod tests {
         assert_eq!(restored.stage, "implement");
         assert_eq!(restored.error_message, None);
 
-        let worktree = db
+        let _worktree = db
             .get_worktree_for_task(&task.id)
             .expect("get worktree failed")
             .expect("missing worktree");
-        assert_eq!(worktree.opencode_port, None);
 
         let workspace = db
             .get_task_workspace_for_task(&task.id)
             .expect("get task workspace failed")
             .expect("missing task workspace");
         assert_eq!(workspace.workspace_path, "/tmp/test-repo/.worktrees/T-100");
-        assert_eq!(workspace.opencode_port, None);
         assert_eq!(workspace.kind, "git_worktree");
 
         drop(db);
@@ -894,7 +847,7 @@ mod tests {
             branch_name: Some("t-201".to_string()),
         };
 
-        restore_resumed_session_state(&db, Some(&session), &target, "opencode", 0, Some(42));
+        restore_resumed_session_state(&db, Some(&session), &target, "opencode", Some(42));
 
         let restored = db
             .get_agent_session("ses-oc-201")
@@ -966,7 +919,7 @@ mod tests {
             branch_name: Some("t-202".to_string()),
         };
 
-        restore_resumed_session_state(&db, Some(&session), &target, "opencode", 0, Some(42));
+        restore_resumed_session_state(&db, Some(&session), &target, "opencode", Some(42));
 
         let restored = db
             .get_agent_session("ses-oc-202")
@@ -1032,7 +985,7 @@ mod tests {
             branch_name: Some("t-200".to_string()),
         };
 
-        restore_resumed_session_state(&db, Some(&session), &target, "pi", 0, Some(42));
+        restore_resumed_session_state(&db, Some(&session), &target, "pi", Some(42));
 
         let restored = db
             .get_agent_session("ses-pi-200")
@@ -1071,7 +1024,6 @@ mod tests {
             "project_dir",
             None,
             "opencode",
-            Some(4001),
             "active",
         )
         .expect("upsert task workspace failed");

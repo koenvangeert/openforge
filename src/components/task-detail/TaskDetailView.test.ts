@@ -286,7 +286,6 @@ function createTaskWorkspaceInfo(overrides: Partial<TaskWorkspaceInfo> = {}): Ta
     kind: 'worktree',
     branch_name: 'branch',
     provider_name: 'opencode',
-    opencode_port: null,
     status: 'ready',
     created_at: 1000,
     updated_at: 2000,

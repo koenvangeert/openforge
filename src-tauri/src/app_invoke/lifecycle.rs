@@ -344,11 +344,6 @@ pub(super) async fn handle_app_start_implementation_command(
             workspace_kind,
             branch_name.as_deref(),
             &provider_name,
-            if matches!(provider_name.as_str(), "claude-code" | "opencode") {
-                None
-            } else {
-                Some(provider_result.port as i64)
-            },
             "active",
         )
         .map_err(|e| {
@@ -357,12 +352,6 @@ pub(super) async fn handle_app_start_implementation_command(
                 format!("Failed to persist task workspace: {e}"),
             )
         })?;
-    }
-
-    if use_worktrees && !matches!(provider_name.as_str(), "claude-code" | "opencode") {
-        let db = crate::db::acquire_db(&state.db);
-        db.update_worktree_server(&task_id, provider_result.port as i64, 0)
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     }
 
     let agent_session_id = crate::agent_lifecycle::create_and_record_session(

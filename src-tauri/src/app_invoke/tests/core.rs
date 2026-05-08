@@ -167,7 +167,7 @@ async fn task_workspace_value(
 }
 
 #[tokio::test]
-async fn task_workspace_hides_legacy_worktree_server_port_fallback() {
+async fn task_workspace_legacy_worktree_fallback_carries_workspace_data_only() {
     let (state, path) = test_state("app_invoke_task_workspace_legacy_fallback");
     let task_id = {
         let db = state.db.lock().expect("db lock");
@@ -191,8 +191,6 @@ async fn task_workspace_hides_legacy_worktree_server_port_fallback() {
             "feature/electron",
         )
         .expect("create worktree");
-        db.update_worktree_server(&task.id, 4096, 1234)
-            .expect("update worktree server");
         db.create_agent_session(
             "ses-legacy",
             &task.id,
@@ -209,7 +207,7 @@ async fn task_workspace_hides_legacy_worktree_server_port_fallback() {
     assert_eq!(workspace["task_id"], task_id);
     assert_eq!(workspace["workspace_path"], "/tmp/openforge-worktree");
     assert_eq!(workspace["provider_name"], "opencode");
-    assert_eq!(workspace["opencode_port"], serde_json::Value::Null);
+    assert_eq!(workspace.get("opencode_port"), None);
     assert_eq!(workspace["kind"], "git_worktree");
     assert_eq!(workspace["branch_name"], "feature/electron");
 

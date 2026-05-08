@@ -128,8 +128,6 @@ CREATE TABLE IF NOT EXISTS worktrees (
     repo_path TEXT NOT NULL,
     worktree_path TEXT NOT NULL,
     branch_name TEXT NOT NULL,
-    opencode_port INTEGER,
-    opencode_pid INTEGER,
     status TEXT NOT NULL DEFAULT 'active',
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL
@@ -655,7 +653,6 @@ CREATE TABLE IF NOT EXISTS task_workspaces (
     kind TEXT NOT NULL,
     branch_name TEXT,
     provider_name TEXT NOT NULL,
-    opencode_port INTEGER,
     status TEXT NOT NULL DEFAULT 'active',
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL
@@ -813,6 +810,43 @@ CREATE TABLE IF NOT EXISTS plugin_storage (
             )
             .map_err(rusqlite_migration::HookError::RusqliteError)?;
         }
+
+        Ok(())
+    }),
+    M::up_with_hook("SELECT 1;", |tx| {
+        fn table_exists(tx: &rusqlite::Transaction<'_>, table: &str) -> bool {
+            tx.query_row(
+                "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name = ?1",
+                [table],
+                |row| row.get(0),
+            )
+            .unwrap_or(false)
+        }
+
+        fn column_exists(tx: &rusqlite::Transaction<'_>, table: &str, column: &str) -> bool {
+            tx.query_row(
+                &format!("SELECT COUNT(*) > 0 FROM pragma_table_info('{table}') WHERE name = ?1"),
+                [column],
+                |row| row.get(0),
+            )
+            .unwrap_or(false)
+        }
+
+        fn drop_column_if_exists(
+            tx: &rusqlite::Transaction<'_>,
+            table: &str,
+            column: &str,
+        ) -> std::result::Result<(), rusqlite_migration::HookError> {
+            if table_exists(tx, table) && column_exists(tx, table, column) {
+                tx.execute(&format!("ALTER TABLE {table} DROP COLUMN {column}"), [])
+                    .map_err(rusqlite_migration::HookError::RusqliteError)?;
+            }
+            Ok(())
+        }
+
+        drop_column_if_exists(tx, "worktrees", "opencode_port")?;
+        drop_column_if_exists(tx, "worktrees", "opencode_pid")?;
+        drop_column_if_exists(tx, "task_workspaces", "opencode_port")?;
 
         Ok(())
     }),
@@ -1083,10 +1117,146 @@ mod tests {
             "Fresh schema must not seed jira-related config"
         );
 
+        let legacy_server_column_count: i32 = conn
+            .query_row(
+                "SELECT
+                    (SELECT COUNT(*) FROM pragma_table_info('worktrees') WHERE name IN ('opencode_port', 'opencode_pid')) +
+                    (SELECT COUNT(*) FROM pragma_table_info('task_workspaces') WHERE name = 'opencode_port')",
+                [],
+                |row| row.get(0),
+            )
+            .expect("Failed to count legacy OpenCode server columns");
+        assert_eq!(
+            legacy_server_column_count, 0,
+            "Fresh schema must not include legacy OpenCode server port/pid columns"
+        );
+
         // Clean up
         drop(conn);
         drop(db);
         let _ = fs::remove_file(&db_path);
+    }
+
+    #[test]
+    fn test_upgrade_removes_legacy_opencode_server_columns() {
+        let path = std::env::temp_dir().join(format!(
+            "test_upgrade_removes_legacy_opencode_server_columns_{}.db",
+            std::process::id()
+        ));
+        let _ = fs::remove_file(&path);
+
+        {
+            let conn = rusqlite::Connection::open(&path).expect("open raw db");
+            let previous_version = LATEST_USER_VERSION - 1;
+            conn.execute(&format!("PRAGMA user_version = {previous_version}"), [])
+                .expect("set user_version");
+            conn.execute_batch(
+                "CREATE TABLE worktrees (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    task_id TEXT NOT NULL UNIQUE,
+                    project_id TEXT NOT NULL,
+                    repo_path TEXT NOT NULL,
+                    worktree_path TEXT NOT NULL,
+                    branch_name TEXT NOT NULL,
+                    opencode_port INTEGER,
+                    opencode_pid INTEGER,
+                    status TEXT NOT NULL DEFAULT 'active',
+                    created_at INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL
+                );
+                CREATE TABLE task_workspaces (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    task_id TEXT NOT NULL UNIQUE,
+                    project_id TEXT NOT NULL,
+                    workspace_path TEXT NOT NULL,
+                    repo_path TEXT NOT NULL,
+                    kind TEXT NOT NULL,
+                    branch_name TEXT,
+                    provider_name TEXT NOT NULL,
+                    opencode_port INTEGER,
+                    status TEXT NOT NULL DEFAULT 'active',
+                    created_at INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL
+                );",
+            )
+            .expect("create legacy workspace tables");
+            conn.execute(
+                "INSERT INTO worktrees (task_id, project_id, repo_path, worktree_path, branch_name, opencode_port, opencode_pid, status, created_at, updated_at)
+                 VALUES ('T-legacy', 'P-1', '/repo', '/repo/.worktrees/T-legacy', 'legacy-branch', 4312, 9876, 'active', 11, 22)",
+                [],
+            )
+            .expect("insert legacy worktree");
+            conn.execute(
+                "INSERT INTO task_workspaces (task_id, project_id, workspace_path, repo_path, kind, branch_name, provider_name, opencode_port, status, created_at, updated_at)
+                 VALUES ('T-legacy', 'P-1', '/repo/.worktrees/T-legacy', '/repo', 'git_worktree', 'legacy-branch', 'opencode', 4312, 'active', 11, 22)",
+                [],
+            )
+            .expect("insert legacy task workspace");
+        }
+
+        let db = Database::new(path.clone()).expect("Database::new");
+        let conn = db.connection();
+        let conn = conn.lock().unwrap();
+
+        let legacy_server_column_count: i32 = conn
+            .query_row(
+                "SELECT
+                    (SELECT COUNT(*) FROM pragma_table_info('worktrees') WHERE name IN ('opencode_port', 'opencode_pid')) +
+                    (SELECT COUNT(*) FROM pragma_table_info('task_workspaces') WHERE name = 'opencode_port')",
+                [],
+                |row| row.get(0),
+            )
+            .expect("count legacy OpenCode server columns");
+        assert_eq!(
+            legacy_server_column_count, 0,
+            "Upgrade must remove legacy OpenCode server port/pid columns"
+        );
+
+        let preserved_worktree: (String, String, String, String, String, i64, i64) = conn
+            .query_row(
+                "SELECT task_id, project_id, repo_path, worktree_path, branch_name, created_at, updated_at FROM worktrees WHERE task_id = 'T-legacy'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?)),
+            )
+            .expect("legacy worktree data should be preserved");
+        assert_eq!(
+            preserved_worktree,
+            (
+                "T-legacy".to_string(),
+                "P-1".to_string(),
+                "/repo".to_string(),
+                "/repo/.worktrees/T-legacy".to_string(),
+                "legacy-branch".to_string(),
+                11,
+                22,
+            )
+        );
+
+        let preserved_workspace: (String, String, String, String, String, Option<String>, String, i64, i64) = conn
+            .query_row(
+                "SELECT task_id, project_id, workspace_path, repo_path, kind, branch_name, provider_name, created_at, updated_at FROM task_workspaces WHERE task_id = 'T-legacy'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?, row.get(7)?, row.get(8)?)),
+            )
+            .expect("legacy task workspace data should be preserved");
+        assert_eq!(
+            preserved_workspace,
+            (
+                "T-legacy".to_string(),
+                "P-1".to_string(),
+                "/repo/.worktrees/T-legacy".to_string(),
+                "/repo".to_string(),
+                "git_worktree".to_string(),
+                Some("legacy-branch".to_string()),
+                "opencode".to_string(),
+                11,
+                22,
+            )
+        );
+
+        drop(conn);
+        drop(db);
+        let _ = fs::remove_file(&path);
     }
 
     #[test]
@@ -1804,7 +1974,7 @@ mod tests {
         {
             let conn = rusqlite::Connection::open(&path).expect("open raw db");
             conn.execute(
-                &format!("PRAGMA user_version = {}", LATEST_USER_VERSION - 3),
+                &format!("PRAGMA user_version = {}", LATEST_USER_VERSION - 4),
                 [],
             )
             .expect("set pre-upgrade user_version");
@@ -1850,7 +2020,7 @@ mod tests {
         {
             let conn = rusqlite::Connection::open(&path).expect("open raw db");
             conn.execute(
-                &format!("PRAGMA user_version = {}", LATEST_USER_VERSION - 3),
+                &format!("PRAGMA user_version = {}", LATEST_USER_VERSION - 4),
                 [],
             )
             .expect("set pre-upgrade user_version");

@@ -11,7 +11,6 @@ pub struct TaskWorkspaceRow {
     pub kind: String,
     pub branch_name: Option<String>,
     pub provider_name: String,
-    pub opencode_port: Option<i64>,
     pub status: String,
     pub created_at: i64,
     pub updated_at: i64,
@@ -28,7 +27,6 @@ impl super::Database {
         kind: &str,
         branch_name: Option<&str>,
         provider_name: &str,
-        opencode_port: Option<i64>,
         status: &str,
     ) -> Result<()> {
         let conn = self.conn.lock().unwrap();
@@ -38,8 +36,8 @@ impl super::Database {
             .as_secs() as i64;
 
         conn.execute(
-            "INSERT INTO task_workspaces (task_id, project_id, workspace_path, repo_path, kind, branch_name, provider_name, opencode_port, status, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+            "INSERT INTO task_workspaces (task_id, project_id, workspace_path, repo_path, kind, branch_name, provider_name, status, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
              ON CONFLICT(task_id) DO UPDATE SET
                project_id = excluded.project_id,
                workspace_path = excluded.workspace_path,
@@ -47,10 +45,9 @@ impl super::Database {
                kind = excluded.kind,
                branch_name = excluded.branch_name,
                provider_name = excluded.provider_name,
-               opencode_port = excluded.opencode_port,
                status = excluded.status,
                updated_at = excluded.updated_at",
-            rusqlite::params![task_id, project_id, workspace_path, repo_path, kind, branch_name, provider_name, opencode_port, status, now, now],
+            rusqlite::params![task_id, project_id, workspace_path, repo_path, kind, branch_name, provider_name, status, now, now],
         )?;
 
         Ok(())
@@ -85,7 +82,7 @@ impl super::Database {
     pub fn get_task_workspace_for_task(&self, task_id: &str) -> Result<Option<TaskWorkspaceRow>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT id, task_id, project_id, workspace_path, repo_path, kind, branch_name, provider_name, opencode_port, status, created_at, updated_at
+            "SELECT id, task_id, project_id, workspace_path, repo_path, kind, branch_name, provider_name, status, created_at, updated_at
              FROM task_workspaces WHERE task_id = ?1",
         )?;
         let mut rows = stmt.query([task_id])?;
@@ -99,10 +96,9 @@ impl super::Database {
                 kind: row.get(5)?,
                 branch_name: row.get(6)?,
                 provider_name: row.get(7)?,
-                opencode_port: row.get(8)?,
-                status: row.get(9)?,
-                created_at: row.get(10)?,
-                updated_at: row.get(11)?,
+                status: row.get(8)?,
+                created_at: row.get(9)?,
+                updated_at: row.get(10)?,
             }))
         } else {
             Ok(None)
@@ -114,7 +110,6 @@ impl super::Database {
         task_id: &str,
         workspace_path: &str,
         provider_name: &str,
-        opencode_port: Option<i64>,
         status: &str,
     ) -> Result<()> {
         let conn = self.conn.lock().unwrap();
@@ -124,9 +119,9 @@ impl super::Database {
             .as_secs() as i64;
         conn.execute(
             "UPDATE task_workspaces
-             SET workspace_path = ?1, provider_name = ?2, opencode_port = ?3, status = ?4, updated_at = ?5
-             WHERE task_id = ?6",
-            rusqlite::params![workspace_path, provider_name, opencode_port, status, now, task_id],
+             SET workspace_path = ?1, provider_name = ?2, status = ?3, updated_at = ?4
+             WHERE task_id = ?5",
+            rusqlite::params![workspace_path, provider_name, status, now, task_id],
         )?;
         Ok(())
     }
@@ -148,7 +143,7 @@ impl super::Database {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
             "SELECT DISTINCT tw.id, tw.task_id, tw.project_id, tw.workspace_path, tw.repo_path,
-                    tw.kind, tw.branch_name, tw.provider_name, tw.opencode_port, tw.status,
+                    tw.kind, tw.branch_name, tw.provider_name, tw.status,
                     tw.created_at, tw.updated_at
              FROM task_workspaces tw
              INNER JOIN tasks t ON tw.task_id = t.id
@@ -167,10 +162,9 @@ impl super::Database {
                 kind: row.get(5)?,
                 branch_name: row.get(6)?,
                 provider_name: row.get(7)?,
-                opencode_port: row.get(8)?,
-                status: row.get(9)?,
-                created_at: row.get(10)?,
-                updated_at: row.get(11)?,
+                status: row.get(8)?,
+                created_at: row.get(9)?,
+                updated_at: row.get(10)?,
             })
         })?;
 
@@ -191,19 +185,6 @@ impl super::Database {
         } else {
             Ok(None)
         }
-    }
-
-    pub fn clear_stale_task_workspace_ports(&self) -> Result<usize> {
-        let conn = self.conn.lock().unwrap();
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .expect("time went backwards")
-            .as_secs() as i64;
-        conn.execute(
-            "UPDATE task_workspaces SET opencode_port = NULL, updated_at = ?1 WHERE opencode_port IS NOT NULL",
-            rusqlite::params![now],
-        )?;
-        Ok(conn.changes() as usize)
     }
 }
 
@@ -247,7 +228,6 @@ mod tests {
             &task.id,
             "/tmp/test-repo/.workspace/T-1",
             "opencode",
-            Some(4312),
             "active",
         )
         .expect("update runtime failed");
@@ -258,7 +238,6 @@ mod tests {
             .get_task_workspace_for_task(&task.id)
             .expect("get updated workspace failed")
             .expect("updated workspace missing");
-        assert_eq!(updated.opencode_port, Some(4312));
         assert_eq!(updated.status, "completed");
 
         drop(db);
@@ -357,7 +336,6 @@ mod tests {
             "git_worktree",
             Some("t-1"),
             "opencode",
-            Some(8080),
             "active",
         )
         .expect("upsert task workspace failed");
@@ -369,45 +347,6 @@ mod tests {
         assert_eq!(workspace.workspace_path, "/tmp/test-repo/.workspace/T-1");
         assert_eq!(workspace.kind, "git_worktree");
         assert_eq!(workspace.branch_name, Some("t-1".to_string()));
-        assert_eq!(workspace.opencode_port, Some(8080));
-
-        drop(db);
-        let _ = fs::remove_file(&path);
-    }
-
-    #[test]
-    fn test_clear_stale_task_workspace_ports() {
-        let (db, path) = make_test_db("clear_stale_task_workspace_ports");
-        let project = db
-            .create_project("Test Project", "/tmp/test-repo")
-            .expect("create project failed");
-        let task = db
-            .create_task("Workspace task", "doing", Some(&project.id), None, None)
-            .expect("create task failed");
-
-        db.upsert_task_workspace_record(
-            &task.id,
-            &project.id,
-            "/tmp/test-repo",
-            "/tmp/test-repo",
-            "project_dir",
-            None,
-            "opencode",
-            Some(4567),
-            "active",
-        )
-        .expect("upsert task workspace failed");
-
-        let count = db
-            .clear_stale_task_workspace_ports()
-            .expect("clear stale task workspace ports failed");
-        assert_eq!(count, 1);
-
-        let workspace = db
-            .get_task_workspace_for_task(&task.id)
-            .expect("get task workspace failed")
-            .expect("task workspace missing");
-        assert_eq!(workspace.opencode_port, None);
 
         drop(db);
         let _ = fs::remove_file(&path);
