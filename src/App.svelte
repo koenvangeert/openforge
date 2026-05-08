@@ -358,6 +358,11 @@
     }
   }
 
+  function hasActiveOpenCodeAgentSession(taskId: string): boolean {
+    const session = $activeSessions.get(taskId)
+    return session?.provider === 'opencode' && (session.status === 'running' || session.status === 'paused')
+  }
+
   async function handleRunAction(data: { taskId: string; actionPrompt: string; agent: string | null }) {
     if (!activeProject) {
       $error = 'No active project selected'
@@ -365,12 +370,14 @@
     }
     const { taskId, actionPrompt } = data
 
-    if (isPtyActive(taskId)) {
+    if (isPtyActive(taskId) || hasActiveOpenCodeAgentSession(taskId)) {
       try {
         await writePtyWithSubmit(taskId, actionPrompt)
         focusTerminal(taskId)
       } catch (e) {
         console.error('[session] Failed to write action to PTY:', taskId, e)
+        // Do not auto-start a replacement session here: a stale active-session
+        // write failure is safer to surface than duplicating work in a second agent.
         $error = String(e)
       }
       return

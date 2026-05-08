@@ -4,7 +4,7 @@
   import { writePty, killPty, abortImplementation } from '../../lib/ipc'
   import '@xterm/xterm/css/xterm.css'
   import { getAgentPanelStatusFromSessionStatus, type AgentPanelStatus } from '../../lib/agentPanelSessionSync'
-  import { parseCheckpointQuestion } from '../../lib/parseCheckpoint'
+  import { parseCheckpointQuestion, parsePtyInstanceId } from '../../lib/parseCheckpoint'
   import VoiceInput from '../shared/input/VoiceInput.svelte'
   import {
     acquire,
@@ -50,6 +50,19 @@
   let session = $derived($activeSessions.get(taskId) || null)
   let questionText = $derived(session ? parseCheckpointQuestion(session.checkpoint_data) : null)
 
+  function syncPtyLifecycleFromSession(): void {
+    if (!poolEntry || !session) return
+
+    const ptyInstanceId = parsePtyInstanceId(session.checkpoint_data)
+    if ((session.status === 'running' || session.status === 'paused') && ptyInstanceId !== null) {
+      updateShellLifecycleState(taskId, {
+        ptyActive: true,
+        shellExited: false,
+        currentPtyInstance: ptyInstanceId,
+      })
+    }
+  }
+
   $effect(() => {
     if (!session) {
       status = 'idle'
@@ -57,6 +70,7 @@
     }
 
     status = getAgentPanelStatusFromSessionStatus(session.status)
+    syncPtyLifecycleFromSession()
   })
 
   $effect(() => {
@@ -80,6 +94,7 @@
     await attach(poolEntry, terminalEl)
     if (destroyed) return
 
+    syncPtyLifecycleFromSession()
     await sessionHistory.loadSessionHistory()
   })
 

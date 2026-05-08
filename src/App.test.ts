@@ -2,7 +2,7 @@ import { render, fireEvent, screen, cleanup } from '@testing-library/svelte'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { get, writable } from 'svelte/store'
 import type { Task, AgentSession, Project, ProjectAttention, PullRequestInfo, CheckpointNotification, CiFailureNotification, RateLimitNotification, AuthoredPullRequest } from './lib/types'
-import { forceGithubSync, installPlugin } from './lib/ipc'
+import { forceGithubSync, installPlugin, getProjects, getTasksForProject, getLatestSessions, startImplementation, getSessionStatus } from './lib/ipc'
 import { requireDefined } from './test-utils/dom'
 
 const callOrder: string[] = []
@@ -329,6 +329,8 @@ vi.mock('./lib/terminalPool', () => ({
   attach: vi.fn(),
   detach: vi.fn(),
   release: vi.fn(),
+  isPtyActive: vi.fn(() => false),
+  focusTerminal: vi.fn(),
 }))
 
 vi.mock('lucide-svelte', () => {
@@ -347,6 +349,54 @@ vi.mock('lucide-svelte', () => {
   }
 })
 
+function makeAppTestProject(): Project {
+  return { id: 'proj-1', name: 'Test Project', path: '/test', created_at: 1000, updated_at: 1000 }
+}
+
+function makeAppTestTask(): Task {
+  return {
+    id: 'T-42',
+    initial_prompt: 'Implement terminal input fix',
+    prompt: null,
+    summary: null,
+    status: 'doing',
+    agent: null,
+    permission_mode: null,
+    project_id: 'proj-1',
+    created_at: 1000,
+    updated_at: 1000,
+  }
+}
+
+function makeAppTestSession(status: string, provider = 'opencode'): AgentSession {
+  return {
+    id: `session-${provider}-${status}`,
+    ticket_id: 'T-42',
+    opencode_session_id: provider === 'opencode' ? 'oc-session-1' : null,
+    stage: 'implement',
+    status,
+    checkpoint_data: provider === 'opencode' ? '{"pty_instance_id":42}' : null,
+    error_message: null,
+    created_at: 1000,
+    updated_at: 1000,
+    provider,
+    claude_session_id: provider === 'claude-code' ? 'claude-session-1' : null,
+    pi_session_id: provider === 'pi' ? 'pi-session-1' : null,
+  }
+}
+
+function findTaskDetailProps(TaskDetailView: unknown): { onRunAction: (data: { taskId: string; actionPrompt: string; agent: string | null }) => Promise<void> } {
+  const calls = (TaskDetailView as { mock: { calls: unknown[][] } }).mock.calls
+  for (const call of [...calls].reverse()) {
+    for (const arg of call) {
+      if (arg && typeof arg === 'object' && 'onRunAction' in arg) {
+        return arg as { onRunAction: (data: { taskId: string; actionPrompt: string; agent: string | null }) => Promise<void> }
+      }
+    }
+  }
+  throw new Error('TaskDetailView props were not captured')
+}
+
 describe('App onMount initialization order', () => {
   beforeEach(() => {
     callOrder.length = 0
@@ -354,6 +404,20 @@ describe('App onMount initialization order', () => {
     eventListeners.clear()
     closeRequestedHandler = null
     vi.clearAllMocks()
+    vi.mocked(getProjects).mockImplementation(async () => {
+      callOrder.push('getProjects')
+      return [{ id: 'proj-1', name: 'Test Project', path: '/test' }] as any
+    })
+    vi.mocked(getTasksForProject).mockImplementation(async () => {
+      callOrder.push('getTasksForProject')
+      return []
+    })
+    vi.mocked(getLatestSessions).mockImplementation(async () => {
+      callOrder.push('getLatestSessions')
+      return []
+    })
+    vi.mocked(startImplementation).mockReset()
+    vi.mocked(getSessionStatus).mockReset()
     vi.mocked(installPlugin).mockImplementation(async (plugin) => {
       persistInstalledPluginRow(plugin)
     })
@@ -369,6 +433,108 @@ describe('App onMount initialization order', () => {
   afterEach(() => {
     cleanup()
     vi.clearAllMocks()
+  })
+
+  describe('active agent prompt routing', () => {
+    async function renderSelectedTaskWithSession(session: AgentSession | null) {
+      const App = (await import('./App.svelte')).default
+      const stores = await import('./lib/stores')
+      const ipc = await import('./lib/ipc')
+      const taskDetail = await import('./components/task-detail/TaskDetailView.svelte')
+      const project = makeAppTestProject()
+      const task = makeAppTestTask()
+
+      stores.projects.set([project])
+      stores.activeProjectId.set(project.id)
+      stores.currentView.set('board')
+      stores.tasks.set([task])
+      stores.selectedTaskId.set(task.id)
+      stores.activeSessions.set(session ? new Map([[task.id, session]]) : new Map())
+
+      vi.mocked(ipc.getProjects).mockResolvedValue([project])
+      vi.mocked(ipc.getTasksForProject).mockResolvedValue([task])
+      vi.mocked(ipc.getLatestSessions).mockResolvedValue(session ? [session] : [])
+
+      render(App)
+
+      await vi.waitFor(() => {
+        expect((taskDetail.default as unknown as { mock: { calls: unknown[][] } }).mock.calls.length).toBeGreaterThan(0)
+      })
+
+      return findTaskDetailProps(taskDetail.default)
+    }
+
+    it.each(['running', 'paused'])('writes action prompts to an active %s agent PTY even when terminalPool reports inactive', async (status) => {
+      const ipc = await import('./lib/ipc')
+      const terminalPool = await import('./lib/terminalPool')
+      const props = await renderSelectedTaskWithSession(makeAppTestSession(status))
+
+      vi.mocked(terminalPool.isPtyActive).mockReturnValue(false)
+      vi.mocked(ipc.writePty).mockClear()
+      vi.mocked(ipc.startImplementation).mockClear()
+      vi.mocked(terminalPool.focusTerminal).mockClear()
+
+      await props.onRunAction({ taskId: 'T-42', actionPrompt: 'Please continue', agent: null })
+
+      expect(ipc.startImplementation).not.toHaveBeenCalled()
+      expect(ipc.writePty).toHaveBeenCalledTimes(2)
+      expect(ipc.writePty).toHaveBeenNthCalledWith(1, 'T-42', 'Please continue')
+      expect(ipc.writePty).toHaveBeenNthCalledWith(2, 'T-42', '\r')
+      expect(ipc.writePty).not.toHaveBeenCalledWith(expect.stringContaining('-shell-'), expect.any(String))
+      expect(terminalPool.focusTerminal).toHaveBeenCalledWith('T-42')
+    })
+
+    it.each(['claude-code', 'pi'])('does not use OpenCode inactive-PTY fallback for active %s sessions', async (provider) => {
+      const ipc = await import('./lib/ipc')
+      const terminalPool = await import('./lib/terminalPool')
+      const session = makeAppTestSession('running', provider)
+      vi.mocked(ipc.startImplementation).mockResolvedValue({ session_id: session.id, workspace_path: '/worktree/T-42', port: null } as any)
+      vi.mocked(ipc.getSessionStatus).mockResolvedValue(session)
+      vi.mocked(terminalPool.isPtyActive).mockReturnValue(false)
+      const props = await renderSelectedTaskWithSession(session)
+
+      vi.mocked(ipc.writePty).mockClear()
+      vi.mocked(ipc.startImplementation).mockClear()
+
+      await props.onRunAction({ taskId: 'T-42', actionPrompt: 'Please continue', agent: null })
+
+      expect(ipc.writePty).not.toHaveBeenCalled()
+      expect(ipc.startImplementation).toHaveBeenCalledWith('T-42', '/test')
+    })
+
+    it('surfaces write failures for stale active sessions without starting a duplicate agent', async () => {
+      const ipc = await import('./lib/ipc')
+      const terminalPool = await import('./lib/terminalPool')
+      const stores = await import('./lib/stores')
+      const props = await renderSelectedTaskWithSession(makeAppTestSession('running'))
+
+      vi.mocked(terminalPool.isPtyActive).mockReturnValue(false)
+      vi.mocked(ipc.writePty).mockRejectedValueOnce(new Error('PTY missing'))
+      vi.mocked(ipc.startImplementation).mockClear()
+
+      await props.onRunAction({ taskId: 'T-42', actionPrompt: 'Please continue', agent: null })
+
+      expect(ipc.startImplementation).not.toHaveBeenCalled()
+      expect(get(stores.error)).toBe('Error: PTY missing')
+    })
+
+    it('starts implementation when no agent session or active PTY exists', async () => {
+      const ipc = await import('./lib/ipc')
+      const terminalPool = await import('./lib/terminalPool')
+      const session = makeAppTestSession('running')
+      vi.mocked(ipc.startImplementation).mockResolvedValue({ session_id: session.id, workspace_path: '/worktree/T-42', port: null } as any)
+      vi.mocked(ipc.getSessionStatus).mockResolvedValue(session)
+      vi.mocked(terminalPool.isPtyActive).mockReturnValue(false)
+      const props = await renderSelectedTaskWithSession(null)
+
+      vi.mocked(ipc.writePty).mockClear()
+      vi.mocked(ipc.startImplementation).mockClear()
+
+      await props.onRunAction({ taskId: 'T-42', actionPrompt: 'Start fresh', agent: null })
+
+      expect(ipc.writePty).not.toHaveBeenCalled()
+      expect(ipc.startImplementation).toHaveBeenCalledWith('T-42', '/test')
+    })
   })
 
   it('still loads projects when builtin plugin persistence fails', async () => {

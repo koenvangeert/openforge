@@ -6,6 +6,22 @@ function isPtyInstanceMetadataOnly(parsed: unknown): boolean {
   return keys.length > 0 && keys.every(key => metadataKeys.has(key))
 }
 
+export function parsePtyInstanceId(checkpointData: string | null): number | null {
+  if (checkpointData === null || checkpointData === undefined || checkpointData === '') {
+    return null
+  }
+
+  try {
+    const parsed = JSON.parse(checkpointData)
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null
+
+    const value = parsed.pty_instance_id ?? parsed.ptyInstanceId
+    return typeof value === 'number' && Number.isFinite(value) ? value : null
+  } catch {
+    return null
+  }
+}
+
 export function parseCheckpointQuestion(checkpointData: string | null): string | null {
   if (checkpointData === null || checkpointData === undefined || checkpointData === '') {
     return null;

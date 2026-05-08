@@ -1,6 +1,21 @@
 import { describe, it, expect } from 'vitest'
 import { requireDefined } from '../test-utils/dom'
-import { parseCheckpointQuestion } from './parseCheckpoint'
+import { parseCheckpointQuestion, parsePtyInstanceId } from './parseCheckpoint'
+
+describe('parsePtyInstanceId', () => {
+  it('extracts snake_case PTY instance metadata', () => {
+    expect(parsePtyInstanceId('{"pty_instance_id":42}')).toBe(42)
+  })
+
+  it('extracts camelCase PTY instance metadata', () => {
+    expect(parsePtyInstanceId('{"ptyInstanceId":43}')).toBe(43)
+  })
+
+  it('returns null for malformed or non-numeric metadata', () => {
+    expect(parsePtyInstanceId('not json')).toBeNull()
+    expect(parsePtyInstanceId('{"pty_instance_id":"42"}')).toBeNull()
+  })
+})
 
 describe('parseCheckpointQuestion', () => {
   it('returns null for null input', () => {

@@ -51,7 +51,7 @@ vi.mock('../../lib/audioRecorder', () => ({
 }))
 
 // Mock terminalPool to avoid xterm constructor issues in test environment
-const { listenCallbacks, mockPoolEntry, mockShellLifecycleState } = vi.hoisted(() => ({
+const { listenCallbacks, mockPoolEntry, mockShellLifecycleState, poolEntryAcquired } = vi.hoisted(() => ({
   listenCallbacks: new Map<string, DesktopEventCallback[]>(),
   mockPoolEntry: {
     taskId: '',
@@ -65,12 +65,14 @@ const { listenCallbacks, mockPoolEntry, mockShellLifecycleState } = vi.hoisted((
     visibilityObserver: null,
     resizeTimeout: null,
     attached: false,
+    currentPtyInstance: null as number | null,
   },
   mockShellLifecycleState: {
     ptyActive: false,
     shellExited: false,
     currentPtyInstance: null as number | null,
   },
+  poolEntryAcquired: { value: false },
 }))
 
 
@@ -85,7 +87,10 @@ vi.mock('../../lib/desktopIpc', () => ({
 }))
 
 vi.mock('../../lib/terminalPool', () => ({
-  acquire: vi.fn().mockResolvedValue(mockPoolEntry),
+  acquire: vi.fn().mockImplementation(async () => {
+    poolEntryAcquired.value = true
+    return mockPoolEntry
+  }),
   attach: vi.fn(),
   detach: vi.fn(),
   release: vi.fn(),
@@ -93,9 +98,13 @@ vi.mock('../../lib/terminalPool', () => ({
   getShellLifecycleState: vi.fn().mockImplementation(() => ({ ...mockShellLifecycleState })),
   isPtyActive: vi.fn().mockImplementation(() => mockShellLifecycleState.ptyActive),
   updateShellLifecycleState: vi.fn().mockImplementation((_taskId: string, state: typeof mockShellLifecycleState) => {
+    if (!poolEntryAcquired.value) return
     mockShellLifecycleState.ptyActive = state.ptyActive
     mockShellLifecycleState.shellExited = state.shellExited
     mockShellLifecycleState.currentPtyInstance = state.currentPtyInstance
+    mockPoolEntry.ptyActive = state.ptyActive
+    mockPoolEntry.needsClear = state.shellExited
+    mockPoolEntry.currentPtyInstance = state.currentPtyInstance
   }),
   _getPool: vi.fn().mockReturnValue(new Map()),
 }))
@@ -116,8 +125,10 @@ describe('AgentPanel (router)', () => {
   beforeEach(() => {
     activeSessions.set(new Map())
     listenCallbacks.clear()
+    poolEntryAcquired.value = false
     mockPoolEntry.ptyActive = false
     mockPoolEntry.needsClear = false
+    mockPoolEntry.currentPtyInstance = null
     mockShellLifecycleState.ptyActive = false
     mockShellLifecycleState.shellExited = false
     mockShellLifecycleState.currentPtyInstance = null
@@ -490,6 +501,42 @@ describe('OpenCodeAgentPanel (via router)', () => {
 
     render(AgentPanel, { props: { taskId: 'T-1' } })
     expect(screen.getByText('Agent is waiting for input')).toBeTruthy()
+  })
+
+  it('marks an OpenCode PTY active from running session metadata so typed input can reach the TTY', async () => {
+    const session: AgentSession = {
+      id: 'ses-1',
+      ticket_id: 'T-1',
+      opencode_session_id: null,
+      stage: 'implement',
+      status: 'running',
+      checkpoint_data: '{"pty_instance_id":42}',
+      error_message: null,
+      created_at: 1000,
+      updated_at: 2000,
+      provider: 'opencode',
+      claude_session_id: null,
+      pi_session_id: null,
+    }
+
+    activeSessions.set(new Map([['T-1', session]]))
+
+    render(AgentPanel, { props: { taskId: 'T-1' } })
+
+    await vi.waitFor(() => {
+      expect(mockShellLifecycleState).toEqual({
+        ptyActive: true,
+        shellExited: false,
+        currentPtyInstance: 42,
+      })
+      expect(mockPoolEntry.ptyActive).toBe(true)
+      expect(mockPoolEntry.currentPtyInstance).toBe(42)
+    })
+    expect(updateShellLifecycleState).toHaveBeenCalledWith('T-1', {
+      ptyActive: true,
+      shellExited: false,
+      currentPtyInstance: 42,
+    })
   })
 
   it('does not show question banner for PTY instance metadata', () => {
