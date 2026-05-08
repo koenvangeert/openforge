@@ -1,9 +1,10 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte'
+  import { get } from 'svelte/store'
   import type { DesktopUnlistenFn } from './lib/desktopIpc'
   import { createDesktopWindow } from './lib/desktopWindow'
   import type { DesktopWindowTarget } from './lib/desktopWindow'
-  import { tasks, pendingTask, selectedTaskId, activeSessions, ticketPrs, error, isLoading, projects, activeProjectId, currentView, reviewRequestCount, authoredPrCount, projectAttention, startingTasks, codeCleanupTasksEnabled, taskRuntimeInfo, focusBoardFilters, setTaskMerging } from './lib/stores'
+  import { tasks, pendingTask, selectedTaskId, activeSessions, ticketPrs, error, isLoading, projects, activeProjectId, activeProjectColorId, currentView, reviewRequestCount, authoredPrCount, projectAttention, startingTasks, codeCleanupTasksEnabled, taskRuntimeInfo, focusBoardFilters, setTaskMerging } from './lib/stores'
   import { getProjects, getTasksForProject, getPullRequests, startImplementation, getSessionStatus, getLatestSessions, forceGithubSync, deleteTask, getProjectAttention, getAppMode, getConfig, getProjectConfig, getReviewPrs, getAuthoredPrs, mergePullRequest, resumeStartupSessions } from './lib/ipc'
   import { writePtyWithSubmit } from './lib/ptySubmit'
   import { applyProjectOrder } from './lib/projectOrder'
@@ -197,29 +198,28 @@
     }
   })
 
-  let activeProjectColorId = $state<string | null>(null)
   $effect(() => {
     const pid = $activeProjectId
-    void $currentView
+    $activeProjectColorId = null
     if (pid) {
       getProjectConfig(pid, 'project_color').then((val) => {
-        activeProjectColorId = val
+        if (get(activeProjectId) === pid && get(activeProjectColorId) === null) {
+          $activeProjectColorId = val
+        }
       })
-    } else {
-      activeProjectColorId = null
     }
   })
 
   let contentBg = $derived.by(() => {
-    const color = getProjectColor(activeProjectColorId)
+    const color = getProjectColor($activeProjectColorId)
     return $themeMode === 'dark' ? color.dark : color.light
   })
   let contentBgAlt = $derived.by(() => {
-    const color = getProjectColor(activeProjectColorId)
+    const color = getProjectColor($activeProjectColorId)
     return $themeMode === 'dark' ? color.darkAlt : color.lightAlt
   })
   let iconRailBg = $derived.by(() => {
-    const color = getProjectColor(activeProjectColorId)
+    const color = getProjectColor($activeProjectColorId)
     if ($themeMode === 'dark') {
       return color.darkAlt
     }

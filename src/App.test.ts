@@ -136,6 +136,7 @@ vi.mock('./lib/stores', () => ({
   error: writable<string | null>(null),
   projects: writable<Project[]>([]),
   activeProjectId: writable<string | null>(null),
+  activeProjectColorId: writable<string | null>(null),
   projectAttention: writable<Map<string, ProjectAttention>>(new Map()),
   agentEvents: writable<Map<string, any>>(new Map()),
   taskRuntimeInfo: writable(new Map()),
