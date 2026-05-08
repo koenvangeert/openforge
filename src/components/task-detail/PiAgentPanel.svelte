@@ -2,10 +2,17 @@
   import { onMount, onDestroy } from 'svelte'
   import type { DesktopUnlistenFn } from '../../lib/desktopIpc'
   import { activeSessions } from '../../lib/stores'
-  import { writePty, killPty, abortImplementation } from '../../lib/ipc'
   import '@xterm/xterm/css/xterm.css'
-  import { getAgentPanelStatusFromSessionStatus, listenToAgentStatusChanged, type AgentPanelStatus } from '../../lib/agentPanelSessionSync'
-  import { acquire, attach, detach, isPtyActive, type PoolEntry } from '../../lib/terminalPool'
+  import { listenToAgentStatusChanged, type AgentPanelStatus } from '../../lib/agentPanelSessionSync'
+  import { acquire, attach, detach, type PoolEntry } from '../../lib/terminalPool'
+  import {
+    abortAgentTerminalSession,
+    getAgentSessionStatusBadgeClass,
+    getAgentStageLabel,
+    getAgentStatusText,
+    syncAgentPanelStatusFromSession,
+    writeAgentTerminalTranscription,
+  } from '../../lib/agentTerminalPanel'
   import VoiceInput from '../shared/input/VoiceInput.svelte'
 
   interface Props {
@@ -25,12 +32,20 @@
   // Derived state from activeSessions store
   let session = $derived($activeSessions.get(taskId) || null)
 
+  const stageLabels: Record<string, string> = {
+    'read_ticket': 'reading ticket',
+    'implement': 'implementing',
+    'create_pr': 'creating PR',
+    'address_comments': 'addressing comments',
+  }
+
   function syncStatusFromSession(sessionStatus: string | null | undefined) {
-    const nextStatus = getAgentPanelStatusFromSessionStatus(sessionStatus)
-    status = nextStatus
-    if (nextStatus === 'running') {
-      terminalActive = isPtyActive(taskId)
-    }
+    syncAgentPanelStatusFromSession({
+      taskId,
+      sessionStatus,
+      setStatus: (nextStatus) => { status = nextStatus },
+      setTerminalActive: (active) => { terminalActive = active },
+    })
   }
 
   $effect(() => {
@@ -43,14 +58,13 @@
     await attach(poolEntry, terminalEl)
     if (destroyed) return
 
-    terminalActive = isPtyActive(taskId)
     syncStatusFromSession(session?.status)
 
     // Listen for agent-status-changed events (App.svelte also updates activeSessions store)
     unlisteners.push(await listenToAgentStatusChanged({
       taskId,
       setStatus: (nextStatus) => { status = nextStatus },
-      onRunning: () => { terminalActive = isPtyActive(taskId) },
+      onRunning: () => { syncStatusFromSession('running') },
     }))
   })
 
@@ -65,52 +79,27 @@
   })
 
   async function handleAbort() {
-    try {
-      if (isPtyActive(taskId)) {
-        await killPty(taskId).catch(e => {
-          console.error('[PiAgentPanel] Failed to kill PTY on abort:', e)
-        })
-      }
-      await abortImplementation(taskId)
-      status = 'error'
-    } catch (e) {
-      console.error('[PiAgentPanel] Failed to abort implementation:', e)
-    }
+    await abortAgentTerminalSession({
+      taskId,
+      logPrefix: 'PiAgentPanel',
+      setStatus: (nextStatus) => { status = nextStatus },
+    })
   }
 
   function handleTranscription(text: string) {
-    if (isPtyActive(taskId)) writePty(taskId, text).catch(e => console.error('[PiAgentPanel] transcription write failed:', e))
+    void writeAgentTerminalTranscription(taskId, text, 'PiAgentPanel')
   }
 
   function getStatusText(): string {
-    switch (status) {
-      case 'idle': return 'No active implementation'
-      case 'running': return 'Pi agent running...'
-      case 'complete': return 'Implementation complete'
-      case 'error': return 'Error occurred'
-      default: return ''
-    }
+    return getAgentStatusText(status, 'Pi agent running...')
   }
 
   function getStageLabel(stage: string): string {
-    const stageMap: Record<string, string> = {
-      'read_ticket': 'reading ticket',
-      'implement': 'implementing',
-      'create_pr': 'creating PR',
-      'address_comments': 'addressing comments',
-    }
-    return stageMap[stage] || stage
+    return getAgentStageLabel(stage, stageLabels)
   }
 
   function getSessionStatusBadgeClass(sessionStatus: string): string {
-    switch (sessionStatus) {
-      case 'running': return 'bg-success/10 text-success'
-      case 'completed': return 'badge-primary'
-      case 'failed': return 'badge-error'
-      case 'interrupted': return 'badge-ghost'
-      case 'paused': return 'badge-warning'
-      default: return 'badge-ghost'
-    }
+    return getAgentSessionStatusBadgeClass(sessionStatus, 'soft')
   }
 </script>
 

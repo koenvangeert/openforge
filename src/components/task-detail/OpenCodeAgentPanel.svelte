@@ -1,20 +1,26 @@
 <script lang="ts">
   import { onMount, onDestroy, untrack } from 'svelte'
   import { activeSessions } from '../../lib/stores'
-  import { writePty, killPty, abortImplementation } from '../../lib/ipc'
   import '@xterm/xterm/css/xterm.css'
-  import { getAgentPanelStatusFromSessionStatus, type AgentPanelStatus } from '../../lib/agentPanelSessionSync'
+  import { type AgentPanelStatus } from '../../lib/agentPanelSessionSync'
   import { parseCheckpointQuestion } from '../../lib/parseCheckpoint'
   import VoiceInput from '../shared/input/VoiceInput.svelte'
   import {
     acquire,
     attach,
     detach,
-    getShellLifecycleState,
     isValidTerminalDimensions,
-    updateShellLifecycleState,
     type PoolEntry,
   } from '../../lib/terminalPool'
+  import {
+    abortAgentTerminalSession,
+    getAgentSessionStatusBadgeClass,
+    getAgentStageLabel,
+    getAgentStatusText,
+    markAgentTerminalExited,
+    syncAgentPanelStatusFromSession,
+    writeAgentTerminalTranscription,
+  } from '../../lib/agentTerminalPanel'
   import { createSessionHistory } from '../../lib/useSessionHistory.svelte'
 
   interface Props {
@@ -29,16 +35,19 @@
   let poolEntry: PoolEntry | null = null
   let destroyed = false
 
+  const stageLabels: Record<string, string> = {
+    'read_ticket': 'Reading Ticket',
+    'implement': 'Implementing',
+    'create_pr': 'Creating PR',
+    'address_comments': 'Addressing Comments'
+  }
+
   const sessionHistory = createSessionHistory({
     taskId: untrack(() => taskId),
-    onStatusUpdate: (s) => {
-      status = s
-      if ((s === 'complete' || s === 'error') && poolEntry) {
-        updateShellLifecycleState(taskId, {
-          ptyActive: false,
-          shellExited: true,
-          currentPtyInstance: poolEntry.currentPtyInstance,
-        })
+    onStatusUpdate: (nextStatus) => {
+      status = nextStatus
+      if ((nextStatus === 'complete' || nextStatus === 'error') && poolEntry) {
+        markAgentTerminalExited(taskId, poolEntry.currentPtyInstance)
       }
     },
   })
@@ -52,7 +61,11 @@
       return
     }
 
-    status = getAgentPanelStatusFromSessionStatus(session.status)
+    syncAgentPanelStatusFromSession({
+      taskId,
+      sessionStatus: session.status,
+      setStatus: (nextStatus) => { status = nextStatus },
+    })
   })
 
   $effect(() => {
@@ -87,60 +100,28 @@
   })
 
   async function handleAbort() {
-    try {
-      const lifecycle = getShellLifecycleState(taskId)
-      if (lifecycle.ptyActive) {
-        await killPty(taskId).catch((e) => {
-          console.error('[OpenCodeAgentPanel] Failed to kill PTY on abort:', e)
-        })
-        updateShellLifecycleState(taskId, {
-          ptyActive: false,
-          shellExited: true,
-          currentPtyInstance: lifecycle.currentPtyInstance,
-        })
-      }
-      await abortImplementation(taskId)
-      status = 'error'
-    } catch (e) {
-      console.error('[OpenCodeAgentPanel] Failed to abort implementation:', e)
-    }
+    await abortAgentTerminalSession({
+      taskId,
+      logPrefix: 'OpenCodeAgentPanel',
+      markLifecycleExited: true,
+      setStatus: (nextStatus) => { status = nextStatus },
+    })
   }
 
   function handleTranscription(text: string) {
-    if (getShellLifecycleState(taskId).ptyActive) {
-      writePty(taskId, text).catch(e => console.error('[OpenCodeAgentPanel] transcription write failed:', e))
-    }
+    void writeAgentTerminalTranscription(taskId, text, 'OpenCodeAgentPanel')
   }
 
   function getStatusText(): string {
-    switch (status) {
-      case 'idle': return 'No active implementation'
-      case 'running': return 'Agent running...'
-      case 'complete': return 'Implementation complete'
-      case 'error': return 'Error occurred'
-      default: return ''
-    }
+    return getAgentStatusText(status, 'Agent running...')
   }
 
   function getStageLabel(stage: string): string {
-    const stageMap: Record<string, string> = {
-      'read_ticket': 'Reading Ticket',
-      'implement': 'Implementing',
-      'create_pr': 'Creating PR',
-      'address_comments': 'Addressing Comments'
-    }
-    return stageMap[stage] || stage
+    return getAgentStageLabel(stage, stageLabels)
   }
 
   function getSessionStatusBadgeClass(sessionStatus: string): string {
-    switch (sessionStatus) {
-      case 'running': return 'badge-success'
-      case 'completed': return 'badge-primary'
-      case 'failed': return 'badge-error'
-      case 'interrupted': return 'badge-ghost'
-      case 'paused': return 'badge-warning'
-      default: return 'badge-ghost'
-    }
+    return getAgentSessionStatusBadgeClass(sessionStatus, 'badge')
   }
 </script>
 
