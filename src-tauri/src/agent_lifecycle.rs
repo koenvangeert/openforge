@@ -56,16 +56,19 @@ pub(crate) fn opencode_status_from_event(
     status_type: Option<&str>,
 ) -> Option<(&'static str, &'static [&'static str])> {
     match (event_type, status_type) {
-        ("session.status", Some("busy" | "retry" | "running"))
-        | ("session.created" | "session.updated" | "message.updated", _)
+        ("session.status" | "session.created" | "session.updated", Some("idle"))
+        | ("session.idle", _) => Some(("completed", &["running", "paused"])),
+        (
+            "session.status" | "session.created" | "session.updated",
+            Some("busy" | "retry" | "running"),
+        )
+        | ("message.updated", _)
         | ("tool.execute.before" | "tool.execute.after", _) => Some((
             "running",
             &["completed", "paused", "interrupted", "running"],
         )),
-        ("session.status", Some("error" | "failed")) | ("session.error", _) => {
-            Some(("failed", &["running", "paused"]))
-        }
-        ("session.status", Some("idle")) | ("session.idle", _) => None,
+        ("session.status" | "session.created" | "session.updated", Some("error" | "failed"))
+        | ("session.error", _) => Some(("failed", &["running", "paused"])),
         _ => None,
     }
 }

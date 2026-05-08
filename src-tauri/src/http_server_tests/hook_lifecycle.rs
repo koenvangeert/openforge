@@ -596,7 +596,7 @@ fn test_map_hook_to_status_full_lifecycle() {
 }
 
 #[test]
-fn opencode_status_events_preserve_payload_semantics_without_idle_completion() {
+fn opencode_status_events_complete_running_sessions_on_idle() {
     assert_eq!(
         opencode_status_from_event("session.status", Some("busy")),
         Some((
@@ -617,9 +617,27 @@ fn opencode_status_events_preserve_payload_semantics_without_idle_completion() {
     );
     assert_eq!(
         opencode_status_from_event("session.status", Some("idle")),
-        None
+        Some(("completed", &["running", "paused"] as &[_]))
     );
-    assert_eq!(opencode_status_from_event("session.idle", None), None);
+    assert_eq!(
+        opencode_status_from_event("session.idle", None),
+        Some(("completed", &["running", "paused"] as &[_]))
+    );
+    assert_eq!(
+        opencode_status_from_event("session.updated", Some("idle")),
+        Some(("completed", &["running", "paused"] as &[_])),
+        "OpenCode can emit idle status on session.updated during startup/resume; it must not revive stale sessions as running"
+    );
+    assert_eq!(
+        opencode_status_from_event("session.updated", None),
+        None,
+        "metadata-only OpenCode session updates during startup must not revive stale sessions as running"
+    );
+    assert_eq!(
+        opencode_status_from_event("session.created", None),
+        None,
+        "metadata-only OpenCode session creation events should not be the source of running truth"
+    );
 }
 
 #[tokio::test]
@@ -798,8 +816,8 @@ async fn agent_lifecycle_route_updates_claude_status_through_shared_seam() {
 }
 
 #[tokio::test]
-async fn opencode_hook_stores_session_id_and_does_not_complete_on_idle_status() {
-    let (state, path) = test_state("opencode_hook_idle_no_complete");
+async fn opencode_hook_stores_session_id_and_completes_on_idle_status() {
+    let (state, path) = test_state("opencode_hook_idle_complete");
     let task_id = {
         let db = state.db.lock().expect("lock db");
         let task = db
@@ -845,7 +863,7 @@ async fn opencode_hook_stores_session_id_and_does_not_complete_on_idle_status() 
         .get_agent_session("ses-opencode-running")
         .expect("get session")
         .expect("session exists");
-    assert_eq!(session.status, "running");
+    assert_eq!(session.status, "completed");
     assert_eq!(
         session.opencode_session_id,
         Some("oc-session-77".to_string())
