@@ -17,13 +17,13 @@ vi.mock('./ipc', async (importOriginal) => {
   return {
     ...actual,
     getLatestSession: vi.fn(),
-    finalizeClaudeSession: vi.fn(),
+    finalizeAgentSession: vi.fn(),
     getTaskDetail: vi.fn(),
   }
 })
 
 import { release, replayPtyBuffersForActiveTerminals } from './terminalPool'
-import { getLatestSession } from './ipc'
+import { finalizeAgentSession, getLatestSession } from './ipc'
 
 function createSession(overrides: Partial<AgentSession> = {}): AgentSession {
   return {
@@ -155,6 +155,18 @@ describe('registerAppDesktopEventListeners', () => {
 
     expect(get(taskRuntimeInfo).get('task-1')).toEqual({ workspacePath: '/tmp/work' })
     expect(get(activeSessions).get('task-1')?.id).toBe('session-resumed')
+  })
+
+  it('finalizes agent PTY exits through the provider-neutral IPC wrapper', async () => {
+    vi.useFakeTimers()
+    const { deps, handlers } = createHarness()
+
+    await registerAppDesktopEventListeners(deps)
+    await handlers.get('agent-pty-exited')?.({ payload: { task_id: 'task-1', success: true } })
+    await vi.advanceTimersByTimeAsync(1500)
+
+    expect(finalizeAgentSession).toHaveBeenCalledWith('task-1', true)
+    vi.useRealTimers()
   })
 
   it('clears active session and releases terminal when task is deleted', async () => {
