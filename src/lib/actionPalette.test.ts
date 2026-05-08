@@ -12,6 +12,7 @@ function makeTask(overrides: Partial<Task> = {}): Task {
     summary: null,
     agent: null,
     permission_mode: null,
+    depends_on: [],
     project_id: null,
     created_at: 0,
     updated_at: 0,

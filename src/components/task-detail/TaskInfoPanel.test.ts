@@ -4,12 +4,13 @@ import { writable } from 'svelte/store'
 import { requireElement } from '../../test-utils/dom'
 import TaskInfoPanel from './TaskInfoPanel.svelte'
 import type { Task, PullRequestInfo } from '../../lib/types'
-import { mergingTaskIds, ticketPrs } from '../../lib/stores'
+import { mergingTaskIds, tasks, ticketPrs } from '../../lib/stores'
 import { forceGithubSync, getPullRequests, mergePullRequest } from '../../lib/ipc'
 
 vi.mock('../../lib/stores', () => ({
   ticketPrs: writable(new Map()),
   mergingTaskIds: writable(new Set()),
+  tasks: writable([]),
   setTaskMerging: vi.fn(),
 }))
 
@@ -40,6 +41,7 @@ const baseTask: Task = {
   summary: null,
   agent: null,
   permission_mode: null,
+  depends_on: [],
   project_id: null,
   created_at: 1000,
   updated_at: 2000,
@@ -50,6 +52,7 @@ describe('TaskInfoPanel', () => {
     vi.clearAllMocks()
     mergingTaskIds.set(new Set())
     ticketPrs.set(new Map())
+    tasks.set([])
     vi.mocked(getPullRequests).mockResolvedValue([])
   })
 
@@ -135,6 +138,69 @@ describe('TaskInfoPanel', () => {
     render(TaskInfoPanel, { props: { task: baseTask, workspacePath: null } })
     expect(screen.queryByText('Edit Task')).toBeNull()
     expect(screen.queryByText('Delete')).toBeNull()
+  })
+
+  it('does not render Dependencies section when task has no dependencies', () => {
+    render(TaskInfoPanel, { props: { task: baseTask, workspacePath: null } })
+    expect(screen.queryByText('// DEPENDS_ON')).toBeNull()
+  })
+
+  it('renders dependency chips with each dependency status from the task store', () => {
+    const parentTask: Task = {
+      ...baseTask,
+      id: 'T-99',
+      depends_on: ['T-41', 'T-17', 'T-03'],
+    }
+    tasks.set([
+      { ...baseTask, id: 'T-41', status: 'done' },
+      { ...baseTask, id: 'T-17', status: 'doing' },
+      { ...baseTask, id: 'T-03', status: 'backlog' },
+      parentTask,
+    ])
+
+    render(TaskInfoPanel, { props: { task: parentTask, workspacePath: null } })
+
+    const dependenciesSection = screen.getByLabelText('Dependencies')
+    expect(dependenciesSection.textContent).toContain('T-41')
+    expect(dependenciesSection.textContent).toContain('done')
+    expect(dependenciesSection.textContent).toContain('T-17')
+    expect(dependenciesSection.textContent).toContain('doing')
+    expect(dependenciesSection.textContent).toContain('T-03')
+    expect(dependenciesSection.textContent).toContain('backlog')
+    expect(dependenciesSection.textContent).toContain('Waiting on 2 dependencies')
+  })
+
+  it('shows dependency readiness when every dependency is done', () => {
+    const parentTask: Task = {
+      ...baseTask,
+      id: 'T-99',
+      depends_on: ['T-41', 'T-17'],
+    }
+    tasks.set([
+      { ...baseTask, id: 'T-41', status: 'done' },
+      { ...baseTask, id: 'T-17', status: 'done' },
+      parentTask,
+    ])
+
+    render(TaskInfoPanel, { props: { task: parentTask, workspacePath: null } })
+
+    expect(screen.getByText('All dependencies done')).toBeTruthy()
+  })
+
+  it('renders missing dependency tasks as unknown and still waiting', () => {
+    const parentTask: Task = {
+      ...baseTask,
+      id: 'T-99',
+      depends_on: ['T-missing'],
+    }
+    tasks.set([parentTask])
+
+    render(TaskInfoPanel, { props: { task: parentTask, workspacePath: null } })
+
+    const dependenciesSection = screen.getByLabelText('Dependencies')
+    expect(dependenciesSection.textContent).toContain('T-missing')
+    expect(dependenciesSection.textContent).toContain('unknown')
+    expect(dependenciesSection.textContent).toContain('Waiting on 1 dependency')
   })
 
    it('renders pipeline status section when PRs have CI data', async () => {

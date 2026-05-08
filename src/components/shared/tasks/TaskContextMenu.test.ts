@@ -24,6 +24,7 @@ const makeTask = (id: string, status: BoardStatus): Task => ({
   summary: null,
   agent: null,
   permission_mode: 'default',
+  depends_on: [],
 })
 
 beforeEach(() => {

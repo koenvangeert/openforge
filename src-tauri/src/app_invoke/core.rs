@@ -208,6 +208,7 @@ pub(super) async fn handle_app_unmatched_command(
             let status = payload_string(&request.payload, "status")?;
             let project_id = payload_optional_string(&request.payload, "projectId")?;
             let permission_mode = payload_optional_string(&request.payload, "permissionMode")?;
+            let depends_on = payload_optional_string_vec(&request.payload, "dependsOn")?;
             let task = db
                 .create_task(
                     &initial_prompt,
@@ -222,7 +223,29 @@ pub(super) async fn handle_app_unmatched_command(
                         format!("Failed to create task: {e}"),
                     )
                 })?;
-            json_value(task)?
+            if let Some(depends_on) = depends_on {
+                if !depends_on.is_empty() {
+                    if let Err(e) = db.set_task_dependencies(&task.id, &depends_on) {
+                        let _ = db.delete_task(&task.id);
+                        return Err((
+                            StatusCode::BAD_REQUEST,
+                            format!("Failed to set task dependencies: {e}"),
+                        ));
+                    }
+                }
+            }
+            json_value(
+                db.get_task(&task.id)
+                    .map_err(|e| {
+                        (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            format!("Failed to reload task: {e}"),
+                        )
+                    })?
+                    .ok_or_else(|| {
+                        (StatusCode::NOT_FOUND, format!("Task {} not found", task.id))
+                    })?,
+            )?
         }
         "update_task" => {
             let id = payload_string(&request.payload, "id")?;

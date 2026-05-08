@@ -41,6 +41,8 @@ pub struct CreateTaskRequest {
     pub initial_prompt: String,
     pub project_id: Option<String>,
     pub worktree: Option<String>,
+    #[serde(default)]
+    pub depends_on: Vec<String>,
 }
 
 #[derive(Clone)]
@@ -188,6 +190,36 @@ pub struct UpdateTaskResponse {
     pub status: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SetTaskDependenciesRequest {
+    pub task_id: String,
+    #[serde(default)]
+    pub depends_on: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AddTaskDependencyRequest {
+    pub task_id: String,
+    pub depends_on: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LinkTaskChainRequest {
+    pub chain: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct LinkTaskChainResponse {
+    pub status: String,
+    pub links: Vec<TaskDependencyLink>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct TaskDependencyLink {
+    pub task_id: String,
+    pub depends_on: String,
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct GetTaskInfoResponse {
     pub id: String,
@@ -195,6 +227,7 @@ pub struct GetTaskInfoResponse {
     pub prompt: Option<String>,
     pub summary: Option<String>,
     pub status: String,
+    pub depends_on: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -406,6 +439,16 @@ pub async fn create_task_handler(
             )
         })?;
 
+    if !request.depends_on.is_empty() {
+        if let Err(e) = db.set_task_dependencies(&task.id, &request.depends_on) {
+            let _ = db.delete_task(&task.id);
+            return Err((
+                StatusCode::BAD_REQUEST,
+                format!("Failed to set task dependencies: {e}"),
+            ));
+        }
+    }
+
     drop(db);
 
     emit_task_changed(&state, "created", &task.id, task.project_id.as_deref());
@@ -455,6 +498,79 @@ pub async fn update_task_handler(
     }))
 }
 
+pub async fn set_task_dependencies_handler(
+    State(state): State<AppState>,
+    Json(request): Json<SetTaskDependenciesRequest>,
+) -> Result<Json<UpdateTaskResponse>, (StatusCode, String)> {
+    let db = state.db.lock().unwrap();
+    db.set_task_dependencies(&request.task_id, &request.depends_on)
+        .map_err(|e| {
+            (
+                StatusCode::BAD_REQUEST,
+                format!("Failed to set task dependencies: {e}"),
+            )
+        })?;
+    drop(db);
+
+    emit_task_changed(&state, "updated", &request.task_id, None);
+
+    Ok(Json(UpdateTaskResponse {
+        task_id: request.task_id,
+        status: "updated".to_string(),
+    }))
+}
+
+pub async fn add_task_dependency_handler(
+    State(state): State<AppState>,
+    Json(request): Json<AddTaskDependencyRequest>,
+) -> Result<Json<UpdateTaskResponse>, (StatusCode, String)> {
+    let db = state.db.lock().unwrap();
+    db.add_task_dependency(&request.task_id, &request.depends_on)
+        .map_err(|e| {
+            (
+                StatusCode::BAD_REQUEST,
+                format!("Failed to add task dependency: {e}"),
+            )
+        })?;
+    drop(db);
+
+    emit_task_changed(&state, "updated", &request.task_id, None);
+
+    Ok(Json(UpdateTaskResponse {
+        task_id: request.task_id,
+        status: "updated".to_string(),
+    }))
+}
+
+pub async fn link_task_chain_handler(
+    State(state): State<AppState>,
+    Json(request): Json<LinkTaskChainRequest>,
+) -> Result<Json<LinkTaskChainResponse>, (StatusCode, String)> {
+    let db = state.db.lock().unwrap();
+    let links = db.link_task_chain(&request.chain).map_err(|e| {
+        (
+            StatusCode::BAD_REQUEST,
+            format!("Failed to link task chain: {e}"),
+        )
+    })?;
+    drop(db);
+
+    for (task_id, _) in &links {
+        emit_task_changed(&state, "updated", task_id, None);
+    }
+
+    Ok(Json(LinkTaskChainResponse {
+        status: "updated".to_string(),
+        links: links
+            .into_iter()
+            .map(|(task_id, depends_on)| TaskDependencyLink {
+                task_id,
+                depends_on,
+            })
+            .collect(),
+    }))
+}
+
 pub async fn get_task_info_handler(
     State(state): State<AppState>,
     Path(id): Path<String>,
@@ -471,6 +587,7 @@ pub async fn get_task_info_handler(
             prompt: task.prompt,
             summary: task.summary,
             status: task.status,
+            depends_on: task.depends_on,
         })),
         None => Err(StatusCode::NOT_FOUND),
     }
@@ -906,6 +1023,12 @@ pub fn create_router(state: AppState) -> Router {
         )
         .route("/create_task", post(create_task_handler))
         .route("/update_task", post(update_task_handler))
+        .route(
+            "/set_task_dependencies",
+            post(set_task_dependencies_handler),
+        )
+        .route("/add_task_dependency", post(add_task_dependency_handler))
+        .route("/link_task_chain", post(link_task_chain_handler))
         .route("/task/:id", get(get_task_info_handler))
         .route("/projects", get(get_projects_handler))
         .route("/tasks", get(get_tasks_handler))

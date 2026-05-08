@@ -21,8 +21,11 @@ If OpenForge is listening on a non-default HTTP bridge port, set `OPENFORGE_HTTP
 ## Commands
 
 ```bash
-openforge create-task --initial-prompt "Describe the follow-up work" --project-id P-1
+openforge create-task --initial-prompt "Describe the follow-up work" --project-id P-1 --depends-on T-122
 openforge update-task --task-id T-123 --summary "What changed and what needs attention"
+openforge set-task-dependencies --task-id T-123 --depends-on T-121,T-122
+openforge add-task-dependency --task-id T-123 --depends-on T-122
+openforge link-tasks --chain "T-121 -> T-122 -> T-123"
 openforge get-task --task-id T-123
 openforge list-tasks --project-id P-1 --state doing
 openforge list-projects
@@ -34,5 +37,6 @@ Use `--worktree "$PWD"` with `create-task` when the project can be inferred from
 
 - Create follow-up tasks for real cleanup or missing work; do not create tasks for trivial preferences.
 - Update the active task with a concise implementation summary before finishing.
+- Use dependencies to record prerequisite ordering, not to mark tasks blocked; Start Task enforcement is intentionally left to the app UX.
 - Task summaries are Markdown-formatted; use short paragraphs or bullets when they improve readability.
 - The CLI prints JSON so you can pass results back into your reasoning without scraping UI text.

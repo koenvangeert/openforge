@@ -19,6 +19,7 @@ const baseTask: Task = {
   prompt: null,
   agent: null,
   permission_mode: null,
+  depends_on: [],
   project_id: 'project-1',
   created_at: 1700000000,
   updated_at: 1700000000,

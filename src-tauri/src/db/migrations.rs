@@ -752,6 +752,20 @@ CREATE TABLE IF NOT EXISTS project_plugins (
 );
         "#,
     ),
+    M::up(
+        r#"
+CREATE TABLE IF NOT EXISTS task_dependencies (
+    task_id TEXT NOT NULL,
+    depends_on_task_id TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (task_id, depends_on_task_id),
+    FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+    FOREIGN KEY (depends_on_task_id) REFERENCES tasks(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_task_dependencies_task ON task_dependencies(task_id);
+CREATE INDEX IF NOT EXISTS idx_task_dependencies_depends_on ON task_dependencies(depends_on_task_id);
+        "#,
+    ),
     M::up_with_hook("", |tx| {
         let has_config_table: bool = tx
             .query_row(
@@ -966,6 +980,25 @@ pub(super) fn ensure_mergeability_columns(conn: &Connection) -> Result<()> {
             conn.execute(sql, [])?;
         }
     }
+
+    Ok(())
+}
+
+pub(super) fn ensure_task_dependency_table(conn: &Connection) -> Result<()> {
+    conn.execute_batch(
+        r#"
+CREATE TABLE IF NOT EXISTS task_dependencies (
+    task_id TEXT NOT NULL,
+    depends_on_task_id TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (task_id, depends_on_task_id),
+    FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+    FOREIGN KEY (depends_on_task_id) REFERENCES tasks(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_task_dependencies_task ON task_dependencies(task_id);
+CREATE INDEX IF NOT EXISTS idx_task_dependencies_depends_on ON task_dependencies(depends_on_task_id);
+        "#,
+    )?;
 
     Ok(())
 }
@@ -1896,6 +1929,32 @@ mod tests {
             prompt, "Test Task Title",
             "prompt should be backfilled from title"
         );
+
+        drop(conn);
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_task_dependencies_table_created() {
+        let path = std::env::temp_dir().join(format!(
+            "test_task_dependencies_table_mig_{}.db",
+            std::process::id()
+        ));
+        let _ = fs::remove_file(&path);
+
+        let db = Database::new(path.clone()).expect("Database::new");
+        let conn = db.connection();
+        let conn = conn.lock().unwrap();
+
+        let table_exists: bool = conn
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='task_dependencies'",
+                [],
+                |r| r.get(0),
+            )
+            .expect("query task_dependencies table");
+        assert!(table_exists, "task_dependencies table should exist");
 
         drop(conn);
         drop(db);
