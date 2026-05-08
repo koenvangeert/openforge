@@ -263,10 +263,6 @@ export interface WorktreeInfo {
   repo_path: string;
   worktree_path: string;
   branch_name: string;
-  /** @deprecated Direct-TTY providers no longer expose an OpenCode server port. */
-  opencode_port: number | null;
-  /** @deprecated OpenForge no longer owns an OpenCode server process for worktrees. */
-  opencode_pid: number | null;
   status: string;
   created_at: number;
   updated_at: number;
@@ -281,8 +277,6 @@ export interface TaskWorkspaceInfo {
   kind: string;
   branch_name: string | null;
   provider_name: string;
-  /** @deprecated Direct-TTY providers no longer expose an OpenCode server port. */
-  opencode_port: number | null;
   status: string;
   created_at: number;
   updated_at: number;

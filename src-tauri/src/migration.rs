@@ -359,7 +359,7 @@ mod tests {
                 id INTEGER PRIMARY KEY,
                 task_id TEXT, project_id TEXT, repo_path TEXT,
                 worktree_path TEXT NOT NULL,
-                branch_name TEXT, opencode_port INTEGER, opencode_pid INTEGER,
+                branch_name TEXT,
                 status TEXT, created_at INTEGER, updated_at INTEGER
             );
             CREATE TABLE task_workspaces (
@@ -371,7 +371,6 @@ mod tests {
                 kind TEXT NOT NULL,
                 branch_name TEXT,
                 provider_name TEXT NOT NULL,
-                opencode_port INTEGER,
                 status TEXT NOT NULL DEFAULT 'active',
                 created_at INTEGER NOT NULL,
                 updated_at INTEGER NOT NULL

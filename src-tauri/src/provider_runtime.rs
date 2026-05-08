@@ -195,8 +195,6 @@ pub(crate) fn legacy_worktree_from_task_workspace(
         repo_path: workspace.repo_path,
         worktree_path: workspace.workspace_path,
         branch_name: workspace.branch_name.unwrap_or_default(),
-        opencode_port: None,
-        opencode_pid: None,
         status: workspace.status,
         created_at: workspace.created_at,
         updated_at: workspace.updated_at,
@@ -216,7 +214,6 @@ pub(crate) fn task_workspace_from_legacy(
         kind: "git_worktree".to_string(),
         branch_name: Some(workspace.branch_name),
         provider_name,
-        opencode_port: None,
         status: workspace.status,
         created_at: workspace.created_at,
         updated_at: workspace.updated_at,
@@ -303,7 +300,6 @@ mod tests {
             kind: "git_worktree".to_string(),
             branch_name: branch_name.map(str::to_string),
             provider_name: "opencode".to_string(),
-            opencode_port: Some(1234),
             status: "running".to_string(),
             created_at: 11,
             updated_at: 22,
@@ -318,8 +314,6 @@ mod tests {
             repo_path: "/tmp/repo".to_string(),
             worktree_path: "/tmp/workspace".to_string(),
             branch_name: "branch-a".to_string(),
-            opencode_port: Some(1234),
-            opencode_pid: Some(999),
             status: "running".to_string(),
             created_at: 11,
             updated_at: 22,
@@ -362,8 +356,6 @@ mod tests {
         assert_eq!(worktree.repo_path, "/tmp/repo");
         assert_eq!(worktree.worktree_path, "/tmp/workspace");
         assert_eq!(worktree.branch_name, "");
-        assert_eq!(worktree.opencode_port, None);
-        assert_eq!(worktree.opencode_pid, None);
         assert_eq!(worktree.status, "running");
         assert_eq!(worktree.created_at, 11);
         assert_eq!(worktree.updated_at, 22);
@@ -381,7 +373,6 @@ mod tests {
         assert_eq!(workspace.kind, "git_worktree");
         assert_eq!(workspace.branch_name, Some("branch-a".to_string()));
         assert_eq!(workspace.provider_name, "pi");
-        assert_eq!(workspace.opencode_port, None);
         assert_eq!(workspace.status, "running");
         assert_eq!(workspace.created_at, 11);
         assert_eq!(workspace.updated_at, 22);
