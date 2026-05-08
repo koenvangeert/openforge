@@ -1,6 +1,6 @@
 import { invokeDesktopCommand as invoke, isElectronDesktopBridgeAvailable } from "./desktopIpc";
 import { normalizeTask } from "./boardStatus"
-import type { AgentInfo, AgentReviewComment, AgentSession, AuthoredPullRequest, AutocompleteAgentInfo, BoardStatus, CommandInfo, CommitInfo, FileContent, FileEntry, ImplementationStatus, PollResult, PrComment, PrFileDiff, PrOverviewComment, Project, ProjectAttention, ProviderModelInfo, PullRequestInfo, ReviewComment, ReviewPullRequest, ReviewSubmissionComment, SelfReviewComment, SkillInfo, Task, TaskWorkspaceInfo, TranscriptionResult, WhisperModelSizeId, WhisperModelStatus, WorktreeInfo } from "./types";
+import type { AgentReviewComment, AgentSession, AuthoredPullRequest, AutocompleteAgentInfo, BoardStatus, CommandInfo, CommitInfo, FileContent, FileEntry, ImplementationStatus, PollResult, PrComment, PrFileDiff, PrOverviewComment, Project, ProjectAttention, ProviderModelInfo, PullRequestInfo, ReviewComment, ReviewPullRequest, ReviewSubmissionComment, SelfReviewComment, SkillInfo, Task, TaskWorkspaceInfo, TranscriptionResult, WhisperModelSizeId, WhisperModelStatus, WorktreeInfo } from "./types";
 
 type RawTask = Omit<Task, 'status'> & { status: string }
 
@@ -37,10 +37,6 @@ export async function getGitBranch(): Promise<string> {
   return invoke<string>("get_git_branch");
 }
 
-
-export async function getAgents(): Promise<AgentInfo[]> {
-  return invoke<AgentInfo[]>("get_agents");
-}
 
 export async function createProject(name: string, path: string): Promise<Project> {
   return invoke<Project>("create_project", { name, path });
@@ -216,10 +212,6 @@ export async function getPrOverviewComments(owner: string, repo: string, prNumbe
 
 export async function submitPrReview(owner: string, repo: string, prNumber: number, event: string, body: string, comments: ReviewSubmissionComment[], commitId: string): Promise<void> {
   return invoke<void>("submit_pr_review", { owner, repo, prNumber, event, body, comments, commitId });
-}
-
-export async function spawnPty(taskId: string, serverPort: number, opencodeSessionId: string, cols: number, rows: number): Promise<number> {
-  return invoke<number>("pty_spawn", { taskId, serverPort, opencodeSessionId, cols, rows });
 }
 
 export async function spawnShellPty(taskId: string, cwd: string, cols: number, rows: number, terminalIndex: number): Promise<number> {

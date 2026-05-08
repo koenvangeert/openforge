@@ -14,22 +14,6 @@ fn decode_payload<T: DeserializeOwned>(command: &str, payload: &serde_json::Valu
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(super) struct PtySpawnPayload {
-    pub(super) task_id: String,
-    pub(super) server_port: u16,
-    pub(super) opencode_session_id: String,
-    pub(super) cols: u16,
-    pub(super) rows: u16,
-}
-
-impl PtySpawnPayload {
-    pub(super) fn decode(command: &str, payload: &serde_json::Value) -> AppResult<Self> {
-        decode_payload(command, payload)
-    }
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(super) struct PtySpawnShellPayload {
     pub(super) task_id: String,
     pub(super) cwd: String,
@@ -111,7 +95,6 @@ mod tests {
 
     fn decode_case(command: &str, payload: &serde_json::Value) -> Result<(), (StatusCode, String)> {
         match command {
-            "pty_spawn" => PtySpawnPayload::decode(command, payload).map(|_| ()),
             "pty_spawn_shell" => PtySpawnShellPayload::decode(command, payload).map(|_| ()),
             "pty_write" => PtyWritePayload::decode(command, payload).map(|_| ()),
             "pty_resize" => PtyResizePayload::decode(command, payload).map(|_| ()),

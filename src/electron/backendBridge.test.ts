@@ -243,7 +243,6 @@ describe('Electron backend bridge command forwarding', () => {
     expect(isSidecarBackedCommand('abort_implementation')).toBe(true)
     expect(isSidecarBackedCommand('finalize_claude_session')).toBe(true)
     expect(isSidecarBackedCommand('get_task_workspace')).toBe(true)
-    expect(isSidecarBackedCommand('pty_spawn')).toBe(true)
     expect(isSidecarBackedCommand('pty_spawn_shell')).toBe(true)
     expect(isSidecarBackedCommand('pty_write')).toBe(true)
     expect(isSidecarBackedCommand('pty_resize')).toBe(true)

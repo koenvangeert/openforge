@@ -1,17 +1,6 @@
 {
   "valid": [
     {
-      "name": "spawn_agent_pty",
-      "command": "pty_spawn",
-      "payload": {
-        "taskId": "T-pty",
-        "serverPort": 4096,
-        "opencodeSessionId": "ses-pty",
-        "cols": 80,
-        "rows": 24
-      }
-    },
-    {
       "name": "spawn_shell_with_index",
       "command": "pty_spawn_shell",
       "payload": {

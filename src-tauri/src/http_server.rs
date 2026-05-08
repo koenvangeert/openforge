@@ -8,7 +8,6 @@ use crate::{
     plugin_host::PluginHost,
     pty_manager::PtyManager,
     server_manager::ServerManager,
-    sse_bridge::SseBridgeManager,
     whisper_manager::WhisperManager,
 };
 use axum::{
@@ -52,7 +51,6 @@ pub struct AppState {
     pub backend_token: Option<String>,
     pub pty_manager: Option<PtyManager>,
     pub server_manager: Option<ServerManager>,
-    pub sse_bridge_manager: Option<SseBridgeManager>,
     pub github_client: GitHubClient,
     pub plugin_host: Option<PluginHost>,
     pub app_event_tx: Option<AppEventSender>,
@@ -1104,10 +1102,6 @@ async fn sidecar_shutdown_signal() {
 async fn shutdown_sidecar_runtime(state: &AppState) {
     info!("[http_server] Rust sidecar shutdown cleanup started");
 
-    if let Some(sse_bridge_manager) = &state.sse_bridge_manager {
-        sse_bridge_manager.stop_all().await;
-    }
-
     if let Some(plugin_host) = &state.plugin_host {
         if let Err(error) = plugin_host.stop_sidecar().await {
             warn!(
@@ -1138,7 +1132,6 @@ pub async fn start_http_sidecar_server(
     db: std::sync::Arc<Mutex<db::Database>>,
     pty_manager: PtyManager,
     server_manager: ServerManager,
-    sse_bridge_manager: SseBridgeManager,
     whisper: std::sync::Arc<WhisperManager>,
     sidecar_readiness: SidecarReadinessState,
     ready_tx: tokio::sync::oneshot::Sender<()>,
@@ -1148,7 +1141,6 @@ pub async fn start_http_sidecar_server(
         db,
         pty_manager,
         server_manager,
-        sse_bridge_manager,
         Some(whisper),
         sidecar_readiness,
         true,
@@ -1162,7 +1154,6 @@ async fn start_http_server_with_app_state(
     db: std::sync::Arc<Mutex<db::Database>>,
     pty_manager: PtyManager,
     server_manager: ServerManager,
-    sse_bridge_manager: SseBridgeManager,
     whisper: Option<std::sync::Arc<WhisperManager>>,
     sidecar_readiness: SidecarReadinessState,
     is_electron_sidecar: bool,
@@ -1197,7 +1188,6 @@ async fn start_http_server_with_app_state(
         backend_token: std::env::var("OPENFORGE_BACKEND_TOKEN").ok(),
         pty_manager: Some(pty_manager),
         server_manager: Some(server_manager),
-        sse_bridge_manager: Some(sse_bridge_manager),
         github_client: github_client.clone(),
         plugin_host,
         app_event_tx: Some(app_event_tx.clone()),

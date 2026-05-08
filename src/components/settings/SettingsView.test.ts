@@ -10,7 +10,6 @@ vi.mock('../../lib/ipc', () => ({
   setProjectConfig: vi.fn(),
   updateProject: vi.fn(),
   deleteProject: vi.fn(),
-  getAgents: vi.fn(() => Promise.resolve([{ name: 'build' }, { name: 'oracle' }])),
   getConfig: vi.fn(() => Promise.resolve(null)),
   setConfig: vi.fn(() => Promise.resolve(undefined)),
   checkOpenCodeInstalled: vi.fn(() => Promise.resolve({ installed: false, path: null, version: null })),

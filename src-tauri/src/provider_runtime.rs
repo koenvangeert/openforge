@@ -341,6 +341,12 @@ pub(crate) fn session_output_context(
     })
 }
 
+/// Resolve a managed OpenCode server port for legacy session-output recovery.
+///
+/// Current OpenCode runs do not have an OpenForge-owned server port; their
+/// terminal output comes from the provider-owned `opencode run` PTY buffer.
+/// This returns `SERVICE_UNAVAILABLE` through app-invoke when a pre-migration
+/// managed server is not present, keeping the compatibility boundary explicit.
 pub(crate) async fn session_output_server_port(
     server_manager: &ServerManager,
     task_id: &str,

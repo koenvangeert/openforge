@@ -1,44 +1,26 @@
-//! OpenCode REST API Client
+//! OpenCode legacy HTTP compatibility types.
 //!
-//! Type-safe Rust client for interacting with the OpenCode HTTP server.
-//! Provides functions for session management, prompt sending, and SSE event streaming.
-//!
-//! ## API Endpoints (opencode serve)
-//! - POST /session — Create new session
-//! - POST /session/{id}/message — Send message to session
-//! - POST /session/{id}/prompt_async — Send message async (no wait)
-//! - POST /session/{id}/abort — Abort a running session
-//! - GET /event — Subscribe to server-sent events
-//! - GET /global/health — Health check
-//!
-//! ## Base URL
-//! Default: http://localhost:4096
-//! Configurable via OpenCodeClient::with_base_url(base_url)
+//! OpenForge no longer owns an `opencode serve` lifecycle after the plugin-hook
+//! migration. New OpenCode work runs through `opencode run` PTYs with events
+//! posted by the installed OpenCode plugin hook. This module intentionally keeps
+//! only the shared DTOs used by provider discovery plus the narrow legacy
+//! session-output reader used by `get_session_output` when a pre-migration
+//! managed server is still present.
 
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::error::Error as StdError;
 use std::fmt;
 
-/// Default OpenCode server base URL
-pub const DEFAULT_BASE_URL: &str = "http://localhost:4096";
-
-/// OpenCode API client
+/// OpenCode API client for the intentionally retained legacy session-output path.
 #[derive(Clone)]
 pub struct OpenCodeClient {
     client: Client,
     base_url: String,
 }
 
-#[allow(dead_code)]
 impl OpenCodeClient {
-    /// Create a new OpenCode client with default base URL
-    pub fn new() -> Self {
-        Self::with_base_url(DEFAULT_BASE_URL.to_string())
-    }
-
-    /// Create a new OpenCode client with custom base URL
+    /// Create a new legacy client for a known managed OpenCode server URL.
     pub fn with_base_url(base_url: String) -> Self {
         Self {
             client: Client::new(),
@@ -46,307 +28,11 @@ impl OpenCodeClient {
         }
     }
 
-    /// Create a new session
+    /// Get session messages for legacy output recovery.
     ///
-    /// # Arguments
-    /// * `title` - Session title
-    ///
-    /// # Returns
-    /// Session ID on success
-    ///
-    /// # Example
-    /// ```no_run
-    /// # use opencode_client::OpenCodeClient;
-    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let client = OpenCodeClient::new();
-    /// let session_id = client.create_session("My Session".to_string()).await?;
-    /// # Ok(())
-    /// # }
-    /// ```
-    pub async fn create_session(&self, title: String) -> Result<String, OpenCodeError> {
-        let url = format!("{}/session", self.base_url);
-        let request = CreateSessionRequest { title };
-
-        let response = self
-            .client
-            .post(&url)
-            .json(&request)
-            .send()
-            .await
-            .map_err(|e| OpenCodeError::NetworkError(e.to_string()))?;
-
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response
-                .text()
-                .await
-                .unwrap_or_else(|_| "Unable to read response body".to_string());
-            return Err(OpenCodeError::ApiError {
-                status: status.as_u16(),
-                message: body,
-            });
-        }
-
-        let session_response: CreateSessionResponse = response
-            .json()
-            .await
-            .map_err(|e| OpenCodeError::ParseError(e.to_string()))?;
-
-        Ok(session_response.id)
-    }
-
-    /// Send a prompt asynchronously (fire-and-forget)
-    ///
-    /// # Arguments
-    /// * `session_id` - Session ID
-    /// * `text` - Prompt text
-    /// * `agent` - Optional agent name to route the prompt to
-    ///
-    /// # Returns
-    /// Ok on successful submission (does not wait for completion)
-    pub async fn prompt_async(
-        &self,
-        session_id: &str,
-        text: String,
-        agent: Option<String>,
-        model: Option<PromptModel>,
-    ) -> Result<(), OpenCodeError> {
-        let url = format!("{}/session/{}/prompt_async", self.base_url, session_id);
-        let request = PromptAsyncRequest {
-            parts: vec![Part {
-                r#type: "text".to_string(),
-                text,
-            }],
-            agent,
-            model,
-        };
-
-        let response = self
-            .client
-            .post(&url)
-            .json(&request)
-            .send()
-            .await
-            .map_err(|e| OpenCodeError::NetworkError(e.to_string()))?;
-
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response
-                .text()
-                .await
-                .unwrap_or_else(|_| "Unable to read response body".to_string());
-            return Err(OpenCodeError::ApiError {
-                status: status.as_u16(),
-                message: body,
-            });
-        }
-
-        Ok(())
-    }
-
-    /// Abort a running session
-    ///
-    /// # Arguments
-    /// * `session_id` - Session ID to abort
-    ///
-    /// # Returns
-    /// Ok on successful abort
-    pub async fn abort_session(&self, session_id: &str) -> Result<(), OpenCodeError> {
-        let url = format!("{}/session/{}/abort", self.base_url, session_id);
-
-        let response = self
-            .client
-            .post(&url)
-            .json(&serde_json::json!({}))
-            .send()
-            .await
-            .map_err(|e| OpenCodeError::NetworkError(e.to_string()))?;
-
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response
-                .text()
-                .await
-                .unwrap_or_else(|_| "Unable to read response body".to_string());
-            return Err(OpenCodeError::ApiError {
-                status: status.as_u16(),
-                message: body,
-            });
-        }
-
-        Ok(())
-    }
-
-    /// List available agents
-    ///
-    /// # Returns
-    /// List of agent information
-    pub async fn list_agents(&self) -> Result<Vec<AgentInfo>, OpenCodeError> {
-        let url = format!("{}/agent", self.base_url);
-
-        let response = self
-            .client
-            .get(&url)
-            .send()
-            .await
-            .map_err(|e| OpenCodeError::NetworkError(e.to_string()))?;
-
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response
-                .text()
-                .await
-                .unwrap_or_else(|_| "Unable to read response body".to_string());
-            return Err(OpenCodeError::ApiError {
-                status: status.as_u16(),
-                message: body,
-            });
-        }
-
-        let agents: Vec<AgentInfo> = response
-            .json()
-            .await
-            .map_err(|e| OpenCodeError::ParseError(e.to_string()))?;
-
-        Ok(agents)
-    }
-
-    pub async fn list_providers(&self) -> Result<Vec<ProviderModelInfo>, OpenCodeError> {
-        let url = format!("{}/provider", self.base_url);
-        let response = self
-            .client
-            .get(&url)
-            .send()
-            .await
-            .map_err(|e| OpenCodeError::NetworkError(e.to_string()))?;
-
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response.text().await.unwrap_or_default();
-            return Err(OpenCodeError::ApiError {
-                status: status.as_u16(),
-                message: body,
-            });
-        }
-
-        let raw: serde_json::Value = response
-            .json()
-            .await
-            .map_err(|e| OpenCodeError::ParseError(e.to_string()))?;
-
-        let mut models = Vec::new();
-        if let Some(all) = raw.get("all").and_then(|v| v.as_array()) {
-            for provider in all {
-                let provider_id = provider
-                    .get("id")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or_default();
-
-                if let Some(provider_models) = provider.get("models").and_then(|v| v.as_array()) {
-                    for m in provider_models {
-                        let model_id = m.get("id").and_then(|v| v.as_str()).unwrap_or_default();
-                        let name = m.get("name").and_then(|v| v.as_str()).unwrap_or(model_id);
-                        models.push(ProviderModelInfo {
-                            provider_id: provider_id.to_string(),
-                            model_id: model_id.to_string(),
-                            name: name.to_string(),
-                        });
-                    }
-                }
-            }
-        }
-
-        Ok(models)
-    }
-
-    /// List available commands
-    ///
-    /// # Returns
-    /// List of command information
-    pub async fn list_commands(&self) -> Result<Vec<CommandInfo>, OpenCodeError> {
-        let url = format!("{}/command", self.base_url);
-
-        let response = self
-            .client
-            .get(&url)
-            .send()
-            .await
-            .map_err(|e| OpenCodeError::NetworkError(e.to_string()))?;
-
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response
-                .text()
-                .await
-                .unwrap_or_else(|_| "Unable to read response body".to_string());
-            return Err(OpenCodeError::ApiError {
-                status: status.as_u16(),
-                message: body,
-            });
-        }
-
-        let commands: Vec<CommandInfo> = response
-            .json()
-            .await
-            .map_err(|e| OpenCodeError::ParseError(e.to_string()))?;
-
-        Ok(commands)
-    }
-
-    /// Find files matching a query
-    ///
-    /// # Arguments
-    /// * `query` - Search query string
-    /// * `dirs` - Include directories in results
-    /// * `limit` - Maximum number of results
-    ///
-    /// # Returns
-    /// List of matching file paths
-    pub async fn find_files(
-        &self,
-        query: &str,
-        dirs: bool,
-        limit: u32,
-    ) -> Result<Vec<String>, OpenCodeError> {
-        let url = format!(
-            "{}/find/file?query={}&dirs={}&limit={}",
-            self.base_url, query, dirs, limit
-        );
-
-        let response = self
-            .client
-            .get(&url)
-            .send()
-            .await
-            .map_err(|e| OpenCodeError::NetworkError(e.to_string()))?;
-
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response
-                .text()
-                .await
-                .unwrap_or_else(|_| "Unable to read response body".to_string());
-            return Err(OpenCodeError::ApiError {
-                status: status.as_u16(),
-                message: body,
-            });
-        }
-
-        let files: Vec<String> = response
-            .json()
-            .await
-            .map_err(|e| OpenCodeError::ParseError(e.to_string()))?;
-
-        Ok(files)
-    }
-
-    /// Get session messages
-    ///
-    /// # Arguments
-    /// * `session_id` - Session ID
-    ///
-    /// # Returns
-    /// Array of message objects (each with role, parts, etc.)
+    /// This is not part of the current OpenCode execution path. It exists only
+    /// so old workspaces with an OpenForge-managed `opencode serve` port can
+    /// still render assistant output via `get_session_output`.
     pub async fn get_session_messages(
         &self,
         session_id: &str,
@@ -372,127 +58,14 @@ impl OpenCodeClient {
             });
         }
 
-        let messages: Vec<serde_json::Value> = response
+        response
             .json()
             .await
-            .map_err(|e| OpenCodeError::ParseError(e.to_string()))?;
-
-        Ok(messages)
-    }
-
-    /// Get child sessions of a parent session
-    ///
-    /// # Arguments
-    /// * `session_id` - Parent session ID
-    ///
-    /// # Returns
-    /// List of child session information
-    pub async fn get_session_children(
-        &self,
-        session_id: &str,
-    ) -> Result<Vec<SessionInfo>, OpenCodeError> {
-        let url = format!("{}/session/{}/children", self.base_url, session_id);
-
-        let response = self
-            .client
-            .get(&url)
-            .send()
-            .await
-            .map_err(|e| OpenCodeError::NetworkError(e.to_string()))?;
-
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response
-                .text()
-                .await
-                .unwrap_or_else(|_| "Unable to read response body".to_string());
-            return Err(OpenCodeError::ApiError {
-                status: status.as_u16(),
-                message: body,
-            });
-        }
-
-        let children: Vec<SessionInfo> = response
-            .json()
-            .await
-            .map_err(|e| OpenCodeError::ParseError(e.to_string()))?;
-
-        Ok(children)
-    }
-
-    /// Get status of all sessions
-    ///
-    /// # Returns
-    /// Map of session IDs to their status information
-    pub async fn get_all_session_statuses(
-        &self,
-    ) -> Result<HashMap<String, SessionStatusInfo>, OpenCodeError> {
-        let url = format!("{}/session/status", self.base_url);
-
-        let response = self
-            .client
-            .get(&url)
-            .send()
-            .await
-            .map_err(|e| OpenCodeError::NetworkError(e.to_string()))?;
-
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response
-                .text()
-                .await
-                .unwrap_or_else(|_| "Unable to read response body".to_string());
-            return Err(OpenCodeError::ApiError {
-                status: status.as_u16(),
-                message: body,
-            });
-        }
-
-        let statuses: HashMap<String, SessionStatusInfo> = response
-            .json()
-            .await
-            .map_err(|e| OpenCodeError::ParseError(e.to_string()))?;
-
-        Ok(statuses)
+            .map_err(|e| OpenCodeError::ParseError(e.to_string()))
     }
 }
 
-impl Default for OpenCodeClient {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-// ============================================================================
-// Request/Response Types
-// ============================================================================
-
-/// Request to create a new session
-#[allow(dead_code)]
-#[derive(Debug, Serialize, Deserialize)]
-pub struct CreateSessionRequest {
-    pub title: String,
-}
-
-/// Response from creating a session
-#[allow(dead_code)]
-#[derive(Debug, Serialize, Deserialize)]
-pub struct CreateSessionResponse {
-    pub id: String,
-    #[serde(flatten)]
-    pub extra: serde_json::Map<String, serde_json::Value>,
-}
-
-/// Part of a prompt (text, image, etc.)
-#[allow(dead_code)]
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Part {
-    #[serde(rename = "type")]
-    pub r#type: String,
-    pub text: String,
-}
-
-/// Request to send a prompt asynchronously
+/// Request to send a prompt asynchronously.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PromptModel {
     #[serde(rename = "providerID")]
@@ -501,18 +74,7 @@ pub struct PromptModel {
     pub model_id: String,
 }
 
-/// Request to send a prompt asynchronously
-#[allow(dead_code)]
-#[derive(Debug, Serialize)]
-pub struct PromptAsyncRequest {
-    pub parts: Vec<Part>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub agent: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub model: Option<PromptModel>,
-}
-
-/// Agent information
+/// Agent information.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AgentInfo {
     pub name: String,
@@ -531,7 +93,7 @@ pub struct ProviderModelInfo {
     pub name: String,
 }
 
-/// Command information
+/// Command information.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct CommandInfo {
     pub name: String,
@@ -545,7 +107,7 @@ pub struct CommandInfo {
     pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
-/// Skill information — enriched from CommandInfo with template content and level
+/// Skill information — enriched from CommandInfo with template content and level.
 #[derive(Debug, Clone, Serialize)]
 pub struct SkillInfo {
     pub name: String,
@@ -556,38 +118,15 @@ pub struct SkillInfo {
     pub source_dir: String, // ".agents", ".claude", or ".opencode"
 }
 
-/// Session information from OpenCode API
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct SessionInfo {
-    pub id: String,
-    pub title: String,
-    #[serde(rename = "parentID", default)]
-    pub parent_id: Option<String>,
-    #[serde(flatten)]
-    pub extra: serde_json::Map<String, serde_json::Value>,
-}
-
-/// Status of a single session from the /session/status endpoint
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct SessionStatusInfo {
-    /// Status type: "idle", "busy", or "retry"
-    #[serde(rename = "type")]
-    pub status_type: String,
-}
-
-// ============================================================================
-// Error Types
-// ============================================================================
-
-/// OpenCode API errors
+/// OpenCode API errors.
 #[derive(Debug)]
 #[allow(clippy::enum_variant_names)]
 pub enum OpenCodeError {
-    /// Network error (connection failed, timeout, etc.)
+    /// Network error (connection failed, timeout, etc.).
     NetworkError(String),
-    /// API returned error status
+    /// API returned error status.
     ApiError { status: u16, message: String },
-    /// Failed to parse response
+    /// Failed to parse response.
     ParseError(String),
 }
 
@@ -605,34 +144,15 @@ impl fmt::Display for OpenCodeError {
 
 impl StdError for OpenCodeError {}
 
-// ============================================================================
-// Tests
-// ============================================================================
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_client_creation() {
-        let client = OpenCodeClient::new();
-        assert_eq!(client.base_url, DEFAULT_BASE_URL);
-    }
 
     #[test]
     fn test_client_with_custom_url() {
         let custom_url = "http://localhost:8080";
         let client = OpenCodeClient::with_base_url(custom_url.to_string());
         assert_eq!(client.base_url, custom_url);
-    }
-
-    #[test]
-    fn test_request_serialization() {
-        let request = CreateSessionRequest {
-            title: "Test Session".to_string(),
-        };
-        let json = serde_json::to_string(&request).unwrap();
-        assert!(json.contains("Test Session"));
     }
 
     #[test]
@@ -651,50 +171,6 @@ mod tests {
     }
 
     #[test]
-    fn test_session_info_deserialization_with_parent() {
-        let json = r#"{"id": "ses_123", "title": "Test Session", "parentID": "ses_parent"}"#;
-        let info: SessionInfo = serde_json::from_str(json).unwrap();
-        assert_eq!(info.id, "ses_123");
-        assert_eq!(info.title, "Test Session");
-        assert_eq!(info.parent_id, Some("ses_parent".to_string()));
-    }
-
-    #[test]
-    fn test_session_info_deserialization_without_parent() {
-        let json = r#"{"id": "ses_456", "title": "Root Session"}"#;
-        let info: SessionInfo = serde_json::from_str(json).unwrap();
-        assert_eq!(info.id, "ses_456");
-        assert_eq!(info.title, "Root Session");
-        assert_eq!(info.parent_id, None);
-    }
-
-    #[test]
-    fn test_session_info_no_status_field() {
-        // Regression: old SessionInfo had `status: String` which would fail
-        // because OpenCode Session has no status field
-        let json = r#"{"id": "ses_789", "title": "No Status", "version": 1}"#;
-        let info: SessionInfo = serde_json::from_str(json).unwrap();
-        assert_eq!(info.id, "ses_789");
-        assert!(info.extra.contains_key("version"));
-    }
-
-    #[test]
-    fn test_session_status_info_deserialization() {
-        let json = r#"{"type": "busy"}"#;
-        let status: SessionStatusInfo = serde_json::from_str(json).unwrap();
-        assert_eq!(status.status_type, "busy");
-    }
-
-    #[test]
-    fn test_session_status_map_deserialization() {
-        let json = r#"{"ses_1": {"type": "busy"}, "ses_2": {"type": "retry"}}"#;
-        let map: HashMap<String, SessionStatusInfo> = serde_json::from_str(json).unwrap();
-        assert_eq!(map.len(), 2);
-        assert_eq!(map.get("ses_1").unwrap().status_type, "busy");
-        assert_eq!(map.get("ses_2").unwrap().status_type, "retry");
-    }
-
-    #[test]
     fn test_prompt_model_serialization() {
         let model = PromptModel {
             provider_id: "anthropic".to_string(),
@@ -706,39 +182,5 @@ mod tests {
         assert_eq!(value["modelID"], "claude-sonnet");
         assert!(value.get("provider_id").is_none());
         assert!(value.get("model_id").is_none());
-    }
-
-    #[test]
-    fn test_prompt_async_request_with_model() {
-        let request = PromptAsyncRequest {
-            parts: vec![Part {
-                r#type: "text".to_string(),
-                text: "Hello".to_string(),
-            }],
-            agent: Some("coder".to_string()),
-            model: Some(PromptModel {
-                provider_id: "anthropic".to_string(),
-                model_id: "claude-sonnet".to_string(),
-            }),
-        };
-
-        let value = serde_json::to_value(&request).unwrap();
-        assert_eq!(value["model"]["providerID"], "anthropic");
-        assert_eq!(value["model"]["modelID"], "claude-sonnet");
-    }
-
-    #[test]
-    fn test_prompt_async_request_without_model() {
-        let request = PromptAsyncRequest {
-            parts: vec![Part {
-                r#type: "text".to_string(),
-                text: "Hello".to_string(),
-            }],
-            agent: Some("coder".to_string()),
-            model: None,
-        };
-
-        let value = serde_json::to_value(&request).unwrap();
-        assert!(value.get("model").is_none());
     }
 }

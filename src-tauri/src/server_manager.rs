@@ -69,10 +69,16 @@ struct ManagedServer {
 }
 
 // ============================================================================
-// Server Manager
+// Legacy Server Manager
 // ============================================================================
 
-/// Manages multiple OpenCode servers (one per task/worktree)
+/// Quarantined compatibility wrapper for pre-plugin-hook OpenCode servers.
+///
+/// OpenForge no longer starts `opencode serve` for normal OpenCode execution or
+/// discovery. Active sessions use provider-owned `opencode run` PTYs plus the
+/// installed OpenCode plugin hook. This manager remains only so old managed
+/// server processes can be stopped and, when still present, legacy
+/// `get_session_output` can read session messages from their ports.
 #[derive(Clone)]
 pub struct ServerManager {
     servers: Arc<Mutex<HashMap<String, ManagedServer>>>,

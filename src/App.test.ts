@@ -214,7 +214,6 @@ vi.mock('./lib/ipc', () => ({
   updateTaskStatus: vi.fn(async () => undefined),
   deleteTask: vi.fn(),
   clearDoneTasks: vi.fn(),
-  getAgents: vi.fn(),
   listOpenCodeAgents: vi.fn().mockResolvedValue([]),
   createProject: vi.fn(),
   updateProject: vi.fn(),

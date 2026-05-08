@@ -23,7 +23,6 @@ import {
 	killPty,
 	killShellsForTask,
 	resizePty,
-	spawnPty,
 	spawnShellPty,
 	transcribeAudio,
 	updateTask,
@@ -66,10 +65,6 @@ describe("ipc spawnShellPty", () => {
 	});
 
 	it("keeps renderer PTY payloads aligned with the Rust decoder contract fixtures", async () => {
-		const spawnAgent = ptyFixture("pty_spawn", "spawn_agent_pty");
-		await spawnPty("T-pty", 4096, "ses-pty", 80, 24);
-		expect(invokeMock).toHaveBeenLastCalledWith(spawnAgent.command, spawnAgent.payload);
-
 		const spawnShell = ptyFixture("pty_spawn_shell", "spawn_shell_with_index");
 		await spawnShellPty("T-pty", "/tmp/openforge-worktree", 80, 24, 2);
 		expect(invokeMock).toHaveBeenLastCalledWith(spawnShell.command, spawnShell.payload);

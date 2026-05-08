@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy, untrack } from 'svelte'
   import { activeSessions } from '../../lib/stores'
-  import { writePty, killPty, spawnPty, abortImplementation } from '../../lib/ipc'
+  import { writePty, killPty, abortImplementation } from '../../lib/ipc'
   import '@xterm/xterm/css/xterm.css'
   import { getAgentPanelStatusFromSessionStatus, type AgentPanelStatus } from '../../lib/agentPanelSessionSync'
   import { parseCheckpointQuestion } from '../../lib/parseCheckpoint'
@@ -25,24 +25,18 @@
   let { taskId, isStarting = false }: Props = $props()
 
   let status = $state<AgentPanelStatus>('idle')
-  let opencodePort = $state<number | null>(null)
   let terminalEl: HTMLDivElement
   let poolEntry: PoolEntry | null = null
   let destroyed = false
 
   const sessionHistory = createSessionHistory({
     taskId: untrack(() => taskId),
-    getOpencodePort: () => opencodePort,
-    setOpencodePort: (port) => { opencodePort = port },
     onStatusUpdate: (s) => {
       status = s
     },
   })
 
   let session = $derived($activeSessions.get(taskId) || null)
-  let attachCommand = $derived(session?.opencode_session_id && opencodePort
-    ? `opencode attach http://127.0.0.1:${opencodePort} -s ${session.opencode_session_id}`
-    : null)
   let questionText = $derived(session ? parseCheckpointQuestion(session.checkpoint_data) : null)
 
   $effect(() => {
@@ -53,9 +47,9 @@
 
     status = getAgentPanelStatusFromSessionStatus(session.status)
 
-    // Attach TTY for any existing session — show terminal output
-    // unless the task never started
-    void tryAttachPty()
+    // OpenCode output is produced by the provider-owned `opencode run` PTY.
+    // The terminal pool replays any in-memory buffer and subscribes to new
+    // PTY events; OpenForge no longer starts `opencode attach` sessions.
   })
 
   $effect(() => {
@@ -73,33 +67,6 @@
     }
   })
 
-  async function tryAttachPty(): Promise<void> {
-    if (!poolEntry) return
-    if (getShellLifecycleState(taskId).ptyActive) return
-
-    const currentSession = $activeSessions.get(taskId)
-    if (!currentSession) return
-    if (!currentSession.opencode_session_id) return
-
-    // Get port from session history or worktree
-    if (!opencodePort) {
-      await sessionHistory.loadSessionHistory()
-    }
-    if (!opencodePort) return
-
-    try {
-      await spawnPty(taskId, opencodePort, currentSession.opencode_session_id, poolEntry.terminal.cols, poolEntry.terminal.rows)
-      updateShellLifecycleState(taskId, {
-        ptyActive: true,
-        shellExited: false,
-        currentPtyInstance: getShellLifecycleState(taskId).currentPtyInstance,
-      })
-      if (currentSession.status === 'running') status = 'running'
-    } catch (e) {
-      console.error('[OpenCodeAgentPanel] Failed to spawn PTY:', e)
-    }
-  }
-
   onMount(async () => {
     poolEntry = await acquire(taskId)
     if (destroyed || !poolEntry) return
@@ -107,8 +74,6 @@
     if (destroyed) return
 
     await sessionHistory.loadSessionHistory()
-    if (destroyed) return
-    await tryAttachPty()
   })
 
   onDestroy(() => {
@@ -188,15 +153,7 @@
             <span class="badge badge-sm {getSessionStatusBadgeClass(session.status)}">
               {session.status}
             </span>
-            {#if attachCommand}
-              <button
-                class="btn btn-ghost btn-xs font-mono text-base-content/50 border border-base-300 max-w-[420px] truncate normal-case"
-                onclick={() => { navigator.clipboard.writeText(attachCommand ?? '') }}
-                title="Click to copy"
-              >
-                {attachCommand}
-              </button>
-            {:else if session.opencode_session_id}
+            {#if session.opencode_session_id}
               <span class="text-[0.6875rem] font-mono text-base-content/50 max-w-[180px] truncate" title={session.opencode_session_id}>
                 {session.opencode_session_id}
               </span>

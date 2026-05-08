@@ -15,12 +15,6 @@ pub(crate) mod test_support;
 #[cfg(test)]
 mod tests;
 
-use lifecycle::cleanup_task_runtime_for_app;
-#[cfg(test)]
-pub(crate) use lifecycle::{start_opencode_sse_bridge_for_app, ExistingSseBridge};
-
-#[cfg(test)]
-use crate::sse_bridge::SseBridgeError;
 use crate::{
     app_events::publish_app_event_to_runtime,
     db,
@@ -28,6 +22,7 @@ use crate::{
     whisper_manager::WhisperModelSize,
 };
 use axum::http::StatusCode;
+use lifecycle::cleanup_task_runtime_for_app;
 use log::{error, info, warn};
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
