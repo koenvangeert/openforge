@@ -20,11 +20,13 @@ export type BridgeFetch = (url: string, init: {
 }) => Promise<BridgeResponseLike>
 
 export type OpenExternal = (url: string) => Promise<void>
+export type QuitApp = () => void | Promise<void>
 
 export interface ElectronInvokeDeps {
   sidecarConfig: SidecarLaunchConfig | null
   fetch: BridgeFetch
   openExternal: OpenExternal
+  quitApp?: QuitApp
 }
 
 const SIDECAR_BACKED_COMMANDS = new Set([
@@ -186,6 +188,11 @@ export async function handleElectronInvoke(request: ElectronInvokeRequest, deps:
     return openExternalUrl(url, deps.openExternal)
   }
 
+  if (command === 'quit_app') {
+    if (!deps.quitApp) throw new Error('quit_app is not available')
+    await deps.quitApp()
+    return undefined
+  }
 
   if (isSidecarBackedCommand(command)) {
     return forwardToSidecar(command, payload, deps)

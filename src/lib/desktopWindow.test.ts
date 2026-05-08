@@ -3,7 +3,7 @@ import { createDesktopWindow, type DesktopCloseRequestEvent } from './desktopWin
 
 describe('desktop window abstraction', () => {
   it('requires the Electron preload bridge for desktop window controls', () => {
-    expect(() => createDesktopWindow({ electronBridge: null, close: vi.fn() })).toThrow('Electron shell')
+    expect(() => createDesktopWindow({ electronBridge: null })).toThrow('Electron shell')
   })
 
   it('adapts Electron beforeunload into close-request callbacks', async () => {
@@ -17,7 +17,6 @@ describe('desktop window abstraction', () => {
     const handler = vi.fn((event: DesktopCloseRequestEvent) => event.preventDefault())
     const desktopWindow = createDesktopWindow({
       electronBridge: { version: 1, invoke: vi.fn(), onEvent: vi.fn() },
-      close: vi.fn(),
     })
 
     const unlisten = await desktopWindow.onCloseRequested(handler)
@@ -36,7 +35,19 @@ describe('desktop window abstraction', () => {
     removeEventListener.mockRestore()
   })
 
-  it('does not re-run Electron close-request handlers when destroy closes after confirmation', async () => {
+  it('requests Electron app quit when destroy closes after confirmation', async () => {
+    const quitApp = vi.fn(async () => undefined)
+    const desktopWindow = createDesktopWindow({
+      electronBridge: { version: 1, invoke: vi.fn(), onEvent: vi.fn() },
+      quitApp,
+    })
+
+    await desktopWindow.destroy()
+
+    expect(quitApp).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not re-run Electron close-request handlers when destroy requests app quit after confirmation', async () => {
     const listeners = new Map<string, EventListener>()
     vi.spyOn(window, 'addEventListener').mockImplementation((type, listener) => {
       if (typeof listener === 'function') listeners.set(type, listener)
@@ -44,19 +55,19 @@ describe('desktop window abstraction', () => {
     vi.spyOn(window, 'removeEventListener').mockImplementation((type, listener) => {
       if (listeners.get(type) === listener) listeners.delete(type)
     })
-    const close = vi.fn(() => {
+    const quitApp = vi.fn(async () => {
       listeners.get('beforeunload')?.(new Event('beforeunload', { cancelable: true }))
     })
     const handler = vi.fn((event: DesktopCloseRequestEvent) => event.preventDefault())
     const desktopWindow = createDesktopWindow({
       electronBridge: { version: 1, invoke: vi.fn(), onEvent: vi.fn() },
-      close,
+      quitApp,
     })
 
     await desktopWindow.onCloseRequested(handler)
     await desktopWindow.destroy()
 
-    expect(close).toHaveBeenCalledTimes(1)
+    expect(quitApp).toHaveBeenCalledTimes(1)
     expect(handler).not.toHaveBeenCalled()
 
     vi.restoreAllMocks()

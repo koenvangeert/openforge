@@ -70,6 +70,7 @@ export const ipcCommandContracts = [
   { functionName: 'forceGithubSync', ipcCommand: 'force_github_sync', payloadKeys: [], targetOwner: 'rust-sidecar', domain: 'github-review' },
   { functionName: 'getPullRequests', ipcCommand: 'get_pull_requests', payloadKeys: [], targetOwner: 'rust-sidecar', domain: 'github-review' },
   { functionName: 'openUrl', ipcCommand: 'open_url', payloadKeys: ['url'], targetOwner: 'electron-main', domain: 'misc' },
+  { functionName: 'quitApp', ipcCommand: 'quit_app', payloadKeys: [], targetOwner: 'electron-main', domain: 'app-shell' },
   { functionName: 'getPrComments', ipcCommand: 'get_pr_comments', payloadKeys: ['prId'], targetOwner: 'rust-sidecar', domain: 'github-review' },
   { functionName: 'markCommentAddressed', ipcCommand: 'mark_comment_addressed', payloadKeys: ['commentId'], targetOwner: 'rust-sidecar', domain: 'github-review' },
   { functionName: 'mergePullRequest', ipcCommand: 'merge_pull_request', payloadKeys: ['owner', 'repo', 'prNumber'], targetOwner: 'rust-sidecar', domain: 'github-review' },

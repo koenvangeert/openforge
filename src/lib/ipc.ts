@@ -121,6 +121,10 @@ export async function openUrl(url: string): Promise<void> {
   return invoke("open_url", { url });
 }
 
+export async function quitApp(): Promise<void> {
+  return invoke("quit_app");
+}
+
 export async function getPrComments(prId: number): Promise<PrComment[]> {
   return invoke<PrComment[]>("get_pr_comments", { prId });
 }

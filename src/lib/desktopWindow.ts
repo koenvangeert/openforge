@@ -1,4 +1,5 @@
 import type { OpenForgeDesktopBridge, DesktopUnlistenFn } from './desktopIpc'
+import { quitApp as defaultQuitApp } from './ipc'
 
 export interface DesktopCloseRequestEvent {
   preventDefault(): void
@@ -11,7 +12,7 @@ export interface DesktopWindowTarget {
 
 export interface CreateDesktopWindowDeps {
   electronBridge?: OpenForgeDesktopBridge | null
-  close?: () => void
+  quitApp?: () => void | Promise<void>
 }
 
 function currentElectronBridge(): OpenForgeDesktopBridge | null {
@@ -21,7 +22,7 @@ function currentElectronBridge(): OpenForgeDesktopBridge | null {
 
 export function createDesktopWindow(deps: CreateDesktopWindowDeps = {}): DesktopWindowTarget {
   const bridge = deps.electronBridge ?? currentElectronBridge()
-  const close = deps.close ?? (() => window.close())
+  const requestQuit = deps.quitApp ?? defaultQuitApp
 
   if (!bridge) {
     throw new Error('Open Forge desktop window controls are unavailable; run the app in the Electron shell')
@@ -46,7 +47,7 @@ export function createDesktopWindow(deps: CreateDesktopWindowDeps = {}): Desktop
     },
     async destroy() {
       isDestroying = true
-      close()
+      await requestQuit()
     },
   }
 }
