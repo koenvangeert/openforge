@@ -16,6 +16,8 @@
   let isLoading = $state(false)
   let error = $state<string | null>(null)
 
+  const markdownImageBaseUrl = $derived(`https://raw.githubusercontent.com/${pr.repo_owner}/${pr.repo_name}/${pr.head_sha}/`)
+
   async function loadComments() {
     isLoading = true
     error = null
@@ -73,7 +75,7 @@
       </div>
       <div class="px-5 py-4">
         {#if pr.body}
-          <MarkdownContent content={pr.body} onOpenUrl={openUrl} />
+          <MarkdownContent content={pr.body} imageBaseUrl={markdownImageBaseUrl} onOpenUrl={openUrl} />
         {:else}
           <p class="text-sm text-base-content/50 italic m-0">No description provided.</p>
         {/if}
@@ -128,7 +130,7 @@
               </div>
             {/if}
             <div class="px-5 py-4">
-              <MarkdownContent content={comment.body} onOpenUrl={openUrl} />
+              <MarkdownContent content={comment.body} imageBaseUrl={markdownImageBaseUrl} onOpenUrl={openUrl} />
             </div>
           </div>
         {/each}

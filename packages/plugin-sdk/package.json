@@ -7,6 +7,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./domain": "./src/domain.ts",
+    "./markdown": "./src/markdown.ts",
     "./numberParsing": "./src/numberParsing.ts",
     "./sanitize": "./src/sanitize.ts",
     "./ui/MarkdownContent.svelte": "./src/ui/MarkdownContent.svelte",
