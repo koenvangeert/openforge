@@ -4,8 +4,8 @@ import type { AgentReviewComment, AgentSession, AuthoredPullRequest, Autocomplet
 
 type RawTask = Omit<Task, 'status'> & { status: string }
 
-export async function createTask(initialPrompt: string, status: BoardStatus, projectId: string | null, agent: string | null, permissionMode: string | null): Promise<Task> {
-  const task = await invoke<RawTask>("create_task", { initialPrompt, status, projectId, agent, permissionMode });
+export async function createTask(initialPrompt: string, status: BoardStatus, projectId: string | null, permissionMode: string | null): Promise<Task> {
+  const task = await invoke<RawTask>("create_task", { initialPrompt, status, projectId, permissionMode });
   return normalizeTask(task)
 }
 

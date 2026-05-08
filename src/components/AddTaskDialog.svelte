@@ -1,13 +1,11 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import type { Task, PermissionMode, Action } from '../lib/types'
-  import { createTask, updateTask, getProjectConfig, listOpenCodeAgents } from '../lib/ipc'
+  import { createTask, updateTask, getProjectConfig } from '../lib/ipc'
   import { getTaskPromptText } from '../lib/taskPrompt'
   import { activeProjectId } from '../lib/stores'
   import Modal from './shared/ui/Modal.svelte'
   import PromptInput from './prompt/PromptInput.svelte'
-  import SearchableSelect from './shared/ui/SearchableSelect.svelte'
-  import { shouldLoadTaskDialogAgents, shouldShowTaskDialogAgentSelector } from '../lib/taskDialogVisibility'
   import { getEnabledActions, loadActions } from '../lib/actions'
 
   interface Props {
@@ -21,37 +19,25 @@
   let { mode = 'create', task = null, onClose, onTaskSaved, onRunAction }: Props = $props()
 
   let selectedPermissionMode = $state<PermissionMode>('default')
-  let selectedAgent = $state('')
   let aiProvider = $state<string | null>(null)
-  let availableAgents = $state<string[]>([])
   let availableActions = $state<Action[]>([])
   let error = $state<string | null>(null)
 
   onMount(async () => {
-    selectedAgent = ''
     selectedPermissionMode = 'default'
     try {
       if ($activeProjectId) {
         const provider = await getProjectConfig($activeProjectId, 'ai_provider')
         aiProvider = provider ?? 'claude-code'
 
-        if (shouldLoadTaskDialogAgents(aiProvider)) {
-          const agents = await listOpenCodeAgents($activeProjectId)
-          availableAgents = agents.filter(a => !a.hidden).map(a => a.name)
-        } else {
-          availableAgents = []
-        }
-
         const allActions = await loadActions($activeProjectId)
         availableActions = getEnabledActions(allActions)
       } else {
         aiProvider = 'claude-code'
-        availableAgents = []
         availableActions = []
       }
     } catch {
       aiProvider = null
-      availableAgents = []
       availableActions = []
     }
   })
@@ -62,7 +48,6 @@
 
     try {
       let savedTask: Task
-      const agent = selectedAgent || null
 
       if (mode === 'edit' && task) {
         await updateTask(task.id, prompt)
@@ -73,13 +58,12 @@
           prompt,
           'backlog',
           $activeProjectId,
-          agent,
           selectedPermissionMode
         )
 
         if (autoStart && onRunAction) {
           onClose?.()
-          await onRunAction(savedTask.id, actionPrompt || '', agent)
+          await onRunAction(savedTask.id, actionPrompt || '', null)
           return
         } else {
           await onTaskSaved?.(savedTask)
@@ -126,20 +110,6 @@
               <option value="bypassPermissions">Bypass Permissions</option>
               <option value="dontAsk">Don't Ask (dangerous)</option>
             </select>
-          </div>
-        {/if}
-        {#if shouldShowTaskDialogAgentSelector({ isEditing: mode === 'edit', aiProvider, availableAgents })}
-          <div class="flex items-center gap-2">
-            <span class="text-xs text-base-content/50 font-medium shrink-0">Agent</span>
-            <div class="flex-1">
-              <SearchableSelect
-                options={[{ value: '', label: 'Default' }, ...availableAgents.map(a => ({ value: a, label: a }))]}
-                value={selectedAgent}
-                placeholder="Search agents..."
-                size="xs"
-                onSelect={(v) => { selectedAgent = v }}
-              />
-            </div>
           </div>
         {/if}
       {/snippet}

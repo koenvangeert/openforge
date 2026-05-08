@@ -777,7 +777,6 @@ mod tests {
                 Some(&project.id),
                 Some("Resume me"),
                 None,
-                None,
             )
             .expect("create task failed");
         db.update_task_status(&task.id, "doing")
@@ -869,7 +868,6 @@ mod tests {
                 "doing",
                 Some(&project.id),
                 Some("Resume Pi"),
-                Some("pi"),
                 None,
             )
             .expect("create task failed");
@@ -940,24 +938,10 @@ mod tests {
             .expect("create project failed");
 
         let task_with_workspace = db
-            .create_task(
-                "Workspace-backed",
-                "doing",
-                Some(&project.id),
-                None,
-                None,
-                None,
-            )
+            .create_task("Workspace-backed", "doing", Some(&project.id), None, None)
             .expect("create workspace-backed task failed");
         let task_with_legacy_worktree = db
-            .create_task(
-                "Legacy worktree",
-                "doing",
-                Some(&project.id),
-                None,
-                None,
-                None,
-            )
+            .create_task("Legacy worktree", "doing", Some(&project.id), None, None)
             .expect("create legacy worktree task failed");
 
         db.upsert_task_workspace_record(

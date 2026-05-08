@@ -42,7 +42,7 @@ export interface DynamicShellEventContract {
 }
 
 export const ipcCommandContracts = [
-  { functionName: 'createTask', ipcCommand: 'create_task', payloadKeys: ['initialPrompt', 'status', 'projectId', 'agent', 'permissionMode'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
+  { functionName: 'createTask', ipcCommand: 'create_task', payloadKeys: ['initialPrompt', 'status', 'projectId', 'permissionMode'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
   { functionName: 'updateTask', ipcCommand: 'update_task', payloadKeys: ['id', 'prompt'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
   { functionName: 'updateTaskSummary', ipcCommand: 'update_task_summary', payloadKeys: ['id', 'summary'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
   { functionName: 'updateTaskStatus', ipcCommand: 'update_task_status', payloadKeys: ['id', 'status'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },

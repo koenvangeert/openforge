@@ -6,7 +6,7 @@ async fn handler_uses_shared_boundary() {
     {
         let db = state.db.lock().expect("db lock");
         let task = db
-            .create_task("PR task", "doing", None, None, None, None)
+            .create_task("PR task", "doing", None, None, None)
             .expect("create task");
         db.insert_pull_request(
             10,
@@ -65,7 +65,7 @@ async fn handles_db_backed_commands_and_events() {
     {
         let db = state.db.lock().expect("db lock");
         let task = db
-            .create_task("PR task", "doing", None, None, None, None)
+            .create_task("PR task", "doing", None, None, None)
             .expect("create task");
         db.insert_pull_request(
             10,

@@ -79,14 +79,12 @@ impl super::Database {
         Ok(result)
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub fn create_task(
         &self,
         initial_prompt: &str,
         status: &str,
         project_id: Option<&str>,
         prompt: Option<&str>,
-        agent: Option<&str>,
         permission_mode: Option<&str>,
     ) -> Result<TaskRow> {
         let conn = self.conn.lock().unwrap();
@@ -139,7 +137,7 @@ impl super::Database {
                 now,
                 final_prompt,
                 None::<String>,
-                agent,
+                None::<String>,
                 permission_mode,
             ],
         )?;
@@ -153,7 +151,7 @@ impl super::Database {
             updated_at: now,
             prompt: Some(final_prompt.to_string()),
             summary: None,
-            agent: agent.map(|s| s.to_string()),
+            agent: None,
             permission_mode: permission_mode.map(|s| s.to_string()),
         })
     }
@@ -333,14 +331,7 @@ mod tests {
         db.set_config("task_id_prefix", "T").unwrap();
 
         let task = db
-            .create_task(
-                "My task",
-                "backlog",
-                None,
-                Some("Custom prompt"),
-                None,
-                None,
-            )
+            .create_task("My task", "backlog", None, Some("Custom prompt"), None)
             .expect("create failed");
 
         assert_eq!(task.id, "T-1");
@@ -362,7 +353,7 @@ mod tests {
         db.set_config("task_id_prefix", "T").unwrap();
 
         let task = db
-            .create_task("My task", "backlog", None, None, None, None)
+            .create_task("My task", "backlog", None, None, None)
             .expect("create failed");
 
         assert_eq!(task.id, "T-1");
@@ -381,7 +372,7 @@ mod tests {
         let (db, path) = make_test_db("update_task_prompt_preserves_initial_prompt");
 
         let task = db
-            .create_task("Original", "backlog", None, None, None, None)
+            .create_task("Original", "backlog", None, None, None)
             .expect("create failed");
 
         db.update_task(&task.id, "Updated prompt")
@@ -400,7 +391,7 @@ mod tests {
         let (db, path) = make_test_db("update_task_summary_preserves_initial_prompt");
 
         let task = db
-            .create_task("Original prompt", "backlog", None, None, None, None)
+            .create_task("Original prompt", "backlog", None, None, None)
             .expect("create failed");
 
         db.update_task_summary(&task.id, "New Summary")
@@ -420,7 +411,7 @@ mod tests {
         db.set_config("task_id_prefix", "T").unwrap();
 
         let task = db
-            .create_task("My task", "backlog", None, None, None, None)
+            .create_task("My task", "backlog", None, None, None)
             .expect("create failed");
 
         assert_eq!(task.id, "T-1");
@@ -441,7 +432,7 @@ mod tests {
         let (db, path) = make_test_db("update_task_preserves_initial_prompt_in_task_list");
 
         let task = db
-            .create_task("Original", "backlog", None, None, None, None)
+            .create_task("Original", "backlog", None, None, None)
             .expect("create failed");
 
         db.update_task(&task.id, "Updated prompt")
@@ -461,7 +452,7 @@ mod tests {
         let (db, path) = make_test_db("get_task_by_id");
 
         let task = db
-            .create_task("Found me", "backlog", None, None, None, None)
+            .create_task("Found me", "backlog", None, None, None)
             .expect("create failed");
 
         let retrieved = db.get_task(&task.id).expect("get failed");
@@ -481,13 +472,13 @@ mod tests {
         db.set_config("task_id_prefix", "T").unwrap();
 
         let task1 = db
-            .create_task("Task 1", "backlog", None, None, None, None)
+            .create_task("Task 1", "backlog", None, None, None)
             .expect("create 1 failed");
         let task2 = db
-            .create_task("Task 2", "backlog", None, None, None, None)
+            .create_task("Task 2", "backlog", None, None, None)
             .expect("create 2 failed");
         let task3 = db
-            .create_task("Task 3", "backlog", None, None, None, None)
+            .create_task("Task 3", "backlog", None, None, None)
             .expect("create 3 failed");
 
         assert_eq!(task1.id, "T-1");
@@ -503,7 +494,7 @@ mod tests {
         let (db, path) = make_test_db("update_task_status");
 
         let task = db
-            .create_task("My task", "backlog", None, None, None, None)
+            .create_task("My task", "backlog", None, None, None)
             .expect("create failed");
 
         db.update_task_status(&task.id, "doing")
@@ -521,7 +512,7 @@ mod tests {
         let (db, path) = make_test_db("delete_task_basic");
 
         let task = db
-            .create_task("Deletable", "backlog", None, None, None, None)
+            .create_task("Deletable", "backlog", None, None, None)
             .expect("create failed");
         let tasks = db.get_all_tasks().expect("get failed");
         assert_eq!(tasks.len(), 1);
@@ -596,7 +587,7 @@ mod tests {
         let (db, path) = make_test_db("task_custom_prefix");
         db.set_config("task_id_prefix", "FOO").unwrap();
         let task = db
-            .create_task("Custom prefix task", "backlog", None, None, None, None)
+            .create_task("Custom prefix task", "backlog", None, None, None)
             .expect("create failed");
         assert_eq!(task.id, "FOO-1");
         drop(db);
@@ -613,7 +604,7 @@ mod tests {
             .unwrap();
         drop(conn);
         let task = db
-            .create_task("Fallback task", "backlog", None, None, None, None)
+            .create_task("Fallback task", "backlog", None, None, None)
             .expect("create failed");
         assert!(
             task.id.starts_with("T-"),
@@ -629,7 +620,7 @@ mod tests {
         let (db, path) = make_test_db("task_fallback_empty");
         db.set_config("task_id_prefix", "").unwrap();
         let task = db
-            .create_task("Fallback task", "backlog", None, None, None, None)
+            .create_task("Fallback task", "backlog", None, None, None)
             .expect("create failed");
         assert!(
             task.id.starts_with("T-"),
@@ -641,27 +632,26 @@ mod tests {
     }
 
     #[test]
-    fn test_create_task_with_agent_and_permission_mode() {
-        let (db, path) = make_test_db("create_task_agent_permission");
+    fn test_create_task_with_permission_mode_defaults_agent_to_none() {
+        let (db, path) = make_test_db("create_task_permission_mode");
         db.set_config("task_id_prefix", "T").unwrap();
 
         let task = db
             .create_task(
-                "Agent task",
+                "Permission mode task",
                 "backlog",
                 None,
-                Some("Do agent work"),
-                Some("claude-code"),
+                Some("Do permission-mode work"),
                 Some("auto"),
             )
             .expect("create failed");
 
         assert_eq!(task.id, "T-1");
-        assert_eq!(task.agent, Some("claude-code".to_string()));
+        assert_eq!(task.agent, None);
         assert_eq!(task.permission_mode, Some("auto".to_string()));
 
         let retrieved = db.get_task(&task.id).expect("get failed").unwrap();
-        assert_eq!(retrieved.agent, Some("claude-code".to_string()));
+        assert_eq!(retrieved.agent, None);
         assert_eq!(retrieved.permission_mode, Some("auto".to_string()));
 
         drop(db);
@@ -673,7 +663,7 @@ mod tests {
         let (db, path) = make_test_db("create_task_agent_none");
 
         let task = db
-            .create_task("No agent task", "backlog", None, None, None, None)
+            .create_task("No agent task", "backlog", None, None, None)
             .expect("create failed");
 
         assert_eq!(task.agent, None);

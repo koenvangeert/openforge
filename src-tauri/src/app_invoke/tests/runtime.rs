@@ -11,7 +11,7 @@ async fn accepts_remaining_electron_cutover_ipc_commands() {
         db.set_project_config(&project.id, "ai_provider", "claude-code")
             .expect("set provider");
         let task = db
-            .create_task("ipc parity", "doing", Some(&project.id), None, None, None)
+            .create_task("ipc parity", "doing", Some(&project.id), None, None)
             .expect("create task");
         db.create_agent_session(
             "session-ipc-parity",
