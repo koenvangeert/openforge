@@ -30,7 +30,7 @@
   let { task, onRunAction }: Props = $props()
   const router = useAppRouter()
 
-  let activeView = $state('code')
+  let activeView = $state('agent')
   let workspacePath = $state<string | null>(null)
   let lastTaskId = ''
   let workspaceLookupToken = 0
@@ -58,8 +58,12 @@
   }
 
   function normalizeStoredActiveView(viewId: string): string {
-    if (viewId === 'code' || viewId === 'review') {
+    if (viewId === 'agent' || viewId === 'review') {
       return viewId
+    }
+
+    if (viewId === 'code') {
+      return 'agent'
     }
 
     const namespacedMatch = findTaskPaneTab(viewId)
@@ -68,7 +72,7 @@
     }
 
     const legacyMatch = sortedTaskPaneTabs.find((tab) => tab.contributionId === viewId)
-    return legacyMatch?.namespacedId ?? 'code'
+    return legacyMatch?.namespacedId ?? 'agent'
   }
 
   function setActiveView(view: string) {
@@ -86,7 +90,7 @@
     const taskId = task.id
     if (taskId !== lastTaskId) {
       lastTaskId = taskId
-      const stored = (get(taskActiveView) as Map<string, string>).get(taskId) ?? 'code'
+      const stored = (get(taskActiveView) as Map<string, string>).get(taskId) ?? 'agent'
       activeView = normalizeStoredActiveView(stored)
       workspacePath = $taskRuntimeInfo.get(taskId)?.workspacePath ?? null
       const lookupToken = ++workspaceLookupToken
@@ -94,8 +98,8 @@
         if (lookupToken !== workspaceLookupToken) return
         const runtimeWorkspacePath = get(taskRuntimeInfo).get(taskId)?.workspacePath ?? null
         workspacePath = runtimeWorkspacePath ?? workspace?.workspace_path ?? null
-        if (activeView !== 'code' && activeView !== 'review' && workspacePath === null) {
-          activeView = 'code'
+        if (activeView !== 'agent' && activeView !== 'review' && workspacePath === null) {
+          activeView = 'agent'
         }
       })
     }
@@ -117,7 +121,7 @@
   $effect(() => {
     if (workspacePath !== null) {
       taskShortcuts.register('⌘1', () => {
-        setActiveView('code')
+        setActiveView('agent')
       })
       taskShortcuts.register('⌘2', () => {
         setActiveView('review')
@@ -200,7 +204,7 @@
     if (e.key === 'h' && workspacePath !== null) {
       e.preventDefault()
       e.stopPropagation()
-      setActiveView('code')
+      setActiveView('agent')
       return
     }
     if (e.key === 'l' && workspacePath !== null) {
@@ -262,20 +266,20 @@
         <span class="text-base-content/20 mx-1">/</span>
         <span class="text-primary font-semibold">{task.id}</span>
         <span class="text-base-content/20 mx-1">/</span>
-         <span class="text-primary font-semibold">{activeView === 'review' ? 'self_review' : findTaskPaneTab(activeView)?.title.toLowerCase().replace(/\s+/g, '_') ?? activeView}</span>
+         <span class="text-primary font-semibold">{findTaskPaneTab(activeView)?.title.toLowerCase().replace(/\s+/g, '_') ?? activeView}</span>
       </div>
       {#if workspacePath !== null}
         <div class="flex items-center gap-1">
           <button
-            class="btn btn-ghost btn-xs gap-1.5 {activeView === 'code' ? 'text-primary border border-primary' : 'text-base-content/50 border border-base-300'}"
-            aria-pressed={activeView === 'code'}
-            onclick={() => setActiveView('code')}
-          >code_view {#if $commandHeld}<kbd class="kbd kbd-xs opacity-50">⌘1</kbd>{/if}</button>
+            class="btn btn-ghost btn-xs gap-1.5 {activeView === 'agent' ? 'text-primary border border-primary' : 'text-base-content/50 border border-base-300'}"
+            aria-pressed={activeView === 'agent'}
+            onclick={() => setActiveView('agent')}
+          >agent {#if $commandHeld}<kbd class="kbd kbd-xs opacity-50">⌘1</kbd>{/if}</button>
           <button
             class="btn btn-ghost btn-xs gap-1.5 {activeView === 'review' ? 'text-primary border border-primary' : 'text-base-content/50 border border-base-300'}"
             aria-pressed={activeView === 'review'}
             onclick={() => setActiveView('review')}
-          >review_view {#if $commandHeld}<kbd class="kbd kbd-xs opacity-50">⌘2</kbd>{/if}</button>
+          >review {#if $commandHeld}<kbd class="kbd kbd-xs opacity-50">⌘2</kbd>{/if}</button>
           {#each sortedTaskPaneTabs as tab (tab.namespacedId)}
             <button
               class="btn btn-ghost btn-xs gap-1.5 {activeView === tab.namespacedId ? 'text-primary border border-primary' : 'text-base-content/50 border border-base-300'}"
@@ -288,7 +292,7 @@
     </div>
 
   <div class="flex flex-col flex-1 overflow-hidden">
-    {#if activeView === 'code' || activeView === 'review'}
+    {#if activeView === 'agent' || activeView === 'review'}
       <div data-testid="upper-area" class="flex flex-1 overflow-hidden max-[800px]:flex-col">
         {#if activeView === 'review'}
           {#key task.id}
@@ -314,7 +318,7 @@
       </div>
     {/if}
 
-    {#if activeView !== 'code' && activeView !== 'review' && isPluginTaskPaneView(activeView) && workspacePath !== null}
+    {#if activeView !== 'agent' && activeView !== 'review' && isPluginTaskPaneView(activeView) && workspacePath !== null}
       <div class="flex flex-col flex-1 overflow-hidden">
         <PluginSlot
           slotType="taskPaneTabs"
