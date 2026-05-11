@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { BoardStatus, Task } from '../../lib/types'
   import { tasks as allTasks, ticketPrs } from '../../lib/stores'
+  import { getTaskTitle } from '../../lib/taskTitle'
   import CopyButton from '../shared/ui/CopyButton.svelte'
   import TaskPromptSummary from './TaskPromptSummary.svelte'
   import TaskPullRequestStatus from './TaskPullRequestStatus.svelte'
@@ -17,10 +18,12 @@
   let tasksById = $derived(new Map($allTasks.map((knownTask) => [knownTask.id, knownTask])))
   let dependencies = $derived(task.depends_on.map((dependencyId) => {
     const dependencyTask = tasksById.get(dependencyId)
+    const displayTitle = dependencyTask ? getTaskTitle(dependencyTask) : null
     return {
       id: dependencyId,
       status: dependencyTask?.status ?? null,
-      title: dependencyTask?.initial_prompt || dependencyTask?.summary || dependencyId,
+      displayTitle,
+      tooltipTitle: displayTitle ?? dependencyId,
     }
   }))
   let waitingDependencyCount = $derived(dependencies.filter((dependency) => dependency.status !== 'done').length)
@@ -45,9 +48,12 @@
       <h3 class="text-[10px] font-bold text-primary font-mono tracking-[1.2px] m-0">// DEPENDS_ON</h3>
       <div class="flex flex-wrap gap-2">
         {#each dependencies as dependency (dependency.id)}
-          <span class="badge badge-sm gap-1.5 border border-base-300 {dependencyStatusClass(dependency.status)}" title={dependency.title}>
-            <span class="font-mono">{dependency.id}</span>
-            <span class="opacity-80">{dependencyStatusLabel(dependency.status)}</span>
+          <span class="badge badge-sm gap-1.5 border border-base-300 max-w-full min-w-0 {dependencyStatusClass(dependency.status)}" title={dependency.tooltipTitle}>
+            <span class="font-mono shrink-0">{dependency.id}</span>
+            <span class="opacity-80 shrink-0">{dependencyStatusLabel(dependency.status)}</span>
+            {#if dependency.displayTitle}
+              <span class="truncate min-w-0">{dependency.displayTitle}</span>
+            {/if}
           </span>
         {/each}
       </div>
