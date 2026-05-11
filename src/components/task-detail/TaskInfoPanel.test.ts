@@ -145,16 +145,17 @@ describe('TaskInfoPanel', () => {
     expect(screen.queryByText('// DEPENDS_ON')).toBeNull()
   })
 
-  it('renders dependency chips with each dependency status from the task store', () => {
+  it('renders dependency chips with each dependency status and title from the task store', () => {
+    const longDependencyTitle = 'Build a very long authentication middleware prerequisite that should remain readable via hover'
     const parentTask: Task = {
       ...baseTask,
       id: 'T-99',
       depends_on: ['T-41', 'T-17', 'T-03'],
     }
     tasks.set([
-      { ...baseTask, id: 'T-41', status: 'done' },
-      { ...baseTask, id: 'T-17', status: 'doing' },
-      { ...baseTask, id: 'T-03', status: 'backlog' },
+      { ...baseTask, id: 'T-41', status: 'done', initial_prompt: longDependencyTitle },
+      { ...baseTask, id: 'T-17', status: 'doing', initial_prompt: 'Prepare database migrations' },
+      { ...baseTask, id: 'T-03', status: 'backlog', initial_prompt: 'Document rollout plan' },
       parentTask,
     ])
 
@@ -163,10 +164,14 @@ describe('TaskInfoPanel', () => {
     const dependenciesSection = screen.getByLabelText('Dependencies')
     expect(dependenciesSection.textContent).toContain('T-41')
     expect(dependenciesSection.textContent).toContain('done')
+    expect(dependenciesSection.textContent).toContain(longDependencyTitle)
+    expect(screen.getByText(longDependencyTitle).closest('[title]')?.getAttribute('title')).toBe(longDependencyTitle)
     expect(dependenciesSection.textContent).toContain('T-17')
     expect(dependenciesSection.textContent).toContain('doing')
+    expect(dependenciesSection.textContent).toContain('Prepare database migrations')
     expect(dependenciesSection.textContent).toContain('T-03')
     expect(dependenciesSection.textContent).toContain('backlog')
+    expect(dependenciesSection.textContent).toContain('Document rollout plan')
     expect(dependenciesSection.textContent).toContain('Waiting on 2 dependencies')
   })
 
