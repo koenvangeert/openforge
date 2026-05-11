@@ -3,8 +3,17 @@ use std::path::PathBuf;
 
 const OPENCODE_PLUGIN_SOURCE: &str = include_str!("opencode-plugin/openforge.ts");
 
+fn opencode_config_dir() -> Option<PathBuf> {
+    std::env::var_os("XDG_CONFIG_HOME")
+        .filter(|path| !path.is_empty())
+        .map(PathBuf::from)
+        .or_else(|| dirs::home_dir().map(|home| home.join(".config")))
+        .or_else(dirs::config_dir)
+        .map(|config| config.join("opencode"))
+}
+
 pub fn get_opencode_plugin_install_dir() -> Option<PathBuf> {
-    dirs::config_dir().map(|config| config.join("opencode").join("plugins"))
+    opencode_config_dir().map(|config| config.join("plugins"))
 }
 
 pub fn ensure_opencode_plugin_installed() -> Result<PathBuf, Box<dyn std::error::Error>> {
@@ -36,8 +45,8 @@ mod tests {
     }
 
     #[test]
-    fn opencode_plugin_install_dir_uses_opencode_plugin_directory() {
+    fn opencode_plugin_install_dir_uses_opencode_config_directory() {
         let dir = get_opencode_plugin_install_dir().expect("config dir should resolve");
-        assert!(dir.ends_with("opencode/plugins"));
+        assert!(dir.ends_with(".config/opencode/plugins"));
     }
 }
