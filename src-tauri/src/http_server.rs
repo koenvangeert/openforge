@@ -322,11 +322,18 @@ fn emit_task_changed(state: &AppState, action: &str, task_id: &str, project_id: 
     }
 }
 
-fn emit_agent_status_changed(state: &AppState, task_id: &str, status: &str, provider: &str) {
+fn emit_agent_status_changed(
+    state: &AppState,
+    change: &crate::agent_lifecycle::AgentLifecycleStatusChange,
+) {
     let payload = serde_json::json!({
-        "task_id": task_id,
-        "status": status,
-        "provider": provider,
+        "task_id": change.task_id,
+        "status": change.status,
+        "provider": change.provider,
+        "kind": change.kind,
+        "pty_instance_id": change.pty_instance_id,
+        "raw_event_type": change.raw_event_type,
+        "raw_status_type": change.raw_status_type,
     });
 
     publish_app_event_to_runtime(
@@ -361,7 +368,7 @@ async fn handle_agent_lifecycle_notification(
     let status_change = record_agent_lifecycle_notification(&state, &notification);
 
     if let Some(change) = status_change {
-        emit_agent_status_changed(&state, &change.task_id, &change.status, &change.provider);
+        emit_agent_status_changed(&state, &change);
     }
 
     Ok(Json(serde_json::json!({ "status": "ok" })))
@@ -745,12 +752,7 @@ async fn handle_hook(
                 raw_status_type: None,
             };
             if let Some(change) = record_agent_lifecycle_notification(&state, &notification) {
-                emit_agent_status_changed(
-                    &state,
-                    &change.task_id,
-                    &change.status,
-                    &change.provider,
-                );
+                emit_agent_status_changed(&state, &change);
             }
         }
     } else {
