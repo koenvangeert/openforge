@@ -155,6 +155,47 @@ describe('TaskDetailPane', () => {
     })
   })
 
+  describe('dependencies section', () => {
+    it('renders dependency statuses for the selected task', () => {
+      const taskWithDependencies = { ...baseTask, depends_on: ['T-101', 'T-102', 'T-missing'] }
+      const dependencyDone = { ...baseTask, id: 'T-101', status: 'done' as const, initial_prompt: 'Finish schema changes' }
+      const dependencyDoing = { ...baseTask, id: 'T-102', status: 'doing' as const, initial_prompt: 'Update API wrapper' }
+
+      render(TaskDetailPane, {
+        props: {
+          task: taskWithDependencies,
+          allTasks: [taskWithDependencies, dependencyDone, dependencyDoing],
+          session: null,
+          pullRequests: [],
+          onOpenFullView: vi.fn(),
+        },
+      })
+
+      const dependenciesSection = screen.getByLabelText('Dependencies')
+      expect(dependenciesSection.textContent).toContain('T-101')
+      expect(dependenciesSection.textContent).toContain('done')
+      expect(dependenciesSection.textContent).toContain('T-102')
+      expect(dependenciesSection.textContent).toContain('doing')
+      expect(dependenciesSection.textContent).toContain('T-missing')
+      expect(dependenciesSection.textContent).toContain('unknown')
+      expect(dependenciesSection.textContent).toContain('Waiting on 2 deps')
+    })
+
+    it('does not render dependencies section when selected task has no dependencies', () => {
+      render(TaskDetailPane, {
+        props: {
+          task: baseTask,
+          allTasks: [baseTask],
+          session: null,
+          pullRequests: [],
+          onOpenFullView: vi.fn(),
+        },
+      })
+
+      expect(screen.queryByLabelText('Dependencies')).toBeNull()
+    })
+  })
+
   describe('summary section', () => {
     it('renders // SUMMARY label', () => {
       render(TaskDetailPane, {

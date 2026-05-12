@@ -12,6 +12,7 @@
     session: AgentSession | null
     pullRequests: PullRequestInfo[]
     reasonText: string
+    dependencyHint?: string | null
     isSelected: boolean
     isFocused: boolean
     isMerging: boolean
@@ -19,7 +20,7 @@
     onContextMenu: (e: MouseEvent) => void
   }
 
-  let { task, state, session, pullRequests, reasonText, isSelected, isFocused, isMerging, onSelect, onContextMenu }: Props = $props()
+  let { task, state, session, pullRequests, reasonText, dependencyHint = null, isSelected, isFocused, isMerging, onSelect, onContextMenu }: Props = $props()
 
   function truncate(text: string, max: number): string {
     return text.length > max ? text.slice(0, max) + '...' : text
@@ -67,6 +68,10 @@
 
   {#if presentation.reasonText}
     <div class="text-xs text-base-content/60 truncate">{presentation.reasonText}</div>
+  {/if}
+
+  {#if dependencyHint}
+    <div class="text-xs text-warning truncate">{dependencyHint}</div>
   {/if}
 
   {#if firstPr}

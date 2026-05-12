@@ -3,6 +3,7 @@
   import { commandHeld, focusBoardFilters, mergingTaskIds } from '../../lib/stores'
   import { filterTasks, getFilterCounts, DEFAULT_FOCUS_STATES, loadFocusFilterStates } from '../../lib/boardFilters'
   import type { BoardFilter } from '../../lib/boardFilters'
+  import { getDependencyWaitLabel } from '../../lib/taskDependencies'
   import { getTaskReasonText } from '../../lib/taskStatePresentation'
   import { computeTaskState } from '../../lib/taskState'
   import type { TaskState } from '../../lib/taskState'
@@ -222,6 +223,7 @@
             {session}
             {pullRequests}
             reasonText={getTaskReasonText(state, pullRequests)}
+            dependencyHint={activeFilter === 'backlog' ? getDependencyWaitLabel(task, tasks) : null}
             isSelected={selectedTaskIdLocal === task.id}
             isFocused={vim.focusedIndex === i}
             isMerging={$mergingTaskIds.has(task.id)}
@@ -242,6 +244,7 @@
     <div class="w-2/5 flex-shrink-0" onfocusin={() => paneHasFocus = true} onfocusout={() => paneHasFocus = false}>
       <TaskDetailPane
         task={selectedTask}
+        allTasks={tasks}
         pullRequests={selectedTask ? ticketPrs.get(selectedTask.id) ?? [] : []}
         onOpenFullView={() => {
           if (selectedTaskIdLocal) onOpenTask(selectedTaskIdLocal)

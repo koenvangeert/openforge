@@ -155,6 +155,22 @@ describe('FocusBoard', () => {
     expect(screen.queryByText('Done task')).toBeNull()
   })
 
+  it('shows dependency wait hint on backlog rows only in the Backlog filter', async () => {
+    const dependency = makeTask('T-5', 'doing', 'Dependency task')
+    const waitingBacklog = { ...taskBacklog, depends_on: [dependency.id] }
+    renderBoard({
+      tasks: [taskFocus, waitingBacklog, dependency],
+      sessions: new Map([[taskFocus.id, makeSession(taskFocus.id, 'paused', 'needs-review')]]),
+    })
+
+    expect(screen.queryByText('Waiting on 1 dep')).toBeNull()
+
+    await fireEvent.click(await screen.findByRole('button', { name: /Backlog 1/i }))
+
+    const backlogCard = requireElement(document.querySelector('[data-vim-item]'), HTMLElement)
+    expect(within(backlogCard).getByText('Waiting on 1 dep')).toBeTruthy()
+  })
+
   it('auto-selects the focused task in detail pane on mount', async () => {
     renderBoard()
 
