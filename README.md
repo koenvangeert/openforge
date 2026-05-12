@@ -5,12 +5,61 @@
 <h1 align="center">Open Forge</h1>
 
 <p align="center">
-  A desktop app that orchestrates AI coding agents. Manage tasks on a focused board, launch agents in isolated git worktrees, and review their work — all from one place.
+  A calm desktop command center for AI-assisted development. Turn a task into an isolated agent run, watch the terminal, review the diff, and decide what ships — without losing the thread.
+</p>
+
+<p align="center">
+  <a href="#quick-install">Install</a> ·
+  <a href="#why-open-forge-exists">Why it exists</a> ·
+  <a href="#what-it-does-today">Features</a> ·
+  <a href="#local-development">Development</a>
 </p>
 
 ---
 
 ![Open Forge — Board](docs/images/board.png)
+
+## Why Open Forge exists
+
+AI coding agents are good at producing code, but the surrounding workflow still creates admin: writing tasks, choosing the right project, starting the agent, watching for handoffs, checking CI, reading diffs, giving feedback, and deciding whether the work is actually good.
+
+Open Forge exists to put that loop in one focused place. It is not trying to replace engineering judgment or turn software work into a black box. It is a local-first operator console for people who want AI help while keeping ownership of the task, context, review, and final decision.
+
+The product direction follows the same thinking Koen writes about on [koenvg.be](https://koenvg.be/): remove unnecessary friction, keep tools calm and understandable, and avoid outsourcing the judgment that keeps the “thinking muscle” sharp. The goal is speed with trust, not speed that creates a pile of work you no longer understand.
+
+## Philosophy
+
+- **Clarity first.** A good tool should make the next action obvious. Open Forge favors a focused board, explicit task state, and visible agent output over a noisy dashboard.
+- **Human judgment stays central.** Agents can implement, summarize, and review, but the developer still owns the problem framing and the shipping decision.
+- **Friction should be intentional.** Repeated admin belongs in the tool; important thinking, review, and trade-off calls should stay visible.
+- **Local workflows should feel solid.** Worktrees, SQLite state, local credentials, terminals, and the Rust sidecar are designed so the app can coordinate real development work without sending your workflow through a hosted control plane.
+- **Fast feedback beats clever ceremony.** Tasks, terminals, self-review, PR review, and CI status sit close together so you can tighten the loop quickly.
+
+## What it does today
+
+Open Forge is a macOS desktop app for running AI coding agents across one or more projects while keeping attention on the current actionable item.
+
+| Area | What Open Forge provides |
+|---|---|
+| **Flow board** | Create, prioritize, search, and move tasks from a focused board with an always-visible detail pane and keyboard navigation. |
+| **Agent runs** | Start Claude Code, OpenCode, or Pi-based agents per task. Each run gets an isolated git worktree and branch. |
+| **Live terminals** | Watch embedded PTY output, use multiple shell tabs, and keep agent lifecycle state attached to the task. |
+| **Self-review** | Inspect agent changes in a syntax-highlighted diff viewer, leave inline feedback, and send that feedback back into the loop. |
+| **PR review** | Review GitHub pull requests assigned to you, browse diffs and comments, submit reviews, and keep CI/review status in sync. |
+| **Project attention** | Track meaningful handoffs — blocked agents, review readiness, CI changes, and tasks that need a decision — without constant noise. |
+| **Plugins and skills** | Extend the desktop surface with managed plugins and reusable agent skills. |
+| **Voice input** | Dictate instructions with on-device Whisper transcription when speaking is faster than typing. |
+| **OpenForge CLI** | Let agents and scripts read/update tasks through the local Open Forge bridge. |
+
+## The workflow in pictures
+
+| Board | Task detail |
+|---|---|
+| ![Open Forge board showing focused task flow](docs/images/board.png) | ![Open Forge task view with agent terminal and task details](docs/images/task-view.png) |
+
+| Self-review |
+|---|
+| ![Open Forge self-review diff view](docs/images/self-review.png) |
 
 ## Quick install
 
@@ -59,36 +108,20 @@ openforge update-task --task-id T-123 --summary "Done"
 
 The CLI talks to the local Open Forge HTTP bridge and is used by the auto-installed provider skills.
 
-## What it does
-
-Open Forge is a command center for AI-assisted development. You define coding tasks, an AI agent (Claude Code or OpenCode) implements them in isolated git worktrees on dedicated branches, and the app tracks the full lifecycle: agent progress, CI status, and PR reviews.
-
-| | |
-|---|---|
-| **Flow board** | Prioritize work from a focused list with an always-visible detail pane. Search, create, and manage tasks with keyboard shortcuts. |
-| **AI agents** | Launch Claude Code or OpenCode agents per task. Each runs in its own git worktree and branch with a live embedded terminal. |
-| **Self-review** | Review agent changes with a syntax-highlighted diff viewer. Leave inline comments and send feedback back to the agent. |
-| **PR review** | Review pull requests assigned to you. Browse diffs, leave comments, and submit reviews directly from the app. |
-| **GitHub** | Background polling keeps PR status and CI checks in sync. |
-| **Voice input** | Dictate instructions to the agent using on-device speech recognition (Whisper). |
-
-![Open Forge — Task View](docs/images/task-view.png)
-
-![Open Forge — Self-Review](docs/images/self-review.png)
-
 ## Tech stack
 
 - **Frontend** — Svelte 5, TypeScript, Tailwind CSS v4, daisyUI v5
 - **Desktop shell** — Electron/Chromium main + sandboxed preload
 - **Backend** — Rust sidecar, SQLite
-- **AI agents** — Claude Code CLI (via PTY), OpenCode (via HTTP/SSE)
+- **AI agents** — Claude Code CLI, OpenCode, and Pi provider integration
+- **Plugin platform** — OpenForge plugin SDK with built-in plugin workspace
 
 ## Prerequisites
 
 - [Rust](https://rustup.rs/) (1.77+)
 - [Node.js](https://nodejs.org/) (20+) and [pnpm](https://pnpm.io/) (10+)
 - macOS with Xcode Command Line Tools (for Metal/Whisper support)
-- [Claude Code](https://docs.anthropic.com/en/docs/claude-code) or [OpenCode](https://github.com/opencode-ai/opencode) installed
+- At least one supported coding agent/provider, such as [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [OpenCode](https://github.com/opencode-ai/opencode), or Pi
 
 ## Local development
 
@@ -160,4 +193,4 @@ pnpm electron:install
 1. Launch the app — the project setup dialog appears automatically
 2. Go to **Settings > Global** to configure your AI provider and GitHub token
 3. Go to **Settings > Project** to set the GitHub repo
-4. Create a task (`Cmd+T`), right-click it, and choose **Start Implementation**
+4. Create a task (`Cmd+T`), right-click it, and choose **Start Task**
