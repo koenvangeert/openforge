@@ -5,6 +5,11 @@ export type AgentPanelStatus = 'idle' | 'running' | 'complete' | 'error'
 interface AgentStatusChangedPayload {
   task_id: string
   status: string
+  provider?: string
+  kind?: 'started' | 'became_busy' | 'became_idle' | 'requested_permission' | 'failed' | 'ended'
+  pty_instance_id?: number | null
+  raw_event_type?: string | null
+  raw_status_type?: string | null
 }
 
 interface AgentStatusChangedEvent {

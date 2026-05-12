@@ -42,6 +42,10 @@ async fn test_pi_agent_status_changes_publish_to_app_event_stream() {
     assert_eq!(event.payload["task_id"], task_id);
     assert_eq!(event.payload["status"], "running");
     assert_eq!(event.payload["provider"], "pi");
+    assert_eq!(event.payload["kind"], "started");
+    assert_eq!(event.payload["raw_event_type"], "agent.start");
+    assert_eq!(event.payload["raw_status_type"], serde_json::Value::Null);
+    assert_eq!(event.payload["pty_instance_id"], 7);
 
     let _ = std::fs::remove_file(path);
 }
@@ -665,6 +669,11 @@ fn opencode_status_events_complete_running_sessions_on_idle() {
 #[tokio::test]
 async fn agent_lifecycle_route_updates_opencode_status_through_shared_seam() {
     let (state, path) = test_state("agent_lifecycle_route_opencode_running");
+    let mut events = state
+        .app_event_tx
+        .as_ref()
+        .expect("event sender")
+        .subscribe();
     let task_id = {
         let db = state.db.lock().expect("lock db");
         let task = db
@@ -723,6 +732,15 @@ async fn agent_lifecycle_route_updates_opencode_status_through_shared_seam() {
         session.checkpoint_data,
         Some(r#"{"pty_instance_id":88}"#.to_string())
     );
+    let event = events.recv().await.expect("app event");
+    assert_eq!(event.event_name, "agent-status-changed");
+    assert_eq!(event.payload["task_id"], task_id);
+    assert_eq!(event.payload["status"], "running");
+    assert_eq!(event.payload["provider"], "opencode");
+    assert_eq!(event.payload["kind"], "became_busy");
+    assert_eq!(event.payload["raw_event_type"], "session.status");
+    assert_eq!(event.payload["raw_status_type"], "busy");
+    assert_eq!(event.payload["pty_instance_id"], 88);
 
     let _ = std::fs::remove_file(path);
 }
@@ -730,6 +748,11 @@ async fn agent_lifecycle_route_updates_opencode_status_through_shared_seam() {
 #[tokio::test]
 async fn agent_lifecycle_route_updates_pi_status_through_shared_seam() {
     let (state, path) = test_state("agent_lifecycle_route_pi_running");
+    let mut events = state
+        .app_event_tx
+        .as_ref()
+        .expect("event sender")
+        .subscribe();
     let task_id = {
         let db = state.db.lock().expect("lock db");
         let task = db
@@ -780,6 +803,15 @@ async fn agent_lifecycle_route_updates_pi_status_through_shared_seam() {
         .expect("get session")
         .expect("session exists");
     assert_eq!(session.status, "running");
+    let event = events.recv().await.expect("app event");
+    assert_eq!(event.event_name, "agent-status-changed");
+    assert_eq!(event.payload["task_id"], task_id);
+    assert_eq!(event.payload["status"], "running");
+    assert_eq!(event.payload["provider"], "pi");
+    assert_eq!(event.payload["kind"], "started");
+    assert_eq!(event.payload["raw_event_type"], "agent.start");
+    assert_eq!(event.payload["raw_status_type"], serde_json::Value::Null);
+    assert_eq!(event.payload["pty_instance_id"], 89);
 
     let _ = std::fs::remove_file(path);
 }
@@ -787,6 +819,11 @@ async fn agent_lifecycle_route_updates_pi_status_through_shared_seam() {
 #[tokio::test]
 async fn agent_lifecycle_route_updates_claude_status_through_shared_seam() {
     let (state, path) = test_state("agent_lifecycle_route_claude_running");
+    let mut events = state
+        .app_event_tx
+        .as_ref()
+        .expect("event sender")
+        .subscribe();
     let task_id = {
         let db = state.db.lock().expect("lock db");
         let task = db
@@ -841,6 +878,15 @@ async fn agent_lifecycle_route_updates_claude_status_through_shared_seam() {
         session.claude_session_id,
         Some("claude-shared-90".to_string())
     );
+    let event = events.recv().await.expect("app event");
+    assert_eq!(event.event_name, "agent-status-changed");
+    assert_eq!(event.payload["task_id"], task_id);
+    assert_eq!(event.payload["status"], "running");
+    assert_eq!(event.payload["provider"], "claude-code");
+    assert_eq!(event.payload["kind"], "became_busy");
+    assert_eq!(event.payload["raw_event_type"], "pre-tool-use");
+    assert_eq!(event.payload["raw_status_type"], serde_json::Value::Null);
+    assert_eq!(event.payload["pty_instance_id"], 90);
 
     let _ = std::fs::remove_file(path);
 }

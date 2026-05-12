@@ -37,6 +37,10 @@ pub struct AgentLifecycleStatusChange {
     pub task_id: String,
     pub status: String,
     pub provider: String,
+    pub kind: AgentLifecycleEventKind,
+    pub pty_instance_id: Option<u64>,
+    pub raw_event_type: Option<String>,
+    pub raw_status_type: Option<String>,
 }
 
 pub fn session_matches_pty_instance(session: &AgentSessionRow, pty_instance_id: u64) -> bool {
@@ -133,6 +137,10 @@ pub fn apply_agent_lifecycle_notification(
         task_id: notification.task_id.clone(),
         status: target_status.to_string(),
         provider: notification.provider.clone(),
+        kind: notification.kind,
+        pty_instance_id: notification.pty_instance_id,
+        raw_event_type: notification.raw_event_type.clone(),
+        raw_status_type: notification.raw_status_type.clone(),
     }))
 }
 
@@ -580,6 +588,16 @@ mod tests {
         .expect("status should change");
 
         assert_eq!(change.status, "running");
+        assert_eq!(change.kind, AgentLifecycleEventKind::BecameBusy);
+        assert_eq!(change.pty_instance_id, Some(5));
+        assert_eq!(
+            change.raw_event_type.as_deref(),
+            Some("provider.changed.this.name")
+        );
+        assert_eq!(
+            change.raw_status_type.as_deref(),
+            Some("provider-changed-this-status")
+        );
         let session = db
             .get_agent_session("ses-normalized")
             .expect("get session")

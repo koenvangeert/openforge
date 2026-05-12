@@ -160,7 +160,7 @@ export const appShellEventContracts = [
   { eventName: 'ci-status-changed', payload: '{ task_id: string; pr_id: number; pr_title: string; ci_status: string; timestamp: number }', producer: 'rust-backend', transportAfterMigration: 'sse-or-websocket', domain: 'github-review' },
   { eventName: 'agent-event', payload: 'AgentEvent', producer: 'rust-backend', transportAfterMigration: 'sse-or-websocket', domain: 'agent-session-pty' },
   { eventName: 'session-aborted', payload: '{ ticket_id: string; session_id: string }', producer: 'rust-backend', transportAfterMigration: 'sse-or-websocket', domain: 'agent-session-pty' },
-  { eventName: 'agent-status-changed', payload: '{ task_id: string; status: string }', producer: 'rust-backend', transportAfterMigration: 'sse-or-websocket', domain: 'agent-session-pty' },
+  { eventName: 'agent-status-changed', payload: '{ task_id: string; status: string; provider?: string; kind?: AgentLifecycleEventKind; pty_instance_id?: number | null; raw_event_type?: string | null; raw_status_type?: string | null }', producer: 'rust-backend', transportAfterMigration: 'sse-or-websocket', domain: 'agent-session-pty' },
   { eventName: 'agent-pty-exited', payload: '{ task_id: string; success: boolean; instance_id: number }', producer: 'rust-backend', transportAfterMigration: 'sse-or-websocket', domain: 'agent-session-pty' },
   { eventName: 'review-pr-count-changed', payload: 'number', producer: 'rust-backend', transportAfterMigration: 'sse-or-websocket', domain: 'github-review' },
   { eventName: 'authored-prs-updated', payload: 'void', producer: 'rust-backend', transportAfterMigration: 'sse-or-websocket', domain: 'github-review' },
