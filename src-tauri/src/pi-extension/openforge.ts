@@ -1,5 +1,9 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 
+function openForgeLifecycleKind(eventType: "agent.start" | "agent.end") {
+  return eventType === "agent.start" ? "started" : "ended";
+}
+
 async function reportPiLifecycle(eventType: "agent.start" | "agent.end") {
   const taskId = process.env.OPENFORGE_TASK_ID;
   const ptyInstanceId = process.env.OPENFORGE_PTY_INSTANCE_ID;
@@ -14,7 +18,8 @@ async function reportPiLifecycle(eventType: "agent.start" | "agent.end") {
         provider: "pi",
         task_id: taskId,
         pty_instance_id: Number(ptyInstanceId),
-        event_type: eventType,
+        kind: openForgeLifecycleKind(eventType),
+        raw_event_type: eventType,
       }),
     });
   } catch (error) {

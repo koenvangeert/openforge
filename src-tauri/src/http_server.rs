@@ -261,6 +261,8 @@ pub struct ClaudeHookPayload {
     pub transcript_path: Option<String>,
     #[serde(alias = "CLAUDE_TASK_ID")]
     pub claude_task_id: Option<String>,
+    #[serde(default, alias = "OPENFORGE_PTY_INSTANCE_ID")]
+    pub pty_instance_id: Option<u64>,
 }
 
 /// Payload from the OpenForge Pi extension when a PTY-backed Pi agent starts or finishes a run.
@@ -682,9 +684,36 @@ pub async fn get_project_attention_handler(
     Ok(Json(attention))
 }
 
+fn claude_event_kind_from_event(
+    event_type: &str,
+) -> Option<crate::agent_lifecycle::AgentLifecycleEventKind> {
+    match event_type {
+        "pre-tool-use" | "post-tool-use" => {
+            Some(crate::agent_lifecycle::AgentLifecycleEventKind::BecameBusy)
+        }
+        "stop" | "session-end" => Some(crate::agent_lifecycle::AgentLifecycleEventKind::Ended),
+        "notification-permission" => {
+            Some(crate::agent_lifecycle::AgentLifecycleEventKind::RequestedPermission)
+        }
+        "notification" => None,
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 pub(crate) fn map_hook_to_status(event_type: &str, current_status: &str) -> Option<String> {
-    crate::agent_lifecycle::claude_status_from_event(event_type, current_status)
+    let kind = claude_event_kind_from_event(event_type)?;
+    let (target_status, eligible_statuses) =
+        crate::agent_lifecycle::lifecycle_status_transition(kind);
+    if !eligible_statuses.contains(&current_status) {
+        return None;
+    }
+    if current_status == target_status
+        && kind != crate::agent_lifecycle::AgentLifecycleEventKind::Ended
+    {
+        return None;
+    }
+    Some(target_status.to_string())
 }
 
 async fn handle_hook(
@@ -705,16 +734,24 @@ async fn handle_hook(
             }),
         );
 
-        let notification = crate::agent_lifecycle::AgentLifecycleNotification {
-            provider: "claude-code".to_string(),
-            task_id: task_id.clone(),
-            pty_instance_id: None,
-            provider_session_id: payload.session_id.clone(),
-            event_type: event_type.to_string(),
-            status_type: None,
-        };
-        if let Some(change) = record_agent_lifecycle_notification(&state, &notification) {
-            emit_agent_status_changed(&state, &change.task_id, &change.status, &change.provider);
+        if let Some(kind) = claude_event_kind_from_event(event_type) {
+            let notification = crate::agent_lifecycle::AgentLifecycleNotification {
+                provider: "claude-code".to_string(),
+                task_id: task_id.clone(),
+                pty_instance_id: payload.pty_instance_id,
+                provider_session_id: payload.session_id.clone(),
+                kind,
+                raw_event_type: Some(event_type.to_string()),
+                raw_status_type: None,
+            };
+            if let Some(change) = record_agent_lifecycle_notification(&state, &notification) {
+                emit_agent_status_changed(
+                    &state,
+                    &change.task_id,
+                    &change.status,
+                    &change.provider,
+                );
+            }
         }
     } else {
         warn!(
@@ -737,8 +774,9 @@ pub async fn pi_agent_start_handler(
             task_id: payload.task_id,
             pty_instance_id: Some(payload.pty_instance_id),
             provider_session_id: None,
-            event_type: "agent.start".to_string(),
-            status_type: None,
+            kind: crate::agent_lifecycle::AgentLifecycleEventKind::Started,
+            raw_event_type: Some("agent.start".to_string()),
+            raw_status_type: None,
         },
     )
     .await
@@ -755,11 +793,33 @@ pub async fn pi_agent_end_handler(
             task_id: payload.task_id,
             pty_instance_id: Some(payload.pty_instance_id),
             provider_session_id: None,
-            event_type: "agent.end".to_string(),
-            status_type: None,
+            kind: crate::agent_lifecycle::AgentLifecycleEventKind::Ended,
+            raw_event_type: Some("agent.end".to_string()),
+            raw_status_type: None,
         },
     )
     .await
+}
+
+fn opencode_event_kind_from_event(
+    event_type: &str,
+    status_type: Option<&str>,
+) -> Option<crate::agent_lifecycle::AgentLifecycleEventKind> {
+    match (event_type, status_type) {
+        ("session.status" | "session.created" | "session.updated", Some("idle"))
+        | ("session.idle", _) => Some(crate::agent_lifecycle::AgentLifecycleEventKind::BecameIdle),
+        (
+            "session.status" | "session.created" | "session.updated",
+            Some("busy" | "retry" | "running"),
+        )
+        | ("message.updated", _)
+        | ("tool.execute.before" | "tool.execute.after", _) => {
+            Some(crate::agent_lifecycle::AgentLifecycleEventKind::BecameBusy)
+        }
+        ("session.status" | "session.created" | "session.updated", Some("error" | "failed"))
+        | ("session.error", _) => Some(crate::agent_lifecycle::AgentLifecycleEventKind::Failed),
+        _ => None,
+    }
 }
 
 #[cfg(test)]
@@ -767,7 +827,8 @@ fn opencode_status_from_event(
     event_type: &str,
     status_type: Option<&str>,
 ) -> Option<(&'static str, &'static [&'static str])> {
-    crate::agent_lifecycle::opencode_status_from_event(event_type, status_type)
+    let kind = opencode_event_kind_from_event(event_type, status_type)?;
+    Some(crate::agent_lifecycle::lifecycle_status_transition(kind))
 }
 
 pub async fn opencode_event_handler(
@@ -786,13 +847,20 @@ pub async fn opencode_event_handler(
         }),
     );
 
+    let Some(kind) =
+        opencode_event_kind_from_event(&payload.event_type, payload.status_type.as_deref())
+    else {
+        return Ok(Json(serde_json::json!({ "status": "ok" })));
+    };
+
     let notification = crate::agent_lifecycle::AgentLifecycleNotification {
         provider: "opencode".to_string(),
         task_id: payload.task_id,
         pty_instance_id: Some(payload.pty_instance_id),
         provider_session_id: payload.session_id,
-        event_type: payload.event_type,
-        status_type: payload.status_type,
+        kind,
+        raw_event_type: Some(payload.event_type),
+        raw_status_type: payload.status_type,
     };
 
     handle_agent_lifecycle_notification(state, notification).await

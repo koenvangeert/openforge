@@ -289,12 +289,13 @@ export async function registerAppDesktopEventListeners(deps: AppDesktopEventDeps
   )
 
   unlisteners.push(
-    await listen<{ task_id: string; success: boolean }>('agent-pty-exited', (event) => {
+    await listen<{ task_id: string; success: boolean; instance_id: number }>('agent-pty-exited', (event) => {
       const taskId = event.payload.task_id
       const success = event.payload.success
+      const ptyInstanceId = event.payload.instance_id
       setTimeout(async () => {
         try {
-          await finalizeAgentSession(taskId, success)
+          await finalizeAgentSession(taskId, success, ptyInstanceId)
         } catch (e) {
           console.error('[pty-exit] Failed to finalize session for task:', taskId, e)
         }

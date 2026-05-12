@@ -214,8 +214,9 @@ fn test_pi_status_update_emits_when_matching_session_already_has_target_status()
             task_id: task_id.clone(),
             pty_instance_id: Some(42),
             provider_session_id: None,
-            event_type: "agent.start".to_string(),
-            status_type: None,
+            kind: crate::agent_lifecycle::AgentLifecycleEventKind::Started,
+            raw_event_type: Some("agent.start".to_string()),
+            raw_status_type: None,
         },
     );
 
@@ -470,6 +471,7 @@ fn test_claude_hook_payload_deserialize_with_claude_task_id() {
     assert_eq!(payload.claude_task_id, Some("task-456".to_string()));
     assert!(payload.tool_input.is_none());
     assert!(payload.transcript_path.is_none());
+    assert!(payload.pty_instance_id.is_none());
 }
 
 #[test]
@@ -487,7 +489,8 @@ fn test_claude_hook_payload_deserialize_all_fields() {
             "tool_name": "bash",
             "tool_input": {"cmd": "ls -la"},
             "transcript_path": "/path/to/transcript",
-            "CLAUDE_TASK_ID": "task-456"
+            "CLAUDE_TASK_ID": "task-456",
+            "OPENFORGE_PTY_INSTANCE_ID": 42
         }"#;
     let payload: ClaudeHookPayload = serde_json::from_str(json).expect("Failed to deserialize");
     assert_eq!(payload.session_id, Some("sess-123".to_string()));
@@ -498,6 +501,7 @@ fn test_claude_hook_payload_deserialize_all_fields() {
         Some("/path/to/transcript".to_string())
     );
     assert_eq!(payload.claude_task_id, Some("task-456".to_string()));
+    assert_eq!(payload.pty_instance_id, Some(42));
 }
 
 #[test]
@@ -506,6 +510,7 @@ fn test_claude_hook_payload_deserialize_missing_task_id() {
     let payload: ClaudeHookPayload = serde_json::from_str(json).expect("Failed to deserialize");
     assert_eq!(payload.session_id, Some("sess-123".to_string()));
     assert!(payload.claude_task_id.is_none());
+    assert!(payload.pty_instance_id.is_none());
 }
 
 #[test]
@@ -517,6 +522,7 @@ fn test_claude_hook_payload_deserialize_empty_object() {
     assert!(payload.tool_input.is_none());
     assert!(payload.transcript_path.is_none());
     assert!(payload.claude_task_id.is_none());
+    assert!(payload.pty_instance_id.is_none());
 }
 
 #[test]
@@ -534,9 +540,11 @@ fn test_claude_hook_payload_creation() {
         tool_input: Some(serde_json::json!({"cmd": "ls"})),
         transcript_path: Some("/path".to_string()),
         claude_task_id: Some("task-456".to_string()),
+        pty_instance_id: Some(456),
     };
     assert_eq!(payload.session_id, Some("sess-123".to_string()));
     assert_eq!(payload.claude_task_id, Some("task-456".to_string()));
+    assert_eq!(payload.pty_instance_id, Some(456));
 }
 
 #[test]
@@ -601,31 +609,45 @@ fn opencode_status_events_complete_running_sessions_on_idle() {
         opencode_status_from_event("session.status", Some("busy")),
         Some((
             "running",
-            &["completed", "paused", "interrupted", "running"] as &[_]
+            &[
+                "started",
+                "completed",
+                "paused",
+                "failed",
+                "interrupted",
+                "running"
+            ] as &[_]
         ))
     );
     assert_eq!(
         opencode_status_from_event("session.status", Some("retry")),
         Some((
             "running",
-            &["completed", "paused", "interrupted", "running"] as &[_]
+            &[
+                "started",
+                "completed",
+                "paused",
+                "failed",
+                "interrupted",
+                "running"
+            ] as &[_]
         ))
     );
     assert_eq!(
         opencode_status_from_event("session.status", Some("error")),
-        Some(("failed", &["running", "paused"] as &[_]))
+        Some(("failed", &["running", "paused", "failed"] as &[_]))
     );
     assert_eq!(
         opencode_status_from_event("session.status", Some("idle")),
-        Some(("completed", &["running", "paused"] as &[_]))
+        Some(("completed", &["running", "paused", "completed"] as &[_]))
     );
     assert_eq!(
         opencode_status_from_event("session.idle", None),
-        Some(("completed", &["running", "paused"] as &[_]))
+        Some(("completed", &["running", "paused", "completed"] as &[_]))
     );
     assert_eq!(
         opencode_status_from_event("session.updated", Some("idle")),
-        Some(("completed", &["running", "paused"] as &[_])),
+        Some(("completed", &["running", "paused", "completed"] as &[_])),
         "OpenCode can emit idle status on session.updated during startup/resume; it must not revive stale sessions as running"
     );
     assert_eq!(
@@ -676,7 +698,7 @@ async fn agent_lifecycle_route_updates_opencode_status_through_shared_seam() {
                 .method("POST")
                 .header("content-type", "application/json")
                 .body(Body::from(format!(
-                    r#"{{"provider":"opencode","task_id":"{}","pty_instance_id":88,"provider_session_id":"ses_shared88","event_type":"session.status","status_type":"busy"}}"#,
+                    r#"{{"provider":"opencode","task_id":"{}","pty_instance_id":88,"provider_session_id":"ses_shared88","kind":"became_busy","raw_event_type":"session.status","raw_status_type":"busy"}}"#,
                     task_id
                 )))
                 .expect("build request"),
@@ -741,7 +763,7 @@ async fn agent_lifecycle_route_updates_pi_status_through_shared_seam() {
                 .method("POST")
                 .header("content-type", "application/json")
                 .body(Body::from(format!(
-                    r#"{{"provider":"pi","task_id":"{}","pty_instance_id":89,"event_type":"agent.start"}}"#,
+                    r#"{{"provider":"pi","task_id":"{}","pty_instance_id":89,"kind":"started","raw_event_type":"agent.start"}}"#,
                     task_id
                 )))
                 .expect("build request"),
@@ -779,6 +801,14 @@ async fn agent_lifecycle_route_updates_claude_status_through_shared_seam() {
             "claude-code",
         )
         .expect("create claude session");
+        db.update_agent_session(
+            "ses-claude-shared",
+            "implementing",
+            "completed",
+            Some(r#"{"pty_instance_id":90}"#),
+            None,
+        )
+        .expect("store pty instance");
         task.id
     };
 
@@ -790,7 +820,7 @@ async fn agent_lifecycle_route_updates_claude_status_through_shared_seam() {
                 .method("POST")
                 .header("content-type", "application/json")
                 .body(Body::from(format!(
-                    r#"{{"provider":"claude-code","task_id":"{}","provider_session_id":"claude-shared-90","event_type":"pre-tool-use"}}"#,
+                    r#"{{"provider":"claude-code","task_id":"{}","pty_instance_id":90,"provider_session_id":"claude-shared-90","kind":"became_busy","raw_event_type":"pre-tool-use"}}"#,
                     task_id
                 )))
                 .expect("build request"),

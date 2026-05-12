@@ -277,7 +277,7 @@ pub(super) async fn handle_app_start_implementation_command(
             let port = crate::claude_hooks::get_http_server_port();
             let hooks_path = crate::claude_hooks::generate_hooks_settings(port)
                 .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-            pty_manager
+            let pty_instance_id = pty_manager
                 .spawn_claude_pty(
                     &task_id,
                     &working_dir,
@@ -297,7 +297,7 @@ pub(super) async fn handle_app_start_implementation_command(
                 port: 0,
                 opencode_session_id: None,
                 pi_session_id: None,
-                pty_instance_id: None,
+                pty_instance_id: Some(pty_instance_id),
             }
         }
         "pi" => {

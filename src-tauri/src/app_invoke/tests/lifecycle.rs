@@ -48,6 +48,14 @@ async fn handles_agent_lifecycle_followups() {
             "claude-code",
         )
         .expect("create claude session");
+        db.update_agent_session(
+            "session-claude",
+            "implementing",
+            "running",
+            Some(r#"{"pty_instance_id":7}"#),
+            None,
+        )
+        .expect("store claude pty instance");
         (pi_task.id, claude_task.id)
     };
 
@@ -61,7 +69,7 @@ async fn handles_agent_lifecycle_followups() {
     invoke_ok(
         &state,
         "finalize_agent_session",
-        json!({ "taskId": claude_task_id, "success": false }),
+        json!({ "taskId": claude_task_id, "success": false, "ptyInstanceId": 7 }),
     )
     .await;
     invoke_ok(
@@ -125,13 +133,21 @@ async fn finalize_agent_session_completes_successful_opencode_pty_run() {
             "opencode",
         )
         .expect("create session");
+        db.update_agent_session(
+            "session-opencode",
+            "implementing",
+            "running",
+            Some(r#"{"pty_instance_id":9}"#),
+            None,
+        )
+        .expect("store pty instance");
         task.id
     };
 
     invoke_ok(
         &state,
         "finalize_agent_session",
-        json!({ "taskId": task_id, "success": true }),
+        json!({ "taskId": task_id, "success": true, "ptyInstanceId": 9 }),
     )
     .await;
 
@@ -143,6 +159,138 @@ async fn finalize_agent_session_completes_successful_opencode_pty_run() {
             .status,
         "completed"
     );
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
+async fn finalize_agent_session_ignores_missing_pty_exit_instance() {
+    let (state, path) = test_state("finalize_ignores_missing_pty_exit");
+    let task_id = {
+        let db = crate::db::acquire_db(&state.db);
+        let task = db
+            .create_task("OpenCode task", "doing", None, None, None)
+            .expect("create task");
+        db.create_agent_session(
+            "session-opencode-missing-instance",
+            &task.id,
+            None,
+            "implementing",
+            "running",
+            "opencode",
+        )
+        .expect("create session");
+        db.update_agent_session(
+            "session-opencode-missing-instance",
+            "implementing",
+            "running",
+            Some(r#"{"pty_instance_id":42}"#),
+            None,
+        )
+        .expect("store pty instance");
+        task.id
+    };
+
+    invoke_ok(
+        &state,
+        "finalize_agent_session",
+        json!({ "taskId": task_id, "success": false }),
+    )
+    .await;
+
+    let db = crate::db::acquire_db(&state.db);
+    assert_eq!(
+        db.get_agent_session("session-opencode-missing-instance")
+            .expect("get opencode")
+            .expect("opencode exists")
+            .status,
+        "running"
+    );
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
+async fn finalize_agent_session_ignores_stale_pty_exit_instance() {
+    let (state, path) = test_state("finalize_ignores_stale_pty_exit");
+    let task_id = {
+        let db = crate::db::acquire_db(&state.db);
+        let task = db
+            .create_task("OpenCode task", "doing", None, None, None)
+            .expect("create task");
+        db.create_agent_session(
+            "session-opencode-current",
+            &task.id,
+            None,
+            "implementing",
+            "running",
+            "opencode",
+        )
+        .expect("create session");
+        db.update_agent_session(
+            "session-opencode-current",
+            "implementing",
+            "running",
+            Some(r#"{"pty_instance_id":42}"#),
+            None,
+        )
+        .expect("store pty instance");
+        task.id
+    };
+
+    invoke_ok(
+        &state,
+        "finalize_agent_session",
+        json!({ "taskId": task_id, "success": false, "ptyInstanceId": 41 }),
+    )
+    .await;
+
+    let db = crate::db::acquire_db(&state.db);
+    assert_eq!(
+        db.get_agent_session("session-opencode-current")
+            .expect("get opencode")
+            .expect("opencode exists")
+            .status,
+        "running"
+    );
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
+async fn finalize_agent_session_does_not_override_paused_lifecycle_state() {
+    let (state, path) = test_state("finalize_does_not_override_paused");
+    let task_id = {
+        let db = crate::db::acquire_db(&state.db);
+        let task = db
+            .create_task("Paused agent task", "doing", None, None, None)
+            .expect("create task");
+        db.create_agent_session(
+            "session-paused-opencode",
+            &task.id,
+            None,
+            "implementing",
+            "paused",
+            "opencode",
+        )
+        .expect("create session");
+        task.id
+    };
+
+    invoke_ok(
+        &state,
+        "finalize_agent_session",
+        json!({ "taskId": task_id, "success": true }),
+    )
+    .await;
+
+    let db = crate::db::acquire_db(&state.db);
+    let session = db
+        .get_agent_session("session-paused-opencode")
+        .expect("get opencode")
+        .expect("opencode exists");
+    assert_eq!(session.status, "paused");
+    assert!(session.error_message.is_none());
 
     let _ = std::fs::remove_file(path);
 }

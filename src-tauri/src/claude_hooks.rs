@@ -82,15 +82,35 @@ pub fn ensure_workspace_trusted(cwd: &Path) -> Result<(), Box<dyn std::error::Er
     Ok(())
 }
 
+fn claude_lifecycle_kind_from_event(
+    event_type: &str,
+) -> Option<crate::agent_lifecycle::AgentLifecycleEventKind> {
+    match event_type {
+        "pre-tool-use" | "post-tool-use" => {
+            Some(crate::agent_lifecycle::AgentLifecycleEventKind::BecameBusy)
+        }
+        "stop" | "session-end" => Some(crate::agent_lifecycle::AgentLifecycleEventKind::Ended),
+        "notification-permission" => {
+            Some(crate::agent_lifecycle::AgentLifecycleEventKind::RequestedPermission)
+        }
+        "notification" => None,
+        _ => None,
+    }
+}
+
 fn lifecycle_hook_command(port: u16, event_type: &str, include_tool_name: bool) -> String {
+    let Some(kind) = claude_lifecycle_kind_from_event(event_type) else {
+        return String::new();
+    };
+    let kind = serde_json::to_string(&kind).unwrap_or_else(|_| "null".to_string());
     let tool_name_field = if include_tool_name {
         ",\"tool_name\":\"'\"$CLAUDE_TOOL_NAME\"'\""
     } else {
         ""
     };
     format!(
-        "curl -s -X POST http://127.0.0.1:{}/hooks/agent-lifecycle -H 'Content-Type: application/json' -d '{{\"provider\":\"claude-code\",\"task_id\":\"'\"$CLAUDE_TASK_ID\"'\",\"provider_session_id\":\"'\"$CLAUDE_SESSION_ID\"'\",\"event_type\":\"{}\"{} }}' ",
-        port, event_type, tool_name_field
+        "curl -s -X POST http://127.0.0.1:{}/hooks/agent-lifecycle -H 'Content-Type: application/json' -d '{{\"provider\":\"claude-code\",\"task_id\":\"'\"$CLAUDE_TASK_ID\"'\",\"pty_instance_id\":'\"$OPENFORGE_PTY_INSTANCE_ID\"',\"provider_session_id\":\"'\"$CLAUDE_SESSION_ID\"'\",\"kind\":{},\"raw_event_type\":\"{}\"{} }}' ",
+        port, kind, event_type, tool_name_field
     )
 }
 
@@ -101,7 +121,6 @@ fn build_hooks_json(port: u16) -> Value {
     let session_end_cmd = lifecycle_hook_command(port, "session-end", false);
     let notification_permission_cmd =
         lifecycle_hook_command(port, "notification-permission", false);
-    let notification_cmd = lifecycle_hook_command(port, "notification", false);
 
     json!({
         "hooks": {
@@ -152,14 +171,6 @@ fn build_hooks_json(port: u16) -> Value {
                         {
                             "type": "command",
                             "command": notification_permission_cmd
-                        }
-                    ]
-                },
-                {
-                    "hooks": [
-                        {
-                            "type": "command",
-                            "command": notification_cmd
                         }
                     ]
                 }
@@ -237,20 +248,16 @@ mod tests {
         assert!(json["hooks"].get("Stop").is_some());
         assert!(json["hooks"].get("SessionEnd").is_some());
         assert!(json["hooks"].get("Notification").is_some());
-        // Notification should have two entries: permission matcher + catch-all
+        // Only permission notifications affect OpenForge lifecycle state.
         let notification = &json["hooks"]["Notification"];
         assert_eq!(
             notification.as_array().unwrap().len(),
-            2,
-            "Notification should have 2 entries"
+            1,
+            "Notification should only include the permission matcher lifecycle hook"
         );
         assert!(
             notification[0].get("matcher").is_some(),
             "First entry should have a matcher"
-        );
-        assert!(
-            notification[1].get("matcher").is_none(),
-            "Second entry should be catch-all (no matcher)"
         );
     }
 
@@ -280,6 +287,7 @@ mod tests {
         assert!(pre_tool_use_cmd.contains("$CLAUDE_SESSION_ID"));
         assert!(pre_tool_use_cmd.contains("$CLAUDE_TOOL_NAME"));
         assert!(pre_tool_use_cmd.contains("$CLAUDE_TASK_ID"));
+        assert!(pre_tool_use_cmd.contains("$OPENFORGE_PTY_INSTANCE_ID"));
     }
 
     #[test]
@@ -396,9 +404,7 @@ mod tests {
             ("PostToolUse", 0, "post-tool-use"),
             ("Stop", 0, "stop"),
             ("SessionEnd", 0, "session-end"),
-            // Notification[0] = permission matcher, Notification[1] = catch-all
             ("Notification", 0, "notification-permission"),
-            ("Notification", 1, "notification"),
         ];
 
         for (hook_key, idx, expected_event_type) in &hook_entries {
@@ -429,11 +435,25 @@ mod tests {
                 cmd
             );
             assert!(
-                cmd.contains(&format!("\"event_type\":\"{}\"", expected_event_type)),
-                "{}[{}] command should include event type {}, got: {}",
+                cmd.contains(&format!("\"raw_event_type\":\"{}\"", expected_event_type)),
+                "{}[{}] command should include raw event type {}, got: {}",
                 hook_key,
                 idx,
                 expected_event_type,
+                cmd
+            );
+            assert!(
+                cmd.contains("\"kind\":"),
+                "{}[{}] command should include normalized lifecycle kind, got: {}",
+                hook_key,
+                idx,
+                cmd
+            );
+            assert!(
+                cmd.contains("\"pty_instance_id\":"),
+                "{}[{}] command should include PTY instance identity, got: {}",
+                hook_key,
+                idx,
                 cmd
             );
             assert!(

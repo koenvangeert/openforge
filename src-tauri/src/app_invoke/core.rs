@@ -347,14 +347,27 @@ pub(super) async fn handle_app_unmatched_command(
         "finalize_agent_session" => {
             let task_id = payload_string(&request.payload, "taskId")?;
             let success = payload_bool(&request.payload, "success")?;
+            let pty_instance_id = request
+                .payload
+                .get("ptyInstanceId")
+                .and_then(|value| value.as_u64());
             if let Some(session) = db.get_latest_session_for_ticket(&task_id).map_err(|e| {
                 (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     format!("Failed to get latest session: {e}"),
                 )
             })? {
-                if matches!(session.provider.as_str(), "claude-code" | "pi" | "opencode")
+                let pty_backed_provider =
+                    matches!(session.provider.as_str(), "claude-code" | "pi" | "opencode");
+                let current_pty_instance_matches = !pty_backed_provider
+                    || pty_instance_id
+                        .map(|id| {
+                            crate::agent_lifecycle::session_matches_pty_instance(&session, id)
+                        })
+                        .unwrap_or(false);
+                if pty_backed_provider
                     && session.status == "running"
+                    && current_pty_instance_matches
                 {
                     let next_status =
                         if matches!(session.provider.as_str(), "pi" | "opencode") && success {

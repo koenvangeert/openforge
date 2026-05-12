@@ -29,6 +29,8 @@ mod tests {
         assert!(PI_EXTENSION_SOURCE.contains("pty_instance_id"));
         assert!(PI_EXTENSION_SOURCE.contains("/hooks/agent-lifecycle"));
         assert!(PI_EXTENSION_SOURCE.contains("provider: \"pi\""));
+        assert!(PI_EXTENSION_SOURCE.contains("kind"));
+        assert!(PI_EXTENSION_SOURCE.contains("raw_event_type"));
         assert!(PI_EXTENSION_SOURCE.contains("agent.start"));
         assert!(PI_EXTENSION_SOURCE.contains("agent.end"));
     }
