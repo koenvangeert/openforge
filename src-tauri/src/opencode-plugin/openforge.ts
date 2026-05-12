@@ -1,12 +1,6 @@
 const interestingEvents = new Set([
   "session.created",
-  "session.updated",
-  "session.status",
   "session.idle",
-  "session.error",
-  "message.updated",
-  "tool.execute.before",
-  "tool.execute.after",
 ])
 
 function isOpenCodeSessionId(value) {
@@ -24,32 +18,12 @@ function sessionIdFromEvent(event) {
   return candidates.find(isOpenCodeSessionId) ?? null
 }
 
-function statusTypeFromEvent(event) {
-  return event?.properties?.status?.type
-    ?? event?.properties?.status
-    ?? event?.properties?.info?.status?.type
-    ?? event?.properties?.info?.status
-    ?? null
-}
-
 function openForgeLifecycleKind(event) {
-  const statusType = statusTypeFromEvent(event)
   switch (event?.type) {
-    case "session.status":
     case "session.created":
-    case "session.updated":
-      if (statusType === "idle") return "became_idle"
-      if (statusType === "busy" || statusType === "retry" || statusType === "running") return "became_busy"
-      if (statusType === "error" || statusType === "failed") return "failed"
-      return null
+      return "started"
     case "session.idle":
-      return "became_idle"
-    case "session.error":
-      return "failed"
-    case "message.updated":
-    case "tool.execute.before":
-    case "tool.execute.after":
-      return "became_busy"
+      return "ended"
     default:
       return null
   }
@@ -75,7 +49,6 @@ async function postOpenForgeEvent(event) {
         provider_session_id: sessionIdFromEvent(event),
         kind,
         raw_event_type: event.type,
-        raw_status_type: statusTypeFromEvent(event),
       }),
     })
   } catch {
