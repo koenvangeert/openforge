@@ -805,21 +805,11 @@ pub async fn pi_agent_end_handler(
 
 fn opencode_event_kind_from_event(
     event_type: &str,
-    status_type: Option<&str>,
+    _status_type: Option<&str>,
 ) -> Option<crate::agent_lifecycle::AgentLifecycleEventKind> {
-    match (event_type, status_type) {
-        ("session.status" | "session.created" | "session.updated", Some("idle"))
-        | ("session.idle", _) => Some(crate::agent_lifecycle::AgentLifecycleEventKind::BecameIdle),
-        (
-            "session.status" | "session.created" | "session.updated",
-            Some("busy" | "retry" | "running"),
-        )
-        | ("message.updated", _)
-        | ("tool.execute.before" | "tool.execute.after", _) => {
-            Some(crate::agent_lifecycle::AgentLifecycleEventKind::BecameBusy)
-        }
-        ("session.status" | "session.created" | "session.updated", Some("error" | "failed"))
-        | ("session.error", _) => Some(crate::agent_lifecycle::AgentLifecycleEventKind::Failed),
+    match event_type {
+        "session.created" => Some(crate::agent_lifecycle::AgentLifecycleEventKind::Started),
+        "session.idle" => Some(crate::agent_lifecycle::AgentLifecycleEventKind::Ended),
         _ => None,
     }
 }

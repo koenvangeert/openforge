@@ -608,9 +608,9 @@ fn test_map_hook_to_status_full_lifecycle() {
 }
 
 #[test]
-fn opencode_status_events_complete_running_sessions_on_idle() {
+fn opencode_status_events_match_pi_start_end_only() {
     assert_eq!(
-        opencode_status_from_event("session.status", Some("busy")),
+        opencode_status_from_event("session.created", None),
         Some((
             "running",
             &[
@@ -621,49 +621,22 @@ fn opencode_status_events_complete_running_sessions_on_idle() {
                 "interrupted",
                 "running"
             ] as &[_]
-        ))
-    );
-    assert_eq!(
-        opencode_status_from_event("session.status", Some("retry")),
-        Some((
-            "running",
-            &[
-                "started",
-                "completed",
-                "paused",
-                "failed",
-                "interrupted",
-                "running"
-            ] as &[_]
-        ))
-    );
-    assert_eq!(
-        opencode_status_from_event("session.status", Some("error")),
-        Some(("failed", &["running", "paused", "failed"] as &[_]))
-    );
-    assert_eq!(
-        opencode_status_from_event("session.status", Some("idle")),
-        Some(("completed", &["running", "paused", "completed"] as &[_]))
+        )),
+        "OpenCode session creation should behave like Pi agent.start"
     );
     assert_eq!(
         opencode_status_from_event("session.idle", None),
-        Some(("completed", &["running", "paused", "completed"] as &[_]))
-    );
-    assert_eq!(
-        opencode_status_from_event("session.updated", Some("idle")),
         Some(("completed", &["running", "paused", "completed"] as &[_])),
-        "OpenCode can emit idle status on session.updated during startup/resume; it must not revive stale sessions as running"
+        "OpenCode idle should behave like Pi agent.end"
     );
-    assert_eq!(
-        opencode_status_from_event("session.updated", None),
-        None,
-        "metadata-only OpenCode session updates during startup must not revive stale sessions as running"
-    );
-    assert_eq!(
-        opencode_status_from_event("session.created", None),
-        None,
-        "metadata-only OpenCode session creation events should not be the source of running truth"
-    );
+    assert_eq!(opencode_status_from_event("session.status", Some("busy")), None);
+    assert_eq!(opencode_status_from_event("session.status", Some("retry")), None);
+    assert_eq!(opencode_status_from_event("session.status", Some("error")), None);
+    assert_eq!(opencode_status_from_event("session.status", Some("idle")), None);
+    assert_eq!(opencode_status_from_event("session.updated", Some("idle")), None);
+    assert_eq!(opencode_status_from_event("message.updated", None), None);
+    assert_eq!(opencode_status_from_event("tool.execute.before", None), None);
+    assert_eq!(opencode_status_from_event("tool.execute.after", None), None);
 }
 
 #[tokio::test]
@@ -707,7 +680,7 @@ async fn agent_lifecycle_route_updates_opencode_status_through_shared_seam() {
                 .method("POST")
                 .header("content-type", "application/json")
                 .body(Body::from(format!(
-                    r#"{{"provider":"opencode","task_id":"{}","pty_instance_id":88,"provider_session_id":"ses_shared88","kind":"became_busy","raw_event_type":"session.status","raw_status_type":"busy"}}"#,
+                    r#"{{"provider":"opencode","task_id":"{}","pty_instance_id":88,"provider_session_id":"ses_shared88","kind":"started","raw_event_type":"session.created"}}"#,
                     task_id
                 )))
                 .expect("build request"),
@@ -737,9 +710,9 @@ async fn agent_lifecycle_route_updates_opencode_status_through_shared_seam() {
     assert_eq!(event.payload["task_id"], task_id);
     assert_eq!(event.payload["status"], "running");
     assert_eq!(event.payload["provider"], "opencode");
-    assert_eq!(event.payload["kind"], "became_busy");
-    assert_eq!(event.payload["raw_event_type"], "session.status");
-    assert_eq!(event.payload["raw_status_type"], "busy");
+    assert_eq!(event.payload["kind"], "started");
+    assert_eq!(event.payload["raw_event_type"], "session.created");
+    assert_eq!(event.payload["raw_status_type"], serde_json::Value::Null);
     assert_eq!(event.payload["pty_instance_id"], 88);
 
     let _ = std::fs::remove_file(path);
@@ -892,7 +865,7 @@ async fn agent_lifecycle_route_updates_claude_status_through_shared_seam() {
 }
 
 #[tokio::test]
-async fn opencode_hook_stores_session_id_and_completes_on_idle_status() {
+async fn opencode_hook_stores_session_id_and_completes_on_idle_event() {
     let (state, path) = test_state("opencode_hook_idle_complete");
     let task_id = {
         let db = state.db.lock().expect("lock db");
@@ -924,9 +897,9 @@ async fn opencode_hook_stores_session_id_and_completes_on_idle_status() {
         Json(OpenCodePluginEventPayload {
             task_id: task_id.clone(),
             pty_instance_id: 77,
-            event_type: "session.status".to_string(),
+            event_type: "session.idle".to_string(),
             session_id: Some("ses_session77".to_string()),
-            status_type: Some("idle".to_string()),
+            status_type: None,
         }),
     )
     .await
@@ -949,7 +922,7 @@ async fn opencode_hook_stores_session_id_and_completes_on_idle_status() {
 }
 
 #[tokio::test]
-async fn opencode_hook_preserves_checkpoint_when_status_changes() {
+async fn opencode_hook_preserves_checkpoint_when_start_event_runs_session() {
     let (state, path) = test_state("opencode_hook_preserves_checkpoint");
     let task_id = {
         let db = state.db.lock().expect("lock db");
@@ -981,9 +954,9 @@ async fn opencode_hook_preserves_checkpoint_when_status_changes() {
         Json(OpenCodePluginEventPayload {
             task_id: task_id.clone(),
             pty_instance_id: 77,
-            event_type: "session.status".to_string(),
+            event_type: "session.created".to_string(),
             session_id: Some("ses_session77".to_string()),
-            status_type: Some("busy".to_string()),
+            status_type: None,
         }),
     )
     .await
@@ -1010,7 +983,7 @@ async fn opencode_hook_preserves_checkpoint_when_status_changes() {
 }
 
 #[tokio::test]
-async fn opencode_hook_marks_error_status_failed() {
+async fn opencode_hook_ignores_error_status_events() {
     let (state, path) = test_state("opencode_hook_error_failed");
     let task_id = {
         let db = state.db.lock().expect("lock db");
@@ -1057,7 +1030,7 @@ async fn opencode_hook_marks_error_status_failed() {
         .get_agent_session("ses-opencode-error")
         .expect("get session")
         .expect("session exists");
-    assert_eq!(session.status, "failed");
+    assert_eq!(session.status, "running");
 
     let _ = std::fs::remove_file(path);
 }

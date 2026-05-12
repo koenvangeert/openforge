@@ -39,11 +39,18 @@ mod tests {
         assert!(OPENCODE_PLUGIN_SOURCE.contains("provider: \"opencode\""));
         assert!(OPENCODE_PLUGIN_SOURCE.contains("session.created"));
         assert!(OPENCODE_PLUGIN_SOURCE.contains("session.idle"));
-        assert!(OPENCODE_PLUGIN_SOURCE.contains("session.error"));
         assert!(OPENCODE_PLUGIN_SOURCE.contains("provider_session_id"));
         assert!(OPENCODE_PLUGIN_SOURCE.contains("kind"));
+        assert!(OPENCODE_PLUGIN_SOURCE.contains("started"));
+        assert!(OPENCODE_PLUGIN_SOURCE.contains("ended"));
         assert!(OPENCODE_PLUGIN_SOURCE.contains("raw_event_type"));
-        assert!(OPENCODE_PLUGIN_SOURCE.contains("raw_status_type"));
+        assert!(!OPENCODE_PLUGIN_SOURCE.contains("session.status"));
+        assert!(!OPENCODE_PLUGIN_SOURCE.contains("session.updated"));
+        assert!(!OPENCODE_PLUGIN_SOURCE.contains("session.error"));
+        assert!(!OPENCODE_PLUGIN_SOURCE.contains("message.updated"));
+        assert!(!OPENCODE_PLUGIN_SOURCE.contains("tool.execute.before"));
+        assert!(!OPENCODE_PLUGIN_SOURCE.contains("tool.execute.after"));
+        assert!(!OPENCODE_PLUGIN_SOURCE.contains("raw_status_type"));
     }
 
     #[test]
