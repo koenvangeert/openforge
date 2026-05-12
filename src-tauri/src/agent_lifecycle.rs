@@ -84,6 +84,10 @@ fn pi_status_from_event(event_type: &str) -> Option<(&'static str, &'static [&'s
     }
 }
 
+fn provider_session_id_is_persistable(provider: &str, provider_session_id: &str) -> bool {
+    provider != "opencode" || provider_session_id.starts_with("ses")
+}
+
 fn provider_status_from_notification(
     notification: &AgentLifecycleNotification,
     current_status: &str,
@@ -130,6 +134,7 @@ pub fn apply_agent_lifecycle_notification(
         .provider_session_id
         .as_deref()
         .filter(|id| !id.is_empty())
+        .filter(|id| provider_session_id_is_persistable(&notification.provider, id))
     {
         db.set_agent_session_provider_id(&session.id, &notification.provider, provider_session_id)
             .map_err(|e| format!("failed to persist provider session id: {e}"))?;
@@ -362,6 +367,96 @@ mod tests {
         assert!(mgmt_pos < instructions_pos);
         assert!(instructions_pos < task_prompt_pos);
         assert!(!prompt.contains("External ticket:"));
+    }
+
+    #[test]
+    fn opencode_lifecycle_ignores_message_ids_as_provider_session_ids() {
+        use crate::db::test_helpers::*;
+        let (db, path) = make_test_db("opencode_ignore_message_provider_id");
+        insert_test_task(&db);
+        db.create_agent_session(
+            "session-row",
+            "T-100",
+            Some("ses_existing"),
+            "implementing",
+            "running",
+            "opencode",
+        )
+        .expect("create opencode session");
+        db.update_agent_session(
+            "session-row",
+            "implementing",
+            "running",
+            Some(r#"{"pty_instance_id":42}"#),
+            None,
+        )
+        .expect("store pty instance");
+
+        apply_agent_lifecycle_notification(
+            &db,
+            &AgentLifecycleNotification {
+                provider: "opencode".to_string(),
+                task_id: "T-100".to_string(),
+                pty_instance_id: Some(42),
+                provider_session_id: Some("msg_bad123".to_string()),
+                event_type: "message.updated".to_string(),
+                status_type: None,
+            },
+        )
+        .expect("apply lifecycle notification");
+
+        let session = db
+            .get_agent_session("session-row")
+            .expect("get session")
+            .expect("session exists");
+        assert_eq!(session.opencode_session_id.as_deref(), Some("ses_existing"));
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn opencode_lifecycle_accepts_real_session_ids_as_provider_session_ids() {
+        use crate::db::test_helpers::*;
+        let (db, path) = make_test_db("opencode_accept_real_provider_id");
+        insert_test_task(&db);
+        db.create_agent_session(
+            "session-row",
+            "T-100",
+            None,
+            "implementing",
+            "running",
+            "opencode",
+        )
+        .expect("create opencode session");
+        db.update_agent_session(
+            "session-row",
+            "implementing",
+            "running",
+            Some(r#"{"pty_instance_id":42}"#),
+            None,
+        )
+        .expect("store pty instance");
+
+        apply_agent_lifecycle_notification(
+            &db,
+            &AgentLifecycleNotification {
+                provider: "opencode".to_string(),
+                task_id: "T-100".to_string(),
+                pty_instance_id: Some(42),
+                provider_session_id: Some("ses_good123".to_string()),
+                event_type: "message.updated".to_string(),
+                status_type: None,
+            },
+        )
+        .expect("apply lifecycle notification");
+
+        let session = db
+            .get_agent_session("session-row")
+            .expect("get session")
+            .expect("session exists");
+        assert_eq!(session.opencode_session_id.as_deref(), Some("ses_good123"));
+
+        let _ = std::fs::remove_file(&path);
     }
 
     #[test]
