@@ -5,16 +5,12 @@ import { handleElectronInvoke } from './backendBridge.js'
 import { createMainWindowOptions } from './windowConfig.js'
 import { createPreloadPath } from './preloadPath.js'
 import { loadAndRevealMainWindow } from './windowStartup.js'
-import { shouldGrantMediaPermission, trustedRendererOrigins } from './mediaPermission.js'
+import { ElectronRendererTrustAdapter } from './rendererTrustPolicy.js'
 import { createAppEventForwarder } from './eventForwarder.js'
-import { trustedRendererUrlFromEnv } from './rendererUrl.js'
 import { resolveElectronSidecarPath } from './sidecarPath.js'
 import { configureElectronUserDataPath } from './runtimePaths.js'
 import {
-  applyElectronRendererCsp,
-  createElectronRendererCsp,
   registerPluginProtocolHandler,
-  registerPluginProtocolSchemeAsPrivileged,
   resolveHostRuntimeRoot,
 } from './pluginProtocol.js'
 import { asChildProcessLike, createSidecarLaunchConfig, startSidecarReadiness } from './sidecar.js'
@@ -30,16 +26,17 @@ export interface ElectronBootAdapterOptions {
 /** Real Electron Adapter for the Boot Lifecycle Module seam. */
 export function createElectronBootAdapter(options: ElectronBootAdapterOptions): BootLifecycleAdapter {
   let sidecarLaunchProcess: SidecarReadinessHandle['process'] | null = null
+  const rendererTrustAdapter = new ElectronRendererTrustAdapter()
 
   async function createMainWindow(): Promise<BrowserWindow> {
     const preloadPath = createPreloadPath(options.currentDir)
     const window = new BrowserWindow(createMainWindowOptions(preloadPath))
 
-    const rendererUrl = trustedRendererUrlFromEnv(options.env)
-    const trustedOrigins = trustedRendererOrigins(rendererUrl)
+    const rendererUrl = rendererTrustAdapter.trustedRendererUrlFromEnv(options.env)
+    const trustedOrigins = rendererTrustAdapter.trustedRendererOrigins(rendererUrl)
     const mainWebContentsId = window.webContents.id
     window.webContents.session.setPermissionRequestHandler((webContents, permission, callback, details) => {
-      callback(shouldGrantMediaPermission({
+      callback(rendererTrustAdapter.shouldGrantMediaPermission({
         permission,
         isMainWindowWebContents: webContents.id === mainWebContentsId,
         requestingUrl: details.requestingUrl,
@@ -57,7 +54,7 @@ export function createElectronBootAdapter(options: ElectronBootAdapterOptions): 
 
   return {
     registerPluginProtocolSchemeAsPrivileged(): void {
-      registerPluginProtocolSchemeAsPrivileged(protocol)
+      rendererTrustAdapter.registerPluginProtocolSchemeAsPrivileged(protocol)
     },
 
     registerBackendInvokeHandler(context: BootBackendInvokeContext): void {
@@ -150,7 +147,7 @@ export function createElectronBootAdapter(options: ElectronBootAdapterOptions): 
     },
 
     applyRendererCsp(sidecarConfig: SidecarLaunchConfig | null): void {
-      applyElectronRendererCsp(session.defaultSession, createElectronRendererCsp(sidecarConfig))
+      rendererTrustAdapter.applyRendererCsp(session.defaultSession, sidecarConfig)
     },
 
     createMainWindow,

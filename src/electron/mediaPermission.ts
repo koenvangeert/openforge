@@ -1,48 +1,12 @@
-export type MediaPermissionSubtype = 'audio' | 'video' | 'microphone' | 'camera' | 'unknown'
+import { DEFAULT_RENDERER_TRUST_POLICY } from './rendererTrustPolicy.js'
+import type { MediaPermissionRequest } from './rendererTrustPolicy.js'
 
-export interface MediaPermissionRequest {
-  permission: string
-  isMainWindowWebContents: boolean
-  requestingUrl?: string
-  trustedOrigins: ReadonlySet<string>
-  mediaType?: MediaPermissionSubtype | string
-  mediaTypes?: readonly (MediaPermissionSubtype | string)[]
-}
-
-function requestOrigin(requestingUrl: string | undefined): string | null {
-  if (!requestingUrl) return null
-
-  try {
-    const url = new URL(requestingUrl)
-    return url.protocol === 'file:' ? 'file:' : url.origin
-  } catch {
-    return null
-  }
-}
-
-function requestsOnlyAudio(request: MediaPermissionRequest): boolean {
-  const mediaTypes = request.mediaTypes ?? (request.mediaType ? [request.mediaType] : [])
-  if (mediaTypes.length === 0) return false
-
-  return mediaTypes.every(type => type === 'audio' || type === 'microphone')
-}
+export type { MediaPermissionRequest, MediaPermissionSubtype } from './rendererTrustPolicy.js'
 
 export function shouldGrantMediaPermission(request: MediaPermissionRequest): boolean {
-  if (request.permission !== 'media') return false
-  if (!request.isMainWindowWebContents) return false
-  if (!requestsOnlyAudio(request)) return false
-
-  const origin = requestOrigin(request.requestingUrl)
-  return origin !== null && request.trustedOrigins.has(origin)
+  return DEFAULT_RENDERER_TRUST_POLICY.shouldGrantMediaPermission(request)
 }
 
 export function trustedRendererOrigins(rendererUrl: string | null): Set<string> {
-  if (!rendererUrl) return new Set(['file:'])
-
-  try {
-    const url = new URL(rendererUrl)
-    return new Set([url.protocol === 'file:' ? 'file:' : url.origin])
-  } catch {
-    return new Set()
-  }
+  return DEFAULT_RENDERER_TRUST_POLICY.trustedRendererOrigins(rendererUrl)
 }
