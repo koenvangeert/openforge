@@ -4,13 +4,9 @@
   import type { DesktopUnlistenFn } from './lib/desktopIpc'
   import { createDesktopWindow } from './lib/desktopWindow'
   import type { DesktopWindowTarget } from './lib/desktopWindow'
-  import { tasks, pendingTask, selectedTaskId, activeSessions, ticketPrs, error, isLoading, projects, activeProjectId, activeProjectColorId, currentView, reviewRequestCount, authoredPrCount, projectAttention, startingTasks, codeCleanupTasksEnabled, taskRuntimeInfo, focusBoardFilters, setTaskMerging } from './lib/stores'
-  import { getProjects, getTasksForProject, getPullRequests, startImplementation, getSessionStatus, getLatestSessions, forceGithubSync, deleteTask, getProjectAttention, getAppMode, getConfig, getProjectConfig, getReviewPrs, getAuthoredPrs, mergePullRequest, resumeStartupSessions } from './lib/ipc'
-  import { writePtyWithSubmit } from './lib/ptySubmit'
-  import { applyProjectOrder } from './lib/projectOrder'
-  import { hasMergeConflicts, preservePullRequestState, isQueuedForMerge, isReadyToMerge } from './lib/types'
-  import type { Task, PullRequestInfo, ProjectAttention, AppView } from './lib/types'
-  import { moveTaskToComplete } from './lib/moveToComplete'
+  import { tasks, pendingTask, selectedTaskId, activeSessions, ticketPrs, isLoading, projects, activeProjectId, activeProjectColorId, currentView, reviewRequestCount, authoredPrCount, codeCleanupTasksEnabled, focusBoardFilters } from './lib/stores'
+  import { getAppMode, getConfig, getProjectConfig, resumeStartupSessions } from './lib/ipc'
+  import type { Task, AppView } from './lib/types'
   import FocusBoard from './components/focus-board/FocusBoard.svelte'
   import TaskDetailView from './components/task-detail/TaskDetailView.svelte'
   import AddTaskDialog from './components/AddTaskDialog.svelte'
@@ -35,11 +31,8 @@
   import type { PluginManifest } from './lib/plugin/types'
   import { activatePlugin, executePluginCommand, initializePluginRuntime } from './lib/plugin/pluginRegistry'
   import { useAppRouter } from './lib/router.svelte'
-  import { loadActions, getEnabledActions } from './lib/actions'
   import { getProjectColor } from './lib/projectColors'
   import { themeMode } from './lib/theme'
-  import type { Action } from './lib/types'
-  import { isPtyActive, focusTerminal } from './lib/terminalPool'
   import { useCommandHeld } from './lib/useCommandHeld.svelte'
   import { useShortcutRegistry } from './lib/shortcuts.svelte'
   import { ICON_RAIL_HIDDEN_VIEWS, getViews } from './lib/views'
@@ -47,10 +40,12 @@
   import { getGlobalShortcutHelpEntries } from './lib/appShortcutDefinitions'
   import { registerAppDesktopEventListeners } from './lib/appDesktopEventListeners'
   import { loadAppStartupData } from './lib/appStartup'
+  import { useAppDataOrchestrator } from './lib/appDataOrchestrator.svelte'
+  import { createTaskActionRunner } from './lib/taskActionRunner'
+  import { useActionPaletteController } from './lib/actionPaletteController.svelte'
   
   let unlisteners: DesktopUnlistenFn[] = []
   let showAddDialog = $state(false)
-  let isSyncing = $state(false)
   let editingTask = $state<Task | null>(null)
   let shortcuts: ReturnType<typeof useShortcutRegistry> | null = $state(null)
 
@@ -61,10 +56,7 @@
   let showProjectSwitcher = $state(false)
   let appSidebarCollapsed = $state(localStorage.getItem('appSidebarCollapsed') === 'true')
   let showCommandPalette = $state(false)
-  let showActionPalette = $state(false)
   let showFileQuickOpen = $state(false)
-  let actionPaletteTask = $state<Task | null>(null)
-  let actionPaletteActions = $state<Action[]>([])
   let router = useAppRouter()
   let registeredPluginShortcuts = new Set<string>()
   const globalShortcutHelpEntries = getGlobalShortcutHelpEntries()
@@ -84,6 +76,27 @@
       .filter((manifest): manifest is PluginManifest => manifest !== undefined)
   )
   let activeProject = $derived($projects.find(p => p.id === $activeProjectId) || null)
+  const appData = useAppDataOrchestrator({
+    setShowProjectSetup: (show) => { showProjectSetup = show },
+  })
+  const taskActions = createTaskActionRunner({
+    getActiveProject: () => activeProject,
+    loadTasks: appData.loadTasks,
+    triggerGithubSync: appData.triggerGithubSync,
+  })
+  const actionPalette = useActionPaletteController({
+    getSelectedTask: () => selectedTask,
+    taskActions,
+    goBack: () => { router.back() },
+    showSearchTasks: () => { showCommandPalette = true },
+    showNewTask: () => {
+      editingTask = null
+      showAddDialog = true
+    },
+    showProjectSwitcher: () => { showProjectSwitcher = true },
+    triggerGithubSync: appData.triggerGithubSync,
+  })
+  const handleRunAction = taskActions.handleRunAction
   let resolvedPluginContributions = $derived(resolveContributions(enabledPluginManifests))
   let resolvedViews = $derived(getViews(enabledPluginManifests))
   let pluginNavItems = $derived(
@@ -110,7 +123,7 @@
         projectName: activeProject?.name ?? '',
         projectPath: activeProject?.path ?? '',
         onCloseSettings: () => { router.navigate('board') },
-        onProjectDeleted: loadProjects,
+        onProjectDeleted: appData.loadProjects,
       }),
     }
   })
@@ -192,9 +205,9 @@
   // Reload tasks when active project changes
   $effect(() => {
     if ($activeProjectId) {
-      loadTasks()
-      loadPullRequests()
-      refreshPrCounts()
+      appData.loadTasks()
+      appData.loadPullRequests()
+      appData.refreshPrCounts()
     }
   })
 
@@ -226,288 +239,9 @@
     return color.lightAlt
   })
 
-  async function loadProjects() {
-    try {
-      const fetchedProjects = await getProjects()
-      let savedOrder: string | null = null
-
-      try {
-        savedOrder = await getConfig('project_sidebar_order')
-      } catch (configError) {
-        console.error('Failed to load saved project order:', configError)
-      }
-
-      $projects = applyProjectOrder(fetchedProjects, savedOrder)
-      if ($activeProjectId && !$projects.find(p => p.id === $activeProjectId)) {
-        $activeProjectId = $projects.length > 0 ? $projects[0].id : null
-      } else if ($projects.length > 0 && !$activeProjectId) {
-        $activeProjectId = $projects[0].id
-      }
-      if ($projects.length === 0) {
-        showProjectSetup = true
-      }
-    } catch (e) {
-      console.error('Failed to load projects:', e)
-      $error = String(e)
-    }
-  }
-
-  async function loadTasks() {
-    if (!$activeProjectId) return
-    $isLoading = true
-    try {
-      $tasks = await getTasksForProject($activeProjectId)
-      await loadSessions()
-    } catch (e) {
-      console.error('Failed to load tasks:', e)
-      $error = String(e)
-    } finally {
-      $isLoading = false
-    }
-  }
-
-  async function loadSessions() {
-    try {
-      const taskIds = $tasks.map(t => t.id)
-      if (taskIds.length === 0) return
-      const sessions = await getLatestSessions(taskIds)
-      const updated = new Map($activeSessions)
-      for (const session of sessions) {
-        updated.set(session.ticket_id, session)
-      }
-      $activeSessions = updated
-    } catch (e) {
-      console.error('Failed to load sessions:', e)
-    }
-  }
-
-  async function loadPullRequests() {
-    try {
-      const prs = await getPullRequests()
-      const grouped = new Map<string, PullRequestInfo[]>()
-      for (const pr of prs) {
-        const oldList = $ticketPrs.get(pr.ticket_id) || []
-        const oldPr = oldList.find(p => p.id === pr.id)
-        const preservedPr = preservePullRequestState(oldPr, pr)
-
-        const existing = grouped.get(preservedPr.ticket_id) || []
-        existing.push(preservedPr)
-        grouped.set(preservedPr.ticket_id, existing)
-      }
-      $ticketPrs = grouped
-    } catch (e) {
-      console.error('Failed to load pull requests:', e)
-    }
-  }
-
-  async function refreshPrCounts() {
-    if (!$activeProjectId) return
-    try {
-      let excludedRepos = new Set<string>()
-      try {
-        const val = await getProjectConfig($activeProjectId, 'pr_excluded_repos')
-        if (val) {
-          const parsed = JSON.parse(val)
-          excludedRepos = new Set(Array.isArray(parsed) ? parsed : [])
-        }
-      } catch {
-        // No exclusion config — count all
-      }
-
-      const isExcluded = (owner: string, name: string) => excludedRepos.has(`${owner}/${name}`)
-
-      const reviewPrList = await getReviewPrs()
-      const filtered = reviewPrList.filter(p => !isExcluded(p.repo_owner, p.repo_name))
-      $reviewRequestCount = filtered.filter(p => p.viewed_at === null).length
-
-      const authoredPrList = await getAuthoredPrs()
-      const filteredAuthored = authoredPrList.filter(p => !isExcluded(p.repo_owner, p.repo_name))
-      $authoredPrCount = filteredAuthored.filter(
-        (p) => p.ci_status === 'failure' || p.review_status === 'changes_requested' || hasMergeConflicts(p),
-      ).length
-    } catch (e) {
-      console.error('Failed to refresh PR counts:', e)
-    }
-  }
-
-  async function loadProjectAttention() {
-    try {
-      const summaries = await getProjectAttention()
-      const map = new Map<string, ProjectAttention>()
-      for (const s of summaries) {
-        map.set(s.project_id, s)
-      }
-      $projectAttention = map
-    } catch (e) {
-      console.error('Failed to load project attention:', e)
-    }
-  }
-
-  async function triggerGithubSync() {
-    if (isSyncing) return
-    isSyncing = true
-    try {
-      await forceGithubSync()
-      await loadPullRequests()
-      await loadTasks()
-    } catch (e) {
-      console.error('Failed to sync GitHub:', e)
-      $error = String(e)
-    } finally {
-      isSyncing = false
-    }
-  }
-
-  async function handleRunAction(data: { taskId: string; actionPrompt: string; agent: string | null }) {
-    if (!activeProject) {
-      $error = 'No active project selected'
-      return
-    }
-    const { taskId, actionPrompt } = data
-
-    if (isPtyActive(taskId)) {
-      try {
-        await writePtyWithSubmit(taskId, actionPrompt)
-        focusTerminal(taskId)
-      } catch (e) {
-        console.error('[session] Failed to write action to PTY:', taskId, e)
-        $error = String(e)
-      }
-      return
-    }
-
-    $startingTasks = new Set($startingTasks).add(taskId)
-
-    try {
-      const result = await startImplementation(taskId, activeProject.path)
-
-      const updatedRuntimeInfo = new Map($taskRuntimeInfo)
-      updatedRuntimeInfo.set(taskId, {
-        workspacePath: result.workspace_path,
-      })
-      $taskRuntimeInfo = updatedRuntimeInfo
-
-      try {
-        const session = await getSessionStatus(result.session_id)
-        const updated = new Map($activeSessions)
-        updated.set(taskId, session)
-        $activeSessions = updated
-      } catch (sessionErr) {
-        console.error('[session] Failed to fetch session after start:', sessionErr)
-      }
-
-      await loadTasks()
-      focusTerminal(taskId)
-    } catch (e) {
-      console.error('[session] Failed to start task:', taskId, e)
-      $error = String(e)
-    } finally {
-      const next = new Set($startingTasks)
-      next.delete(taskId)
-      $startingTasks = next
-    }
-  }
-
-  function closeActionPalette() {
-    showActionPalette = false
-    actionPaletteTask = null
-  }
-
-  async function openActionPalette() {
-    if (showActionPalette) {
-      closeActionPalette()
-      return
-    }
-
-    actionPaletteTask = selectedTask
-
-    if ($activeProjectId) {
-      try {
-        const all = await loadActions($activeProjectId)
-        actionPaletteActions = getEnabledActions(all)
-      } catch {
-        actionPaletteActions = []
-      }
-    }
-    showActionPalette = true
-  }
-
-  async function executeAction(actionId: string) {
-    const task = actionPaletteTask
-    closeActionPalette()
-
-    switch (actionId) {
-      case 'start-task':
-        if (task) await handleRunAction({ taskId: task.id, actionPrompt: '', agent: null })
-        break
-      case 'move-to-done':
-        if (task) {
-          await moveTaskToComplete(task.id)
-        }
-        break
-      case 'delete-task':
-        if (task) {
-          await deleteTask(task.id)
-          await loadTasks()
-        }
-        break
-      case 'merge-pr': {
-        const prs = task ? ($ticketPrs.get(task.id) || []) : []
-        const readyPrs = prs.filter(candidate => isReadyToMerge(candidate) && !isQueuedForMerge(candidate))
-        if (task && readyPrs.length === 1) {
-          const pr = readyPrs[0]
-          try {
-            setTaskMerging(task.id, true)
-            await mergePullRequest(pr.repo_owner, pr.repo_name, pr.id)
-            const nextMap = new Map($ticketPrs)
-            const taskPrs = nextMap.get(task.id) || []
-            nextMap.set(task.id, taskPrs.map(p => 
-              p.id === pr.id ? { ...p, state: 'merged', merged_at: Math.floor(Date.now() / 1000) } : p
-            ))
-            $ticketPrs = nextMap
-            await triggerGithubSync()
-          } catch (e) {
-            console.error('Failed to merge PR:', e)
-            $error = String(e)
-          } finally {
-            setTaskMerging(task.id, false)
-          }
-        } else if (task && readyPrs.length > 1) {
-          $error = 'Multiple pull requests are ready to merge. Open the task details to choose the correct PR.'
-        }
-        break
-      }
-      case 'go-back':
-        router.back()
-        break
-      case 'search-tasks':
-        showCommandPalette = true
-        break
-      case 'new-task':
-        editingTask = null
-        showAddDialog = true
-        break
-      case 'switch-project':
-        showProjectSwitcher = true
-        break
-      case 'refresh-github':
-        triggerGithubSync()
-        break
-      default:
-        if (actionId.startsWith('custom-action-') && task) {
-          const realId = actionId.replace('custom-action-', '')
-          const action = actionPaletteActions.find(a => a.id === realId)
-          if (action) {
-            await handleRunAction({ taskId: task.id, actionPrompt: action.prompt, agent: null })
-          }
-        }
-        break
-    }
-  }
-
   function handleProjectCreated() {
     showProjectSetup = false
-    loadProjects()
+    appData.loadProjects()
   }
 
   function handleNavigate(view: AppView) {
@@ -572,7 +306,7 @@
 
     registerAppShortcuts(shortcuts, {
       showShortcuts: () => { showShortcutsDialog = true },
-      openActionPalette,
+      openActionPalette: actionPalette.openActionPalette,
       toggleProjectSwitcher: () => { showProjectSwitcher = !showProjectSwitcher },
       toggleSidebar: () => {
         appSidebarCollapsed = !appSidebarCollapsed
@@ -588,7 +322,7 @@
       toggleVoiceRecording: () => { window.dispatchEvent(new CustomEvent('toggle-voice-recording')) },
       toggleCommandPalette: () => { showCommandPalette = !showCommandPalette },
       toggleFileQuickOpen: () => { showFileQuickOpen = !showFileQuickOpen },
-      canToggleFileQuickOpen: () => selectedTask === null && !showCommandPalette && !showProjectSwitcher && !showActionPalette && !showShortcutsDialog,
+      canToggleFileQuickOpen: () => selectedTask === null && !showCommandPalette && !showProjectSwitcher && !actionPalette.showActionPalette && !showShortcutsDialog,
       resetToBoard: () => { router.resetToBoard() },
       navigateToSettings: () => { handleNavigate('settings') },
       cycleActiveProject,
@@ -597,11 +331,11 @@
     unlisteners.push(...await registerAppDesktopEventListeners({
       appWindow,
       onCloseRequested: handleCloseRequested,
-      loadTasks,
-      loadSessions,
-      loadPullRequests,
-      loadProjectAttention,
-      refreshPrCounts,
+      loadTasks: appData.loadTasks,
+      loadSessions: appData.loadSessions,
+      loadPullRequests: appData.loadPullRequests,
+      loadProjectAttention: appData.loadProjectAttention,
+      refreshPrCounts: appData.refreshPrCounts,
     }))
 
     try {
@@ -612,13 +346,13 @@
 
     await loadAppStartupData({
       initializePluginRuntime,
-      loadProjects,
+      loadProjects: appData.loadProjects,
       getAppMode,
       getConfig,
       setAppMode: (mode) => { appMode = mode },
       setCodeCleanupTasksEnabled: (enabled) => { $codeCleanupTasksEnabled = enabled },
-      loadProjectAttention,
-      loadTasks,
+      loadProjectAttention: appData.loadProjectAttention,
+      loadTasks: appData.loadTasks,
     })
   })
 
@@ -645,7 +379,7 @@
     onNavigate={handleNavigate}
   />
   {#if !ICON_RAIL_HIDDEN_VIEWS.has($currentView)}
-    <IconRail currentView={$currentView} onNavigate={handleNavigate} reviewRequestCount={$reviewRequestCount} authoredPrCount={$authoredPrCount} pluginNavItems={pluginNavItems} modalsOpen={showCommandPalette || showProjectSwitcher || showActionPalette || showAddDialog || showFileQuickOpen} railBg={iconRailBg} />
+    <IconRail currentView={$currentView} onNavigate={handleNavigate} reviewRequestCount={$reviewRequestCount} authoredPrCount={$authoredPrCount} pluginNavItems={pluginNavItems} modalsOpen={showCommandPalette || showProjectSwitcher || actionPalette.showActionPalette || showAddDialog || showFileQuickOpen} railBg={iconRailBg} />
   {/if}
 
   <div class="flex flex-col flex-1 min-w-0 relative" style="background: linear-gradient(180deg, var(--project-bg-alt) 0%, var(--project-bg) 100%)">
@@ -684,9 +418,9 @@
             mode={editingTask ? 'edit' : 'create'}
             task={editingTask}
             onClose={() => { showAddDialog = false; editingTask = null }}
-            onTaskSaved={async () => { await loadTasks() }}
+            onTaskSaved={async () => { await appData.loadTasks() }}
             onRunAction={async (taskId, actionPrompt, agent) => {
-              await loadTasks()
+              await appData.loadTasks()
               await handleRunAction({ taskId, actionPrompt, agent })
             }}
           />
@@ -730,13 +464,13 @@
   <CommandPalette onClose={() => showCommandPalette = false} />
 {/if}
 
-{#if showActionPalette}
+{#if actionPalette.showActionPalette}
   <ActionPalette
-    task={actionPaletteTask}
-    customActions={actionPaletteActions}
-    taskPrs={actionPaletteTask ? ($ticketPrs.get(actionPaletteTask.id) || []) : []}
-    onClose={closeActionPalette}
-    onExecute={executeAction}
+    task={actionPalette.actionPaletteTask}
+    customActions={actionPalette.actionPaletteActions}
+    taskPrs={actionPalette.actionPaletteTask ? ($ticketPrs.get(actionPalette.actionPaletteTask.id) || []) : []}
+    onClose={actionPalette.closeActionPalette}
+    onExecute={actionPalette.executeAction}
   />
 {/if}
 

@@ -329,6 +329,8 @@ vi.mock('./lib/terminalPool', () => ({
   acquire: vi.fn(async () => ({ ptyActive: false })),
   attach: vi.fn(),
   detach: vi.fn(),
+  focusTerminal: vi.fn(),
+  isPtyActive: vi.fn(() => false),
   release: vi.fn(),
 }))
 
