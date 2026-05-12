@@ -132,7 +132,7 @@ mod tests {
     }
 
     #[test]
-    fn opencode_tui_args_continue_without_prompt_for_startup_resume() {
+    fn opencode_tui_args_continue_without_prompt_for_explicit_continue() {
         assert_eq!(
             build_opencode_tui_args("", None, true, None, None),
             vec!["--continue"]
