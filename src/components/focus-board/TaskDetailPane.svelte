@@ -1,6 +1,7 @@
 <script lang="ts">
-  import type { Task, PullRequestInfo, PrComment } from '../../lib/types'
+  import type { BoardStatus, Task, PullRequestInfo, PrComment } from '../../lib/types'
   import { parseCheckRuns, splitCheckRuns } from '../../lib/types'
+  import { getTaskDependencySummaries, getWaitingDependencyCount } from '../../lib/taskDependencies'
   import { getPrComments, markCommentAddressed, openUrl } from '../../lib/ipc'
   import MarkdownContent from '../shared/content/MarkdownContent.svelte'
   import { getPrStatusChips } from '../../lib/prStatusPresentation'
@@ -8,14 +9,28 @@
 
   interface Props {
     task: Task | null
+    allTasks?: Task[]
     pullRequests: PullRequestInfo[]
     onOpenFullView: () => void
   }
 
-  let { task, pullRequests, onOpenFullView }: Props = $props()
+  let { task, allTasks = [], pullRequests, onOpenFullView }: Props = $props()
 
   let comments = $state<PrComment[]>([])
   let unaddressedComments = $derived(comments.filter(c => c.addressed === 0))
+  let dependencies = $derived(task ? getTaskDependencySummaries(task, allTasks) : [])
+  let waitingDependencyCount = $derived(task ? getWaitingDependencyCount(task, allTasks) : 0)
+
+  function dependencyStatusLabel(status: BoardStatus | null): string {
+    return status ?? 'unknown'
+  }
+
+  function dependencyStatusClass(status: BoardStatus | null): string {
+    if (status === 'done') return 'badge-success'
+    if (status === 'doing') return 'badge-warning'
+    if (status === 'backlog') return 'badge-ghost'
+    return 'badge-neutral'
+  }
 
   async function fetchComments() {
     if (!task || pullRequests.length === 0) {
@@ -70,6 +85,27 @@
         <p class="text-xs text-base-content/40">No summary yet.</p>
       {/if}
     </section>
+
+    {#if dependencies.length > 0}
+      <section class="flex flex-col gap-2" aria-label="Dependencies" aria-live="polite">
+        <span class="font-mono text-[10px] font-bold text-primary">// DEPENDS_ON</span>
+        <div class="flex flex-wrap gap-1.5">
+          {#each dependencies as dependency (dependency.id)}
+            <span class="badge badge-xs gap-1 border border-base-300 {dependencyStatusClass(dependency.status)}" title={dependency.title}>
+              <span class="font-mono">{dependency.id}</span>
+              <span class="opacity-80">{dependencyStatusLabel(dependency.status)}</span>
+            </span>
+          {/each}
+        </div>
+        <p class="text-xs text-base-content/40">
+          {#if waitingDependencyCount === 0}
+            All dependencies done
+          {:else}
+            Waiting on {waitingDependencyCount} {waitingDependencyCount === 1 ? 'dep' : 'deps'}
+          {/if}
+        </p>
+      </section>
+    {/if}
 
     {#if pullRequests.length > 0}
       <section class="flex flex-col gap-2">

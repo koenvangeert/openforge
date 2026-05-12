@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { BoardStatus, Task } from '../../lib/types'
   import { tasks as allTasks, ticketPrs } from '../../lib/stores'
-  import { getTaskTitle } from '../../lib/taskTitle'
+  import { getTaskDependencySummaries, getWaitingDependencyCount } from '../../lib/taskDependencies'
   import CopyButton from '../shared/ui/CopyButton.svelte'
   import TaskPromptSummary from './TaskPromptSummary.svelte'
   import TaskPullRequestStatus from './TaskPullRequestStatus.svelte'
@@ -15,18 +15,8 @@
   let { task, workspacePath }: Props = $props()
 
   let taskPrs = $derived($ticketPrs.get(task.id) || [])
-  let tasksById = $derived(new Map($allTasks.map((knownTask) => [knownTask.id, knownTask])))
-  let dependencies = $derived(task.depends_on.map((dependencyId) => {
-    const dependencyTask = tasksById.get(dependencyId)
-    const displayTitle = dependencyTask ? getTaskTitle(dependencyTask) : null
-    return {
-      id: dependencyId,
-      status: dependencyTask?.status ?? null,
-      displayTitle,
-      tooltipTitle: displayTitle ?? dependencyId,
-    }
-  }))
-  let waitingDependencyCount = $derived(dependencies.filter((dependency) => dependency.status !== 'done').length)
+  let dependencies = $derived(getTaskDependencySummaries(task, $allTasks))
+  let waitingDependencyCount = $derived(getWaitingDependencyCount(task, $allTasks))
 
   function dependencyStatusLabel(status: BoardStatus | null): string {
     return status ?? 'unknown'

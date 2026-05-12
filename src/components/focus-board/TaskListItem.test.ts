@@ -87,6 +87,16 @@ describe('TaskListItem', () => {
     expect(screen.getByText('Agent is running.')).toBeTruthy()
   })
 
+  it('renders read-only dependency wait hint when provided', () => {
+    render(TaskListItem, { props: { ...baseProps, dependencyHint: 'Waiting on 2 deps' } })
+    expect(screen.getByText('Waiting on 2 deps')).toBeTruthy()
+  })
+
+  it('does not render dependency wait hint when omitted', () => {
+    render(TaskListItem, { props: baseProps })
+    expect(screen.queryByText(/Waiting on \d+ deps?/)).toBeNull()
+  })
+
   it('keeps the full reasonText available when selected', () => {
     render(TaskListItem, { props: { ...baseProps, isSelected: true, reasonText: 'A very long reason text that should be ellipsized' } })
     const item = screen.getByRole('button')
