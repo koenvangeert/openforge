@@ -676,7 +676,7 @@ async fn agent_lifecycle_route_updates_opencode_status_through_shared_seam() {
                 .method("POST")
                 .header("content-type", "application/json")
                 .body(Body::from(format!(
-                    r#"{{"provider":"opencode","task_id":"{}","pty_instance_id":88,"provider_session_id":"oc-shared-88","event_type":"session.status","status_type":"busy"}}"#,
+                    r#"{{"provider":"opencode","task_id":"{}","pty_instance_id":88,"provider_session_id":"ses_shared88","event_type":"session.status","status_type":"busy"}}"#,
                     task_id
                 )))
                 .expect("build request"),
@@ -695,7 +695,7 @@ async fn agent_lifecycle_route_updates_opencode_status_through_shared_seam() {
     assert_eq!(session.status, "running");
     assert_eq!(
         session.opencode_session_id,
-        Some("oc-shared-88".to_string())
+        Some("ses_shared88".to_string())
     );
     assert_eq!(
         session.checkpoint_data,
@@ -849,7 +849,7 @@ async fn opencode_hook_stores_session_id_and_completes_on_idle_status() {
             task_id: task_id.clone(),
             pty_instance_id: 77,
             event_type: "session.status".to_string(),
-            session_id: Some("oc-session-77".to_string()),
+            session_id: Some("ses_session77".to_string()),
             status_type: Some("idle".to_string()),
         }),
     )
@@ -866,7 +866,7 @@ async fn opencode_hook_stores_session_id_and_completes_on_idle_status() {
     assert_eq!(session.status, "completed");
     assert_eq!(
         session.opencode_session_id,
-        Some("oc-session-77".to_string())
+        Some("ses_session77".to_string())
     );
 
     let _ = std::fs::remove_file(path);
@@ -906,7 +906,7 @@ async fn opencode_hook_preserves_checkpoint_when_status_changes() {
             task_id: task_id.clone(),
             pty_instance_id: 77,
             event_type: "session.status".to_string(),
-            session_id: Some("oc-session-77".to_string()),
+            session_id: Some("ses_session77".to_string()),
             status_type: Some("busy".to_string()),
         }),
     )
@@ -927,7 +927,7 @@ async fn opencode_hook_preserves_checkpoint_when_status_changes() {
     );
     assert_eq!(
         session.opencode_session_id,
-        Some("oc-session-77".to_string())
+        Some("ses_session77".to_string())
     );
 
     let _ = std::fs::remove_file(path);

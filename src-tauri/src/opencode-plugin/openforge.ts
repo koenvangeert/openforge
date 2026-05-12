@@ -9,12 +9,19 @@ const interestingEvents = new Set([
   "tool.execute.after",
 ])
 
+function isOpenCodeSessionId(value) {
+  return typeof value === "string" && value.startsWith("ses")
+}
+
 function sessionIdFromEvent(event) {
-  return event?.properties?.info?.id
-    ?? event?.properties?.session?.id
-    ?? event?.properties?.sessionID
-    ?? event?.properties?.sessionId
-    ?? null
+  const candidates = [
+    event?.properties?.session?.id,
+    event?.properties?.sessionID,
+    event?.properties?.sessionId,
+    event?.properties?.info?.id,
+  ]
+
+  return candidates.find(isOpenCodeSessionId) ?? null
 }
 
 function statusTypeFromEvent(event) {

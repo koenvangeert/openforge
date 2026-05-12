@@ -49,4 +49,71 @@ mod tests {
         let dir = get_opencode_plugin_install_dir().expect("config dir should resolve");
         assert!(dir.ends_with(".config/opencode/plugins"));
     }
+
+    #[test]
+    fn opencode_plugin_prefers_session_id_over_message_id() {
+        let session_id = evaluate_session_id_from_event(
+            r#"{
+                type: "message.updated",
+                properties: {
+                    info: { id: "msg_bad123" },
+                    session: { id: "ses_good123" },
+                    sessionID: "ses_good456",
+                    sessionId: "ses_good789"
+                }
+            }"#,
+        );
+
+        assert_eq!(session_id.as_deref(), Some("ses_good123"));
+    }
+
+    #[test]
+    fn opencode_plugin_rejects_message_id_without_session_id() {
+        let session_id = evaluate_session_id_from_event(
+            r#"{
+                type: "message.updated",
+                properties: {
+                    info: { id: "msg_bad123" }
+                }
+            }"#,
+        );
+
+        assert_eq!(session_id, None);
+    }
+
+    fn evaluate_session_id_from_event(event_js: &str) -> Option<String> {
+        let source =
+            OPENCODE_PLUGIN_SOURCE.replace("export const OpenForgePlugin", "const OpenForgePlugin");
+        let script = format!(
+            r#"{source}
+const result = sessionIdFromEvent({event_js});
+process.stdout.write(result === null || result === undefined ? "null" : String(result));
+"#
+        );
+        let path = std::env::temp_dir().join(format!(
+            "openforge-opencode-plugin-test-{}.mjs",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("system time should be after epoch")
+                .as_nanos()
+        ));
+        std::fs::write(&path, script).expect("write plugin test script");
+        let output = std::process::Command::new("node")
+            .arg(&path)
+            .output()
+            .expect("run node for opencode plugin test");
+        let _ = std::fs::remove_file(&path);
+
+        assert!(
+            output.status.success(),
+            "node failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let stdout = String::from_utf8(output.stdout).expect("node output should be utf8");
+        if stdout == "null" {
+            None
+        } else {
+            Some(stdout)
+        }
+    }
 }
