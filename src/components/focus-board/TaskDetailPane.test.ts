@@ -180,6 +180,24 @@ describe('TaskDetailPane', () => {
       expect(screen.getByText('Applied reactive fix.')).toBeTruthy()
     })
 
+    it('renders summary markdown when present', () => {
+      const taskWithMarkdownSummary = {
+        ...baseTask,
+        summary: '**Bold summary** and `inline code`',
+      }
+      const { container } = render(TaskDetailPane, {
+        props: {
+          task: taskWithMarkdownSummary,
+          session: null,
+          pullRequests: [],
+          onOpenFullView: vi.fn(),
+        },
+      })
+
+      expect(container.querySelector('strong')?.textContent).toBe('Bold summary')
+      expect(container.querySelector('code')?.textContent).toBe('inline code')
+    })
+
     it('renders fallback text when summary is null', () => {
       const taskNoSummary = { ...baseTask, summary: null }
       render(TaskDetailPane, {
