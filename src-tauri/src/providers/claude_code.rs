@@ -34,7 +34,8 @@ impl ClaudeCodeProvider {
         let hooks_path =
             crate::claude_hooks::generate_hooks_settings(port).map_err(|e| e.to_string())?;
 
-        self.pty_mgr
+        let pty_instance_id = self
+            .pty_mgr
             .spawn_claude_pty(
                 task_id,
                 worktree_path,
@@ -55,7 +56,7 @@ impl ClaudeCodeProvider {
             port: 0,
             opencode_session_id: None,
             pi_session_id: None,
-            pty_instance_id: None,
+            pty_instance_id: Some(pty_instance_id),
         })
     }
 
@@ -85,7 +86,8 @@ impl ClaudeCodeProvider {
             None => ("", resume_id.is_none()),
         };
 
-        self.pty_mgr
+        let pty_instance_id = self
+            .pty_mgr
             .spawn_claude_pty(
                 task_id,
                 worktree_path,
@@ -106,7 +108,7 @@ impl ClaudeCodeProvider {
             port: 0,
             opencode_session_id: None,
             pi_session_id: None,
-            pty_instance_id: None,
+            pty_instance_id: Some(pty_instance_id),
         })
     }
 

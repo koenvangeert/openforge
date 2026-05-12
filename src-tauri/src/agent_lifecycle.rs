@@ -1,11 +1,22 @@
 use crate::db::{self, AgentSessionRow};
 use serde::{Deserialize, Serialize};
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum AgentLifecycleEventKind {
+    Started,
+    BecameBusy,
+    BecameIdle,
+    RequestedPermission,
+    Failed,
+    Ended,
+}
+
 /// Provider-agnostic lifecycle notification sent by installed agent adapters.
 ///
 /// This is the seam between provider plugins/extensions/hooks and OpenForge's
-/// session state. Existing provider-specific HTTP routes are compatibility
-/// adapters that translate into this interface.
+/// session state. Provider adapters translate native event names into
+/// `kind`, while raw fields are retained only for debugging.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct AgentLifecycleNotification {
     pub provider: String,
@@ -14,9 +25,11 @@ pub struct AgentLifecycleNotification {
     pub pty_instance_id: Option<u64>,
     #[serde(default)]
     pub provider_session_id: Option<String>,
-    pub event_type: String,
+    pub kind: AgentLifecycleEventKind,
     #[serde(default)]
-    pub status_type: Option<String>,
+    pub raw_event_type: Option<String>,
+    #[serde(default)]
+    pub raw_status_type: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -35,75 +48,31 @@ pub fn session_matches_pty_instance(session: &AgentSessionRow, pty_instance_id: 
         == Some(pty_instance_id)
 }
 
-pub fn claude_status_from_event(event_type: &str, current_status: &str) -> Option<String> {
-    match event_type {
-        "pre-tool-use" | "post-tool-use" => {
-            if current_status != "running" {
-                Some("running".to_string())
-            } else {
-                None
-            }
+pub(crate) fn lifecycle_status_transition(
+    kind: AgentLifecycleEventKind,
+) -> (&'static str, &'static [&'static str]) {
+    match kind {
+        AgentLifecycleEventKind::Started | AgentLifecycleEventKind::BecameBusy => (
+            "running",
+            &[
+                "started",
+                "completed",
+                "paused",
+                "failed",
+                "interrupted",
+                "running",
+            ],
+        ),
+        AgentLifecycleEventKind::BecameIdle | AgentLifecycleEventKind::Ended => {
+            ("completed", &["running", "paused", "completed"])
         }
-        "stop" | "session-end" => Some("completed".to_string()),
-        "notification-permission" if current_status == "running" => Some("paused".to_string()),
-        "notification" => None,
-        _ => None,
-    }
-}
-
-pub(crate) fn opencode_status_from_event(
-    event_type: &str,
-    status_type: Option<&str>,
-) -> Option<(&'static str, &'static [&'static str])> {
-    match (event_type, status_type) {
-        ("session.status" | "session.created" | "session.updated", Some("idle"))
-        | ("session.idle", _) => Some(("completed", &["running", "paused"])),
-        (
-            "session.status" | "session.created" | "session.updated",
-            Some("busy" | "retry" | "running"),
-        )
-        | ("message.updated", _)
-        | ("tool.execute.before" | "tool.execute.after", _) => Some((
-            "running",
-            &["completed", "paused", "interrupted", "running"],
-        )),
-        ("session.status" | "session.created" | "session.updated", Some("error" | "failed"))
-        | ("session.error", _) => Some(("failed", &["running", "paused"])),
-        _ => None,
-    }
-}
-
-fn pi_status_from_event(event_type: &str) -> Option<(&'static str, &'static [&'static str])> {
-    match event_type {
-        "agent.start" => Some((
-            "running",
-            &["completed", "paused", "interrupted", "running"],
-        )),
-        "agent.end" => Some(("completed", &["running", "paused"])),
-        _ => None,
+        AgentLifecycleEventKind::RequestedPermission => ("paused", &["running", "paused"]),
+        AgentLifecycleEventKind::Failed => ("failed", &["running", "paused", "failed"]),
     }
 }
 
 fn provider_session_id_is_persistable(provider: &str, provider_session_id: &str) -> bool {
     provider != "opencode" || provider_session_id.starts_with("ses")
-}
-
-fn provider_status_from_notification(
-    notification: &AgentLifecycleNotification,
-    current_status: &str,
-) -> Option<(String, &'static [&'static str])> {
-    match notification.provider.as_str() {
-        "claude-code" => claude_status_from_event(&notification.event_type, current_status)
-            .map(|status| (status, &[] as &[_])),
-        "pi" => pi_status_from_event(&notification.event_type)
-            .map(|(status, eligible)| (status.to_string(), eligible)),
-        "opencode" => opencode_status_from_event(
-            &notification.event_type,
-            notification.status_type.as_deref(),
-        )
-        .map(|(status, eligible)| (status.to_string(), eligible)),
-        _ => None,
-    }
 }
 
 pub fn apply_agent_lifecycle_notification(
@@ -121,7 +90,10 @@ pub fn apply_agent_lifecycle_notification(
         return Ok(None);
     }
 
-    if matches!(notification.provider.as_str(), "pi" | "opencode") {
+    if matches!(
+        notification.provider.as_str(),
+        "claude-code" | "pi" | "opencode"
+    ) {
         let Some(pty_instance_id) = notification.pty_instance_id else {
             return Ok(None);
         };
@@ -140,11 +112,7 @@ pub fn apply_agent_lifecycle_notification(
             .map_err(|e| format!("failed to persist provider session id: {e}"))?;
     }
 
-    let Some((target_status, eligible_statuses)) =
-        provider_status_from_notification(notification, &session.status)
-    else {
-        return Ok(None);
-    };
+    let (target_status, eligible_statuses) = lifecycle_status_transition(notification.kind);
 
     if !eligible_statuses.is_empty() && !eligible_statuses.contains(&session.status.as_str()) {
         return Ok(None);
@@ -154,7 +122,7 @@ pub fn apply_agent_lifecycle_notification(
         db.update_agent_session(
             &session.id,
             &session.stage,
-            &target_status,
+            target_status,
             session.checkpoint_data.as_deref(),
             None,
         )
@@ -163,7 +131,7 @@ pub fn apply_agent_lifecycle_notification(
 
     Ok(Some(AgentLifecycleStatusChange {
         task_id: notification.task_id.clone(),
-        status: target_status,
+        status: target_status.to_string(),
         provider: notification.provider.clone(),
     }))
 }
@@ -399,8 +367,9 @@ mod tests {
                 task_id: "T-100".to_string(),
                 pty_instance_id: Some(42),
                 provider_session_id: Some("msg_bad123".to_string()),
-                event_type: "message.updated".to_string(),
-                status_type: None,
+                kind: AgentLifecycleEventKind::BecameBusy,
+                raw_event_type: Some("message.updated".to_string()),
+                raw_status_type: None,
             },
         )
         .expect("apply lifecycle notification");
@@ -444,8 +413,9 @@ mod tests {
                 task_id: "T-100".to_string(),
                 pty_instance_id: Some(42),
                 provider_session_id: Some("ses_good123".to_string()),
-                event_type: "message.updated".to_string(),
-                status_type: None,
+                kind: AgentLifecycleEventKind::BecameBusy,
+                raw_event_type: Some("message.updated".to_string()),
+                raw_status_type: None,
             },
         )
         .expect("apply lifecycle notification");
@@ -567,6 +537,141 @@ mod tests {
 
         drop(db_arc);
         let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn normalized_lifecycle_kind_drives_status_even_with_unknown_raw_debug_fields() {
+        use crate::db::test_helpers::*;
+        let (db, path) = make_test_db("normalized_lifecycle_ignores_raw_debug");
+        let task = db
+            .create_task("OpenCode task", "doing", None, None, None)
+            .expect("create task");
+        db.create_agent_session(
+            "ses-normalized",
+            &task.id,
+            None,
+            "implementing",
+            "completed",
+            "opencode",
+        )
+        .expect("create session");
+        db.update_agent_session(
+            "ses-normalized",
+            "implementing",
+            "completed",
+            Some(r#"{"pty_instance_id":5}"#),
+            None,
+        )
+        .expect("store pty instance");
+
+        let change = apply_agent_lifecycle_notification(
+            &db,
+            &AgentLifecycleNotification {
+                provider: "opencode".to_string(),
+                task_id: task.id.clone(),
+                pty_instance_id: Some(5),
+                provider_session_id: Some("ses-5".to_string()),
+                kind: AgentLifecycleEventKind::BecameBusy,
+                raw_event_type: Some("provider.changed.this.name".to_string()),
+                raw_status_type: Some("provider-changed-this-status".to_string()),
+            },
+        )
+        .expect("apply lifecycle")
+        .expect("status should change");
+
+        assert_eq!(change.status, "running");
+        let session = db
+            .get_agent_session("ses-normalized")
+            .expect("get session")
+            .expect("session exists");
+        assert_eq!(session.status, "running");
+        assert_eq!(session.opencode_session_id, Some("ses-5".to_string()));
+
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn claude_lifecycle_requires_matching_pty_instance() {
+        use crate::db::test_helpers::*;
+        let (db, path) = make_test_db("claude_lifecycle_requires_pty_instance");
+        let task = db
+            .create_task("Claude task", "doing", None, None, None)
+            .expect("create task");
+        db.create_agent_session(
+            "ses-claude-pty",
+            &task.id,
+            None,
+            "implementing",
+            "completed",
+            "claude-code",
+        )
+        .expect("create session");
+        db.update_agent_session(
+            "ses-claude-pty",
+            "implementing",
+            "completed",
+            Some(r#"{"pty_instance_id":41}"#),
+            None,
+        )
+        .expect("store pty instance");
+
+        let stale = apply_agent_lifecycle_notification(
+            &db,
+            &AgentLifecycleNotification {
+                provider: "claude-code".to_string(),
+                task_id: task.id.clone(),
+                pty_instance_id: Some(99),
+                provider_session_id: Some("claude-stale".to_string()),
+                kind: AgentLifecycleEventKind::BecameBusy,
+                raw_event_type: Some("pre-tool-use".to_string()),
+                raw_status_type: None,
+            },
+        )
+        .expect("stale lifecycle should not error");
+        assert!(stale.is_none());
+
+        let missing_identity = apply_agent_lifecycle_notification(
+            &db,
+            &AgentLifecycleNotification {
+                provider: "claude-code".to_string(),
+                task_id: task.id.clone(),
+                pty_instance_id: None,
+                provider_session_id: Some("claude-no-pty".to_string()),
+                kind: AgentLifecycleEventKind::BecameBusy,
+                raw_event_type: Some("pre-tool-use".to_string()),
+                raw_status_type: None,
+            },
+        )
+        .expect("missing pty identity should not error");
+        assert!(missing_identity.is_none());
+
+        let applied = apply_agent_lifecycle_notification(
+            &db,
+            &AgentLifecycleNotification {
+                provider: "claude-code".to_string(),
+                task_id: task.id.clone(),
+                pty_instance_id: Some(41),
+                provider_session_id: Some("claude-current".to_string()),
+                kind: AgentLifecycleEventKind::BecameBusy,
+                raw_event_type: Some("pre-tool-use".to_string()),
+                raw_status_type: None,
+            },
+        )
+        .expect("current lifecycle should apply")
+        .expect("status should change");
+        assert_eq!(applied.status, "running");
+
+        let session = db
+            .get_agent_session("ses-claude-pty")
+            .expect("get session")
+            .expect("session exists");
+        assert_eq!(session.status, "running");
+        assert_eq!(
+            session.claude_session_id,
+            Some("claude-current".to_string())
+        );
+
+        let _ = std::fs::remove_file(path);
     }
 
     #[test]

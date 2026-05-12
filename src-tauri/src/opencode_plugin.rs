@@ -41,7 +41,9 @@ mod tests {
         assert!(OPENCODE_PLUGIN_SOURCE.contains("session.idle"));
         assert!(OPENCODE_PLUGIN_SOURCE.contains("session.error"));
         assert!(OPENCODE_PLUGIN_SOURCE.contains("provider_session_id"));
-        assert!(OPENCODE_PLUGIN_SOURCE.contains("status_type"));
+        assert!(OPENCODE_PLUGIN_SOURCE.contains("kind"));
+        assert!(OPENCODE_PLUGIN_SOURCE.contains("raw_event_type"));
+        assert!(OPENCODE_PLUGIN_SOURCE.contains("raw_status_type"));
     }
 
     #[test]

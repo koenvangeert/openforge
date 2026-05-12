@@ -162,10 +162,10 @@ describe('registerAppDesktopEventListeners', () => {
     const { deps, handlers } = createHarness()
 
     await registerAppDesktopEventListeners(deps)
-    await handlers.get('agent-pty-exited')?.({ payload: { task_id: 'task-1', success: true } })
+    await handlers.get('agent-pty-exited')?.({ payload: { task_id: 'task-1', success: true, instance_id: 42 } })
     await vi.advanceTimersByTimeAsync(1500)
 
-    expect(finalizeAgentSession).toHaveBeenCalledWith('task-1', true)
+    expect(finalizeAgentSession).toHaveBeenCalledWith('task-1', true, 42)
     vi.useRealTimers()
   })
 

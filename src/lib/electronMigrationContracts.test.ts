@@ -202,7 +202,7 @@ describe('Electron migration Phase 0 contract inventory', () => {
       payload: '{ task_id: string; workspace_path: string }',
     })
     expect(appShellEventContracts.find(contract => contract.eventName === 'agent-pty-exited')).toMatchObject({
-      payload: '{ task_id: string; success: boolean }',
+      payload: '{ task_id: string; success: boolean; instance_id: number }',
     })
     expect(appShellEventContracts.find(contract => contract.eventName === 'task-changed')).toMatchObject({
       payload: '{ action: "created" | "updated" | "deleted"; task_id: string } | { action: "cleared_done"; count: number }',

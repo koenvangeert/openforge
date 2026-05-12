@@ -272,6 +272,7 @@ impl PtyManager {
             .openpty(size)
             .map_err(|e| PtyError::SpawnFailed(format!("Failed to create PTY pair: {}", e)))?;
 
+        let instance_id = NEXT_INSTANCE_ID.fetch_add(1, Ordering::Relaxed);
         let mut cmd = CommandBuilder::new("claude");
         for arg in build_claude_args(
             prompt,
@@ -292,6 +293,7 @@ impl PtyManager {
         cmd.env("COLORTERM", "truecolor");
         cmd.env("TERM_PROGRAM", "vscode");
         cmd.env("CLAUDE_TASK_ID", task_id);
+        cmd.env("OPENFORGE_PTY_INSTANCE_ID", instance_id.to_string());
 
         let child = pair
             .slave
@@ -302,8 +304,6 @@ impl PtyManager {
 
         let pid = child.process_id().unwrap_or(0);
         info!("Claude PTY for task {} started (PID: {})", task_id, pid);
-
-        let instance_id = NEXT_INSTANCE_ID.fetch_add(1, Ordering::Relaxed);
 
         let reader = pair
             .master

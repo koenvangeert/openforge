@@ -316,7 +316,7 @@ pub(super) fn spawn_batched_pty_event_emitter(
                             let exit_payload = serde_json::json!({"instance_id": instance_id});
                             publish_app_event_to_runtime(app_handle.as_ref(), &app_event_tx, &exit_event_name, &exit_payload);
                             if let Some(success) = agent_success {
-                                let payload = serde_json::json!({"task_id": &session_key, "success": success});
+                                let payload = serde_json::json!({"task_id": &session_key, "success": success, "instance_id": instance_id});
                                 publish_app_event_to_runtime(app_handle.as_ref(), &app_event_tx, "agent-pty-exited", &payload);
                             }
                             break;
