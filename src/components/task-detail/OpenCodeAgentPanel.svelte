@@ -22,6 +22,7 @@
     writeAgentTerminalTranscription,
   } from '../../lib/agentTerminalPanel'
   import { createSessionHistory } from '../../lib/useSessionHistory.svelte'
+  import { getAgentResumeCommand } from '../../lib/agentResumeCommand'
 
   interface Props {
     taskId: string
@@ -54,6 +55,7 @@
 
   let session = $derived($activeSessions.get(taskId) || null)
   let questionText = $derived(session ? parseCheckpointQuestion(session.checkpoint_data) : null)
+  let resumeCommand = $derived(getAgentResumeCommand('opencode', session?.opencode_session_id ?? null))
 
   $effect(() => {
     if (!session) {
@@ -137,10 +139,10 @@
             <span class="badge badge-sm {getSessionStatusBadgeClass(session.status)}">
               {session.status}
             </span>
-            {#if session.opencode_session_id}
-              <span class="text-[0.6875rem] font-mono text-base-content/50 max-w-[180px] truncate" title={session.opencode_session_id}>
-                {session.opencode_session_id}
-              </span>
+            {#if resumeCommand}
+              <code class="text-[0.6875rem] font-mono text-base-content/50 whitespace-nowrap select-all" title={resumeCommand}>
+                {resumeCommand}
+              </code>
             {/if}
           </div>
         {/if}

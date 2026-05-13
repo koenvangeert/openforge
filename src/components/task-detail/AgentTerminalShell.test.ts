@@ -41,7 +41,7 @@ describe('AgentTerminalShell', () => {
     expect(await screen.findByText('Pi agent running...')).toBeTruthy()
     expect(screen.getByText('// implementing')).toBeTruthy()
     expect(screen.getByText('RUNNING')).toBeTruthy()
-    expect(screen.getByText('pi-sess-abc123')).toBeTruthy()
+    expect(screen.getByText('pi --session pi-sess-abc123')).toBeTruthy()
     expect(screen.getByTestId('pi-agent-panel')).toBeTruthy()
     expect(document.querySelector('.shell-terminal-wrapper')).toBeTruthy()
 

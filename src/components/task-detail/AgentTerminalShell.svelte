@@ -15,6 +15,7 @@
     type AgentStageLabels,
   } from '../../lib/agentTerminalPanel'
   import VoiceInput from '../shared/input/VoiceInput.svelte'
+  import { getAgentResumeCommand, type AgentResumeCommandProvider } from '../../lib/agentResumeCommand'
 
   type ProviderSessionIdKey = 'claude_session_id' | 'pi_session_id'
 
@@ -47,6 +48,8 @@
 
   let session = $derived($activeSessions.get(taskId) || null)
   let providerSessionId = $derived(session ? session[sessionIdKey] : null)
+  let resumeCommandProvider: AgentResumeCommandProvider = $derived(sessionIdKey === 'claude_session_id' ? 'claude-code' : 'pi')
+  let resumeCommand = $derived(getAgentResumeCommand(resumeCommandProvider, providerSessionId))
 
   function syncStatusFromSession(sessionStatus: string | null | undefined) {
     syncAgentPanelStatusFromSession({
@@ -123,10 +126,10 @@
             <span class="badge badge-sm font-bold {getSessionStatusBadgeClass(session.status)}">
               {session.status.toUpperCase()}
             </span>
-            {#if providerSessionId}
-              <span class="text-[0.6875rem] font-mono text-secondary max-w-[180px] truncate" title={providerSessionId}>
-                {providerSessionId}
-              </span>
+            {#if resumeCommand}
+              <code class="text-[0.6875rem] font-mono text-secondary whitespace-nowrap select-all" title={resumeCommand}>
+                {resumeCommand}
+              </code>
             {/if}
           </div>
         {/if}

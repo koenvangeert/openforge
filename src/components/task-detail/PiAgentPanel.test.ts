@@ -83,11 +83,11 @@ describe('PiAgentPanel', () => {
     })
   })
 
-  it('shows pi session id when available', () => {
+  it('shows pi resume command when a session id is available', () => {
     setActiveSession(baseSession)
 
     render(PiAgentPanel, { props: { taskId: 'T-1' } })
-    expect(screen.getByText('pi-sess-abc123')).toBeTruthy()
+    expect(screen.getByText('pi --session pi-sess-abc123')).toBeTruthy()
   })
 
   it('renders voice input mic button', async () => {

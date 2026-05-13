@@ -83,11 +83,11 @@ describe('ClaudeAgentPanel', () => {
     })
   })
 
-  it('shows claude session id when available', () => {
+  it('shows claude resume command when a session id is available', () => {
     setActiveSession(baseSession)
 
     render(ClaudeAgentPanel, { props: { taskId: 'T-1' } })
-    expect(screen.getByText('claude-sess-abc123')).toBeTruthy()
+    expect(screen.getByText('claude --resume claude-sess-abc123')).toBeTruthy()
   })
 
   it('renders voice input mic button', async () => {
