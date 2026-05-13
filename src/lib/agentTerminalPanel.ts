@@ -15,7 +15,6 @@ interface SyncAgentPanelStatusOptions {
 interface AbortAgentTerminalSessionOptions {
   taskId: string
   logPrefix: string
-  markLifecycleExited?: boolean
   setStatus?: (status: AgentPanelStatus) => void
 }
 
@@ -77,7 +76,6 @@ export function hydrateAgentTerminalPtyInstance(taskId: string, currentPtyInstan
 export async function abortAgentTerminalSession({
   taskId,
   logPrefix,
-  markLifecycleExited = false,
   setStatus,
 }: AbortAgentTerminalSessionOptions): Promise<void> {
   try {
@@ -86,9 +84,7 @@ export async function abortAgentTerminalSession({
       await killPty(taskId).catch(e => {
         console.error(`[${logPrefix}] Failed to kill PTY on abort:`, e)
       })
-      if (markLifecycleExited) {
-        markAgentTerminalExited(taskId, lifecycle.currentPtyInstance)
-      }
+      markAgentTerminalExited(taskId, lifecycle.currentPtyInstance)
     }
     await abortImplementation(taskId)
     setStatus?.('error')

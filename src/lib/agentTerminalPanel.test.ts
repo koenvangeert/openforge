@@ -77,7 +77,6 @@ describe('agent terminal panel helpers', () => {
     await abortAgentTerminalSession({
       taskId: 'T-1',
       logPrefix: 'TestPanel',
-      markLifecycleExited: true,
       setStatus,
     })
 
@@ -101,7 +100,7 @@ describe('agent terminal panel helpers', () => {
     expect(writePty).toHaveBeenCalledWith('T-1', 'hello')
   })
 
-  it('marks terminal lifecycle exited through terminalPool for session history completions', () => {
+  it('marks terminal lifecycle exited through terminalPool', () => {
     markAgentTerminalExited('T-1', 99)
 
     expect(updateShellLifecycleState).toHaveBeenCalledWith('T-1', {

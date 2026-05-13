@@ -35,13 +35,6 @@ vi.mock('../../lib/audioRecorder', () => ({
   createAudioRecorder: vi.fn(),
 }))
 
-vi.mock('../../lib/useSessionHistory.svelte', () => ({
-  createSessionHistory: vi.fn(() => ({
-    get loadingHistory() { return false },
-    loadSessionHistory: vi.fn().mockResolvedValue(undefined),
-  })),
-}))
-
 vi.mock('../../lib/useDiffLoader.svelte', () => ({
   createDiffLoader: vi.fn(() => ({
     get isLoading() { return false },
