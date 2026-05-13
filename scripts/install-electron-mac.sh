@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/openforge-cli-install.sh
+. "${SCRIPT_DIR}/openforge-cli-install.sh"
+
 APP_NAME="Open Forge"
 INSTALL_DIR="/Applications"
 
@@ -16,45 +20,6 @@ stop_running_app() {
     echo "Stopping stale Electron sidecar..."
     pkill -f 'Open Forge.app/Contents/MacOS/openforge-sidecar' 2>/dev/null || true
   fi
-}
-
-install_cli_payload() {
-  local app_path="${INSTALL_DIR}/${APP_NAME}.app"
-  local cli_source_dir="${app_path}/Contents/Resources/openforge-cli"
-  local cli_target_dir="${HOME}/Library/Application Support/openforge/cli"
-
-  if [ ! -f "${cli_source_dir}/cli.js" ]; then
-    echo "ERROR: OpenForge CLI payload not found at ${cli_source_dir}/cli.js" >&2
-    exit 1
-  fi
-
-  rm -rf "${cli_target_dir}"
-  mkdir -p "${cli_target_dir}"
-  cp -R "${cli_source_dir}/." "${cli_target_dir}/"
-  echo "Installed OpenForge CLI payload to ${cli_target_dir}"
-}
-
-install_cli_launcher() {
-  local cli_bin_dir="${HOME}/.openforge/bin"
-  local cli_target="${HOME}/Library/Application Support/openforge/cli/cli.js"
-  local zshrc="${HOME}/.zshrc"
-
-  mkdir -p "${cli_bin_dir}"
-  cat > "${cli_bin_dir}/openforge" <<EOF
-#!/bin/sh
-exec node "${cli_target}" "\$@"
-EOF
-  chmod 755 "${cli_bin_dir}/openforge"
-
-  if ! grep -qs '\.openforge/bin' "${zshrc}" 2>/dev/null; then
-    {
-      echo ""
-      echo "# OpenForge CLI"
-      echo 'export PATH="$HOME/.openforge/bin:$PATH"'
-    } >> "${zshrc}"
-  fi
-
-  echo "Installed OpenForge CLI launcher to ${cli_bin_dir}/openforge"
 }
 
 echo "Building Electron ${APP_NAME}..."
@@ -75,8 +40,7 @@ cp -R "$APP_PATH" "${INSTALL_DIR}/"
 
 xattr -rd com.apple.quarantine "${INSTALL_DIR}/${APP_NAME}.app" 2>/dev/null || true
 
-install_cli_payload
-install_cli_launcher
+install_openforge_cli "${INSTALL_DIR}/${APP_NAME}.app" error
 
 echo "Installed Electron ${APP_NAME} to ${INSTALL_DIR}/${APP_NAME}.app"
 echo "Restart your shell or run: source ~/.zshrc"
