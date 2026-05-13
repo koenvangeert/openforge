@@ -1,7 +1,8 @@
 <script lang="ts">
-  import type { BoardStatus, Task } from '../../lib/types'
+  import type { Task } from '../../lib/types'
   import { tasks as allTasks, ticketPrs } from '../../lib/stores'
   import { getTaskDependencySummaries, getWaitingDependencyCount } from '../../lib/taskDependencies'
+  import { getDependencyStatusPresentation } from '../../lib/dependencyStatusPresentation'
   import CopyButton from '../shared/ui/CopyButton.svelte'
   import TaskPromptSummary from './TaskPromptSummary.svelte'
   import TaskPullRequestStatus from './TaskPullRequestStatus.svelte'
@@ -18,16 +19,6 @@
   let dependencies = $derived(getTaskDependencySummaries(task, $allTasks))
   let waitingDependencyCount = $derived(getWaitingDependencyCount(task, $allTasks))
 
-  function dependencyStatusLabel(status: BoardStatus | null): string {
-    return status ?? 'unknown'
-  }
-
-  function dependencyStatusClass(status: BoardStatus | null): string {
-    if (status === 'done') return 'badge-success'
-    if (status === 'doing') return 'badge-warning'
-    if (status === 'backlog') return 'badge-ghost'
-    return 'badge-neutral'
-  }
 </script>
 
 <div class="flex flex-col gap-5 p-5 overflow-y-auto bg-base-200 h-full">
@@ -38,9 +29,10 @@
       <h3 class="text-[10px] font-bold text-primary font-mono tracking-[1.2px] m-0">// DEPENDS_ON</h3>
       <div class="flex flex-wrap gap-2">
         {#each dependencies as dependency (dependency.id)}
-          <span class="badge badge-sm gap-1.5 border border-base-300 max-w-full min-w-0 {dependencyStatusClass(dependency.status)}" title={dependency.tooltipTitle}>
+          {@const statusPresentation = getDependencyStatusPresentation(dependency.status)}
+          <span class="badge badge-sm gap-1.5 border border-base-300 max-w-full min-w-0 {statusPresentation.badgeClass}" title={dependency.tooltipTitle}>
             <span class="font-mono shrink-0">{dependency.id}</span>
-            <span class="opacity-80 shrink-0">{dependencyStatusLabel(dependency.status)}</span>
+            <span class="opacity-80 shrink-0">{statusPresentation.label}</span>
             {#if dependency.displayTitle}
               <span class="truncate min-w-0">{dependency.displayTitle}</span>
             {/if}

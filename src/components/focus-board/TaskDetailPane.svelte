@@ -1,7 +1,8 @@
 <script lang="ts">
-  import type { BoardStatus, Task, PullRequestInfo, PrComment } from '../../lib/types'
+  import type { Task, PullRequestInfo, PrComment } from '../../lib/types'
   import { parseCheckRuns, splitCheckRuns } from '../../lib/types'
   import { getTaskDependencySummaries, getWaitingDependencyCount } from '../../lib/taskDependencies'
+  import { getDependencyStatusPresentation } from '../../lib/dependencyStatusPresentation'
   import { getPrComments, markCommentAddressed, openUrl } from '../../lib/ipc'
   import MarkdownContent from '../shared/content/MarkdownContent.svelte'
   import { getPrStatusChips } from '../../lib/prStatusPresentation'
@@ -22,17 +23,6 @@
   let markdownImageBaseUrlsByPrId = $derived(new Map(pullRequests.map((pr) => [pr.id, getGitHubMarkdownImageBaseUrl(pr)])))
   let dependencies = $derived(task ? getTaskDependencySummaries(task, allTasks) : [])
   let waitingDependencyCount = $derived(task ? getWaitingDependencyCount(task, allTasks) : 0)
-
-  function dependencyStatusLabel(status: BoardStatus | null): string {
-    return status ?? 'unknown'
-  }
-
-  function dependencyStatusClass(status: BoardStatus | null): string {
-    if (status === 'done') return 'badge-success'
-    if (status === 'doing') return 'badge-warning'
-    if (status === 'backlog') return 'badge-ghost'
-    return 'badge-neutral'
-  }
 
   async function fetchComments() {
     if (!task || pullRequests.length === 0) {
@@ -97,9 +87,10 @@
         <span class="font-mono text-[10px] font-bold text-primary">// DEPENDS_ON</span>
         <div class="flex flex-wrap gap-1.5">
           {#each dependencies as dependency (dependency.id)}
-            <span class="badge badge-xs gap-1 border border-base-300 {dependencyStatusClass(dependency.status)}" title={dependency.title}>
+            {@const statusPresentation = getDependencyStatusPresentation(dependency.status)}
+            <span class="badge badge-xs gap-1 border border-base-300 {statusPresentation.badgeClass}" title={dependency.title}>
               <span class="font-mono">{dependency.id}</span>
-              <span class="opacity-80">{dependencyStatusLabel(dependency.status)}</span>
+              <span class="opacity-80">{statusPresentation.label}</span>
             </span>
           {/each}
         </div>
