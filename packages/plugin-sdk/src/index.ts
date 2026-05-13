@@ -1,36 +1,45 @@
 export {
+  OPENFORGE_PACKAGE_METADATA_SCHEMA,
+  OPENFORGE_PLUGIN_CAPABILITIES,
+  isOpenForgePackageMetadata,
+  isPluginPackageMetadata,
+  isSupportedOpenForgeApiVersion,
+  validateOpenForgePackageMetadata,
+  validatePluginPackageMetadata,
+} from './manifest'
+
+export {
   MAX_SUPPORTED_API_VERSION,
-  makePluginViewKey,
+  MIN_SUPPORTED_API_VERSION,
+  OPENFORGE_PLUGIN_API_VERSION,
+  SUPPORTED_OPENFORGE_API_VERSIONS,
   isPluginViewKey,
+  makePluginViewKey,
   parsePluginViewKey,
-  type PluginActivatedViewContribution,
-  type PluginActivatedBackgroundService,
-  type PluginActivatedCommandContribution,
-  type PluginActivatedSettingsSectionContribution,
-  type PluginActivatedSidebarPanelContribution,
-  type PluginActivatedTaskPaneTabContribution,
-  type PluginActivationResult,
-  type PluginBackgroundService,
-  type PluginCommandContribution,
-  type PluginContext,
-  type PluginContributionPoints,
-  type PluginEntry,
-  type PluginManifest,
-  type PluginSettingsSection,
-  type PluginSidebarPanelContribution,
-  type PluginState,
-  type PluginStorage,
-  type PluginTaskPaneProps,
-  type PluginTaskPaneTabContribution,
-  type PluginViewContribution,
-  type PluginViewKey,
-  type PluginViewProps,
 } from './types'
 
-export { isValidShortcutFormat, normalizeShortcut, validatePluginManifest, isPluginManifest, ALLOWED_ICON_KEYS } from './manifest'
-export type { ValidationError } from './manifest'
-export { PluginContextImpl } from './context'
-export { isPluginCommandContribution, isPluginViewContribution, getViewContributions, getCommandContributions } from './helpers'
+export type {
+  Disposable,
+  JsonObject,
+  JsonPrimitive,
+  JsonSchema,
+  JsonValue,
+  MaybePromise,
+  OpenForgeContextSnapshot,
+  OpenForgePackageMetadata,
+  OpenForgePluginCapability,
+  OpenForgePluginContext,
+  OpenForgePluginPackageJson,
+  PluginEntry,
+  PluginState,
+  PluginStorage,
+  PluginStorageScope,
+  PluginViewKey,
+  SubscriptionSink,
+  SupportedOpenForgeApiVersion,
+  ValidationError,
+} from './types'
+
 export { parseStrictFiniteNumber } from './numberParsing'
 export {
   getSkillIdentity,

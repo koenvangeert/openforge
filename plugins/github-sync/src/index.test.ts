@@ -9,7 +9,7 @@ vi.mock('./review/pr/PrReviewView.svelte', () => ({
 }))
 
 import manifest from '../manifest.json'
-import { validatePluginManifest } from '@openforge/plugin-sdk'
+import { validatePluginManifest } from '../../../src/lib/plugin/manifest'
 
 describe('github-sync plugin', () => {
   it('has a valid manifest', () => {

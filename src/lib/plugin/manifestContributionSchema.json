@@ -1,0 +1,63 @@
+{
+  "allowedIconKeys": [
+    "layout-dashboard",
+    "folder-open",
+    "git-pull-request",
+    "sparkles",
+    "settings",
+    "terminal",
+    "code",
+    "file-text",
+    "plug",
+    "puzzle",
+    "boxes",
+    "wrench"
+  ],
+  "shortcutPattern": "^(?:(?:Cmd|Ctrl|Alt|Shift)\\+)*(?:[a-zA-Z0-9]|F\\d{1,2}|Space|Enter|Tab|Backspace|Escape)$",
+  "contributionPoints": {
+    "views": {
+      "fields": {
+        "id": { "kind": "nonEmptyString", "required": true },
+        "title": { "kind": "nonEmptyString", "required": true },
+        "icon": { "kind": "icon", "required": true },
+        "shortcut": { "kind": "shortcut" },
+        "railOrder": { "kind": "number" }
+      }
+    },
+    "taskPaneTabs": {
+      "fields": {
+        "id": { "kind": "nonEmptyString", "required": true },
+        "title": { "kind": "nonEmptyString", "required": true },
+        "icon": { "kind": "icon" },
+        "order": { "kind": "number" }
+      }
+    },
+    "sidebarPanels": {
+      "fields": {
+        "id": { "kind": "nonEmptyString", "required": true },
+        "title": { "kind": "nonEmptyString", "required": true },
+        "side": { "kind": "enum", "required": true, "values": ["left", "right"] },
+        "order": { "kind": "number" }
+      }
+    },
+    "commands": {
+      "fields": {
+        "id": { "kind": "nonEmptyString", "required": true },
+        "title": { "kind": "nonEmptyString", "required": true },
+        "shortcut": { "kind": "shortcut" }
+      }
+    },
+    "settingsSections": {
+      "fields": {
+        "id": { "kind": "nonEmptyString", "required": true },
+        "title": { "kind": "nonEmptyString", "required": true }
+      }
+    },
+    "backgroundServices": {
+      "fields": {
+        "id": { "kind": "nonEmptyString", "required": true },
+        "name": { "kind": "nonEmptyString", "required": true }
+      }
+    }
+  }
+}

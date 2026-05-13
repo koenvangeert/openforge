@@ -1,4 +1,4 @@
-import type { PluginActivationResult, PluginContext } from '@openforge/plugin-sdk'
+import type { PluginActivationResult, PluginContext } from '../../../src/lib/plugin/types'
 import FilesView from './FilesView.svelte'
 import { setPluginContext } from './pluginContext'
 

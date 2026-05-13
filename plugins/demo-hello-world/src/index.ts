@@ -1,4 +1,4 @@
-import type { PluginActivationResult, PluginContext } from '@openforge/plugin-sdk'
+import type { PluginActivationResult, PluginContext } from '../../../src/lib/plugin/types'
 import HelloWorldView from './components/HelloWorldView.svelte'
 
 export async function activate(context: PluginContext): Promise<PluginActivationResult> {

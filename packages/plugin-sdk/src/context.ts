@@ -1,39 +1,34 @@
-import type { PluginContext, PluginStorage } from './types'
+import type { Disposable, OpenForgePackageMetadata, OpenForgePluginContext, SubscriptionSink, SupportedOpenForgeApiVersion } from './types'
 
-export class PluginContextImpl implements PluginContext {
-  readonly pluginId: string
-  readonly storage: PluginStorage
-  private readonly invokeHostFn: (command: string, payload?: unknown) => Promise<unknown>
-  private readonly invokeBackendFn: (method: string, payload?: unknown) => Promise<unknown>
-  private readonly onEventFn: (event: string, handler: (data: unknown) => void) => () => void
+class SubscriptionSet implements SubscriptionSink {
+  private readonly subscriptions = new Set<Disposable | (() => void)>()
 
-  constructor(opts: {
-    pluginId: string
-    invokeHost: (command: string, payload?: unknown) => Promise<unknown>
-    invokeBackend: (method: string, payload?: unknown) => Promise<unknown>
-    onEvent: (event: string, handler: (data: unknown) => void) => () => void
-    storageGet: (key: string) => Promise<string | null>
-    storageSet: (key: string, value: string) => Promise<void>
-  }) {
-    this.pluginId = opts.pluginId
-    this.invokeHostFn = opts.invokeHost
-    this.invokeBackendFn = opts.invokeBackend
-    this.onEventFn = opts.onEvent
-    this.storage = {
-      get: (key) => opts.storageGet(key),
-      set: (key, value) => opts.storageSet(key, value),
-    }
+  add(subscription: Disposable | (() => void)): void {
+    this.subscriptions.add(subscription)
   }
 
-  async invokeHost(command: string, payload?: unknown): Promise<unknown> {
-    return this.invokeHostFn(command, payload)
-  }
+  async disposeAll(): Promise<void> {
+    const subscriptions = [...this.subscriptions]
+    this.subscriptions.clear()
 
-  async invokeBackend(method: string, payload?: unknown): Promise<unknown> {
-    return this.invokeBackendFn(method, payload)
+    await Promise.all(subscriptions.map(async (subscription) => {
+      if (typeof subscription === 'function') {
+        subscription()
+      } else {
+        await subscription.dispose()
+      }
+    }))
   }
+}
 
-  onEvent(event: string, handler: (data: unknown) => void): () => void {
-    return this.onEventFn(event, handler)
+export class PluginContextImpl implements OpenForgePluginContext {
+  readonly subscriptions: SubscriptionSet
+
+  constructor(
+    readonly pluginId: string,
+    readonly apiVersion: SupportedOpenForgeApiVersion,
+    readonly packageMetadata: OpenForgePackageMetadata,
+  ) {
+    this.subscriptions = new SubscriptionSet()
   }
 }

@@ -9,7 +9,7 @@ vi.mock('./SkillsView.svelte', () => ({
 }))
 
 import manifest from '../manifest.json'
-import { validatePluginManifest } from '@openforge/plugin-sdk'
+import { validatePluginManifest } from '../../../src/lib/plugin/manifest'
 
 describe('skills-viewer plugin', () => {
   it('has a valid manifest', () => {

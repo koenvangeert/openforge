@@ -1,4 +1,4 @@
-import type { PluginActivationResult, PluginContext } from '@openforge/plugin-sdk'
+import type { PluginActivationResult, PluginContext } from '../../../src/lib/plugin/types'
 import SkillsView from './SkillsView.svelte'
 import { setPluginContext } from './pluginContext'
 
