@@ -419,6 +419,9 @@ type PluginRowSnake = {
   frontend_entry: string;
   backend_entry: string | null;
   install_path: string;
+  source_kind: string;
+  source_spec: string;
+  package_metadata: string;
   installed_at: number;
   is_builtin: boolean;
 }
@@ -434,6 +437,9 @@ export type NormalizedPluginRow = {
   frontendEntry: string;
   backendEntry: string | null;
   installPath: string;
+  sourceKind: string;
+  sourceSpec: string;
+  packageMetadata: string;
   installedAt: number;
   isBuiltin: boolean;
 }
@@ -450,6 +456,9 @@ function normalizePluginRow(raw: PluginRowSnake): NormalizedPluginRow {
     frontendEntry: raw.frontend_entry,
     backendEntry: raw.backend_entry,
     installPath: raw.install_path,
+    sourceKind: raw.source_kind ?? 'legacy',
+    sourceSpec: raw.source_spec ?? '',
+    packageMetadata: raw.package_metadata ?? '{}',
     installedAt: raw.installed_at,
     isBuiltin: raw.is_builtin,
   };
@@ -466,6 +475,9 @@ export async function installPlugin(plugin: {
   frontendEntry: string;
   backendEntry: string | null;
   installPath: string;
+  sourceKind?: string;
+  sourceSpec?: string;
+  packageMetadata?: string;
   installedAt: number;
   isBuiltin: boolean;
 }): Promise<void> {
@@ -481,6 +493,9 @@ export async function installPlugin(plugin: {
       frontendEntry: plugin.frontendEntry,
       backendEntry: plugin.backendEntry,
       installPath: plugin.installPath,
+      sourceKind: plugin.sourceKind ?? 'legacy',
+      sourceSpec: plugin.sourceSpec ?? '',
+      packageMetadata: plugin.packageMetadata ?? '{}',
       installedAt: plugin.installedAt,
       isBuiltin: plugin.isBuiltin,
     },
@@ -494,6 +509,16 @@ export async function installPluginFromLocal(sourcePath: string): Promise<Normal
 
 export async function installPluginFromNpm(packageName: string): Promise<NormalizedPluginRow> {
   const raw = await invoke<PluginRowSnake>("install_plugin_from_npm", { packageName })
+  return normalizePluginRow(raw)
+}
+
+export async function installPluginFromGit(gitSpec: string): Promise<NormalizedPluginRow> {
+  const raw = await invoke<PluginRowSnake>("install_plugin_from_git", { gitSpec })
+  return normalizePluginRow(raw)
+}
+
+export async function installPluginFromSource(sourceSpec: string): Promise<NormalizedPluginRow> {
+  const raw = await invoke<PluginRowSnake>("install_plugin_from_source", { sourceSpec })
   return normalizePluginRow(raw)
 }
 

@@ -117,6 +117,8 @@ const SIDECAR_BACKED_COMMANDS = new Set([
   'install_plugin',
   'install_plugin_from_local',
   'install_plugin_from_npm',
+  'install_plugin_from_git',
+  'install_plugin_from_source',
   'uninstall_plugin',
   'get_plugin',
   'list_plugins',

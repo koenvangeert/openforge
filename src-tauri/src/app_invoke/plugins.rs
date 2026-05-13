@@ -13,9 +13,23 @@ struct AppInstallPluginRequest {
     frontend_entry: String,
     backend_entry: Option<String>,
     install_path: String,
+    #[serde(default = "legacy_source_kind")]
+    source_kind: String,
+    #[serde(default)]
+    source_spec: String,
+    #[serde(default = "empty_package_metadata")]
+    package_metadata: String,
     installed_at: i64,
     #[serde(rename = "isBuiltin")]
     _is_builtin: bool,
+}
+
+fn legacy_source_kind() -> String {
+    "legacy".to_string()
+}
+
+fn empty_package_metadata() -> String {
+    "{}".to_string()
 }
 
 impl AppInstallPluginRequest {
@@ -34,6 +48,9 @@ impl AppInstallPluginRequest {
             frontend_entry: self.frontend_entry,
             backend_entry: self.backend_entry,
             install_path: self.install_path,
+            source_kind: self.source_kind,
+            source_spec: self.source_spec,
+            package_metadata: self.package_metadata,
             installed_at: self.installed_at,
             is_builtin,
         }
@@ -118,6 +135,22 @@ pub(super) async fn handle_app_plugin_command(
             let package_name = payload_string(&request.payload, "packageName")?;
             let plugin = plugin_platform(state, true)?
                 .install_npm_plugin_bundle(&package_name)
+                .await
+                .map_err(map_plugin_platform_error)?;
+            json_value(plugin)?
+        }
+        "install_plugin_from_git" => {
+            let git_spec = payload_string(&request.payload, "gitSpec")?;
+            let plugin = plugin_platform(state, true)?
+                .install_git_plugin_bundle(&git_spec)
+                .await
+                .map_err(map_plugin_platform_error)?;
+            json_value(plugin)?
+        }
+        "install_plugin_from_source" => {
+            let source_spec = payload_string(&request.payload, "sourceSpec")?;
+            let plugin = plugin_platform(state, true)?
+                .install_plugin_package_source(&source_spec)
                 .await
                 .map_err(map_plugin_platform_error)?;
             json_value(plugin)?

@@ -136,6 +136,8 @@ export const ipcCommandContracts = [
   { functionName: 'installPlugin', ipcCommand: 'install_plugin', payloadKeys: ['plugin'], targetOwner: 'rust-sidecar', domain: 'plugins' },
   { functionName: 'installPluginFromLocal', ipcCommand: 'install_plugin_from_local', payloadKeys: ['sourcePath'], targetOwner: 'rust-sidecar', domain: 'plugins' },
   { functionName: 'installPluginFromNpm', ipcCommand: 'install_plugin_from_npm', payloadKeys: ['packageName'], targetOwner: 'rust-sidecar', domain: 'plugins' },
+  { functionName: 'installPluginFromGit', ipcCommand: 'install_plugin_from_git', payloadKeys: ['gitSpec'], targetOwner: 'rust-sidecar', domain: 'plugins' },
+  { functionName: 'installPluginFromSource', ipcCommand: 'install_plugin_from_source', payloadKeys: ['sourceSpec'], targetOwner: 'rust-sidecar', domain: 'plugins' },
   { functionName: 'uninstallPlugin', ipcCommand: 'uninstall_plugin', payloadKeys: ['pluginId'], targetOwner: 'rust-sidecar', domain: 'plugins' },
   { functionName: 'getPlugin', ipcCommand: 'get_plugin', payloadKeys: ['pluginId'], targetOwner: 'rust-sidecar', domain: 'plugins' },
   { functionName: 'listPlugins', ipcCommand: 'list_plugins', payloadKeys: [], targetOwner: 'rust-sidecar', domain: 'plugins' },
