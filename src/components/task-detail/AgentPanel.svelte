@@ -52,7 +52,7 @@
     {taskId}
     {isStarting}
     runningText="Claude agent running..."
-    logPrefix="ClaudeAgentPanel"
+    logPrefix="AgentPanel:Claude"
     sessionIdKey="claude_session_id"
     stageLabels={sharedStageLabels}
   />
@@ -61,7 +61,7 @@
     {taskId}
     {isStarting}
     runningText="Pi agent running..."
-    logPrefix="PiAgentPanel"
+    logPrefix="AgentPanel:Pi"
     sessionIdKey="pi_session_id"
     stageLabels={sharedStageLabels}
     rootTestId="pi-agent-panel"
@@ -71,7 +71,7 @@
     {taskId}
     {isStarting}
     runningText="Agent running..."
-    logPrefix="OpenCodeAgentPanel"
+    logPrefix="AgentPanel:OpenCode"
     sessionIdKey="opencode_session_id"
     stageLabels={openCodeStageLabels}
     rootTestId="opencode-agent-panel"
