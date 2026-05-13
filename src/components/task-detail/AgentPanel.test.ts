@@ -101,13 +101,6 @@ vi.mock('../../lib/terminalPool', () => ({
   _getPool: vi.fn().mockReturnValue(new Map()),
 }))
 
-vi.mock('../../lib/useSessionHistory.svelte', () => ({
-  createSessionHistory: vi.fn(() => ({
-    get loadingHistory() { return false },
-    loadSessionHistory: vi.fn().mockResolvedValue(undefined),
-  })),
-}))
-
 import AgentPanel from './AgentPanel.svelte'
 import { activeSessions } from '../../lib/stores'
 import { killPty } from '../../lib/ipc'
@@ -125,12 +118,13 @@ describe('AgentPanel (router)', () => {
     vi.clearAllMocks()
   })
 
-  it('renders OpenCode panel by default when no session exists', async () => {
+  it('renders OpenCode panel by default when no session exists without a separate history-loading overlay', async () => {
     render(AgentPanel, { props: { taskId: 'T-1' } })
     // Wait for async onMount to complete
     await vi.waitFor(() => {
       expect(screen.getByText('No active agent session')).toBeTruthy()
     })
+    expect(screen.queryByText('Loading session output...')).toBeNull()
   })
 
   it('shows guidance text via OpenCode panel', async () => {

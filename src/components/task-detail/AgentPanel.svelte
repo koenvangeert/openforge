@@ -75,8 +75,6 @@
     sessionIdKey="opencode_session_id"
     stageLabels={openCodeStageLabels}
     rootTestId="opencode-agent-panel"
-    loadSessionHistory
-    markLifecycleExitedOnAbort
     stageLabelPrefix=""
     uppercaseSessionStatus={false}
     sessionStatusBadgeVariant="badge"

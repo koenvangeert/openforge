@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, onDestroy, untrack } from 'svelte'
+  import { onMount, onDestroy } from 'svelte'
   import type { DesktopUnlistenFn } from '../../lib/desktopIpc'
   import { activeSessions } from '../../lib/stores'
   import '@xterm/xterm/css/xterm.css'
@@ -11,7 +11,6 @@
     getAgentStageLabel,
     getAgentStatusText,
     hydrateAgentTerminalPtyInstance,
-    markAgentTerminalExited,
     syncAgentPanelStatusFromSession,
     writeAgentTerminalTranscription,
     type AgentStageLabels,
@@ -20,7 +19,6 @@
   import VoiceInput from '../shared/input/VoiceInput.svelte'
   import { getAgentResumeCommand, type AgentResumeCommandProvider } from '../../lib/agentResumeCommand'
   import { parseCheckpointQuestion } from '../../lib/parseCheckpoint'
-  import { createSessionHistory } from '../../lib/useSessionHistory.svelte'
 
   type ProviderSessionIdKey = 'opencode_session_id' | 'claude_session_id' | 'pi_session_id'
 
@@ -32,8 +30,6 @@
     stageLabels: AgentStageLabels
     isStarting?: boolean
     rootTestId?: string | null
-    loadSessionHistory?: boolean
-    markLifecycleExitedOnAbort?: boolean
     stageLabelPrefix?: string
     uppercaseSessionStatus?: boolean
     sessionStatusBadgeVariant?: AgentSessionStatusBadgeVariant
@@ -47,8 +43,6 @@
     stageLabels,
     isStarting = false,
     rootTestId = null,
-    loadSessionHistory = false,
-    markLifecycleExitedOnAbort = false,
     stageLabelPrefix = '// ',
     uppercaseSessionStatus = true,
     sessionStatusBadgeVariant = 'soft',
@@ -61,16 +55,6 @@
   let status = $state<AgentPanelStatus>('idle')
   let terminalActive = $state(false)
   let destroyed = false
-
-  const sessionHistory = createSessionHistory({
-    taskId: untrack(() => taskId),
-    onStatusUpdate: (nextStatus) => {
-      status = nextStatus
-      if ((nextStatus === 'complete' || nextStatus === 'error') && poolEntry) {
-        markAgentTerminalExited(taskId, poolEntry.currentPtyInstance)
-      }
-    },
-  })
 
   let session = $derived($activeSessions.get(taskId) || null)
   let providerSessionId = $derived(session ? session[sessionIdKey] : null)
@@ -134,10 +118,6 @@
 
     syncStatusFromSession(session?.status)
 
-    if (loadSessionHistory) {
-      await sessionHistory.loadSessionHistory()
-    }
-
     unlisteners.push(await listenToAgentStatusChanged({
       taskId,
       setStatus: (nextStatus) => { status = nextStatus },
@@ -164,7 +144,6 @@
     await abortAgentTerminalSession({
       taskId,
       logPrefix,
-      markLifecycleExited: markLifecycleExitedOnAbort,
       setStatus: (nextStatus) => { status = nextStatus },
     })
   }
@@ -230,12 +209,7 @@
 
   <div class="flex-1 overflow-hidden min-h-0 bg-base-100 border border-base-300 rounded-md relative">
     <div class="shell-terminal-wrapper w-full h-full p-3" bind:this={terminalEl}></div>
-    {#if loadSessionHistory && sessionHistory.loadingHistory}
-      <div class="absolute inset-0 flex flex-col items-center justify-center p-16 gap-4 bg-base-100 z-[1] pointer-events-none">
-        <span class="loading loading-spinner loading-md text-primary"></span>
-        <div class="text-base font-semibold text-base-content">Loading session output...</div>
-      </div>
-    {:else if !session && !terminalActive}
+    {#if !session && !terminalActive}
       <div class="absolute inset-0 flex flex-col items-center justify-center p-16 gap-4 bg-base-100 z-[1] pointer-events-none">
         {#if isStarting}
           <span class="loading loading-spinner loading-lg text-primary"></span>
