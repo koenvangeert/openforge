@@ -14,8 +14,8 @@ install_cli_payload() {
   CLI_TARGET_DIR="${HOME}/Library/Application Support/openforge/cli"
 
   if [ ! -f "${CLI_SOURCE_DIR}/cli.js" ]; then
-    echo "ERROR: OpenForge CLI payload not found at ${CLI_SOURCE_DIR}/cli.js" >&2
-    exit 1
+    echo "WARNING: OpenForge CLI payload not found at ${CLI_SOURCE_DIR}/cli.js; continuing without updating CLI payload" >&2
+    return 0
   fi
 
   rm -rf "${CLI_TARGET_DIR}"
