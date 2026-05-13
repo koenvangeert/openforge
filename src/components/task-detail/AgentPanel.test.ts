@@ -152,7 +152,7 @@ describe('AgentPanel (router)', () => {
       updated_at: 2000,
       provider: 'opencode',
       claude_session_id: null,
-    pi_session_id: null,
+      pi_session_id: null,
     }
 
     const sessions = new Map<string, AgentSession>()
@@ -162,6 +162,7 @@ describe('AgentPanel (router)', () => {
     render(AgentPanel, { props: { taskId: 'T-1' } })
     expect(screen.getByText('Implementing')).toBeTruthy()
     expect(screen.getByText('running')).toBeTruthy()
+    expect(screen.getByText('opencode --session oc-sess-1')).toBeTruthy()
   })
 
   it('renders Claude panel for claude-code provider session', () => {
@@ -187,7 +188,7 @@ describe('AgentPanel (router)', () => {
     render(AgentPanel, { props: { taskId: 'T-1' } })
     // ClaudeAgentPanel uses uppercase status and "// " prefixed stage labels
     expect(screen.getByText('RUNNING')).toBeTruthy()
-    expect(screen.getByText('claude-sess-1')).toBeTruthy()
+    expect(screen.getByText('claude --resume claude-sess-1')).toBeTruthy()
   })
 
   it('renders Pi panel for pi provider session', () => {
@@ -203,7 +204,7 @@ describe('AgentPanel (router)', () => {
       updated_at: 2000,
       provider: 'pi',
       claude_session_id: null,
-    pi_session_id: null,
+      pi_session_id: 'pi-sess-1',
     }
 
     const sessions = new Map<string, AgentSession>()
@@ -212,6 +213,7 @@ describe('AgentPanel (router)', () => {
 
     render(AgentPanel, { props: { taskId: 'T-1' } })
     expect(screen.getByTestId('pi-agent-panel')).toBeTruthy()
+    expect(screen.getByText('pi --session pi-sess-1')).toBeTruthy()
   })
 
 })
