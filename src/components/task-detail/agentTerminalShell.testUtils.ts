@@ -42,7 +42,7 @@ const mocks = vi.hoisted(() => {
   const poolEntry = {
     taskId: '',
     terminal: { write: vi.fn(), dispose: vi.fn(), reset: vi.fn(), cols: 80, rows: 24 },
-    fitAddon: { fit: vi.fn() },
+    fitAddon: { fit: vi.fn(), proposeDimensions: vi.fn().mockReturnValue({ cols: 80, rows: 24 }) },
     hostDiv: document.createElement('div'),
     ptyActive: false,
     needsClear: false,
@@ -100,6 +100,7 @@ vi.mock('../../lib/ipc', () => ({
   getWhisperModelStatus: vi.fn(),
   downloadWhisperModel: vi.fn(),
   getPtyBuffer: vi.fn().mockResolvedValue(null),
+  getLatestSession: vi.fn().mockResolvedValue(null),
 }))
 
 vi.mock('../../lib/desktopIpc', () => ({
@@ -117,6 +118,7 @@ vi.mock('../../lib/terminalPool', () => ({
   release: vi.fn(),
   getShellLifecycleState: vi.fn().mockImplementation(() => ({ ...mocks.shellLifecycleState })),
   isPtyActive: vi.fn().mockImplementation(() => mocks.shellLifecycleState.ptyActive),
+  isValidTerminalDimensions: vi.fn().mockReturnValue(true),
   updateShellLifecycleState: vi.fn().mockImplementation((_taskId: string, state: typeof mocks.shellLifecycleState) => {
     mocks.shellLifecycleState.ptyActive = state.ptyActive
     mocks.shellLifecycleState.shellExited = state.shellExited
@@ -131,6 +133,8 @@ export function resetAgentTerminalTestState() {
   mocks.activeSessions.set(new Map())
   mocks.poolEntry.ptyActive = false
   mocks.poolEntry.attached = false
+  mocks.poolEntry.fitAddon.fit.mockClear()
+  mocks.poolEntry.fitAddon.proposeDimensions.mockClear()
   mocks.shellLifecycleState.ptyActive = false
   mocks.shellLifecycleState.shellExited = false
   mocks.shellLifecycleState.currentPtyInstance = null
