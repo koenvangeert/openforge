@@ -36,6 +36,14 @@ export default defineConfig({
       },
       {
         test: {
+          name: 'plugin-sdk',
+          environment: 'jsdom',
+          globals: true,
+          include: ['packages/plugin-sdk/src/**/*.test.ts'],
+        },
+      },
+      {
+        test: {
           name: 'node',
           environment: 'node',
           globals: true,
