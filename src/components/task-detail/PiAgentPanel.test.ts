@@ -8,7 +8,7 @@ import {
 } from './agentTerminalShell.testUtils'
 import PiAgentPanel from './PiAgentPanel.svelte'
 
-const baseSession = createAgentSession({ provider: 'pi-code' })
+const baseSession = createAgentSession({ provider: 'pi' })
 
 describe('PiAgentPanel', () => {
   beforeEach(() => {

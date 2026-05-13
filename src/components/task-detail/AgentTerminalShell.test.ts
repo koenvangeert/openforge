@@ -10,7 +10,7 @@ import {
 } from './agentTerminalShell.testUtils'
 import AgentTerminalShell from './AgentTerminalShell.svelte'
 
-const baseSession = createAgentSession({ provider: 'pi-code' })
+const baseSession = createAgentSession({ provider: 'pi' })
 
 const stageLabels: Record<string, string> = {
   read_ticket: 'reading ticket',
@@ -27,7 +27,7 @@ describe('AgentTerminalShell', () => {
   it.each([
     {
       providerName: 'Pi',
-      session: createAgentSession({ provider: 'pi-code', pi_session_id: 'pi-sess-abc123' }),
+      session: createAgentSession({ provider: 'pi', pi_session_id: 'pi-sess-abc123' }),
       runningText: 'Pi agent running...',
       logPrefix: 'PiAgentPanel',
       sessionIdKey: 'pi_session_id' as const,
