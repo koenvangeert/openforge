@@ -1,8 +1,6 @@
 use std::path::Path;
 
-use crate::backend_runtime::AppHandle;
-
-use super::ProviderSessionResult;
+use super::{ProviderSessionResult, ProviderStartContext};
 use crate::db::AgentSessionRow;
 use crate::pty_manager::PtyManager;
 
@@ -24,7 +22,7 @@ impl PiProvider {
         _agent: Option<&str>,
         _permission_mode: Option<&str>,
         _model: Option<&crate::opencode_client::PromptModel>,
-        app: &AppHandle,
+        start_context: &ProviderStartContext,
     ) -> Result<ProviderSessionResult, String> {
         let pty_instance_id = self
             .pty_mgr
@@ -34,10 +32,10 @@ impl PiProvider {
                 prompt,
                 None,
                 false,
-                80,
-                24,
-                Some(app.clone()),
-                None,
+                start_context.cols,
+                start_context.rows,
+                start_context.app_handle.clone(),
+                start_context.app_event_tx.clone(),
             )
             .await
             .map_err(|e| e.to_string())?;
@@ -60,7 +58,7 @@ impl PiProvider {
         _agent: Option<&str>,
         _permission_mode: Option<&str>,
         _model: Option<&crate::opencode_client::PromptModel>,
-        app: &AppHandle,
+        start_context: &ProviderStartContext,
     ) -> Result<ProviderSessionResult, String> {
         let resume_session_id = session.pi_session_id.as_deref();
         let actual_prompt = prompt.unwrap_or("");
@@ -74,10 +72,10 @@ impl PiProvider {
                 actual_prompt,
                 resume_session_id,
                 continue_session,
-                80,
-                24,
-                Some(app.clone()),
-                None,
+                start_context.cols,
+                start_context.rows,
+                start_context.app_handle.clone(),
+                start_context.app_event_tx.clone(),
             )
             .await
             .map_err(|e| e.to_string())?;

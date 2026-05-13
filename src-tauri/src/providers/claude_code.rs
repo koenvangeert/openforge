@@ -1,8 +1,7 @@
-use crate::backend_runtime::AppHandle;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
-use super::ProviderSessionResult;
+use super::{ProviderSessionResult, ProviderStartContext};
 use crate::db::AgentSessionRow;
 use crate::pty_manager::PtyManager;
 
@@ -28,7 +27,7 @@ impl ClaudeCodeProvider {
         _agent: Option<&str>,
         permission_mode: Option<&str>,
         _model: Option<&crate::opencode_client::PromptModel>,
-        app: &AppHandle,
+        start_context: &ProviderStartContext,
     ) -> Result<ProviderSessionResult, String> {
         let port = crate::claude_hooks::get_http_server_port();
         let hooks_path =
@@ -44,10 +43,10 @@ impl ClaudeCodeProvider {
                 false,
                 &hooks_path,
                 permission_mode,
-                80,
-                24,
-                Some(app.clone()),
-                None,
+                start_context.cols,
+                start_context.rows,
+                start_context.app_handle.clone(),
+                start_context.app_event_tx.clone(),
             )
             .await
             .map_err(|e| e.to_string())?;
@@ -70,7 +69,7 @@ impl ClaudeCodeProvider {
         _agent: Option<&str>,
         permission_mode: Option<&str>,
         _model: Option<&crate::opencode_client::PromptModel>,
-        app: &AppHandle,
+        start_context: &ProviderStartContext,
     ) -> Result<ProviderSessionResult, String> {
         let port = crate::claude_hooks::get_http_server_port();
         let hooks_path =
@@ -96,10 +95,10 @@ impl ClaudeCodeProvider {
                 use_continue,
                 &hooks_path,
                 permission_mode,
-                80,
-                24,
-                Some(app.clone()),
-                None,
+                start_context.cols,
+                start_context.rows,
+                start_context.app_handle.clone(),
+                start_context.app_event_tx.clone(),
             )
             .await
             .map_err(|e| e.to_string())?;

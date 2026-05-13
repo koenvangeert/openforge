@@ -98,6 +98,17 @@ async fn handles_agent_lifecycle_followups() {
     let _ = std::fs::remove_file(path);
 }
 
+#[test]
+fn start_implementation_routes_provider_start_through_provider_module() {
+    let source = include_str!("../lifecycle.rs");
+
+    assert!(source.contains("Provider::from_name"));
+    assert!(source.contains(".start("));
+    assert!(!source.contains("spawn_opencode_run_pty"));
+    assert!(!source.contains("spawn_claude_pty"));
+    assert!(!source.contains("spawn_pi_pty"));
+}
+
 #[tokio::test]
 async fn start_implementation_reports_missing_task() {
     let (state, path) = test_state("app_invoke_start_implementation");

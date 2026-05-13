@@ -248,87 +248,22 @@ pub(super) async fn handle_app_start_implementation_command(
         code_cleanup_enabled,
     );
 
-    let provider_result = match provider_name.as_str() {
-        "opencode" => {
-            let pty_instance_id = pty_manager
-                .spawn_opencode_run_pty(
-                    &task_id,
-                    &working_dir,
-                    &prompt,
-                    None,
-                    false,
-                    task.agent.as_deref(),
-                    None,
-                    80,
-                    24,
-                    state.app.clone(),
-                    state.app_event_tx.clone(),
-                )
-                .await
-                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-            crate::providers::ProviderSessionResult {
-                port: 0,
-                opencode_session_id: None,
-                pi_session_id: None,
-                pty_instance_id: Some(pty_instance_id),
-            }
-        }
-        "claude-code" => {
-            let port = crate::claude_hooks::get_http_server_port();
-            let hooks_path = crate::claude_hooks::generate_hooks_settings(port)
-                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-            let pty_instance_id = pty_manager
-                .spawn_claude_pty(
-                    &task_id,
-                    &working_dir,
-                    &prompt,
-                    None,
-                    false,
-                    &hooks_path,
-                    task.permission_mode.as_deref(),
-                    80,
-                    24,
-                    state.app.clone(),
-                    state.app_event_tx.clone(),
-                )
-                .await
-                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-            crate::providers::ProviderSessionResult {
-                port: 0,
-                opencode_session_id: None,
-                pi_session_id: None,
-                pty_instance_id: Some(pty_instance_id),
-            }
-        }
-        "pi" => {
-            let pty_instance_id = pty_manager
-                .spawn_pi_pty(
-                    &task_id,
-                    &working_dir,
-                    &prompt,
-                    None,
-                    false,
-                    80,
-                    24,
-                    state.app.clone(),
-                    state.app_event_tx.clone(),
-                )
-                .await
-                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-            crate::providers::ProviderSessionResult {
-                port: 0,
-                opencode_session_id: None,
-                pi_session_id: None,
-                pty_instance_id: Some(pty_instance_id),
-            }
-        }
-        other => {
-            return Err((
-                StatusCode::BAD_REQUEST,
-                format!("Unknown provider: {other}"),
-            ));
-        }
-    };
+    let provider = crate::providers::Provider::from_name(&provider_name, pty_manager.clone())
+        .map_err(|e| (StatusCode::BAD_REQUEST, e))?;
+    let start_context =
+        crate::providers::ProviderStartContext::new(state.app.clone(), state.app_event_tx.clone());
+    let provider_result = provider
+        .start(
+            &task_id,
+            &working_dir,
+            &prompt,
+            task.agent.as_deref(),
+            task.permission_mode.as_deref(),
+            None,
+            &start_context,
+        )
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
 
     {
         let db = crate::db::acquire_db(&state.db);

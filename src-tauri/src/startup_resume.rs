@@ -194,6 +194,8 @@ pub(crate) async fn resume_task_sessions(
             }
         };
 
+        let start_context = providers::ProviderStartContext::new(Some(app.clone()), None);
+
         match provider
             .resume(
                 &target.task_id,
@@ -203,7 +205,7 @@ pub(crate) async fn resume_task_sessions(
                 None,
                 None,
                 None,
-                &app,
+                &start_context,
             )
             .await
         {

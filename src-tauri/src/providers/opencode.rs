@@ -1,7 +1,6 @@
-use crate::backend_runtime::AppHandle;
 use std::path::Path;
 
-use super::ProviderSessionResult;
+use super::{ProviderSessionResult, ProviderStartContext};
 use crate::db::AgentSessionRow;
 use crate::pty_manager::PtyManager;
 
@@ -23,7 +22,7 @@ impl OpenCodeProvider {
         agent: Option<&str>,
         _permission_mode: Option<&str>,
         model: Option<&crate::opencode_client::PromptModel>,
-        app: &AppHandle,
+        start_context: &ProviderStartContext,
     ) -> Result<ProviderSessionResult, String> {
         let pty_instance_id = self
             .pty_mgr
@@ -35,10 +34,10 @@ impl OpenCodeProvider {
                 false,
                 agent,
                 model,
-                80,
-                24,
-                Some(app.clone()),
-                None,
+                start_context.cols,
+                start_context.rows,
+                start_context.app_handle.clone(),
+                start_context.app_event_tx.clone(),
             )
             .await
             .map_err(|e| e.to_string())?;
@@ -61,7 +60,7 @@ impl OpenCodeProvider {
         agent: Option<&str>,
         _permission_mode: Option<&str>,
         model: Option<&crate::opencode_client::PromptModel>,
-        app: &AppHandle,
+        start_context: &ProviderStartContext,
     ) -> Result<ProviderSessionResult, String> {
         let resume_session_id = session.opencode_session_id.as_deref();
         let actual_prompt = prompt.unwrap_or("");
@@ -76,10 +75,10 @@ impl OpenCodeProvider {
                 continue_session,
                 agent,
                 model,
-                80,
-                24,
-                Some(app.clone()),
-                None,
+                start_context.cols,
+                start_context.rows,
+                start_context.app_handle.clone(),
+                start_context.app_event_tx.clone(),
             )
             .await
             .map_err(|e| e.to_string())?;
