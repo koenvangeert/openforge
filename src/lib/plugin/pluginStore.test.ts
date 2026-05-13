@@ -68,6 +68,38 @@ describe('pluginStore', () => {
     expect(map.get('p1')?.installPath).toBe('/tmp/plugin')
   })
 
+  it('prefers package metadata over legacy manifest contribution fields for package plugins', async () => {
+    listPluginsMock.mockResolvedValue([{ 
+      ...makePlugin('row-id'),
+      name: 'Legacy Name',
+      description: 'Legacy description',
+      contributes: JSON.stringify({ views: [{ id: 'legacy', title: 'Legacy', icon: 'sparkles' }] }),
+      frontendEntry: 'legacy.js',
+      backendEntry: 'legacy-backend.js',
+      packageMetadata: JSON.stringify({
+        id: 'package-id',
+        apiVersion: 1,
+        displayName: 'Package Plugin',
+        description: 'Package metadata description',
+        frontend: './dist/frontend.js',
+        backend: './dist/backend.js',
+      }),
+    }])
+
+    await loadInstalledPlugins()
+
+    const entry = get(installedPlugins).get('row-id')
+    expect(entry?.packageMetadata).toMatchObject({ id: 'package-id', frontend: './dist/frontend.js' })
+    expect(entry?.manifest).toMatchObject({
+      id: 'package-id',
+      name: 'Package Plugin',
+      description: 'Package metadata description',
+      contributes: {},
+      frontend: './dist/frontend.js',
+      backend: './dist/backend.js',
+    })
+  })
+
   it('enables plugin for project', async () => {
     setPluginEnabledMock.mockResolvedValue(undefined)
     await enablePlugin('proj1', 'p1')

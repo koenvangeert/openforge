@@ -3,6 +3,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import PluginSlot from './PluginSlot.svelte'
 import PluginSlotTestView from './PluginSlotTestView.svelte'
 import PluginSlotCrashingView from './PluginSlotCrashingView.svelte'
+import PluginSlotRuntimePropsView from './PluginSlotRuntimePropsView.svelte'
 import { installedPlugins, enabledPluginIds } from '../../lib/plugin/pluginStore'
 import type { PluginEntry, PluginManifest } from '../../lib/plugin/types'
 import { clearComponentRegistry, registerRenderableContributionComponent, registerViewComponent } from '../../lib/plugin/componentRegistry'
@@ -14,6 +15,10 @@ const { activatePluginMock } = vi.hoisted(() => ({
 
 vi.mock('../../lib/plugin/pluginRegistry', () => ({
   activatePlugin: activatePluginMock,
+  getPluginRenderProps: (pluginId: string, options: { projectId: string | null; taskId?: string | null }) => ({
+    api: {},
+    context: { pluginId, projectId: options.projectId, taskId: options.taskId ?? null },
+  }),
 }))
 
 function makeViewManifest(pluginId: string = 'test-plugin'): PluginManifest {
@@ -158,6 +163,29 @@ describe('PluginSlot', () => {
     })
   })
 
+  it('resolves lazy plugin component factories and injects API/context props', async () => {
+    const manifest = makeViewManifest()
+    installedPlugins.set(new Map([['test-plugin', { manifest, state: 'active', error: null }]]))
+    enabledPluginIds.set(new Set(['test-plugin']))
+    registerViewComponent(
+      makePluginViewKey('test-plugin', 'main'),
+      () => Promise.resolve({ default: PluginSlotRuntimePropsView })
+    )
+
+    render(PluginSlot, {
+      props: {
+        slotType: 'views',
+        slotId: 'plugin:test-plugin:main',
+        projectId: 'P-1',
+        taskId: 'T-1',
+      },
+    })
+
+    await waitFor(() => {
+      expect(screen.getByTestId('plugin-runtime-props').textContent).toContain('test-plugin:P-1:T-1:T-1:P-1:api')
+    })
+  })
+
   it('shows plugin fallback UI when the rendered plugin view throws', async () => {
     const manifest = makeViewManifest()
     const entry: PluginEntry = {
@@ -209,17 +237,17 @@ describe('PluginSlot', () => {
     const manifest = makeManifestWithContribution({
       settingsSections: [{ id: 'preferences', title: 'Preferences' }],
       sidebarPanels: [{ id: 'inspector', title: 'Inspector', side: 'right' }],
-    })
+    }, 'plugin.settings')
 
-    installedPlugins.set(new Map([['test-plugin', { manifest, state: 'active', error: null }]]))
-    enabledPluginIds.set(new Set(['test-plugin']))
-    registerRenderableContributionComponent('settingsSections', 'test-plugin:preferences', PluginSlotTestView)
-    registerRenderableContributionComponent('sidebarPanels', 'test-plugin:inspector', PluginSlotTestView)
+    installedPlugins.set(new Map([['plugin.settings', { manifest, state: 'active', error: null }]]))
+    enabledPluginIds.set(new Set(['plugin.settings']))
+    registerRenderableContributionComponent('settingsSections', 'plugin.settings:preferences', PluginSlotTestView)
+    registerRenderableContributionComponent('sidebarPanels', 'plugin.settings:inspector', PluginSlotTestView)
 
     const { rerender } = render(PluginSlot, {
       props: {
         slotType: 'settingsSections',
-        slotId: 'test-plugin:preferences',
+        slotId: 'plugin.settings:preferences',
         projectName: 'Project Delta',
       },
     })
@@ -230,7 +258,7 @@ describe('PluginSlot', () => {
 
     await rerender({
       slotType: 'sidebarPanels',
-      slotId: 'test-plugin:inspector',
+      slotId: 'plugin.settings:inspector',
       projectName: 'Project Delta',
     })
 

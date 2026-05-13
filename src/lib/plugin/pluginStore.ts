@@ -1,5 +1,7 @@
 import { writable, get } from 'svelte/store'
-import type { PluginEntry } from './types'
+import { isOpenForgePackageMetadata } from '@openforge/plugin-sdk'
+import type { OpenForgePackageMetadata } from '@openforge/plugin-sdk'
+import type { PluginEntry, PluginManifest } from './types'
 import * as ipc from '../ipc'
 import { resolveContributions } from './contributionResolver'
 
@@ -16,6 +18,38 @@ export const enabledPluginIds = writable<Set<string>>(new Set())
 export const loading = writable<boolean>(false)
 export const error = writable<string | null>(null)
 
+export function parsePackageMetadata(raw: string | null | undefined): OpenForgePackageMetadata | null {
+  if (!raw) return null
+  try {
+    const parsed = JSON.parse(raw)
+    return isOpenForgePackageMetadata(parsed) ? parsed : null
+  } catch {
+    return null
+  }
+}
+
+export function manifestFromPluginRow(row: ipc.NormalizedPluginRow): { manifest: PluginManifest; packageMetadata: OpenForgePackageMetadata | null } {
+  const packageMetadata = parsePackageMetadata(row.packageMetadata)
+  const manifest: PluginManifest = {
+    id: packageMetadata?.id ?? row.id,
+    name: packageMetadata?.displayName ?? row.name,
+    version: row.version,
+    apiVersion: packageMetadata?.apiVersion ?? row.apiVersion,
+    description: packageMetadata?.description ?? row.description,
+    permissions: [],
+    contributes: {},
+    frontend: (packageMetadata?.frontend ?? row.frontendEntry) || null,
+    backend: packageMetadata?.backend ?? row.backendEntry,
+  }
+
+  if (!packageMetadata) {
+    manifest.permissions = JSON.parse(row.permissions)
+    manifest.contributes = JSON.parse(row.contributes)
+  }
+
+  return { manifest, packageMetadata }
+}
+
 export async function loadInstalledPlugins(): Promise<void> {
   loading.set(true)
   error.set(null)
@@ -27,26 +61,20 @@ export async function loadInstalledPlugins(): Promise<void> {
     }
 
     const rows = await listPlugins()
-    installedPlugins.set(new Map(rows.map(row => [
-      row.id,
-      {
-        manifest: {
-          id: row.id,
-          name: row.name,
-          version: row.version,
-          apiVersion: row.apiVersion,
-          description: row.description,
-          permissions: JSON.parse(row.permissions),
-          contributes: JSON.parse(row.contributes),
-          frontend: row.frontendEntry || null,
-          backend: row.backendEntry,
+    installedPlugins.set(new Map(rows.map(row => {
+      const { manifest, packageMetadata } = manifestFromPluginRow(row)
+      return [
+        row.id,
+        {
+          manifest,
+          state: 'installed' as const,
+          error: null,
+          installPath: row.installPath,
+          isBuiltin: row.isBuiltin,
+          packageMetadata,
         },
-        state: 'installed' as const,
-        error: null,
-        installPath: row.installPath,
-        isBuiltin: row.isBuiltin,
-      },
-    ])))
+      ]
+    })))
   } catch (e) {
     error.set(e instanceof Error ? e.message : String(e))
   } finally {

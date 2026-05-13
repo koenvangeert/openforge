@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import { defineBackendPlugin } from '@openforge/plugin-sdk/backend'
-import { defineFrontendPlugin } from '@openforge/plugin-sdk/frontend'
+import { OPENFORGE_FRONTEND_PLUGIN_MARKER, defineFrontendPlugin } from '@openforge/plugin-sdk/frontend'
 
 import type {
   BackendOpenForgeAPI,
@@ -34,6 +34,8 @@ describe('frontend/backend plugin entrypoints', () => {
     await plugin.activate({ views } as unknown as FrontendOpenForgeAPI, { subscriptions } as unknown as FrontendPluginContext)
 
     expect(plugin.activate).toBe(activate)
+    expect(plugin[OPENFORGE_FRONTEND_PLUGIN_MARKER]).toBe(true)
+    expect(Object.keys(plugin)).not.toContain(OPENFORGE_FRONTEND_PLUGIN_MARKER)
     expect(views.register).toHaveBeenCalledWith(expect.objectContaining({ id: 'prs' }))
     expect(subscriptions.add).toHaveBeenCalledWith(expect.objectContaining({ dispose: expect.any(Function) }))
   })

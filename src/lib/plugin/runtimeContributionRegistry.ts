@@ -214,6 +214,8 @@ export function createRuntimeContributionRegistry(options: RuntimeOptions) {
   return new RuntimeContributionRegistry(options)
 }
 
+export type RuntimeContributionRegistryInstance = ReturnType<typeof createRuntimeContributionRegistry>
+
 class RuntimeContributionRegistry {
   private readonly pluginId: string
   private readonly projectId: string | null
@@ -222,6 +224,8 @@ class RuntimeContributionRegistry {
   private readonly storage = createMemoryStorage()
   private readonly frontendSubscriptions = new RuntimeSubscriptionSink()
   private readonly backendSubscriptions = new RuntimeSubscriptionSink()
+  private frontendApi: FrontendOpenForgeAPI | null = null
+  private backendApi: BackendOpenForgeAPI | null = null
   private readonly duplicateKeys = new Set<string>()
   private readonly eventHandlers = new Map<string, Set<RuntimeEventHandler>>()
   private readonly globalEventHandlers = new Map<string, Set<RuntimeEventHandler>>()
@@ -277,7 +281,11 @@ class RuntimeContributionRegistry {
   }
 
   getFrontendApi(): FrontendOpenForgeAPI {
-    return {
+    if (this.frontendApi) {
+      return this.frontendApi
+    }
+
+    this.frontendApi = {
       ...this.createCommonApi(),
       views: {
         register: (registration) => this.registerView(registration),
@@ -298,10 +306,16 @@ class RuntimeContributionRegistry {
         invoke: async (method, payload) => this.invokeBackendMethod(method, payload),
       },
     }
+
+    return this.frontendApi
   }
 
   getBackendApi(): BackendOpenForgeAPI {
-    return {
+    if (this.backendApi) {
+      return this.backendApi
+    }
+
+    this.backendApi = {
       ...this.createCommonApi(),
       backend: {
         registerMethod: (method, registration) => this.registerBackendMethod(method, registration),
@@ -309,6 +323,20 @@ class RuntimeContributionRegistry {
       background: {
         register: (registration) => this.registerBackgroundService(registration),
       },
+    }
+
+    return this.backendApi
+  }
+
+  getContextSnapshot(): OpenForgeContextSnapshot {
+    return { ...this.contextSnapshot }
+  }
+
+  createRenderContextSnapshot(projectId: string | null, taskId: string | null): OpenForgeContextSnapshot {
+    return {
+      ...this.contextSnapshot,
+      projectId,
+      taskId,
     }
   }
 
@@ -345,7 +373,7 @@ class RuntimeContributionRegistry {
       },
       storage: this.storage,
       context: {
-        getSnapshot: () => ({ ...this.contextSnapshot }),
+        getSnapshot: () => this.getContextSnapshot(),
       },
       tasks: {},
       projects: {},

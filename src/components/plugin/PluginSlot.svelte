@@ -1,13 +1,14 @@
 <script lang="ts">
-  import type { Component } from 'svelte'
+  import { onDestroy, type Component } from 'svelte'
   import { get } from 'svelte/store'
   import PluginErrorBoundary from './PluginErrorBoundary.svelte'
   import { enabledPluginIds, installedPlugins } from '../../lib/plugin/pluginStore'
   import { resolveContributions, resolveContributionsForSlot } from '../../lib/plugin/contributionResolver'
   import type { PluginManifest } from '../../lib/plugin/types'
   import { makePluginViewKey } from '../../lib/plugin/types'
-  import { getRegisteredComponent, getRegisteredRenderableComponent } from '../../lib/plugin/componentRegistry'
-  import { activatePlugin } from '../../lib/plugin/pluginRegistry'
+  import { getRegisteredComponent, getRegisteredRenderableComponent, resolvePluginComponent } from '../../lib/plugin/componentRegistry'
+  import type { PluginComponentSource } from '../../lib/plugin/componentRegistry'
+  import { activatePlugin, getPluginRenderProps } from '../../lib/plugin/pluginRegistry'
 
   interface Props {
     slotType: 'views' | 'taskPaneTabs' | 'sidebarPanels' | 'commands' | 'settingsSections' | 'backgroundServices'
@@ -47,7 +48,7 @@
     return baseContributions
   })
 
-  function getContributionComponent(contrib: (typeof slotContributions)[number]): Component<Record<string, unknown>> | undefined {
+  function getContributionComponent(contrib: (typeof slotContributions)[number]): PluginComponentSource<Record<string, unknown>> | undefined {
     if (slotType === 'views') {
       return getRegisteredComponent(makePluginViewKey(contrib.pluginId, contrib.contributionId))
     }
@@ -69,6 +70,10 @@
     renderErrors = next
   }
 
+  onDestroy(() => {
+    activationRunId += 1
+  })
+
   $effect(() => {
     renderedComponents = new Map()
     renderErrors = new Map()
@@ -87,18 +92,22 @@
       for (const contrib of contributions) {
         const viewKey = makePluginViewKey(contrib.pluginId, contrib.contributionId)
 
-        let component = getContributionComponent(contrib)
-        if (!component) {
+        let componentSource = getContributionComponent(contrib)
+        if (!componentSource) {
           await activatePlugin(contrib.pluginId)
-          component = getContributionComponent(contrib)
+          componentSource = getContributionComponent(contrib)
         }
 
         if (runId !== activationRunId) {
           return
         }
 
-        if (component) {
-          nextRenderedComponents.set(viewKey, component)
+        if (componentSource) {
+          try {
+            nextRenderedComponents.set(viewKey, await resolvePluginComponent(componentSource))
+          } catch (error) {
+            nextRenderErrors.set(viewKey, normalizeErrorMessage(error))
+          }
           continue
         }
 
@@ -116,9 +125,6 @@
       renderErrors = nextRenderErrors
     })()
 
-    return () => {
-      activationRunId += 1
-    }
   })
 </script>
 
@@ -143,7 +149,8 @@
             errorMessage={normalizeErrorMessage(error)}
           />
         {/snippet}
-        <Component {taskId} {projectId} {projectName} {projectPath} />
+        {@const renderProps = getPluginRenderProps(contrib.pluginId, { projectId, taskId })}
+        <Component {...renderProps} {taskId} {projectId} {projectName} {projectPath} />
       </svelte:boundary>
     {:else}
       <div data-contribution-id={contrib.contributionId}></div>

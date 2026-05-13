@@ -1,4 +1,5 @@
 import type { Component } from 'svelte'
+import type { OpenForgePackageMetadata, PluginComponentLoader, PluginSettingsSectionProps as SdkPluginSettingsSectionProps, PluginTaskPaneProps as SdkPluginTaskPaneProps, PluginViewProps as SdkPluginViewProps } from '@openforge/plugin-sdk'
 
 export interface PluginStorage {
   get(key: string): Promise<string | null>
@@ -102,27 +103,27 @@ export interface PluginTaskPaneProps extends Record<string, unknown> {
 
 export interface PluginActivatedViewContribution extends Partial<PluginViewContribution> {
   id: string
-  component: Component<Record<string, unknown>>
+  component: Component<SdkPluginViewProps> | PluginComponentLoader<SdkPluginViewProps>
 }
 
 export interface PluginActivatedTaskPaneTabContribution extends Partial<PluginTaskPaneTabContribution> {
   id: string
-  component: Component<Record<string, unknown>>
+  component: Component<SdkPluginTaskPaneProps> | PluginComponentLoader<SdkPluginTaskPaneProps>
 }
 
 export interface PluginActivatedSidebarPanelContribution extends Partial<PluginSidebarPanelContribution> {
   id: string
-  component: Component<Record<string, unknown>>
+  component: Component<Record<string, unknown>> | PluginComponentLoader<Record<string, unknown>>
 }
 
 export interface PluginActivatedSettingsSectionContribution extends Partial<PluginSettingsSection> {
   id: string
-  component: Component<Record<string, unknown>>
+  component: Component<SdkPluginSettingsSectionProps> | PluginComponentLoader<SdkPluginSettingsSectionProps>
 }
 
 export interface PluginActivatedCommandContribution extends Partial<PluginCommandContribution> {
   id: string
-  execute(payload?: unknown): Promise<void> | void
+  execute(payload?: unknown): Promise<unknown> | unknown
 }
 
 export interface PluginActivatedBackgroundService extends Partial<PluginBackgroundService> {
@@ -150,6 +151,7 @@ export interface PluginEntry {
   error: string | null
   installPath?: string
   isBuiltin?: boolean
+  packageMetadata?: OpenForgePackageMetadata | null
 }
 
 export const MAX_SUPPORTED_API_VERSION = 1
