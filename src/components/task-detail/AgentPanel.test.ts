@@ -161,7 +161,7 @@ describe('AgentPanel (router)', () => {
     expect(screen.getByText('opencode --session oc-sess-1')).toBeTruthy()
   })
 
-  it('renders Claude panel for claude-code provider session', () => {
+  it('routes claude-code provider sessions through the shared terminal shell', () => {
     const session: AgentSession = {
       id: 'ses-1',
       ticket_id: 'T-1',
@@ -182,12 +182,11 @@ describe('AgentPanel (router)', () => {
     activeSessions.set(sessions)
 
     render(AgentPanel, { props: { taskId: 'T-1' } })
-    // ClaudeAgentPanel uses uppercase status and "// " prefixed stage labels
     expect(screen.getByText('RUNNING')).toBeTruthy()
     expect(screen.getByText('claude --resume claude-sess-1')).toBeTruthy()
   })
 
-  it('renders Pi panel for pi provider session', () => {
+  it('routes pi provider sessions through the shared terminal shell', () => {
     const session: AgentSession = {
       id: 'ses-1',
       ticket_id: 'T-1',
