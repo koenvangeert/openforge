@@ -53,6 +53,7 @@ jobs:
         uses: swatinem/rust-cache@v2
         with:
           workspaces: ${{ steps.backend-layout.outputs.backend-crate-root }} -> target
+          cache-bin: false
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
