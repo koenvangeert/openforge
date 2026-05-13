@@ -3,6 +3,7 @@
   import { prOverviewComments } from '../../../lib/stores'
   import { getPrOverviewComments } from '../../../lib/ipc'
   import { timeAgo, timeAgoFromSeconds } from '../../../lib/timeAgo'
+  import { getGitHubMarkdownImageBaseUrl } from '../../../lib/githubMarkdown'
   import type { ReviewPullRequest, PrOverviewComment } from '../../../lib/types'
   import MarkdownContent from '../../shared/content/MarkdownContent.svelte'
 
@@ -15,7 +16,7 @@
   let isLoading = $state(false)
   let error = $state<string | null>(null)
 
-  const markdownImageBaseUrl = $derived(`https://raw.githubusercontent.com/${pr.repo_owner}/${pr.repo_name}/${pr.head_sha}/`)
+  const markdownImageBaseUrl = $derived(getGitHubMarkdownImageBaseUrl(pr))
 
   async function loadComments() {
     isLoading = true

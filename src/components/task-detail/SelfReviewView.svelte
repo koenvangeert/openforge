@@ -7,6 +7,7 @@
   import { createCommentSelection } from '../../lib/useCommentSelection.svelte'
   import { prCommentsToReviewComments } from '../../lib/diffComments'
   import { getTaskReviewPaneState, updateTaskReviewPaneState } from '../../lib/taskReviewPaneState'
+  import { getGitHubMarkdownImageBaseUrl } from '../../lib/githubMarkdown'
 
   import type { Task, PrFileDiff, ReviewSubmissionComment } from '../../lib/types'
   import type { FileContents } from '../../lib/diffAdapter'
@@ -59,6 +60,7 @@
   let inlineReviewComments = $derived(prCommentsToReviewComments(diffLoader.prComments))
   let pendingInlineComments = $derived(selfReviewState?.pendingInlineComments ?? [])
   let visibleComments = $derived(showAddressed ? diffLoader.prComments : commentSelection.unaddressedComments)
+  let markdownImageBaseUrl = $derived(getGitHubMarkdownImageBaseUrl(diffLoader.linkedPr))
 
   let hasAutoOpened = false
   $effect(() => {
@@ -367,7 +369,7 @@
                                 </div>
                               {/if}
                               <div class="text-sm text-base-content leading-relaxed [&_.markdown-body]:text-sm [&_.markdown-body_pre]:text-xs [&_.markdown-body_code]:text-xs [&_.markdown-body_p]:my-1.5">
-                                <MarkdownContent content={comment.body} />
+                                <MarkdownContent content={comment.body} imageBaseUrl={markdownImageBaseUrl} />
                               </div>
                               {#if comment.addressed === 0}
                                 <button

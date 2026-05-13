@@ -523,11 +523,11 @@ describe("SelfReviewView — hide addressed comments", () => {
 		vi.clearAllMocks();
 	});
 
-	const makeComment = (id: number, addressed: number): PrComment => ({
+	const makeComment = (id: number, addressed: number, body = `Comment ${id}`): PrComment => ({
 		id,
 		pr_id: 1,
 		author: "alice",
-		body: `Comment ${id}`,
+		body,
 		comment_type: "review_comment",
 		file_path: "src/main.rs",
 		line_number: 10,
@@ -556,6 +556,26 @@ describe("SelfReviewView — hide addressed comments", () => {
 		is_queued: false,
 		unaddressed_comment_count: 0,
 	};
+
+	it("resolves relative PR comment image sources against the linked PR head commit", async () => {
+		vi.mocked(getPrComments).mockResolvedValue([
+			makeComment(1, 0, "![Screenshot](docs/review.png)"),
+		]);
+		ticketPrs.set(new Map([["task-1", [mockPr]]]));
+		vi.mocked(getTaskDiff).mockResolvedValue([baseDiff]);
+
+		const { container } = render(SelfReviewView, {
+			props: {
+				task: baseTask,
+				agentStatus: null,
+				onSendToAgent: vi.fn(),
+			},
+		});
+
+		await waitFor(() => {
+			expect(container.querySelector("img")?.getAttribute("src")).toBe("https://raw.githubusercontent.com/acme/repo/abc/docs/review.png");
+		});
+	});
 
 	it("addressed comments hidden by default", async () => {
 		const comments = [
