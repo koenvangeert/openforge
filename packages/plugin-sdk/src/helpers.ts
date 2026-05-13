@@ -1,19 +1,13 @@
-import type { PluginCommandContribution, PluginContributionPoints, PluginViewContribution } from './types'
+import type { OpenForgePackageMetadata, OpenForgePluginCapability } from './types'
 
-export function isPluginViewContribution(contribution: unknown): contribution is PluginViewContribution {
-  return typeof contribution === 'object' && contribution !== null
-    && 'id' in contribution && 'title' in contribution && 'icon' in contribution
+export function getRequiredOpenForgeCapabilities(metadata: OpenForgePackageMetadata): OpenForgePluginCapability[] {
+  return metadata.requires ?? []
 }
 
-export function isPluginCommandContribution(contribution: unknown): contribution is PluginCommandContribution {
-  return typeof contribution === 'object' && contribution !== null
-    && 'id' in contribution && 'title' in contribution
+export function hasFrontendEntry(metadata: OpenForgePackageMetadata): boolean {
+  return typeof metadata.frontend === 'string' && metadata.frontend.length > 0
 }
 
-export function getViewContributions(contributes: PluginContributionPoints | undefined): PluginViewContribution[] {
-  return contributes?.views ?? []
-}
-
-export function getCommandContributions(contributes: PluginContributionPoints | undefined): PluginCommandContribution[] {
-  return contributes?.commands ?? []
+export function hasBackendEntry(metadata: OpenForgePackageMetadata): boolean {
+  return typeof metadata.backend === 'string' && metadata.backend.length > 0
 }

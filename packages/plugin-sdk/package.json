@@ -6,6 +6,9 @@
   "types": "src/index.ts",
   "exports": {
     ".": "./src/index.ts",
+    "./frontend": "./src/frontend.ts",
+    "./backend": "./src/backend.ts",
+    "./package-metadata-schema.json": "./src/openforgePackageMetadataSchema.json",
     "./domain": "./src/domain.ts",
     "./markdown": "./src/markdown.ts",
     "./numberParsing": "./src/numberParsing.ts",

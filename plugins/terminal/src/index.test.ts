@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { validatePluginManifest } from '@openforge/plugin-sdk'
+import { validatePluginManifest } from '../../../src/lib/plugin/manifest'
 import manifest from '../manifest.json'
 
 const terminalSrcDir = dirname(fileURLToPath(import.meta.url))

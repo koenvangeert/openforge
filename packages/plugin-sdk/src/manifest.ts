@@ -1,248 +1,140 @@
-import contributionSchemaData from './manifestContributionSchema.json'
-import type { PluginManifest } from './types'
-import { MAX_SUPPORTED_API_VERSION } from './types'
+import packageMetadataSchemaData from './openforgePackageMetadataSchema.json'
+import type { OpenForgePackageMetadata, OpenForgePluginCapability, ValidationError } from './types'
+import { SUPPORTED_OPENFORGE_API_VERSIONS } from './types'
 
-export interface ValidationError {
-  path: string
-  message: string
-}
+export const OPENFORGE_PACKAGE_METADATA_SCHEMA = packageMetadataSchemaData
 
-type ContributionFieldKind = 'nonEmptyString' | 'icon' | 'number' | 'shortcut' | 'enum'
+export const OPENFORGE_PLUGIN_CAPABILITIES = [
+  'commands',
+  'events',
+  'views',
+  'taskPane',
+  'settings',
+  'background',
+  'backend',
+  'storage',
+  'context',
+  'tasks',
+  'projects',
+  'fs',
+  'shell',
+  'notifications',
+  'attention',
+  'system.openUrl',
+  'config',
+  'projectConfig',
+] as const satisfies readonly OpenForgePluginCapability[]
 
-interface ContributionFieldSpec {
-  kind: ContributionFieldKind
-  required?: boolean
-  values?: string[]
-}
-
-interface ContributionPointSpec {
-  fields: Record<string, ContributionFieldSpec>
-}
-
-interface ManifestContributionSchema {
-  allowedIconKeys: string[]
-  shortcutPattern: string
-  contributionPoints: Record<string, ContributionPointSpec>
-}
-
-const contributionSchema = contributionSchemaData as ManifestContributionSchema
-const shortcutRegex = new RegExp(contributionSchema.shortcutPattern)
-
-export const ALLOWED_ICON_KEYS: ReadonlySet<string> = new Set(contributionSchema.allowedIconKeys)
-
-export function isValidShortcutFormat(shortcut: string): boolean {
-  return shortcutRegex.test(shortcut)
-}
-
-export function normalizeShortcut(shortcut: string): string {
-  let result = ''
-  const parts = shortcut.split('+')
-  const key = parts[parts.length - 1]
-  const modifiers = parts.slice(0, -1)
-
-  if (modifiers.includes('Cmd')) result += '⌘'
-  if (modifiers.includes('Ctrl')) result += '⌃'
-  if (modifiers.includes('Alt')) result += '⌥'
-  if (modifiers.includes('Shift')) result += '⇧'
-
-  result += key.toLowerCase()
-  return result
-}
+const CAPABILITIES = new Set<string>(OPENFORGE_PLUGIN_CAPABILITIES)
 
 function isString(value: unknown): value is string {
   return typeof value === 'string'
 }
 
-function isNumber(value: unknown): value is number {
-  return typeof value === 'number'
-}
-
-function isArray(value: unknown): value is unknown[] {
-  return Array.isArray(value)
+function isNonEmptyString(value: unknown): value is string {
+  return isString(value) && value.length > 0
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
 }
 
-function getRequiredStringError(path: string): ValidationError {
-  return { path, message: 'Required string' }
+function validateRequiredString(value: unknown, path: string): ValidationError[] {
+  if (!isNonEmptyString(value)) {
+    return [{ path, message: 'Required string' }]
+  }
+  return []
 }
 
-function validateNonEmptyString(value: unknown, path: string, required: boolean): ValidationError[] {
+function validateOptionalString(value: unknown, path: string): ValidationError[] {
   if (value === undefined) {
-    return required ? [getRequiredStringError(path)] : []
+    return []
+  }
+  if (!isNonEmptyString(value)) {
+    return [{ path, message: 'Must be a non-empty string' }]
+  }
+  return []
+}
+
+export function isSupportedOpenForgeApiVersion(apiVersion: unknown): apiVersion is (typeof SUPPORTED_OPENFORGE_API_VERSIONS)[number] {
+  return typeof apiVersion === 'number'
+    && Number.isInteger(apiVersion)
+    && (SUPPORTED_OPENFORGE_API_VERSIONS as readonly number[]).includes(apiVersion)
+}
+
+function validateApiVersion(value: unknown): ValidationError[] {
+  if (typeof value !== 'number' || !Number.isInteger(value)) {
+    return [{ path: 'apiVersion', message: 'Required integer' }]
   }
 
-  if (!isString(value) || !value) {
-    return [required ? getRequiredStringError(path) : { path, message: 'Must be a string' }]
+  if (!isSupportedOpenForgeApiVersion(value)) {
+    return [{ path: 'apiVersion', message: `API version ${value} not supported (supported: ${SUPPORTED_OPENFORGE_API_VERSIONS.join(', ')})` }]
   }
 
   return []
 }
 
-function validateIcon(value: unknown, path: string, required: boolean): ValidationError[] {
-  const errors = validateNonEmptyString(value, path, required)
-  if (errors.length > 0 || value === undefined) {
-    return errors
-  }
-
-  if (!ALLOWED_ICON_KEYS.has(value as string)) {
-    return [{ path, message: `Icon key "${value as string}" not allowed` }]
-  }
-
-  return []
-}
-
-function validateNumber(value: unknown, path: string, required: boolean): ValidationError[] {
-  if (value === undefined) {
-    return required ? [{ path, message: 'Required number' }] : []
-  }
-
-  if (!isNumber(value)) {
-    return [{ path, message: 'Must be a number' }]
-  }
-
-  return []
-}
-
-function validateShortcut(value: unknown, path: string, required: boolean): ValidationError[] {
-  if (value === undefined) {
-    return required ? [getRequiredStringError(path)] : []
-  }
-
-  if (!isString(value)) {
-    return [{ path, message: 'Must be a string' }]
-  }
-
-  if (!isValidShortcutFormat(value)) {
-    return [{ path, message: 'Invalid shortcut format' }]
-  }
-
-  return []
-}
-
-function validateEnum(value: unknown, path: string, required: boolean, values: string[] | undefined): ValidationError[] {
-  if (value === undefined) {
-    return required ? [getRequiredStringError(path)] : []
-  }
-
-  if (!isString(value) || !values?.includes(value)) {
-    return [{ path, message: values === undefined ? 'Invalid value' : `Must be ${values.map((option) => `"${option}"`).join(' or ')}` }]
-  }
-
-  return []
-}
-
-function validateContributionField(value: unknown, path: string, spec: ContributionFieldSpec): ValidationError[] {
-  const required = spec.required === true
-
-  switch (spec.kind) {
-    case 'nonEmptyString':
-      return validateNonEmptyString(value, path, required)
-    case 'icon':
-      return validateIcon(value, path, required)
-    case 'number':
-      return validateNumber(value, path, required)
-    case 'shortcut':
-      return validateShortcut(value, path, required)
-    case 'enum':
-      return validateEnum(value, path, required, spec.values)
-  }
-}
-
-function validateContributionArray(value: unknown, path: string, spec: ContributionPointSpec): ValidationError[] {
+function validateRequires(value: unknown): ValidationError[] {
   const errors: ValidationError[] = []
 
-  if (!isArray(value)) {
-    errors.push({ path, message: 'Must be an array' })
+  if (value === undefined) {
     return errors
+  }
+
+  if (!Array.isArray(value)) {
+    return [{ path: 'requires', message: 'Must be an array' }]
   }
 
   value.forEach((item, index) => {
-    const itemPath = `${path}[${index}]`
-    if (!isObject(item)) {
-      errors.push({ path: itemPath, message: 'Must be an object' })
+    const path = `requires[${index}]`
+    if (!isString(item)) {
+      errors.push({ path, message: 'Must be a string' })
       return
     }
 
-    Object.entries(spec.fields).forEach(([fieldName, fieldSpec]) => {
-      errors.push(...validateContributionField(item[fieldName], `${itemPath}.${fieldName}`, fieldSpec))
-    })
-  })
-
-  return errors
-}
-
-function validateContributionPoints(contributes: unknown): ValidationError[] {
-  const errors: ValidationError[] = []
-
-  if (!isObject(contributes)) {
-    errors.push({ path: 'contributes', message: 'Must be an object' })
-    return errors
-  }
-
-  Object.entries(contributionSchema.contributionPoints).forEach(([contributionName, contributionSpec]) => {
-    const value = contributes[contributionName]
-    if (value !== undefined) {
-      errors.push(...validateContributionArray(value, `contributes.${contributionName}`, contributionSpec))
+    if (!CAPABILITIES.has(item)) {
+      errors.push({ path, message: `Unknown OpenForge capability "${item}"` })
     }
   })
 
   return errors
 }
 
-export function validatePluginManifest(data: unknown): ValidationError[] {
+export function validateOpenForgePackageMetadata(data: unknown): ValidationError[] {
   const errors: ValidationError[] = []
 
   if (!isObject(data)) {
-    errors.push({ path: '', message: 'Manifest must be an object' })
-    return errors
+    return [{ path: '', message: 'OpenForge package metadata must be an object' }]
   }
 
-  if (!isString(data.id) || !data.id) {
-    errors.push({ path: 'id', message: 'Required string' })
-  }
-
-  if (!isString(data.name) || !data.name) {
-    errors.push({ path: 'name', message: 'Required string' })
-  }
-
-  if (!isString(data.version) || !data.version) {
-    errors.push({ path: 'version', message: 'Required string' })
-  }
-
-  if (!isNumber(data.apiVersion)) {
-    errors.push({ path: 'apiVersion', message: 'Required number' })
-  } else if (data.apiVersion > MAX_SUPPORTED_API_VERSION) {
-    errors.push({ path: 'apiVersion', message: `API version ${data.apiVersion} not supported (max: ${MAX_SUPPORTED_API_VERSION})` })
-  }
-
-  if (!isString(data.description) || !data.description) {
-    errors.push({ path: 'description', message: 'Required string' })
-  }
-
-  if (data.permissions !== undefined && !isArray(data.permissions)) {
-    errors.push({ path: 'permissions', message: 'Must be an array' })
-  }
+  errors.push(...validateRequiredString(data.id, 'id'))
+  errors.push(...validateApiVersion(data.apiVersion))
+  errors.push(...validateRequiredString(data.displayName, 'displayName'))
+  errors.push(...validateRequiredString(data.description, 'description'))
+  errors.push(...validateOptionalString(data.icon, 'icon'))
+  errors.push(...validateOptionalString(data.frontend, 'frontend'))
+  errors.push(...validateOptionalString(data.backend, 'backend'))
+  errors.push(...validateRequires(data.requires))
 
   if (data.contributes !== undefined) {
-    errors.push(...validateContributionPoints(data.contributes))
+    errors.push({ path: 'contributes', message: 'Manifest contribution arrays are not supported; register contributions at runtime' })
   }
 
-  if (data.frontend === undefined) {
-    errors.push({ path: 'frontend', message: 'Required string or null' })
-  } else if (data.frontend !== null && (!isString(data.frontend) || !data.frontend)) {
-    errors.push({ path: 'frontend', message: 'Must be a non-empty string or null' })
-  }
-
-  if (data.backend !== undefined && data.backend !== null && !isString(data.backend)) {
-    errors.push({ path: 'backend', message: 'Must be a string or null' })
+  for (const key of Object.keys(data)) {
+    if (!Object.prototype.hasOwnProperty.call(OPENFORGE_PACKAGE_METADATA_SCHEMA.properties, key)) {
+      if (key !== 'contributes') {
+        errors.push({ path: key, message: 'Unknown OpenForge package metadata field' })
+      }
+    }
   }
 
   return errors
 }
 
-export function isPluginManifest(data: unknown): data is PluginManifest {
-  return validatePluginManifest(data).length === 0
+export const validatePluginPackageMetadata = validateOpenForgePackageMetadata
+
+export function isOpenForgePackageMetadata(data: unknown): data is OpenForgePackageMetadata {
+  return validateOpenForgePackageMetadata(data).length === 0
 }
+
+export const isPluginPackageMetadata = isOpenForgePackageMetadata

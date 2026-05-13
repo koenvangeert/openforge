@@ -1,4 +1,4 @@
-import type { PluginContext } from '@openforge/plugin-sdk'
+import type { PluginContext } from '../../../src/lib/plugin/types'
 
 let pluginContext: PluginContext | null = null
 
