@@ -124,6 +124,36 @@ describe('runtime contribution registry', () => {
     expect(registry.getSnapshot().commands).toEqual([])
   })
 
+  it('allows multiple local event listeners for the same event and disposes them independently', async () => {
+    const registry = makeRegistry()
+    const frontend = registry.getFrontendApi()
+    const firstHandler = vi.fn()
+    const secondHandler = vi.fn()
+
+    const firstDisposable = frontend.events.on('sync.finished', firstHandler)
+    const secondDisposable = frontend.events.on('sync.finished', secondHandler)
+
+    await frontend.events.emit('sync.finished', { synced: 1 })
+
+    expect(firstHandler).toHaveBeenCalledWith({ synced: 1 })
+    expect(secondHandler).toHaveBeenCalledWith({ synced: 1 })
+
+    await firstDisposable.dispose()
+    await firstDisposable.dispose()
+    await frontend.events.emit('sync.finished', { synced: 2 })
+
+    expect(firstHandler).toHaveBeenCalledTimes(1)
+    expect(secondHandler).toHaveBeenCalledTimes(2)
+    expect(secondHandler).toHaveBeenLastCalledWith({ synced: 2 })
+
+    await secondDisposable.dispose()
+    await secondDisposable.dispose()
+    await frontend.events.emit('sync.finished', { synced: 3 })
+
+    expect(firstHandler).toHaveBeenCalledTimes(1)
+    expect(secondHandler).toHaveBeenCalledTimes(2)
+  })
+
   it('rejects reserved openforge.* plugin-local registrations while allowing explicit global host listeners', () => {
     const registry = makeRegistry()
     const frontend = registry.getFrontendApi()

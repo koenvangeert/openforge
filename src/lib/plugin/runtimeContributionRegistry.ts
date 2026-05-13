@@ -232,6 +232,7 @@ class RuntimeContributionRegistry {
   private readonly eventListeners = new Map<string, RuntimeEventListenerContribution>()
   private readonly backendMethods = new Map<string, RuntimeBackendMethodContribution>()
   private readonly backgroundServices = new Map<string, RuntimeBackgroundServiceContribution>()
+  private eventListenerSequence = 0
 
   constructor(options: RuntimeOptions) {
     assertLocalId('backend', options.pluginId)
@@ -339,7 +340,7 @@ class RuntimeContributionRegistry {
       events: {
         on: <TPayload>(event: string, handler: (payload: TPayload) => void) => this.registerEventListener(event, handler as RuntimeEventHandler, false),
         onGlobal: <TPayload>(qualifiedEvent: string, handler: (payload: TPayload) => void) => this.registerEventListener(qualifiedEvent, handler as RuntimeEventHandler, true),
-        emit: async <TPayload>(event: string, payload: TPayload) => this.emitEvent(qualifyLocalContributionId(this.pluginId, event), payload),
+        emit: async <TPayload>(event: string, payload: TPayload) => this.emitEvent(this.qualifiedId('events', event), payload),
         emitGlobal: async <TPayload>(qualifiedEvent: string, payload: TPayload) => this.emitEvent(qualifiedEvent, payload),
       },
       storage: this.storage,
@@ -407,10 +408,6 @@ class RuntimeContributionRegistry {
 
   private registerEventListener(event: string, handler: RuntimeEventHandler, global: boolean): Disposable {
     const qualifiedId = global ? event : this.qualifiedId('events', event)
-    if (!global) {
-      assertLocalId('events', event)
-      this.claim('events', qualifiedId)
-    }
     if (!isNonEmptyString(qualifiedId)) {
       throw new RuntimeValidationError('events', 'requires a non-empty id')
     }
@@ -429,8 +426,9 @@ class RuntimeContributionRegistry {
       handler,
       global,
     }
+    const listenerKey = `${qualifiedId}#${++this.eventListenerSequence}`
     if (!global) {
-      this.eventListeners.set(qualifiedId, contribution)
+      this.eventListeners.set(listenerKey, contribution)
     }
 
     return createDisposable(() => {
@@ -439,8 +437,7 @@ class RuntimeContributionRegistry {
         target.delete(qualifiedId)
       }
       if (!global) {
-        this.eventListeners.delete(qualifiedId)
-        this.release('events', qualifiedId)
+        this.eventListeners.delete(listenerKey)
       }
     })
   }
