@@ -10,6 +10,7 @@
     getAgentSessionStatusBadgeClass,
     getAgentStageLabel,
     getAgentStatusText,
+    hydrateAgentTerminalPtyInstance,
     markAgentTerminalExited,
     syncAgentPanelStatusFromSession,
     writeAgentTerminalTranscription,
@@ -141,6 +142,10 @@
       taskId,
       setStatus: (nextStatus) => { status = nextStatus },
       onRunning: () => { syncStatusFromSession('running') },
+      onPtyInstanceId: (ptyInstanceId) => {
+        hydrateAgentTerminalPtyInstance(taskId, ptyInstanceId)
+        terminalActive = true
+      },
     }))
   })
 

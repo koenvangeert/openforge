@@ -161,6 +161,7 @@ describe('AgentPanel (router)', () => {
     activeSessions.set(sessions)
 
     render(AgentPanel, { props: { taskId: 'T-1' } })
+    expect(screen.getByTestId('opencode-agent-panel')).toBeTruthy()
     expect(screen.getByText('Implementing')).toBeTruthy()
     expect(screen.getByText('running')).toBeTruthy()
     expect(screen.getByText('opencode --session oc-sess-1')).toBeTruthy()
@@ -273,7 +274,7 @@ describe('AgentPanel starting animation', () => {
   })
 })
 
-describe('OpenCodeAgentPanel (via router)', () => {
+describe('OpenCode shared shell (via router)', () => {
   beforeEach(() => {
     activeSessions.set(new Map())
     listenCallbacks.clear()

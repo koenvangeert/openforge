@@ -20,6 +20,7 @@ interface AgentStatusChangedHandlerOptions {
   taskId: string
   setStatus: (status: AgentPanelStatus) => void
   onRunning?: () => void
+  onPtyInstanceId?: (ptyInstanceId: number) => void
 }
 
 export function getAgentPanelStatusFromSessionStatus(sessionStatus: string | null | undefined): AgentPanelStatus {
@@ -47,6 +48,7 @@ export function createAgentStatusChangedHandler({
   taskId,
   setStatus,
   onRunning,
+  onPtyInstanceId,
 }: AgentStatusChangedHandlerOptions): (event: AgentStatusChangedEvent) => void {
   return (event) => {
     if (!isAgentStatusChangedPayload(event.payload)) return
@@ -56,6 +58,9 @@ export function createAgentStatusChangedHandler({
     if (nextStatus === 'idle') return
 
     setStatus(nextStatus)
+    if (typeof event.payload.pty_instance_id === 'number') {
+      onPtyInstanceId?.(event.payload.pty_instance_id)
+    }
     if (nextStatus === 'running') {
       onRunning?.()
     }
