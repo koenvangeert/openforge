@@ -740,6 +740,9 @@ CREATE TABLE IF NOT EXISTS plugins (
     frontend_entry TEXT NOT NULL,
     backend_entry TEXT,
     install_path TEXT NOT NULL,
+    source_kind TEXT NOT NULL DEFAULT 'legacy',
+    source_spec TEXT NOT NULL DEFAULT '',
+    package_metadata TEXT NOT NULL DEFAULT '{}',
     installed_at INTEGER NOT NULL DEFAULT (unixepoch()),
     is_builtin INTEGER NOT NULL DEFAULT 0
 );
@@ -1017,6 +1020,9 @@ CREATE TABLE IF NOT EXISTS plugins (
     frontend_entry TEXT NOT NULL,
     backend_entry TEXT,
     install_path TEXT NOT NULL,
+    source_kind TEXT NOT NULL DEFAULT 'legacy',
+    source_spec TEXT NOT NULL DEFAULT '',
+    package_metadata TEXT NOT NULL DEFAULT '{}',
     installed_at INTEGER NOT NULL DEFAULT (unixepoch()),
     is_builtin INTEGER NOT NULL DEFAULT 0
 );
@@ -1036,6 +1042,30 @@ CREATE TABLE IF NOT EXISTS plugin_storage (
 );
          "#,
     )?;
+
+    for (column, sql) in [
+        (
+            "source_kind",
+            "ALTER TABLE plugins ADD COLUMN source_kind TEXT NOT NULL DEFAULT 'legacy'",
+        ),
+        (
+            "source_spec",
+            "ALTER TABLE plugins ADD COLUMN source_spec TEXT NOT NULL DEFAULT ''",
+        ),
+        (
+            "package_metadata",
+            "ALTER TABLE plugins ADD COLUMN package_metadata TEXT NOT NULL DEFAULT '{}'",
+        ),
+    ] {
+        let exists: bool = conn.query_row(
+            "SELECT COUNT(*) > 0 FROM pragma_table_info('plugins') WHERE name = ?1",
+            [column],
+            |row| row.get(0),
+        )?;
+        if !exists {
+            conn.execute(sql, [])?;
+        }
+    }
 
     Ok(())
 }

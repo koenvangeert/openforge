@@ -298,6 +298,8 @@ describe('Electron backend bridge command forwarding', () => {
     expect(isSidecarBackedCommand('install_plugin')).toBe(true)
     expect(isSidecarBackedCommand('install_plugin_from_local')).toBe(true)
     expect(isSidecarBackedCommand('install_plugin_from_npm')).toBe(true)
+    expect(isSidecarBackedCommand('install_plugin_from_git')).toBe(true)
+    expect(isSidecarBackedCommand('install_plugin_from_source')).toBe(true)
     expect(isSidecarBackedCommand('uninstall_plugin')).toBe(true)
     expect(isSidecarBackedCommand('get_plugin')).toBe(true)
     expect(isSidecarBackedCommand('list_plugins')).toBe(true)

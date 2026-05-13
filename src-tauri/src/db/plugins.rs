@@ -14,6 +14,9 @@ pub struct PluginRow {
     pub frontend_entry: String,
     pub backend_entry: Option<String>,
     pub install_path: String,
+    pub source_kind: String,
+    pub source_spec: String,
+    pub package_metadata: String,
     pub installed_at: i64,
     pub is_builtin: bool,
 }
@@ -25,8 +28,9 @@ impl super::Database {
         conn.execute(
             "INSERT INTO plugins
                 (id, name, version, api_version, description, permissions, contributes,
-                 frontend_entry, backend_entry, install_path, installed_at, is_builtin)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
+                 frontend_entry, backend_entry, install_path, source_kind, source_spec,
+                 package_metadata, installed_at, is_builtin)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
              ON CONFLICT(id) DO UPDATE SET
                 name = excluded.name,
                 version = excluded.version,
@@ -37,6 +41,9 @@ impl super::Database {
                 frontend_entry = excluded.frontend_entry,
                 backend_entry = excluded.backend_entry,
                 install_path = excluded.install_path,
+                source_kind = excluded.source_kind,
+                source_spec = excluded.source_spec,
+                package_metadata = excluded.package_metadata,
                 installed_at = excluded.installed_at,
                 is_builtin = excluded.is_builtin",
             rusqlite::params![
@@ -50,6 +57,9 @@ impl super::Database {
                 plugin.frontend_entry,
                 plugin.backend_entry,
                 plugin.install_path,
+                plugin.source_kind,
+                plugin.source_spec,
+                plugin.package_metadata,
                 plugin.installed_at,
                 plugin.is_builtin as i64,
             ],
@@ -69,7 +79,8 @@ impl super::Database {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
             "SELECT id, name, version, api_version, description, permissions, contributes,
-                    frontend_entry, backend_entry, install_path, installed_at, is_builtin
+                    frontend_entry, backend_entry, install_path, source_kind, source_spec,
+                    package_metadata, installed_at, is_builtin
              FROM plugins WHERE id = ?1",
         )?;
         let mut rows = stmt.query_map([plugin_id], row_to_plugin)?;
@@ -84,7 +95,8 @@ impl super::Database {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
             "SELECT id, name, version, api_version, description, permissions, contributes,
-                    frontend_entry, backend_entry, install_path, installed_at, is_builtin
+                    frontend_entry, backend_entry, install_path, source_kind, source_spec,
+                    package_metadata, installed_at, is_builtin
              FROM plugins ORDER BY name ASC",
         )?;
         let rows = stmt.query_map([], row_to_plugin)?;
@@ -119,7 +131,7 @@ impl super::Database {
         let mut stmt = conn.prepare(
             "SELECT p.id, p.name, p.version, p.api_version, p.description, p.permissions,
                     p.contributes, p.frontend_entry, p.backend_entry, p.install_path,
-                    p.installed_at, p.is_builtin
+                    p.source_kind, p.source_spec, p.package_metadata, p.installed_at, p.is_builtin
              FROM plugins p
              JOIN project_plugins pp ON pp.plugin_id = p.id
              WHERE pp.project_id = ?1 AND pp.enabled = 1
@@ -183,8 +195,11 @@ fn row_to_plugin(row: &rusqlite::Row<'_>) -> rusqlite::Result<PluginRow> {
         frontend_entry: row.get(7)?,
         backend_entry: row.get(8)?,
         install_path: row.get(9)?,
-        installed_at: row.get(10)?,
-        is_builtin: row.get::<_, i64>(11)? != 0,
+        source_kind: row.get(10)?,
+        source_spec: row.get(11)?,
+        package_metadata: row.get(12)?,
+        installed_at: row.get(13)?,
+        is_builtin: row.get::<_, i64>(14)? != 0,
     })
 }
 
@@ -205,6 +220,9 @@ mod tests {
             frontend_entry: "index.js".to_string(),
             backend_entry: None,
             install_path: "/tmp/plugin".to_string(),
+            source_kind: "legacy".to_string(),
+            source_spec: "".to_string(),
+            package_metadata: "{}".to_string(),
             installed_at: 0,
             is_builtin: false,
         }
@@ -218,6 +236,23 @@ mod tests {
         let got = db.get_plugin("p1").unwrap().expect("plugin should exist");
         assert_eq!(got.id, "p1");
         assert_eq!(got.name, "Plugin p1");
+    }
+
+    #[test]
+    fn install_and_get_plugin_persists_package_source_metadata() {
+        let (db, _tmp) = make_test_db("plugins_install_metadata");
+        let mut plugin = sample_plugin("pkg");
+        plugin.source_kind = "npm".to_string();
+        plugin.source_spec = "npm:@acme/openforge-plugin@1.2.3".to_string();
+        plugin.package_metadata =
+            r#"{"id":"pkg","apiVersion":1,"displayName":"Pkg","description":"Plugin"}"#.to_string();
+
+        db.install_plugin(&plugin).unwrap();
+
+        let got = db.get_plugin("pkg").unwrap().expect("plugin should exist");
+        assert_eq!(got.source_kind, "npm");
+        assert_eq!(got.source_spec, "npm:@acme/openforge-plugin@1.2.3");
+        assert_eq!(got.package_metadata, plugin.package_metadata);
     }
 
     #[test]

@@ -1,100 +1,130 @@
 use crate::db;
 use regex::Regex;
 use serde::Deserialize;
-use serde_json::Value;
-use std::collections::BTreeMap;
+use serde_json::{Map, Value};
 use std::fs;
 use std::path::{Component, Path, PathBuf};
+use std::sync::OnceLock;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::process::Command;
 
 const NPM_PATH_ENV: &str = "OPENFORGE_NPM_PATH";
-const CONTRIBUTION_SCHEMA_JSON: &str =
-    include_str!("../../packages/plugin-sdk/src/manifestContributionSchema.json");
+const GIT_PATH_ENV: &str = "OPENFORGE_GIT_PATH";
+const OPENFORGE_PACKAGE_METADATA_SCHEMA_JSON: &str =
+    include_str!("../../packages/plugin-sdk/src/openforgePackageMetadataSchema.json");
+const SUPPORTED_API_VERSION: i64 = 1;
 
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct ManifestContributionSchema {
-    allowed_icon_keys: Vec<String>,
-    shortcut_pattern: String,
-    contribution_points: BTreeMap<String, ContributionPointSpec>,
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum PackageSourceSpec {
+    Local {
+        path: PathBuf,
+        spec: String,
+    },
+    Npm {
+        package_spec: String,
+        spec: String,
+    },
+    Git {
+        repo: String,
+        reference: Option<String>,
+        spec: String,
+    },
 }
 
-#[derive(Debug, Deserialize)]
-struct ContributionPointSpec {
-    fields: BTreeMap<String, ContributionFieldSpec>,
-}
+impl PackageSourceSpec {
+    fn parse(raw_spec: &str) -> Result<Self, String> {
+        let spec = raw_spec.trim();
+        if spec.is_empty() {
+            return Err("plugin package source spec cannot be empty".to_string());
+        }
 
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct ContributionFieldSpec {
-    kind: ContributionFieldKind,
-    required: Option<bool>,
-    values: Option<Vec<String>>,
-}
+        if let Some(package_spec) = spec.strip_prefix("npm:") {
+            let package_spec = package_spec.trim();
+            if package_spec.is_empty() {
+                return Err("npm plugin package source spec cannot be empty".to_string());
+            }
+            return Ok(Self::Npm {
+                package_spec: package_spec.to_string(),
+                spec: spec.to_string(),
+            });
+        }
 
-#[derive(Debug, Deserialize, Clone, Copy)]
-#[serde(rename_all = "camelCase")]
-enum ContributionFieldKind {
-    NonEmptyString,
-    Icon,
-    Number,
-    Shortcut,
-    Enum,
-}
+        if let Some(git_spec) = spec.strip_prefix("git:") {
+            let (repo, reference) = parse_git_source(git_spec)?;
+            return Ok(Self::Git {
+                repo,
+                reference,
+                spec: spec.to_string(),
+            });
+        }
 
-fn contribution_schema() -> &'static ManifestContributionSchema {
-    static CONTRIBUTION_SCHEMA: std::sync::OnceLock<ManifestContributionSchema> =
-        std::sync::OnceLock::new();
-    CONTRIBUTION_SCHEMA.get_or_init(|| {
-        serde_json::from_str(CONTRIBUTION_SCHEMA_JSON)
-            .expect("shared plugin contribution schema should parse")
-    })
-}
+        let path = if let Some(path) = spec.strip_prefix("local:") {
+            PathBuf::from(path)
+        } else {
+            PathBuf::from(spec)
+        };
 
-fn shortcut_pattern() -> &'static Regex {
-    static SHORTCUT_PATTERN: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
-    SHORTCUT_PATTERN.get_or_init(|| {
-        Regex::new(&contribution_schema().shortcut_pattern)
-            .expect("shared plugin contribution shortcut regex should compile")
-    })
-}
+        Ok(Self::Local {
+            path,
+            spec: spec.to_string(),
+        })
+    }
 
-#[derive(Debug, Deserialize)]
-#[serde(untagged)]
-enum NullablePath {
-    Path(String),
-    Null(()),
-}
-
-impl NullablePath {
-    fn as_deref(&self) -> Option<&str> {
+    fn kind(&self) -> &'static str {
         match self {
-            Self::Path(path) => Some(path.as_str()),
-            Self::Null(()) => None,
+            Self::Local { .. } => "local",
+            Self::Npm { .. } => "npm",
+            Self::Git { .. } => "git",
         }
     }
 
-    fn to_path_string(&self) -> String {
+    fn spec(&self) -> &str {
         match self {
-            Self::Path(path) => path.clone(),
-            Self::Null(()) => String::new(),
+            Self::Local { spec, .. } | Self::Npm { spec, .. } | Self::Git { spec, .. } => spec,
         }
     }
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct PluginManifestFile {
-    id: String,
-    name: String,
+struct PackageJsonFile {
+    #[serde(rename = "name")]
+    _name: String,
     version: String,
+    #[serde(default, rename = "peerDependencies")]
+    _peer_dependencies: Option<Value>,
+    openforge: OpenForgePackageMetadata,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct OpenForgePackageMetadata {
+    id: String,
     api_version: i64,
+    display_name: String,
     description: String,
-    permissions: Value,
-    contributes: Value,
-    frontend: NullablePath,
+    #[serde(default, rename = "icon")]
+    _icon: Option<String>,
+    #[serde(default)]
+    frontend: Option<String>,
+    #[serde(default)]
     backend: Option<String>,
+    #[serde(default, rename = "requires")]
+    _requires: Option<Vec<String>>,
+}
+
+#[derive(Debug)]
+struct LoadedPluginPackage {
+    package_json: PackageJsonFile,
+    package_metadata_json: String,
+}
+
+#[derive(Debug)]
+struct AcquiredPackage {
+    source: PackageSourceSpec,
+    package_dir: PathBuf,
+    install_path: PathBuf,
+    staging_root: Option<PathBuf>,
 }
 
 pub fn managed_plugins_dir(base_dir: &Path) -> PathBuf {
@@ -109,83 +139,67 @@ pub fn install_local_plugin_bundle(
     source_path: &Path,
     managed_base_dir: &Path,
 ) -> Result<db::PluginRow, String> {
-    if !source_path.is_dir() {
-        return Err(format!(
-            "plugin source path is not a directory: {}",
-            source_path.display()
-        ));
-    }
-
-    let manifest = load_manifest_from_dir(source_path)?;
-    let destination = managed_plugin_dir(managed_base_dir, &manifest.id);
-    replace_directory(source_path, &destination)?;
-    build_plugin_row(&manifest, &destination, false)
+    install_plugin_package_from_source_spec(&source_path.to_string_lossy(), managed_base_dir)
 }
 
 pub async fn install_npm_plugin_bundle(
     package_name: &str,
     managed_base_dir: &Path,
 ) -> Result<db::PluginRow, String> {
-    let npm_path = resolve_npm_binary()?;
-    install_npm_plugin_bundle_with_npm(package_name, managed_base_dir, &npm_path).await
+    install_plugin_package_from_source_spec_async(
+        &format!("npm:{}", package_name.trim()),
+        managed_base_dir,
+    )
+    .await
 }
 
-async fn install_npm_plugin_bundle_with_npm(
-    package_name: &str,
+pub async fn install_git_plugin_bundle(
+    git_spec: &str,
     managed_base_dir: &Path,
-    npm_path: &Path,
 ) -> Result<db::PluginRow, String> {
-    let package_name = package_name.trim();
-    if package_name.is_empty() {
-        return Err("package name cannot be empty".to_string());
+    let source_spec = if git_spec.trim().starts_with("git:") {
+        git_spec.trim().to_string()
+    } else {
+        format!("git:{}", git_spec.trim())
+    };
+    install_plugin_package_from_source_spec_async(&source_spec, managed_base_dir).await
+}
+
+pub fn install_plugin_package_from_source_spec(
+    source_spec: &str,
+    managed_base_dir: &Path,
+) -> Result<db::PluginRow, String> {
+    let source = PackageSourceSpec::parse(source_spec)?;
+    match source {
+        PackageSourceSpec::Local { .. } => {
+            let acquired = acquire_local_package(source)?;
+            install_acquired_package(acquired, managed_base_dir)
+        }
+        PackageSourceSpec::Npm { .. } | PackageSourceSpec::Git { .. } => Err(
+            "npm and git plugin package sources require the async package installer".to_string(),
+        ),
     }
+}
 
-    let staging_root = unique_staging_dir(managed_base_dir)?;
-    let install_root = staging_root.join("install-root");
-    fs::create_dir_all(&install_root)
-        .map_err(|error| format!("failed to create npm install root: {error}"))?;
-    fs::write(
-        install_root.join("package.json"),
-        r#"{"name":"openforge-plugin-staging","version":"1.0.0","private":true}"#,
-    )
-    .map_err(|error| format!("failed to create npm staging package.json: {error}"))?;
+pub async fn install_plugin_package_from_source_spec_async(
+    source_spec: &str,
+    managed_base_dir: &Path,
+) -> Result<db::PluginRow, String> {
+    let source = PackageSourceSpec::parse(source_spec)?;
+    let acquired = match source {
+        PackageSourceSpec::Local { .. } => acquire_local_package(source)?,
+        PackageSourceSpec::Npm { .. } => acquire_npm_package(source, managed_base_dir).await?,
+        PackageSourceSpec::Git { .. } => acquire_git_package(source, managed_base_dir).await?,
+    };
 
-    let output = Command::new(npm_path)
-        .arg("install")
-        .arg("--prefix")
-        .arg(&install_root)
-        .arg("--ignore-scripts")
-        .arg("--omit=dev")
-        .arg("--no-save")
-        .arg(package_name)
-        .output()
-        .await
-        .map_err(|error| format!("failed to run npm install: {error}"))?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        let details = if !stderr.is_empty() { stderr } else { stdout };
-        let _ = fs::remove_dir_all(&staging_root);
-        return Err(format!("npm install failed: {details}"));
-    }
-
-    let package_dir = install_root
-        .join("node_modules")
-        .join(resolve_requested_package_dir_name(package_name)?);
-    let manifest = load_manifest_from_dir(&package_dir)?;
-    let destination = managed_plugin_dir(managed_base_dir, &manifest.id);
-    let copy_result = replace_directory(&package_dir, &destination);
-    let _ = fs::remove_dir_all(&staging_root);
-    copy_result?;
-    build_plugin_row(&manifest, &destination, false)
+    install_acquired_package(acquired, managed_base_dir)
 }
 
 pub fn uninstall_managed_plugin(
     plugin: &db::PluginRow,
     managed_base_dir: &Path,
 ) -> Result<(), String> {
-    if plugin.is_builtin {
+    if plugin.is_builtin || plugin.source_kind == "local" {
         return Ok(());
     }
 
@@ -207,315 +221,442 @@ pub fn uninstall_managed_plugin(
     Ok(())
 }
 
-fn load_manifest_from_dir(dir: &Path) -> Result<PluginManifestFile, String> {
-    let manifest_path = dir.join("manifest.json");
-    let raw = fs::read_to_string(&manifest_path).map_err(|error| {
-        format!(
-            "failed to read manifest {}: {error}",
-            manifest_path.display()
-        )
-    })?;
-    let manifest: PluginManifestFile = serde_json::from_str(&raw).map_err(|error| {
-        format!(
-            "failed to parse manifest {}: {error}",
-            manifest_path.display()
-        )
-    })?;
-    validate_manifest(&manifest, dir)?;
-    Ok(manifest)
-}
+fn install_acquired_package(
+    mut acquired: AcquiredPackage,
+    managed_base_dir: &Path,
+) -> Result<db::PluginRow, String> {
+    let result = (|| {
+        let loaded = load_package_from_dir(&acquired.package_dir)?;
+        validate_package(&loaded.package_json, &acquired.package_dir)?;
 
-fn validate_manifest(manifest: &PluginManifestFile, dir: &Path) -> Result<(), String> {
-    if manifest.id.trim().is_empty() {
-        return Err("plugin manifest id cannot be empty".to_string());
-    }
-    if manifest.id.contains('/') || manifest.id.contains('\\') {
-        return Err("plugin manifest id cannot contain path separators".to_string());
-    }
-    let mut components = Path::new(&manifest.id).components();
-    match (components.next(), components.next()) {
-        (Some(Component::Normal(_)), None) => {}
-        _ => return Err("plugin manifest id is invalid".to_string()),
-    }
-    if manifest.name.trim().is_empty() {
-        return Err("plugin manifest name cannot be empty".to_string());
-    }
-    if manifest.version.trim().is_empty() {
-        return Err("plugin manifest version cannot be empty".to_string());
-    }
-    if manifest.description.trim().is_empty() {
-        return Err("plugin manifest description cannot be empty".to_string());
-    }
-    if manifest.frontend.as_deref().is_none() && manifest.backend.is_none() {
-        return Err("plugin manifest requires a frontend or backend entry".to_string());
-    }
-
-    if let Some(frontend) = manifest.frontend.as_deref() {
-        if frontend.trim().is_empty() {
-            return Err("plugin manifest frontend entry cannot be empty".to_string());
+        if acquired.source.kind() != "local" {
+            let destination =
+                managed_plugin_dir(managed_base_dir, &loaded.package_json.openforge.id);
+            replace_directory(&acquired.package_dir, &destination)?;
+            acquired.install_path = destination;
         }
 
-        validate_relative_entry_path(dir, frontend, "frontend")?;
-    } else {
-        validate_frontendless_contributions(&manifest.contributes)?;
+        build_plugin_row(&loaded, &acquired.install_path, &acquired.source, false)
+    })();
+
+    if let Some(staging_root) = acquired.staging_root {
+        let _ = fs::remove_dir_all(staging_root);
     }
 
-    if let Some(backend) = &manifest.backend {
-        if backend.trim().is_empty() {
-            return Err("plugin manifest backend entry cannot be empty when provided".to_string());
-        }
-
-        validate_relative_entry_path(dir, backend, "backend")?;
-    }
-
-    validate_contributions(&manifest.contributes)?;
-
-    Ok(())
+    result
 }
 
-fn contribution_array_is_non_empty(contributes: &Value, key: &str) -> bool {
-    contributes
-        .get(key)
-        .and_then(Value::as_array)
-        .is_some_and(|items| !items.is_empty())
-}
+fn acquire_local_package(source: PackageSourceSpec) -> Result<AcquiredPackage, String> {
+    let PackageSourceSpec::Local { path, .. } = &source else {
+        return Err("expected a local plugin package source".to_string());
+    };
 
-fn validate_frontendless_contributions(contributes: &Value) -> Result<(), String> {
-    for key in ["views", "taskPaneTabs", "sidebarPanels", "settingsSections"] {
-        if contribution_array_is_non_empty(contributes, key) {
-            return Err("renderable plugin contributions require a frontend entry".to_string());
-        }
-    }
-
-    if contribution_array_is_non_empty(contributes, "backgroundServices") {
-        return Err("frontendless background service contributions are not supported".to_string());
-    }
-
-    Ok(())
-}
-
-fn validate_relative_entry_path(dir: &Path, entry: &str, field_name: &str) -> Result<(), String> {
-    let entry_path = Path::new(entry);
-    if entry_path.is_absolute() {
+    if !path.is_dir() {
         return Err(format!(
-            "plugin manifest {field_name} entry must stay within the plugin directory"
+            "local plugin package source is not a directory: {}",
+            path.display()
         ));
     }
 
-    if entry_path
-        .components()
-        .any(|component| matches!(component, Component::ParentDir))
+    let canonical = path.canonicalize().map_err(|error| {
+        format!(
+            "failed to resolve local plugin package source {}: {error}",
+            path.display()
+        )
+    })?;
+
+    Ok(AcquiredPackage {
+        source,
+        package_dir: canonical.clone(),
+        install_path: canonical,
+        staging_root: None,
+    })
+}
+
+async fn acquire_npm_package(
+    source: PackageSourceSpec,
+    managed_base_dir: &Path,
+) -> Result<AcquiredPackage, String> {
+    let PackageSourceSpec::Npm { package_spec, .. } = &source else {
+        return Err("expected an npm plugin package source".to_string());
+    };
+
+    let npm_path = resolve_binary(NPM_PATH_ENV, "npm")?;
+    let staging_root = unique_staging_dir(managed_base_dir, "npm")?;
+    let install_root = staging_root.join("install-root");
+    fs::create_dir_all(&install_root)
+        .map_err(|error| format!("failed to create npm install root: {error}"))?;
+    fs::write(
+        install_root.join("package.json"),
+        r#"{"name":"openforge-plugin-staging","version":"1.0.0","private":true}"#,
+    )
+    .map_err(|error| format!("failed to create npm staging package.json: {error}"))?;
+
+    let output = Command::new(&npm_path)
+        .arg("install")
+        .arg("--prefix")
+        .arg(&install_root)
+        .arg("--ignore-scripts")
+        .arg("--omit=dev")
+        .arg("--no-save")
+        .arg(package_spec)
+        .output()
+        .await
+        .map_err(|error| format!("failed to run npm install: {error}"))?;
+
+    if !output.status.success() {
+        let details = command_output_details(&output.stdout, &output.stderr);
+        let _ = fs::remove_dir_all(&staging_root);
+        return Err(format!("npm install failed for {package_spec}: {details}"));
+    }
+
+    let package_dir = install_root
+        .join("node_modules")
+        .join(resolve_requested_package_dir_name(package_spec)?);
+
+    Ok(AcquiredPackage {
+        source,
+        package_dir,
+        install_path: PathBuf::new(),
+        staging_root: Some(staging_root),
+    })
+}
+
+async fn acquire_git_package(
+    source: PackageSourceSpec,
+    managed_base_dir: &Path,
+) -> Result<AcquiredPackage, String> {
+    let PackageSourceSpec::Git {
+        repo, reference, ..
+    } = &source
+    else {
+        return Err("expected a git plugin package source".to_string());
+    };
+
+    let git_path = resolve_binary(GIT_PATH_ENV, "git")?;
+    let staging_root = unique_staging_dir(managed_base_dir, "git")?;
+    let checkout_dir = staging_root.join("checkout");
+    let repo_url = normalize_git_repo_url(repo);
+
+    let mut command = Command::new(&git_path);
+    command.arg("clone").arg("--depth").arg("1");
+    if let Some(reference) = reference {
+        command.arg("--branch").arg(reference);
+    }
+    let output = command
+        .arg(&repo_url)
+        .arg(&checkout_dir)
+        .output()
+        .await
+        .map_err(|error| format!("failed to run git clone: {error}"))?;
+
+    if !output.status.success() {
+        let details = command_output_details(&output.stdout, &output.stderr);
+        let _ = fs::remove_dir_all(&staging_root);
+        return Err(format!("git clone failed for {repo}: {details}"));
+    }
+
+    Ok(AcquiredPackage {
+        source,
+        package_dir: checkout_dir,
+        install_path: PathBuf::new(),
+        staging_root: Some(staging_root),
+    })
+}
+
+fn load_package_from_dir(dir: &Path) -> Result<LoadedPluginPackage, String> {
+    let package_json_path = dir.join("package.json");
+    let raw = fs::read_to_string(&package_json_path).map_err(|error| {
+        format!(
+            "failed to read OpenForge plugin package.json {}: {error}",
+            package_json_path.display()
+        )
+    })?;
+    let raw_value: Value = serde_json::from_str(&raw).map_err(|error| {
+        format!(
+            "failed to parse OpenForge plugin package.json {}: {error}",
+            package_json_path.display()
+        )
+    })?;
+    validate_package_json_shape(&raw_value)?;
+
+    let package_json: PackageJsonFile =
+        serde_json::from_value(raw_value.clone()).map_err(|error| {
+            format!(
+                "failed to parse OpenForge plugin package metadata {}: {error}",
+                package_json_path.display()
+            )
+        })?;
+
+    let package_metadata_json = package_metadata_json(&raw_value)?;
+
+    Ok(LoadedPluginPackage {
+        package_json,
+        package_metadata_json,
+    })
+}
+
+fn validate_package_json_shape(value: &Value) -> Result<(), String> {
+    let object = value
+        .as_object()
+        .ok_or_else(|| "OpenForge plugin package.json must be an object".to_string())?;
+
+    validate_non_empty_json_string(object, "name", "package.json name")?;
+    validate_non_empty_json_string(object, "version", "package.json version")?;
+
+    let openforge = object
+        .get("openforge")
+        .ok_or_else(|| "OpenForge plugin package.json must include openforge metadata".to_string())?
+        .as_object()
+        .ok_or_else(|| "package.json openforge metadata must be an object".to_string())?;
+
+    if openforge.contains_key("contributes") {
+        return Err("package.json openforge.contributes is not supported; register contributions at runtime".to_string());
+    }
+
+    for key in openforge.keys() {
+        if !allowed_openforge_metadata_fields().contains(&key.as_str()) {
+            return Err(format!(
+                "package.json openforge.{key} is not supported by the OpenForge package metadata schema"
+            ));
+        }
+    }
+
+    validate_non_empty_json_string(openforge, "id", "package.json openforge.id")?;
+    validate_non_empty_json_string(
+        openforge,
+        "displayName",
+        "package.json openforge.displayName",
+    )?;
+    validate_non_empty_json_string(
+        openforge,
+        "description",
+        "package.json openforge.description",
+    )?;
+
+    match openforge.get("apiVersion").and_then(Value::as_i64) {
+        Some(SUPPORTED_API_VERSION) => {}
+        Some(version) => {
+            return Err(format!(
+                "package.json openforge.apiVersion {version} is not supported (supported: {SUPPORTED_API_VERSION})"
+            ));
+        }
+        None => return Err("package.json openforge.apiVersion must be 1".to_string()),
+    }
+
+    for key in ["icon", "frontend", "backend"] {
+        if openforge.get(key).is_some() {
+            validate_non_empty_json_string(
+                openforge,
+                key,
+                &format!("package.json openforge.{key}"),
+            )?;
+        }
+    }
+
+    if let Some(requires) = openforge.get("requires") {
+        let requires = requires
+            .as_array()
+            .ok_or_else(|| "package.json openforge.requires must be an array".to_string())?;
+        for (index, capability) in requires.iter().enumerate() {
+            let capability = capability.as_str().ok_or_else(|| {
+                format!("package.json openforge.requires[{index}] must be a string")
+            })?;
+            if !allowed_capabilities().contains(&capability) {
+                return Err(format!(
+                    "package.json openforge.requires[{index}] has unknown capability \"{capability}\""
+                ));
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn validate_package(package: &PackageJsonFile, dir: &Path) -> Result<(), String> {
+    if !plugin_id_pattern().is_match(&package.openforge.id) {
+        return Err(format!(
+            "package.json openforge.id \"{}\" must match the OpenForge package metadata schema",
+            package.openforge.id
+        ));
+    }
+
+    if package.openforge.api_version != SUPPORTED_API_VERSION {
+        return Err(format!(
+            "package.json openforge.apiVersion {} is not supported (supported: {SUPPORTED_API_VERSION})",
+            package.openforge.api_version
+        ));
+    }
+
+    if package.openforge.frontend.is_none() && package.openforge.backend.is_none() {
+        return Err(
+            "package.json openforge metadata requires a frontend or backend built JavaScript entry"
+                .to_string(),
+        );
+    }
+
+    if let Some(frontend) = package.openforge.frontend.as_deref() {
+        validate_relative_js_entry_path(dir, frontend, "frontend")?;
+    }
+    if let Some(backend) = package.openforge.backend.as_deref() {
+        validate_relative_js_entry_path(dir, backend, "backend")?;
+    }
+
+    Ok(())
+}
+
+fn validate_relative_js_entry_path(
+    dir: &Path,
+    entry: &str,
+    field_name: &str,
+) -> Result<(), String> {
+    let entry_path = Path::new(entry);
+    if entry_path.is_absolute()
+        || entry_path
+            .components()
+            .any(|component| matches!(component, Component::ParentDir))
     {
         return Err(format!(
-            "plugin manifest {field_name} entry must stay within the plugin directory"
+            "package.json openforge.{field_name} entry must stay within the plugin package directory"
         ));
     }
 
     let candidate = dir.join(entry_path);
     if !candidate.is_file() {
         return Err(format!(
-            "plugin {field_name} entry does not exist: {}",
+            "OpenForge plugin {field_name} entry is missing at {}; run the package build first",
             candidate.display()
+        ));
+    }
+
+    let extension = candidate
+        .extension()
+        .and_then(|extension| extension.to_str());
+    if !matches!(extension, Some("js" | "mjs" | "cjs")) {
+        return Err(format!(
+            "package.json openforge.{field_name} must point to a built JavaScript artifact (.js, .mjs, or .cjs)"
         ));
     }
 
     let canonical_dir = dir.canonicalize().map_err(|error| {
         format!(
-            "failed to canonicalize plugin directory {}: {error}",
+            "failed to canonicalize plugin package directory {}: {error}",
             dir.display()
         )
     })?;
     let canonical_candidate = candidate.canonicalize().map_err(|error| {
         format!(
-            "failed to canonicalize plugin {field_name} entry {}: {error}",
+            "failed to canonicalize OpenForge plugin {field_name} entry {}: {error}",
             candidate.display()
         )
     })?;
 
     if !canonical_candidate.starts_with(&canonical_dir) {
         return Err(format!(
-            "plugin manifest {field_name} entry must stay within the plugin directory"
+            "package.json openforge.{field_name} entry must stay within the plugin package directory"
         ));
-    }
-
-    Ok(())
-}
-
-fn validate_string_field(
-    value: Option<&Value>,
-    path: &str,
-    required: bool,
-) -> Result<Option<String>, String> {
-    match value {
-        Some(value) => {
-            let value = value
-                .as_str()
-                .ok_or_else(|| format!("plugin manifest {path} must be a string"))?
-                .trim();
-            if value.is_empty() {
-                Err(format!("plugin manifest {path} must be a non-empty string"))
-            } else {
-                Ok(Some(value.to_string()))
-            }
-        }
-        None if required => Err(format!("plugin manifest {path} must be a non-empty string")),
-        None => Ok(None),
-    }
-}
-
-fn validate_number_field(value: Option<&Value>, path: &str, required: bool) -> Result<(), String> {
-    match value {
-        Some(value) if value.is_number() => Ok(()),
-        Some(_) => Err(format!("plugin manifest {path} must be a number")),
-        None if required => Err(format!("plugin manifest {path} must be a number")),
-        None => Ok(()),
-    }
-}
-
-fn validate_shortcut_field(
-    value: Option<&Value>,
-    path: &str,
-    required: bool,
-) -> Result<(), String> {
-    let Some(shortcut) = validate_string_field(value, path, required)? else {
-        return Ok(());
-    };
-
-    if !shortcut_pattern().is_match(&shortcut) {
-        return Err(format!(
-            "plugin manifest {path} has invalid shortcut format"
-        ));
-    }
-
-    Ok(())
-}
-
-fn validate_icon_field(value: Option<&Value>, path: &str, required: bool) -> Result<(), String> {
-    let Some(icon) = validate_string_field(value, path, required)? else {
-        return Ok(());
-    };
-
-    if !contribution_schema().allowed_icon_keys.contains(&icon) {
-        return Err(format!(
-            "plugin manifest {path} icon key \"{icon}\" is not allowed"
-        ));
-    }
-
-    Ok(())
-}
-
-fn validate_enum_field(
-    value: Option<&Value>,
-    path: &str,
-    required: bool,
-    values: Option<&[String]>,
-) -> Result<(), String> {
-    let Some(value) = validate_string_field(value, path, required)? else {
-        return Ok(());
-    };
-    let allowed_values =
-        values.ok_or_else(|| format!("plugin manifest {path} enum has no values"))?;
-
-    if !allowed_values.contains(&value) {
-        return Err(format!(
-            "plugin manifest {path} must be one of {}",
-            allowed_values.join(", ")
-        ));
-    }
-
-    Ok(())
-}
-
-fn validate_array<'a>(
-    value: Option<&'a Value>,
-    path: &'a str,
-) -> Result<Vec<&'a serde_json::Map<String, Value>>, String> {
-    let entries = value
-        .ok_or_else(|| format!("plugin manifest {path} must be an array"))?
-        .as_array()
-        .ok_or_else(|| format!("plugin manifest {path} must be an array"))?;
-
-    entries
-        .iter()
-        .enumerate()
-        .map(|(index, item)| {
-            item.as_object()
-                .ok_or_else(|| format!("plugin manifest {path}[{index}] must be an object"))
-        })
-        .collect()
-}
-
-fn validate_contribution_field(
-    value: Option<&Value>,
-    path: &str,
-    spec: &ContributionFieldSpec,
-) -> Result<(), String> {
-    let required = spec.required.unwrap_or(false);
-
-    match spec.kind {
-        ContributionFieldKind::NonEmptyString => {
-            validate_string_field(value, path, required).map(|_| ())
-        }
-        ContributionFieldKind::Icon => validate_icon_field(value, path, required),
-        ContributionFieldKind::Number => validate_number_field(value, path, required),
-        ContributionFieldKind::Shortcut => validate_shortcut_field(value, path, required),
-        ContributionFieldKind::Enum => {
-            validate_enum_field(value, path, required, spec.values.as_deref())
-        }
-    }
-}
-
-fn validate_contributions(contributes: &Value) -> Result<(), String> {
-    let contributes = contributes
-        .as_object()
-        .ok_or_else(|| "plugin manifest contributes must be an object".to_string())?;
-
-    for (contribution_name, contribution_spec) in &contribution_schema().contribution_points {
-        let Some(entries) = contributes.get(contribution_name) else {
-            continue;
-        };
-        let contribution_path = format!("contributes.{contribution_name}");
-
-        for (index, entry) in validate_array(Some(entries), &contribution_path)?
-            .into_iter()
-            .enumerate()
-        {
-            for (field_name, field_spec) in &contribution_spec.fields {
-                validate_contribution_field(
-                    entry.get(field_name),
-                    &format!("{contribution_path}[{index}].{field_name}"),
-                    field_spec,
-                )?;
-            }
-        }
     }
 
     Ok(())
 }
 
 fn build_plugin_row(
-    manifest: &PluginManifestFile,
+    loaded: &LoadedPluginPackage,
     install_path: &Path,
+    source: &PackageSourceSpec,
     is_builtin: bool,
 ) -> Result<db::PluginRow, String> {
+    let openforge = &loaded.package_json.openforge;
     Ok(db::PluginRow {
-        id: manifest.id.clone(),
-        name: manifest.name.clone(),
-        version: manifest.version.clone(),
-        api_version: manifest.api_version,
-        description: manifest.description.clone(),
-        permissions: serde_json::to_string(&manifest.permissions)
-            .map_err(|error| format!("failed to serialize plugin permissions: {error}"))?,
-        contributes: serde_json::to_string(&manifest.contributes)
-            .map_err(|error| format!("failed to serialize plugin contributions: {error}"))?,
-        frontend_entry: manifest.frontend.to_path_string(),
-        backend_entry: manifest.backend.clone(),
+        id: openforge.id.clone(),
+        name: openforge.display_name.clone(),
+        version: loaded.package_json.version.clone(),
+        api_version: openforge.api_version,
+        description: openforge.description.clone(),
+        permissions: "[]".to_string(),
+        contributes: "{}".to_string(),
+        frontend_entry: openforge.frontend.clone().unwrap_or_default(),
+        backend_entry: openforge.backend.clone(),
         install_path: install_path.to_string_lossy().into_owned(),
+        source_kind: source.kind().to_string(),
+        source_spec: source.spec().to_string(),
+        package_metadata: loaded.package_metadata_json.clone(),
         installed_at: SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map_err(|error| format!("failed to compute install timestamp: {error}"))?
             .as_millis() as i64,
         is_builtin,
+    })
+}
+
+fn package_metadata_json(value: &Value) -> Result<String, String> {
+    let object = value
+        .as_object()
+        .ok_or_else(|| "OpenForge plugin package.json must be an object".to_string())?;
+    let mut metadata = Map::new();
+    for key in ["name", "version", "peerDependencies", "openforge"] {
+        if let Some(value) = object.get(key) {
+            metadata.insert(key.to_string(), value.clone());
+        }
+    }
+    serde_json::to_string(&Value::Object(metadata))
+        .map_err(|error| format!("failed to serialize OpenForge package metadata: {error}"))
+}
+
+fn validate_non_empty_json_string(
+    object: &Map<String, Value>,
+    key: &str,
+    label: &str,
+) -> Result<(), String> {
+    match object.get(key).and_then(Value::as_str) {
+        Some(value) if !value.trim().is_empty() => Ok(()),
+        _ => Err(format!("{label} must be a non-empty string")),
+    }
+}
+
+fn allowed_openforge_metadata_fields() -> &'static [&'static str] {
+    static FIELDS: [&str; 8] = [
+        "id",
+        "apiVersion",
+        "displayName",
+        "description",
+        "icon",
+        "frontend",
+        "backend",
+        "requires",
+    ];
+    &FIELDS
+}
+
+fn allowed_capabilities() -> &'static [&'static str] {
+    static CAPABILITIES: [&str; 18] = [
+        "commands",
+        "events",
+        "views",
+        "taskPane",
+        "settings",
+        "background",
+        "backend",
+        "storage",
+        "context",
+        "tasks",
+        "projects",
+        "fs",
+        "shell",
+        "notifications",
+        "attention",
+        "system.openUrl",
+        "config",
+        "projectConfig",
+    ];
+    &CAPABILITIES
+}
+
+fn plugin_id_pattern() -> &'static Regex {
+    static PATTERN: OnceLock<Regex> = OnceLock::new();
+    PATTERN.get_or_init(|| {
+        Regex::new(r"^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$")
+            .expect("OpenForge package id regex should compile")
     })
 }
 
@@ -569,25 +710,26 @@ fn copy_directory_recursive(source: &Path, destination: &Path) -> Result<(), Str
     Ok(())
 }
 
-fn resolve_npm_binary() -> Result<PathBuf, String> {
-    if let Ok(path) = std::env::var(NPM_PATH_ENV) {
+fn resolve_binary(env_name: &str, binary_name: &str) -> Result<PathBuf, String> {
+    if let Ok(path) = std::env::var(env_name) {
         let trimmed = path.trim();
         if !trimmed.is_empty() {
             return Ok(PathBuf::from(trimmed));
         }
     }
 
-    which::which("npm").map_err(|error| format!("failed to locate npm in PATH: {error}"))
+    which::which(binary_name)
+        .map_err(|error| format!("failed to locate {binary_name} in PATH: {error}"))
 }
 
-fn unique_staging_dir(managed_base_dir: &Path) -> Result<PathBuf, String> {
+fn unique_staging_dir(managed_base_dir: &Path, prefix: &str) -> Result<PathBuf, String> {
     let nonce = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_err(|error| format!("failed to create staging directory nonce: {error}"))?
         .as_nanos();
     let path = managed_base_dir
         .join(".staging")
-        .join(format!("npm-{nonce}"));
+        .join(format!("{prefix}-{nonce}"));
     fs::create_dir_all(&path).map_err(|error| {
         format!(
             "failed to create staging directory {}: {error}",
@@ -600,7 +742,7 @@ fn unique_staging_dir(managed_base_dir: &Path) -> Result<PathBuf, String> {
 fn resolve_requested_package_dir_name(package_spec: &str) -> Result<String, String> {
     let package_spec = package_spec.trim();
     if package_spec.is_empty() {
-        return Err("package name cannot be empty".to_string());
+        return Err("npm package source spec cannot be empty".to_string());
     }
 
     if let Some((alias, _)) = package_spec.split_once("@npm:") {
@@ -633,6 +775,59 @@ fn resolve_requested_package_dir_name(package_spec: &str) -> Result<String, Stri
     }
 }
 
+fn parse_git_source(git_spec: &str) -> Result<(String, Option<String>), String> {
+    let git_spec = git_spec.trim();
+    if git_spec.is_empty() {
+        return Err("git plugin package source spec cannot be empty".to_string());
+    }
+
+    if git_spec.starts_with("git@") {
+        return Ok((git_spec.to_string(), None));
+    }
+
+    match git_spec.rsplit_once('@') {
+        Some((repo, reference)) if !repo.is_empty() && !reference.is_empty() => {
+            Ok((repo.to_string(), Some(reference.to_string())))
+        }
+        Some(_) => Err(format!(
+            "invalid git plugin package source spec: git:{git_spec}"
+        )),
+        None => Ok((git_spec.to_string(), None)),
+    }
+}
+
+fn normalize_git_repo_url(repo: &str) -> String {
+    if repo.starts_with("http://")
+        || repo.starts_with("https://")
+        || repo.starts_with("ssh://")
+        || repo.starts_with("git@")
+        || repo.starts_with("file://")
+    {
+        repo.to_string()
+    } else {
+        format!("https://{repo}")
+    }
+}
+
+fn command_output_details(stdout: &[u8], stderr: &[u8]) -> String {
+    let stderr = String::from_utf8_lossy(stderr).trim().to_string();
+    if !stderr.is_empty() {
+        return stderr;
+    }
+
+    let stdout = String::from_utf8_lossy(stdout).trim().to_string();
+    if stdout.is_empty() {
+        "command exited without details".to_string()
+    } else {
+        stdout
+    }
+}
+
+#[allow(dead_code)]
+fn _package_metadata_schema_json() -> &'static str {
+    OPENFORGE_PACKAGE_METADATA_SCHEMA_JSON
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -641,385 +836,141 @@ mod tests {
     #[cfg(unix)]
     use std::os::unix::fs::PermissionsExt;
 
-    fn write_manifest(dir: &Path, manifest: &str) {
-        fs::write(dir.join("manifest.json"), manifest).expect("manifest should write");
-    }
-
-    #[test]
-    fn install_local_plugin_bundle_copies_into_managed_directory() {
-        let source = tempdir().expect("source tempdir should create");
-        let managed = tempdir().expect("managed tempdir should create");
-        fs::create_dir_all(source.path().join("dist")).expect("dist dir should create");
-        fs::write(source.path().join("dist/index.js"), "export const x = 1;")
-            .expect("frontend should write");
+    fn write_package_json(dir: &Path, openforge: &str) {
         fs::write(
-            source.path().join("backend.js"),
-            "export async function ping() { return 'pong' }",
+            dir.join("package.json"),
+            format!(r#"{{"name":"@acme/plugin","version":"1.2.3","openforge":{openforge}}}"#),
         )
-        .expect("backend should write");
-        write_manifest(
-            source.path(),
-            r#"{
-                "id": "com.example.local",
-                "name": "Local Plugin",
-                "version": "1.0.0",
-                "apiVersion": 1,
-                "description": "A local plugin",
-                "permissions": [],
-                "contributes": {},
-                "frontend": "dist/index.js",
-                "backend": "backend.js"
-            }"#,
-        );
+        .expect("package.json should write");
+    }
 
-        let row = install_local_plugin_bundle(source.path(), managed.path())
-            .expect("local install should succeed");
-
-        let install_path = PathBuf::from(&row.install_path);
-        assert_eq!(row.id, "com.example.local");
-        assert!(install_path.starts_with(managed_plugins_dir(managed.path())));
-        assert!(install_path.join("manifest.json").exists());
-        assert!(install_path.join("dist/index.js").exists());
-        assert!(install_path.join("backend.js").exists());
+    fn make_executable(path: &Path) {
+        #[cfg(unix)]
+        {
+            let mut permissions = fs::metadata(path)
+                .expect("metadata should read")
+                .permissions();
+            permissions.set_mode(0o755);
+            fs::set_permissions(path, permissions).expect("permissions should set");
+        }
     }
 
     #[test]
-    fn install_local_plugin_bundle_allows_backend_only_command_plugins() {
+    fn install_local_package_source_references_source_path_directly() {
         let source = tempdir().expect("source tempdir should create");
         let managed = tempdir().expect("managed tempdir should create");
-        fs::write(
-            source.path().join("backend.js"),
-            "export async function echo(payload) { return payload }",
+        fs::create_dir_all(source.path().join("dist")).expect("dist dir should create");
+        fs::write(source.path().join("dist/frontend.js"), "export default {};")
+            .expect("frontend should write");
+        write_package_json(
+            source.path(),
+            r#"{"id":"acme.local","apiVersion":1,"displayName":"Local Plugin","description":"A local plugin","frontend":"dist/frontend.js","requires":["views"]}"#,
+        );
+
+        let row = install_plugin_package_from_source_spec(
+            &source.path().to_string_lossy(),
+            managed.path(),
         )
-        .expect("backend should write");
-        write_manifest(
-            source.path(),
-            r#"{
-                "id": "com.example.backend-only",
-                "name": "Backend Only Plugin",
-                "version": "1.0.0",
-                "apiVersion": 1,
-                "description": "A backend-only command plugin",
-                "permissions": [],
-                "contributes": {
-                    "commands": [{ "id": "echo", "title": "Echo" }]
-                },
-                "frontend": null,
-                "backend": "backend.js"
-            }"#,
+        .expect("local package install should succeed");
+
+        assert_eq!(row.id, "acme.local");
+        assert_eq!(row.name, "Local Plugin");
+        assert_eq!(row.source_kind, "local");
+        assert_eq!(row.source_spec, source.path().to_string_lossy());
+        assert_eq!(
+            row.install_path,
+            source.path().canonicalize().unwrap().to_string_lossy()
         );
-
-        let row = install_local_plugin_bundle(source.path(), managed.path())
-            .expect("backend-only command plugin should install");
-
-        assert_eq!(row.frontend_entry, "");
-        assert_eq!(row.backend_entry.as_deref(), Some("backend.js"));
+        assert!(!managed_plugin_dir(managed.path(), "acme.local").exists());
+        assert!(row
+            .package_metadata
+            .contains("\"displayName\":\"Local Plugin\""));
     }
 
     #[test]
-    fn install_local_plugin_bundle_rejects_frontendless_renderable_contributions() {
+    fn install_package_source_rejects_missing_built_js_entry_with_clear_error() {
         let source = tempdir().expect("source tempdir should create");
         let managed = tempdir().expect("managed tempdir should create");
-        fs::write(
-            source.path().join("backend.js"),
-            "export async function ping() { return 'pong' }",
-        )
-        .expect("backend should write");
-        write_manifest(
+        write_package_json(
             source.path(),
-            r#"{
-                "id": "com.example.backend-renderable",
-                "name": "Backend Renderable Plugin",
-                "version": "1.0.0",
-                "apiVersion": 1,
-                "description": "A frontendless renderable plugin",
-                "permissions": [],
-                "contributes": {
-                    "views": [{ "id": "main", "title": "Main", "icon": "plug" }]
-                },
-                "frontend": null,
-                "backend": "backend.js"
-            }"#,
+            r#"{"id":"acme.missing","apiVersion":1,"displayName":"Missing Build","description":"Needs build","frontend":"dist/frontend.js"}"#,
         );
 
-        let result = install_local_plugin_bundle(source.path(), managed.path());
+        let result = install_plugin_package_from_source_spec(
+            &source.path().to_string_lossy(),
+            managed.path(),
+        );
 
         assert!(result.is_err());
         assert!(result
             .expect_err("install should fail")
-            .contains("renderable plugin contributions require a frontend entry"));
+            .contains("run the package build first"));
     }
 
     #[test]
-    fn install_local_plugin_bundle_rejects_missing_frontend_entry() {
-        let source = tempdir().expect("source tempdir should create");
-        let managed = tempdir().expect("managed tempdir should create");
-        write_manifest(
-            source.path(),
-            r#"{
-                "id": "com.example.invalid",
-                "name": "Broken Plugin",
-                "version": "1.0.0",
-                "apiVersion": 1,
-                "description": "Broken plugin",
-                "permissions": [],
-                "contributes": {},
-                "frontend": "dist/index.js",
-                "backend": null
-            }"#,
-        );
-
-        let result = install_local_plugin_bundle(source.path(), managed.path());
-
-        assert!(result.is_err());
-        assert!(result
-            .expect_err("install should fail")
-            .contains("plugin frontend entry does not exist"));
-    }
-
-    #[test]
-    fn install_local_plugin_bundle_rejects_frontend_path_traversal() {
+    fn install_package_source_rejects_legacy_contributes_metadata() {
         let source = tempdir().expect("source tempdir should create");
         let managed = tempdir().expect("managed tempdir should create");
         fs::create_dir_all(source.path().join("dist")).expect("dist dir should create");
-        fs::write(source.path().join("dist/index.js"), "export const x = 1;")
+        fs::write(source.path().join("dist/frontend.js"), "export default {};")
             .expect("frontend should write");
-        write_manifest(
+        write_package_json(
             source.path(),
-            r#"{
-                "id": "com.example.invalid-path",
-                "name": "Broken Path Plugin",
-                "version": "1.0.0",
-                "apiVersion": 1,
-                "description": "Broken plugin",
-                "permissions": [],
-                "contributes": {},
-                "frontend": "../dist/index.js",
-                "backend": null
-            }"#,
+            r#"{"id":"acme.legacy","apiVersion":1,"displayName":"Legacy","description":"Legacy","frontend":"dist/frontend.js","contributes":{}}"#,
         );
 
-        let result = install_local_plugin_bundle(source.path(), managed.path());
+        let result = install_plugin_package_from_source_spec(
+            &source.path().to_string_lossy(),
+            managed.path(),
+        );
 
         assert!(result.is_err());
         assert!(result
             .expect_err("install should fail")
-            .contains("must stay within the plugin directory"));
+            .contains("register contributions at runtime"));
     }
 
     #[test]
-    fn install_local_plugin_bundle_rejects_absolute_frontend_path() {
+    fn install_package_source_rejects_path_traversal_entry() {
+        let source = tempdir().expect("source tempdir should create");
+        let managed = tempdir().expect("managed tempdir should create");
+        write_package_json(
+            source.path(),
+            r#"{"id":"acme.traversal","apiVersion":1,"displayName":"Traversal","description":"Traversal","frontend":"../frontend.js"}"#,
+        );
+
+        let result = install_plugin_package_from_source_spec(
+            &source.path().to_string_lossy(),
+            managed.path(),
+        );
+
+        assert!(result.is_err());
+        assert!(result
+            .expect_err("install should fail")
+            .contains("must stay within the plugin package directory"));
+    }
+
+    #[test]
+    fn install_package_source_rejects_non_js_entry() {
         let source = tempdir().expect("source tempdir should create");
         let managed = tempdir().expect("managed tempdir should create");
         fs::create_dir_all(source.path().join("dist")).expect("dist dir should create");
-        fs::write(source.path().join("dist/index.js"), "export const x = 1;")
+        fs::write(source.path().join("dist/frontend.ts"), "export default {};")
             .expect("frontend should write");
-        write_manifest(
+        write_package_json(
             source.path(),
-            r#"{
-                "id": "com.example.absolute-frontend",
-                "name": "Broken Absolute Frontend Plugin",
-                "version": "1.0.0",
-                "apiVersion": 1,
-                "description": "Broken plugin",
-                "permissions": [],
-                "contributes": {},
-                "frontend": "/tmp/index.js",
-                "backend": null
-            }"#,
+            r#"{"id":"acme.typescript","apiVersion":1,"displayName":"Typescript","description":"Typescript","frontend":"dist/frontend.ts"}"#,
         );
 
-        let result = install_local_plugin_bundle(source.path(), managed.path());
+        let result = install_plugin_package_from_source_spec(
+            &source.path().to_string_lossy(),
+            managed.path(),
+        );
 
         assert!(result.is_err());
         assert!(result
             .expect_err("install should fail")
-            .contains("must stay within the plugin directory"));
-    }
-
-    #[test]
-    fn install_local_plugin_bundle_rejects_backend_path_traversal() {
-        let source = tempdir().expect("source tempdir should create");
-        let managed = tempdir().expect("managed tempdir should create");
-        fs::create_dir_all(source.path().join("dist")).expect("dist dir should create");
-        fs::write(source.path().join("dist/index.js"), "export const x = 1;")
-            .expect("frontend should write");
-        fs::write(
-            source.path().join("backend.js"),
-            "export async function run() {}",
-        )
-        .expect("backend should write");
-        write_manifest(
-            source.path(),
-            r#"{
-                "id": "com.example.invalid-backend-path",
-                "name": "Broken Backend Path Plugin",
-                "version": "1.0.0",
-                "apiVersion": 1,
-                "description": "Broken plugin",
-                "permissions": [],
-                "contributes": {},
-                "frontend": "dist/index.js",
-                "backend": "../backend.js"
-            }"#,
-        );
-
-        let result = install_local_plugin_bundle(source.path(), managed.path());
-
-        assert!(result.is_err());
-        assert!(result
-            .expect_err("install should fail")
-            .contains("must stay within the plugin directory"));
-    }
-
-    #[test]
-    fn install_local_plugin_bundle_rejects_invalid_sidebar_panel_contribution() {
-        let source = tempdir().expect("source tempdir should create");
-        let managed = tempdir().expect("managed tempdir should create");
-        fs::create_dir_all(source.path().join("dist")).expect("dist dir should create");
-        fs::write(source.path().join("dist/index.js"), "export const x = 1;")
-            .expect("frontend should write");
-        write_manifest(
-            source.path(),
-            r#"{
-                "id": "com.example.invalid-sidebar",
-                "name": "Broken Sidebar Plugin",
-                "version": "1.0.0",
-                "apiVersion": 1,
-                "description": "Broken plugin",
-                "permissions": [],
-                "contributes": {
-                    "sidebarPanels": [{ "id": "inspector", "title": "Inspector", "side": "center" }]
-                },
-                "frontend": "dist/index.js",
-                "backend": null
-            }"#,
-        );
-
-        let result = install_local_plugin_bundle(source.path(), managed.path());
-
-        assert!(result.is_err());
-        assert!(result
-            .expect_err("install should fail")
-            .contains("sidebarPanels[0].side"));
-    }
-
-    #[test]
-    fn install_local_plugin_bundle_rejects_invalid_task_pane_icon_key() {
-        let source = tempdir().expect("source tempdir should create");
-        let managed = tempdir().expect("managed tempdir should create");
-        fs::create_dir_all(source.path().join("dist")).expect("dist dir should create");
-        fs::write(source.path().join("dist/index.js"), "export const x = 1;")
-            .expect("frontend should write");
-        write_manifest(
-            source.path(),
-            r#"{
-                "id": "com.example.invalid-icon",
-                "name": "Broken Icon Plugin",
-                "version": "1.0.0",
-                "apiVersion": 1,
-                "description": "Broken plugin",
-                "permissions": [],
-                "contributes": {
-                    "taskPaneTabs": [{ "id": "terminal", "title": "Terminal", "icon": "bad-icon" }]
-                },
-                "frontend": "dist/index.js",
-                "backend": null
-            }"#,
-        );
-
-        let result = install_local_plugin_bundle(source.path(), managed.path());
-
-        assert!(result.is_err());
-        assert!(result
-            .expect_err("install should fail")
-            .contains("taskPaneTabs[0].icon"));
-    }
-
-    #[test]
-    fn install_local_plugin_bundle_rejects_invalid_command_shortcut() {
-        let source = tempdir().expect("source tempdir should create");
-        let managed = tempdir().expect("managed tempdir should create");
-        fs::create_dir_all(source.path().join("dist")).expect("dist dir should create");
-        fs::write(source.path().join("dist/index.js"), "export const x = 1;")
-            .expect("frontend should write");
-        write_manifest(
-            source.path(),
-            r#"{
-                "id": "com.example.invalid-command",
-                "name": "Broken Command Plugin",
-                "version": "1.0.0",
-                "apiVersion": 1,
-                "description": "Broken plugin",
-                "permissions": [],
-                "contributes": {
-                    "commands": [{ "id": "run", "title": "Run", "shortcut": "BAD+FORMAT+!!!" }]
-                },
-                "frontend": "dist/index.js",
-                "backend": null
-            }"#,
-        );
-
-        let result = install_local_plugin_bundle(source.path(), managed.path());
-
-        assert!(result.is_err());
-        assert!(result
-            .expect_err("install should fail")
-            .contains("commands[0].shortcut"));
-    }
-
-    #[test]
-    fn uninstall_managed_plugin_removes_managed_directory() {
-        let managed = tempdir().expect("managed tempdir should create");
-        let plugin_dir = managed_plugin_dir(managed.path(), "com.example.local");
-        fs::create_dir_all(&plugin_dir).expect("plugin dir should create");
-        fs::write(plugin_dir.join("manifest.json"), "{}").expect("manifest should write");
-
-        let row = db::PluginRow {
-            id: "com.example.local".to_string(),
-            name: "Local Plugin".to_string(),
-            version: "1.0.0".to_string(),
-            api_version: 1,
-            description: "plugin".to_string(),
-            permissions: "[]".to_string(),
-            contributes: "{}".to_string(),
-            frontend_entry: "dist/index.js".to_string(),
-            backend_entry: None,
-            install_path: plugin_dir.to_string_lossy().into_owned(),
-            installed_at: 0,
-            is_builtin: false,
-        };
-
-        uninstall_managed_plugin(&row, managed.path()).expect("uninstall should succeed");
-
-        assert!(!plugin_dir.exists());
-    }
-
-    #[test]
-    fn uninstall_managed_plugin_is_noop_for_unmanaged_paths() {
-        let managed = tempdir().expect("managed tempdir should create");
-        let external = tempdir().expect("external tempdir should create");
-        let external_manifest = external.path().join("manifest.json");
-        fs::write(&external_manifest, "{}").expect("manifest should write");
-
-        let row = db::PluginRow {
-            id: "com.example.legacy".to_string(),
-            name: "Legacy Plugin".to_string(),
-            version: "1.0.0".to_string(),
-            api_version: 1,
-            description: "plugin".to_string(),
-            permissions: "[]".to_string(),
-            contributes: "{}".to_string(),
-            frontend_entry: "dist/index.js".to_string(),
-            backend_entry: None,
-            install_path: external.path().to_string_lossy().into_owned(),
-            installed_at: 0,
-            is_builtin: false,
-        };
-
-        uninstall_managed_plugin(&row, managed.path()).expect("unmanaged uninstall should succeed");
-
-        assert!(external_manifest.exists());
+            .contains("built JavaScript artifact"));
     }
 
     #[test]
@@ -1047,7 +998,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn install_npm_plugin_bundle_uses_staging_install_and_copies_package_root() {
+    async fn install_npm_package_source_uses_managed_directory_and_records_source() {
         let managed = tempdir().expect("managed tempdir should create");
         let fake_npm_dir = tempdir().expect("fake npm dir should create");
         let fake_npm = fake_npm_dir.path().join("npm");
@@ -1063,92 +1014,70 @@ while [ $# -gt 0 ]; do
   shift
 done
 mkdir -p "$prefix/node_modules/fake-package/dist"
-cat > "$prefix/node_modules/fake-package/manifest.json" <<'EOF'
-{
-  "id": "com.example.npm",
-  "name": "Npm Plugin",
-  "version": "1.2.3",
-  "apiVersion": 1,
-  "description": "Installed from npm",
-  "permissions": [],
-  "contributes": {},
-  "frontend": "dist/index.js",
-  "backend": null
-}
+cat > "$prefix/node_modules/fake-package/package.json" <<'EOF'
+{"name":"fake-package","version":"2.0.0","openforge":{"id":"acme.npm","apiVersion":1,"displayName":"Npm Plugin","description":"Installed from npm","frontend":"dist/index.js"}}
 EOF
 echo "export const ok = true;" > "$prefix/node_modules/fake-package/dist/index.js"
 "#;
         fs::write(&fake_npm, script).expect("fake npm should write");
-        #[cfg(unix)]
-        {
-            let mut permissions = fs::metadata(&fake_npm)
-                .expect("metadata should read")
-                .permissions();
-            permissions.set_mode(0o755);
-            fs::set_permissions(&fake_npm, permissions).expect("permissions should set");
+        make_executable(&fake_npm);
+
+        let previous = std::env::var(NPM_PATH_ENV).ok();
+        std::env::set_var(NPM_PATH_ENV, &fake_npm);
+        let row =
+            install_plugin_package_from_source_spec_async("npm:fake-package@2.0.0", managed.path())
+                .await
+                .expect("npm install should succeed");
+        match previous {
+            Some(value) => std::env::set_var(NPM_PATH_ENV, value),
+            None => std::env::remove_var(NPM_PATH_ENV),
         }
 
-        let row = install_npm_plugin_bundle_with_npm("fake-package", managed.path(), &fake_npm)
-            .await
-            .expect("npm install should succeed");
-
         let install_path = PathBuf::from(&row.install_path);
-        assert_eq!(row.id, "com.example.npm");
+        assert_eq!(row.id, "acme.npm");
+        assert_eq!(row.version, "2.0.0");
+        assert_eq!(row.source_kind, "npm");
+        assert_eq!(row.source_spec, "npm:fake-package@2.0.0");
         assert!(install_path.starts_with(managed_plugins_dir(managed.path())));
-        assert!(install_path.join("manifest.json").exists());
+        assert!(install_path.join("package.json").exists());
         assert!(install_path.join("dist/index.js").exists());
     }
 
     #[tokio::test]
-    async fn install_npm_plugin_bundle_resolves_versioned_package_specs() {
+    async fn install_git_package_source_uses_external_git_and_records_source() {
         let managed = tempdir().expect("managed tempdir should create");
-        let fake_npm_dir = tempdir().expect("fake npm dir should create");
-        let fake_npm = fake_npm_dir.path().join("npm");
+        let fake_git_dir = tempdir().expect("fake git dir should create");
+        let fake_git = fake_git_dir.path().join("git");
         let script = r#"#!/bin/sh
-prefix=""
-while [ $# -gt 0 ]; do
-  case "$1" in
-    --prefix)
-      shift
-      prefix="$1"
-      ;;
-  esac
-  shift
-done
-mkdir -p "$prefix/node_modules/example-plugin/dist"
-cat > "$prefix/node_modules/example-plugin/manifest.json" <<'EOF'
-{
-  "id": "com.example.versioned",
-  "name": "Versioned Plugin",
-  "version": "1.2.3",
-  "apiVersion": 1,
-  "description": "Installed from npm",
-  "permissions": [],
-  "contributes": {},
-  "frontend": "dist/index.js",
-  "backend": null
-}
+for last do :; done
+dest="$last"
+mkdir -p "$dest/dist"
+cat > "$dest/package.json" <<'EOF'
+{"name":"git-package","version":"3.0.0","openforge":{"id":"acme.git","apiVersion":1,"displayName":"Git Plugin","description":"Installed from git","frontend":"dist/index.js"}}
 EOF
-echo "export const ok = true;" > "$prefix/node_modules/example-plugin/dist/index.js"
+echo "export const ok = true;" > "$dest/dist/index.js"
 "#;
-        fs::write(&fake_npm, script).expect("fake npm should write");
-        #[cfg(unix)]
-        {
-            let mut permissions = fs::metadata(&fake_npm)
-                .expect("metadata should read")
-                .permissions();
-            permissions.set_mode(0o755);
-            fs::set_permissions(&fake_npm, permissions).expect("permissions should set");
+        fs::write(&fake_git, script).expect("fake git should write");
+        make_executable(&fake_git);
+
+        let previous = std::env::var(GIT_PATH_ENV).ok();
+        std::env::set_var(GIT_PATH_ENV, &fake_git);
+        let row = install_plugin_package_from_source_spec_async(
+            "git:github.com/acme/plugin@main",
+            managed.path(),
+        )
+        .await
+        .expect("git install should succeed");
+        match previous {
+            Some(value) => std::env::set_var(GIT_PATH_ENV, value),
+            None => std::env::remove_var(GIT_PATH_ENV),
         }
 
-        let row =
-            install_npm_plugin_bundle_with_npm("example-plugin@1.2.3", managed.path(), &fake_npm)
-                .await
-                .expect("versioned npm install should succeed");
-
         let install_path = PathBuf::from(&row.install_path);
-        assert_eq!(row.id, "com.example.versioned");
-        assert!(install_path.join("manifest.json").exists());
-        assert!(install_path.join("dist/index.js").exists());
+        assert_eq!(row.id, "acme.git");
+        assert_eq!(row.source_kind, "git");
+        assert_eq!(row.source_spec, "git:github.com/acme/plugin@main");
+        assert!(install_path.starts_with(managed_plugins_dir(managed.path())));
+        assert!(install_path.join("package.json").exists());
     }
 }

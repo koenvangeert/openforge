@@ -64,6 +64,35 @@ impl<'a> PluginPlatform<'a> {
         Ok(plugin)
     }
 
+    pub(crate) async fn install_git_plugin_bundle(
+        &self,
+        git_spec: &str,
+    ) -> Result<db::PluginRow, String> {
+        let app_data_dir = self.app_data_dir()?.to_path_buf();
+        let plugin =
+            crate::plugin_installation::install_git_plugin_bundle(git_spec, &app_data_dir).await?;
+        let db = db::acquire_db(self.db);
+        db.install_plugin(&plugin)
+            .map_err(|error| format!("Failed to install git plugin: {error}"))?;
+        Ok(plugin)
+    }
+
+    pub(crate) async fn install_plugin_package_source(
+        &self,
+        source_spec: &str,
+    ) -> Result<db::PluginRow, String> {
+        let app_data_dir = self.app_data_dir()?.to_path_buf();
+        let plugin = crate::plugin_installation::install_plugin_package_from_source_spec_async(
+            source_spec,
+            &app_data_dir,
+        )
+        .await?;
+        let db = db::acquire_db(self.db);
+        db.install_plugin(&plugin)
+            .map_err(|error| format!("Failed to install plugin package source: {error}"))?;
+        Ok(plugin)
+    }
+
     pub(crate) fn uninstall_plugin(&self, plugin_id: &str) -> Result<(), String> {
         let plugin = {
             let db = db::acquire_db(self.db);

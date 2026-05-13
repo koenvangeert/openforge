@@ -39,6 +39,9 @@ function makePlugin(id: string): NormalizedPluginRow {
     frontendEntry: 'index.js',
     backendEntry: null,
     installPath: '/tmp/plugin',
+    sourceKind: 'legacy',
+    sourceSpec: '',
+    packageMetadata: '{}',
     installedAt: 0,
     isBuiltin: false,
   }

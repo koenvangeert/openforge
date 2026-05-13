@@ -105,20 +105,20 @@ async fn installs_local_plugin_with_backend_app_path_state() {
     std::fs::write(source.path().join("dist/index.js"), "export const x = 1;")
         .expect("frontend entry");
     std::fs::write(
-        source.path().join("manifest.json"),
+        source.path().join("package.json"),
         r#"{
-                "id": "com.example.local-sidecar",
-                "name": "Local Sidecar Plugin",
+                "name": "@example/local-sidecar",
                 "version": "1.0.0",
-                "apiVersion": 1,
-                "description": "A local plugin",
-                "permissions": [],
-                "contributes": {},
-                "frontend": "dist/index.js",
-                "backend": null
+                "openforge": {
+                    "id": "com.example.local-sidecar",
+                    "apiVersion": 1,
+                    "displayName": "Local Sidecar Plugin",
+                    "description": "A local plugin",
+                    "frontend": "dist/index.js"
+                }
             }"#,
     )
-    .expect("manifest");
+    .expect("package.json");
 
     let installed = invoke_ok(
         &state,
@@ -128,5 +128,12 @@ async fn installs_local_plugin_with_backend_app_path_state() {
     .await;
 
     assert_eq!(installed["id"], "com.example.local-sidecar");
+    assert_eq!(installed["source_kind"], "local");
+    assert_eq!(
+        installed["install_path"]
+            .as_str()
+            .expect("install_path should be a string"),
+        source.path().canonicalize().unwrap().to_string_lossy()
+    );
     let _ = std::fs::remove_file(path);
 }
