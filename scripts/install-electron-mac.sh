@@ -18,6 +18,22 @@ stop_running_app() {
   fi
 }
 
+install_cli_payload() {
+  local app_path="${INSTALL_DIR}/${APP_NAME}.app"
+  local cli_source_dir="${app_path}/Contents/Resources/openforge-cli"
+  local cli_target_dir="${HOME}/Library/Application Support/openforge/cli"
+
+  if [ ! -f "${cli_source_dir}/cli.js" ]; then
+    echo "ERROR: OpenForge CLI payload not found at ${cli_source_dir}/cli.js" >&2
+    exit 1
+  fi
+
+  rm -rf "${cli_target_dir}"
+  mkdir -p "${cli_target_dir}"
+  cp -R "${cli_source_dir}/." "${cli_target_dir}/"
+  echo "Installed OpenForge CLI payload to ${cli_target_dir}"
+}
+
 install_cli_launcher() {
   local cli_bin_dir="${HOME}/.openforge/bin"
   local cli_target="${HOME}/Library/Application Support/openforge/cli/cli.js"
@@ -59,6 +75,7 @@ cp -R "$APP_PATH" "${INSTALL_DIR}/"
 
 xattr -rd com.apple.quarantine "${INSTALL_DIR}/${APP_NAME}.app" 2>/dev/null || true
 
+install_cli_payload
 install_cli_launcher
 
 echo "Installed Electron ${APP_NAME} to ${INSTALL_DIR}/${APP_NAME}.app"

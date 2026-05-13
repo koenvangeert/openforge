@@ -8,6 +8,22 @@ cleanup() {
   fi
 }
 
+install_cli_payload() {
+  APP_PATH="${INSTALL_DIR}/${APP_NAME}.app"
+  CLI_SOURCE_DIR="${APP_PATH}/Contents/Resources/openforge-cli"
+  CLI_TARGET_DIR="${HOME}/Library/Application Support/openforge/cli"
+
+  if [ ! -f "${CLI_SOURCE_DIR}/cli.js" ]; then
+    echo "ERROR: OpenForge CLI payload not found at ${CLI_SOURCE_DIR}/cli.js" >&2
+    exit 1
+  fi
+
+  rm -rf "${CLI_TARGET_DIR}"
+  mkdir -p "${CLI_TARGET_DIR}"
+  cp -R "${CLI_SOURCE_DIR}/." "${CLI_TARGET_DIR}/"
+  echo "Installed OpenForge CLI payload to ${CLI_TARGET_DIR}"
+}
+
 install_cli_launcher() {
   CLI_BIN_DIR="${HOME}/.openforge/bin"
   CLI_TARGET="${HOME}/Library/Application Support/openforge/cli/cli.js"
@@ -115,6 +131,7 @@ main() {
   # Clear quarantine attribute
   xattr -rd com.apple.quarantine "${INSTALL_DIR}/${APP_NAME}.app"
 
+  install_cli_payload
   install_cli_launcher
 
   echo "Successfully installed ${APP_NAME} v${VERSION} to ${INSTALL_DIR}/${APP_NAME}.app"

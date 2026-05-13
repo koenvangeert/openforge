@@ -237,6 +237,9 @@ describe('Electron macOS packaging helpers', () => {
     await writeFile(join(root, 'dist-electron/main.js'), 'console.log("main")')
     await mkdir(join(root, 'src-tauri/target/release'), { recursive: true })
     await writeExecutable(join(root, 'src-tauri/target/release/openforge'), '#!/bin/sh\necho sidecar\n')
+    await mkdir(join(root, 'src-tauri/src/openforge-cli'), { recursive: true })
+    await writeFile(join(root, 'src-tauri/src/openforge-cli/cli.js'), '#!/usr/bin/env node\nconsole.log("openforge cli")\n')
+    await writeFile(join(root, 'src-tauri/src/openforge-cli/openforge-skill.md'), 'openforge skill docs\n')
 
     await packageElectronApp({ repoRoot: root })
 
@@ -244,6 +247,8 @@ describe('Electron macOS packaging helpers', () => {
     await expect(stat(join(output, 'Contents/MacOS/openforge-sidecar'))).resolves.toBeTruthy()
     await expect(stat(join(output, 'Contents/Resources/app/dist/index.html'))).resolves.toBeTruthy()
     await expect(stat(join(output, 'Contents/Resources/app/dist-electron/main.js'))).resolves.toBeTruthy()
+    await expect(readFile(join(output, 'Contents/Resources/openforge-cli/cli.js'), 'utf8')).resolves.toContain('openforge cli')
+    await expect(readFile(join(output, 'Contents/Resources/openforge-cli/openforge-skill.md'), 'utf8')).resolves.toContain('openforge skill docs')
     await expect(readlink(join(output, 'Contents/Frameworks/Electron Framework.framework/Versions/Current'))).resolves.toBe('A')
     await expect(readlink(join(output, 'Contents/Frameworks/Electron Framework.framework/Resources'))).resolves.toBe('Versions/Current/Resources')
     await expect(readFile(join(output, 'Contents/Resources/app/package.json'), 'utf8').then(JSON.parse)).resolves.toMatchObject({ main: 'dist-electron/main.js' })
