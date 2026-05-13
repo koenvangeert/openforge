@@ -11,7 +11,8 @@ import {
   tasks,
 } from './stores'
 import { finalizeAgentSession, getLatestSession, getTaskDetail } from './ipc'
-import { release as releaseTerminal, replayPtyBuffersForActiveTerminals } from './terminalPool'
+import { getShellLifecycleState, release as releaseTerminal, replayPtyBuffersForActiveTerminals, updateShellLifecycleState } from './terminalPool'
+import { shouldHydratePtyInstanceFromAgentStatusMetadata, type AgentStatusChangedKind } from './agentPanelSessionSync'
 import { getOpenCodeSessionUpdate } from './opencodeSessionEvents'
 import { getTaskPromptText } from './taskPrompt'
 import type { AgentEvent, AgentSession } from './types'
@@ -52,6 +53,23 @@ function clearCheckpointForTask(taskId: string): void {
   if (get(checkpointNotification)?.ticketId === taskId) {
     checkpointNotification.set(null)
   }
+}
+
+function hydratePtyInstanceFromStatusMetadata(
+  taskId: string,
+  status: string,
+  kind: AgentStatusChangedKind | null | undefined,
+  ptyInstanceId: number | null | undefined,
+): void {
+  if (typeof ptyInstanceId !== 'number') return
+  if (!shouldHydratePtyInstanceFromAgentStatusMetadata(status, kind)) return
+
+  updateShellLifecycleState(taskId, {
+    ...getShellLifecycleState(taskId),
+    ptyActive: true,
+    shellExited: false,
+    currentPtyInstance: ptyInstanceId,
+  })
 }
 
 async function getOrLoadActiveSession(taskId: string): Promise<AgentSession | null> {
@@ -240,8 +258,9 @@ export async function registerAppDesktopEventListeners(deps: AppDesktopEventDeps
   )
 
   unlisteners.push(
-    await listen<{ task_id: string; status: string }>('agent-status-changed', async (event) => {
+    await listen<{ task_id: string; status: string; kind?: AgentStatusChangedKind | null; pty_instance_id?: number | null }>('agent-status-changed', async (event) => {
       const { task_id: taskId, status } = event.payload
+      hydratePtyInstanceFromStatusMetadata(taskId, status, event.payload.kind, event.payload.pty_instance_id)
       let session = get(activeSessions).get(taskId)
       if (!session) {
         try {

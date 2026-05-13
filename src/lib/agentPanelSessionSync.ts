@@ -1,12 +1,13 @@
 import { listenDesktopEvent, type DesktopUnlistenFn } from './desktopIpc'
 
 export type AgentPanelStatus = 'idle' | 'running' | 'complete' | 'error'
+export type AgentStatusChangedKind = 'started' | 'became_busy' | 'became_idle' | 'requested_permission' | 'failed' | 'ended'
 
 interface AgentStatusChangedPayload {
   task_id: string
   status: string
   provider?: string
-  kind?: 'started' | 'became_busy' | 'became_idle' | 'requested_permission' | 'failed' | 'ended'
+  kind?: AgentStatusChangedKind | null
   pty_instance_id?: number | null
   raw_event_type?: string | null
   raw_status_type?: string | null
@@ -38,6 +39,14 @@ export function getAgentPanelStatusFromSessionStatus(sessionStatus: string | nul
   }
 }
 
+export function shouldHydratePtyInstanceFromAgentStatusMetadata(
+  status: string,
+  kind: AgentStatusChangedKind | null | undefined,
+): boolean {
+  if (status !== 'running') return false
+  return kind === undefined || kind === null || kind === 'started' || kind === 'became_busy'
+}
+
 function isAgentStatusChangedPayload(payload: unknown): payload is AgentStatusChangedPayload {
   if (!payload || typeof payload !== 'object') return false
   const maybePayload = payload as Partial<AgentStatusChangedPayload>
@@ -58,7 +67,10 @@ export function createAgentStatusChangedHandler({
     if (nextStatus === 'idle') return
 
     setStatus(nextStatus)
-    if (typeof event.payload.pty_instance_id === 'number') {
+    if (
+      typeof event.payload.pty_instance_id === 'number' &&
+      shouldHydratePtyInstanceFromAgentStatusMetadata(event.payload.status, event.payload.kind)
+    ) {
       onPtyInstanceId?.(event.payload.pty_instance_id)
     }
     if (nextStatus === 'running') {

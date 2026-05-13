@@ -610,6 +610,28 @@ describe("terminalPool", () => {
 		expect(entry.ptyActive).toBe(false);
 	});
 
+	it("accepts only current instance output after PTY instance metadata is hydrated", async () => {
+		const entry = await acquire("task-10-hydrated-output");
+		const { write: writeSpy, reset: resetSpy } = getTerminalMocks(entry);
+
+		updateShellLifecycleState("task-10-hydrated-output", {
+			ptyActive: true,
+			shellExited: false,
+			currentPtyInstance: 42,
+		});
+
+		const outputCb = getListenCallback("pty-output-task-10-hydrated-output");
+		outputCb({ payload: { data: "old output", instance_id: 41 } });
+		outputCb({ payload: { data: "current output", instance_id: 42 } });
+
+		expect(writeSpy).toHaveBeenCalledTimes(1);
+		expect(writeSpy).toHaveBeenCalledWith("current output");
+		expect(resetSpy).not.toHaveBeenCalled();
+		expect(entry.ptyActive).toBe(true);
+		expect(entry.needsClear).toBe(false);
+		expect(entry.currentPtyInstance).toBe(42);
+	});
+
 	it("pty-exit listener marks ptyActive false and needsClear true", async () => {
 		const entry = await acquire("task-11");
 		entry.ptyActive = true;

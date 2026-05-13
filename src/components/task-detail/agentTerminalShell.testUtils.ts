@@ -10,6 +10,8 @@ interface MockWritable<T> {
   subscribe(run: (value: T) => void): () => void
 }
 
+type DesktopEventCallback = (event: { payload: unknown }) => void
+
 const mocks = vi.hoisted(() => {
   function createMockWritable<T>(initialValue: T): MockWritable<T> {
     let value = initialValue
@@ -57,8 +59,9 @@ const mocks = vi.hoisted(() => {
     shellExited: false,
     currentPtyInstance: null as number | null,
   }
+  const listenCallbacks = new Map<string, DesktopEventCallback[]>()
 
-  return { activeSessions, poolEntry, shellLifecycleState }
+  return { activeSessions, poolEntry, shellLifecycleState, listenCallbacks }
 })
 
 vi.mock('@xterm/xterm', () => {
@@ -104,7 +107,12 @@ vi.mock('../../lib/ipc', () => ({
 }))
 
 vi.mock('../../lib/desktopIpc', () => ({
-  listenDesktopEvent: vi.fn().mockResolvedValue(() => {}),
+  listenDesktopEvent: vi.fn().mockImplementation((eventName: string, cb: DesktopEventCallback) => {
+    const existing = mocks.listenCallbacks.get(eventName) || []
+    existing.push(cb)
+    mocks.listenCallbacks.set(eventName, existing)
+    return Promise.resolve(() => {})
+  }),
 }))
 
 vi.mock('../../lib/audioRecorder', () => ({
@@ -128,13 +136,19 @@ vi.mock('../../lib/terminalPool', () => ({
 
 export const mockPoolEntry = mocks.poolEntry
 export const mockShellLifecycleState = mocks.shellLifecycleState
+export const listenCallbacks = mocks.listenCallbacks
 
 export function resetAgentTerminalTestState() {
+  vi.clearAllMocks()
   mocks.activeSessions.set(new Map())
   mocks.poolEntry.ptyActive = false
   mocks.poolEntry.attached = false
   mocks.poolEntry.fitAddon.fit.mockClear()
   mocks.poolEntry.fitAddon.proposeDimensions.mockClear()
+  mocks.poolEntry.terminal.write.mockClear()
+  mocks.poolEntry.terminal.reset.mockClear()
+  mocks.poolEntry.terminal.dispose.mockClear()
+  mocks.listenCallbacks.clear()
   mocks.shellLifecycleState.ptyActive = false
   mocks.shellLifecycleState.shellExited = false
   mocks.shellLifecycleState.currentPtyInstance = null

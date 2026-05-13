@@ -8,8 +8,14 @@ import { appShellEventContracts } from './electronMigrationContracts'
 import type { DesktopUnlistenFn } from './desktopIpc'
 
 vi.mock('./terminalPool', () => ({
+  getShellLifecycleState: vi.fn().mockReturnValue({
+    ptyActive: true,
+    shellExited: false,
+    currentPtyInstance: null,
+  }),
   release: vi.fn(),
   replayPtyBuffersForActiveTerminals: vi.fn(async () => undefined),
+  updateShellLifecycleState: vi.fn(),
 }))
 
 vi.mock('./ipc', async (importOriginal) => {
@@ -22,7 +28,7 @@ vi.mock('./ipc', async (importOriginal) => {
   }
 })
 
-import { release, replayPtyBuffersForActiveTerminals } from './terminalPool'
+import { getShellLifecycleState, release, replayPtyBuffersForActiveTerminals, updateShellLifecycleState } from './terminalPool'
 import { finalizeAgentSession, getLatestSession } from './ipc'
 
 function createSession(overrides: Partial<AgentSession> = {}): AgentSession {
@@ -72,6 +78,11 @@ describe('registerAppDesktopEventListeners', () => {
     checkpointNotification.set(null)
     taskRuntimeInfo.set(new Map())
     vi.clearAllMocks()
+    vi.mocked(getShellLifecycleState).mockReturnValue({
+      ptyActive: true,
+      shellExited: false,
+      currentPtyInstance: null,
+    })
   })
 
   it('registers window close handling and all shell event channels', async () => {
@@ -155,6 +166,41 @@ describe('registerAppDesktopEventListeners', () => {
 
     expect(get(taskRuntimeInfo).get('task-1')).toEqual({ workspacePath: '/tmp/work' })
     expect(get(activeSessions).get('task-1')?.id).toBe('session-resumed')
+  })
+
+  it('hydrates terminalPool with current PTY instance metadata from provider-neutral status events', async () => {
+    const { deps, handlers } = createHarness()
+    activeSessions.set(new Map([['task-1', createSession({ status: 'running' })]]))
+
+    await registerAppDesktopEventListeners(deps)
+    await handlers.get('agent-status-changed')?.({
+      payload: { task_id: 'task-1', status: 'running', pty_instance_id: 42 },
+    })
+
+    expect(updateShellLifecycleState).toHaveBeenCalledWith('task-1', {
+      ptyActive: true,
+      shellExited: false,
+      currentPtyInstance: 42,
+    })
+    expect(get(activeSessions).get('task-1')?.status).toBe('running')
+  })
+
+  it('does not reactivate an exited PTY from completed status metadata', async () => {
+    const { deps, handlers } = createHarness()
+    vi.mocked(getShellLifecycleState).mockReturnValue({
+      ptyActive: false,
+      shellExited: true,
+      currentPtyInstance: 42,
+    })
+    activeSessions.set(new Map([['task-1', createSession({ status: 'running' })]]))
+
+    await registerAppDesktopEventListeners(deps)
+    await handlers.get('agent-status-changed')?.({
+      payload: { task_id: 'task-1', status: 'completed', kind: 'ended', pty_instance_id: 42 },
+    })
+
+    expect(updateShellLifecycleState).not.toHaveBeenCalled()
+    expect(get(activeSessions).get('task-1')?.status).toBe('completed')
   })
 
   it('finalizes agent PTY exits through the provider-neutral IPC wrapper', async () => {

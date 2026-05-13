@@ -8,6 +8,7 @@ import {
   createAgentStatusChangedHandler,
   getAgentPanelStatusFromSessionStatus,
   listenToAgentStatusChanged,
+  shouldHydratePtyInstanceFromAgentStatusMetadata,
   type AgentPanelStatus,
 } from './agentPanelSessionSync'
 import { listenDesktopEvent } from './desktopIpc'
@@ -70,7 +71,7 @@ describe('agent panel session status synchronization', () => {
     expect(onRunning).not.toHaveBeenCalled()
   })
 
-  it('hydrates PTY instance ids from matching agent status events', () => {
+  it('hydrates PTY instance ids from matching running agent status events', () => {
     const setStatus = vi.fn()
     const onPtyInstanceId = vi.fn()
     const handler = createAgentStatusChangedHandler({
@@ -79,9 +80,37 @@ describe('agent panel session status synchronization', () => {
       onPtyInstanceId,
     })
 
-    handler({ payload: { task_id: 'T-1', status: 'running', pty_instance_id: 42 } })
+    handler({ payload: { task_id: 'T-1', status: 'running', kind: 'became_busy', pty_instance_id: 42 } })
 
     expect(onPtyInstanceId).toHaveBeenCalledWith(42)
+  })
+
+  it('does not hydrate PTY instance ids from terminal agent status events', () => {
+    const setStatus = vi.fn()
+    const onPtyInstanceId = vi.fn()
+    const handler = createAgentStatusChangedHandler({
+      taskId: 'T-1',
+      setStatus,
+      onPtyInstanceId,
+    })
+
+    handler({ payload: { task_id: 'T-1', status: 'completed', kind: 'ended', pty_instance_id: 42 } })
+
+    expect(setStatus).toHaveBeenCalledWith('complete')
+    expect(onPtyInstanceId).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['running', undefined, true],
+    ['running', null, true],
+    ['running', 'started', true],
+    ['running', 'became_busy', true],
+    ['running', 'became_idle', false],
+    ['running', 'ended', false],
+    ['completed', 'ended', false],
+    ['paused', 'requested_permission', false],
+  ] as const)('decides PTY hydration for status %s and kind %s', (status, kind, expected) => {
+    expect(shouldHydratePtyInstanceFromAgentStatusMetadata(status, kind)).toBe(expected)
   })
 
   it('subscribes through the desktop event adapter so Electron and Tauri share the same path', async () => {
