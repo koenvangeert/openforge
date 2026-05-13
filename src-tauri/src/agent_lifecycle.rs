@@ -173,7 +173,7 @@ Task is incomplete unless both summary updates were made. If the openforge CLI i
 "#, task_id = task.id));
 
     if code_cleanup_enabled {
-        prompt.push_str(r#"<openforge_code_cleanup>
+        prompt.push_str(&format!(r#"<openforge_code_cleanup>
 As you work on this task, watch for code that doesn't meet project standards or that should be split into separate concerns. When you encounter such code — whether in files you're modifying or adjacent code you're reading — create a new task for it using the OpenForge CLI or the equivalent task-creation mechanism available in your environment.
 
 Create a task when you find:
@@ -185,14 +185,14 @@ Create a task when you find:
 - Dead code, unused imports, or stale abstractions that should be cleaned up
 
 How to create a cleanup task:
-- Run: openforge create-task --initial-prompt "..." --worktree "$PWD"
+- Run: openforge create-task --initial-prompt "..." --worktree "$PWD" --depends-on "{task_id}"
 - Write a clear, actionable prompt (e.g. "Extract shared validation logic from UserForm and AdminForm")
 - Do NOT fix these issues yourself — just log them as tasks and stay focused on your current task
 
 Only create tasks for genuine issues worth addressing. Do not create tasks for minor style preferences or trivial nitpicks.
 </openforge_code_cleanup>
 
-"#);
+"#, task_id = task.id));
     }
 
     if let Some(instructions) = additional_instructions {
@@ -731,9 +731,9 @@ mod tests {
 
         assert!(prompt.contains("<openforge_code_cleanup>"));
         assert!(prompt.contains("</openforge_code_cleanup>"));
-        assert!(
-            prompt.contains("openforge create-task --initial-prompt \"...\" --worktree \"$PWD\"")
-        );
+        assert!(prompt.contains(
+            "openforge create-task --initial-prompt \"...\" --worktree \"$PWD\" --depends-on \"T-801\""
+        ));
         assert!(prompt.contains("openforge update-task --task-id \"T-801\" --summary \"...\""));
         assert!(!prompt.contains("openforge_create_task"));
         assert!(!prompt.contains("openforge_update_task"));
