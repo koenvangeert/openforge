@@ -5,6 +5,7 @@
   import { getPrComments, markCommentAddressed, openUrl } from '../../lib/ipc'
   import MarkdownContent from '../shared/content/MarkdownContent.svelte'
   import { getPrStatusChips } from '../../lib/prStatusPresentation'
+  import { getGitHubMarkdownImageBaseUrl } from '../../lib/githubMarkdown'
   import PrStatusChip from '../shared/ui/PrStatusChip.svelte'
 
   interface Props {
@@ -18,6 +19,7 @@
 
   let comments = $state<PrComment[]>([])
   let unaddressedComments = $derived(comments.filter(c => c.addressed === 0))
+  let markdownImageBaseUrlsByPrId = $derived(new Map(pullRequests.map((pr) => [pr.id, getGitHubMarkdownImageBaseUrl(pr)])))
   let dependencies = $derived(task ? getTaskDependencySummaries(task, allTasks) : [])
   let waitingDependencyCount = $derived(task ? getWaitingDependencyCount(task, allTasks) : 0)
 
@@ -44,6 +46,10 @@
   async function handleMarkAddressed(commentId: number) {
     await markCommentAddressed(commentId)
     await fetchComments()
+  }
+
+  function getCommentImageBaseUrl(comment: PrComment): string | null {
+    return markdownImageBaseUrlsByPrId.get(comment.pr_id) ?? null
   }
 
   $effect(() => {
@@ -205,7 +211,7 @@
                 {/if}
               </div>
               <div class="text-xs text-base-content/70 leading-relaxed [&_.markdown-body]:text-xs [&_.markdown-body_pre]:text-[10px] [&_.markdown-body_code]:text-[10px] [&_.markdown-body_p]:m-0">
-                <MarkdownContent content={comment.body} />
+                <MarkdownContent content={comment.body} imageBaseUrl={getCommentImageBaseUrl(comment)} />
               </div>
             </div>
           {/each}

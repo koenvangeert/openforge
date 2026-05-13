@@ -391,6 +391,35 @@ describe('TaskDetailPane', () => {
       expect(container.querySelector('code')?.textContent).toBe('inline code')
     })
 
+    it('resolves relative PR comment image sources against the matching PR head commit', async () => {
+      const secondPr: PullRequestInfo = {
+        ...basePr,
+        id: 202,
+        repo_owner: 'other-org',
+        repo_name: 'other-repo',
+        title: 'Second PR',
+        url: 'https://github.com/other-org/other-repo/pull/202',
+        head_sha: 'def456',
+      }
+      vi.mocked(ipc.getPrComments).mockImplementation(async (prId: number) => {
+        if (prId === 101) return []
+        return [makeComment({ id: 9, pr_id: 202, body: '![Screenshot](docs/review.png)' })]
+      })
+
+      const { container } = render(TaskDetailPane, {
+        props: {
+          task: baseTask,
+          session: null,
+          pullRequests: [basePr, secondPr],
+          onOpenFullView: vi.fn(),
+        },
+      })
+
+      await waitFor(() => {
+        expect(container.querySelector('img')?.getAttribute('src')).toBe('https://raw.githubusercontent.com/other-org/other-repo/def456/docs/review.png')
+      })
+    })
+
     it('renders // PR_COMMENTS label when task is provided', () => {
       render(TaskDetailPane, {
         props: {
