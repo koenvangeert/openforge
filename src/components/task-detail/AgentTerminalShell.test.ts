@@ -2,7 +2,9 @@ import { render, screen } from '@testing-library/svelte'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import {
   createAgentSession,
+  listenCallbacks,
   mockPoolEntry,
+  mockShellLifecycleState,
   resetAgentTerminalTestState,
   setActiveSession,
 } from './agentTerminalShell.testUtils'
@@ -20,6 +22,121 @@ const stageLabels: Record<string, string> = {
 describe('AgentTerminalShell', () => {
   beforeEach(() => {
     resetAgentTerminalTestState()
+  })
+
+  it.each([
+    {
+      providerName: 'Pi',
+      session: createAgentSession({ provider: 'pi-code', pi_session_id: 'pi-sess-abc123' }),
+      runningText: 'Pi agent running...',
+      logPrefix: 'PiAgentPanel',
+      sessionIdKey: 'pi_session_id' as const,
+      expectedCommand: 'pi --session pi-sess-abc123',
+    },
+    {
+      providerName: 'Claude',
+      session: createAgentSession({ provider: 'claude-code', claude_session_id: 'claude-sess-abc123' }),
+      runningText: 'Claude agent running...',
+      logPrefix: 'ClaudeAgentPanel',
+      sessionIdKey: 'claude_session_id' as const,
+      expectedCommand: 'claude --resume claude-sess-abc123',
+    },
+    {
+      providerName: 'OpenCode',
+      session: createAgentSession({ provider: 'opencode', opencode_session_id: 'opencode-sess-abc123' }),
+      runningText: 'Agent running...',
+      logPrefix: 'OpenCodeAgentPanel',
+      sessionIdKey: 'opencode_session_id' as const,
+      expectedCommand: 'opencode --session opencode-sess-abc123',
+    },
+  ])('keeps the pooled terminal attached across $providerName unmount/remount without clearing or killing the PTY', async ({
+    session,
+    runningText,
+    logPrefix,
+    sessionIdKey,
+    expectedCommand,
+  }) => {
+    setActiveSession(session)
+    mockShellLifecycleState.ptyActive = true
+
+    const { acquire, attach, detach, release } = await import('../../lib/terminalPool')
+    const { killPty } = await import('../../lib/ipc')
+
+    const firstRender = render(AgentTerminalShell, {
+      props: {
+        taskId: 'T-1',
+        runningText,
+        logPrefix,
+        sessionIdKey,
+        stageLabels,
+      },
+    })
+
+    expect(await screen.findByText(expectedCommand)).toBeTruthy()
+    await vi.waitFor(() => {
+      expect(attach).toHaveBeenCalledWith(mockPoolEntry, expect.any(HTMLDivElement))
+    })
+
+    firstRender.unmount()
+    expect(detach).toHaveBeenCalledWith(mockPoolEntry)
+    expect(release).not.toHaveBeenCalled()
+    expect(killPty).not.toHaveBeenCalled()
+    expect(mockPoolEntry.terminal.reset).not.toHaveBeenCalled()
+    expect(mockPoolEntry.terminal.dispose).not.toHaveBeenCalled()
+
+    render(AgentTerminalShell, {
+      props: {
+        taskId: 'T-1',
+        runningText,
+        logPrefix,
+        sessionIdKey,
+        stageLabels,
+      },
+    })
+
+    expect(await screen.findByText(expectedCommand)).toBeTruthy()
+    await vi.waitFor(() => {
+      expect(acquire).toHaveBeenCalledTimes(2)
+      expect(attach).toHaveBeenCalledTimes(2)
+      expect(attach).toHaveBeenLastCalledWith(mockPoolEntry, expect.any(HTMLDivElement))
+    })
+    expect(release).not.toHaveBeenCalled()
+    expect(killPty).not.toHaveBeenCalled()
+    expect(mockPoolEntry.terminal.reset).not.toHaveBeenCalled()
+    expect(mockPoolEntry.terminal.dispose).not.toHaveBeenCalled()
+  })
+
+  it('hydrates PTY instance metadata from status events while preserving active pooled terminal state', async () => {
+    setActiveSession(createAgentSession({ provider: 'opencode', opencode_session_id: 'opencode-sess-abc123' }))
+    mockShellLifecycleState.ptyActive = true
+
+    const { updateShellLifecycleState } = await import('../../lib/terminalPool')
+
+    render(AgentTerminalShell, {
+      props: {
+        taskId: 'T-1',
+        runningText: 'Agent running...',
+        logPrefix: 'OpenCodeAgentPanel',
+        sessionIdKey: 'opencode_session_id',
+        stageLabels,
+      },
+    })
+
+    await vi.waitFor(() => {
+      expect(listenCallbacks.get('agent-status-changed')?.length).toBe(1)
+    })
+
+    listenCallbacks.get('agent-status-changed')?.[0]?.({
+      payload: { task_id: 'T-1', status: 'running', pty_instance_id: 42 },
+    })
+
+    expect(updateShellLifecycleState).toHaveBeenCalledWith('T-1', {
+      ptyActive: true,
+      shellExited: false,
+      currentPtyInstance: 42,
+    })
+    expect(screen.getByText('Agent running...')).toBeTruthy()
+    expect(screen.queryByText('No active agent session')).toBeNull()
   })
 
   it('preserves provider-specific chrome while sharing terminal shell behavior', async () => {
