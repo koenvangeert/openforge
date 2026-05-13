@@ -629,13 +629,31 @@ fn opencode_status_events_match_pi_start_end_only() {
         Some(("completed", &["running", "paused", "completed"] as &[_])),
         "OpenCode idle should behave like Pi agent.end"
     );
-    assert_eq!(opencode_status_from_event("session.status", Some("busy")), None);
-    assert_eq!(opencode_status_from_event("session.status", Some("retry")), None);
-    assert_eq!(opencode_status_from_event("session.status", Some("error")), None);
-    assert_eq!(opencode_status_from_event("session.status", Some("idle")), None);
-    assert_eq!(opencode_status_from_event("session.updated", Some("idle")), None);
+    assert_eq!(
+        opencode_status_from_event("session.status", Some("busy")),
+        None
+    );
+    assert_eq!(
+        opencode_status_from_event("session.status", Some("retry")),
+        None
+    );
+    assert_eq!(
+        opencode_status_from_event("session.status", Some("error")),
+        None
+    );
+    assert_eq!(
+        opencode_status_from_event("session.status", Some("idle")),
+        None
+    );
+    assert_eq!(
+        opencode_status_from_event("session.updated", Some("idle")),
+        None
+    );
     assert_eq!(opencode_status_from_event("message.updated", None), None);
-    assert_eq!(opencode_status_from_event("tool.execute.before", None), None);
+    assert_eq!(
+        opencode_status_from_event("tool.execute.before", None),
+        None
+    );
     assert_eq!(opencode_status_from_event("tool.execute.after", None), None);
 }
 
