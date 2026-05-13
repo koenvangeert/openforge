@@ -2,6 +2,7 @@ pub mod claude_code;
 pub mod opencode;
 pub mod pi;
 
+use crate::app_events::AppEventSender;
 use crate::backend_runtime::AppHandle;
 use std::path::Path;
 
@@ -22,6 +23,25 @@ pub struct ProviderSessionResult {
     pub opencode_session_id: Option<String>,
     pub pi_session_id: Option<String>,
     pub pty_instance_id: Option<u64>,
+}
+
+#[derive(Clone)]
+pub struct ProviderStartContext {
+    pub app_handle: Option<AppHandle>,
+    pub app_event_tx: Option<AppEventSender>,
+    pub cols: u16,
+    pub rows: u16,
+}
+
+impl ProviderStartContext {
+    pub fn new(app_handle: Option<AppHandle>, app_event_tx: Option<AppEventSender>) -> Self {
+        Self {
+            app_handle,
+            app_event_tx,
+            cols: 80,
+            rows: 24,
+        }
+    }
 }
 
 // ============================================================================
@@ -62,7 +82,7 @@ impl Provider {
         agent: Option<&str>,
         permission_mode: Option<&str>,
         model: Option<&crate::opencode_client::PromptModel>,
-        app: &AppHandle,
+        start_context: &ProviderStartContext,
     ) -> Result<ProviderSessionResult, String> {
         match self {
             Provider::ClaudeCode(p) => {
@@ -73,7 +93,7 @@ impl Provider {
                     agent,
                     permission_mode,
                     model,
-                    app,
+                    start_context,
                 )
                 .await
             }
@@ -85,7 +105,7 @@ impl Provider {
                     agent,
                     permission_mode,
                     model,
-                    app,
+                    start_context,
                 )
                 .await
             }
@@ -97,7 +117,7 @@ impl Provider {
                     agent,
                     permission_mode,
                     model,
-                    app,
+                    start_context,
                 )
                 .await
             }
@@ -115,7 +135,7 @@ impl Provider {
         agent: Option<&str>,
         permission_mode: Option<&str>,
         model: Option<&crate::opencode_client::PromptModel>,
-        app: &AppHandle,
+        start_context: &ProviderStartContext,
     ) -> Result<ProviderSessionResult, String> {
         match self {
             Provider::ClaudeCode(p) => {
@@ -127,7 +147,7 @@ impl Provider {
                     agent,
                     permission_mode,
                     model,
-                    app,
+                    start_context,
                 )
                 .await
             }
@@ -140,7 +160,7 @@ impl Provider {
                     agent,
                     permission_mode,
                     model,
-                    app,
+                    start_context,
                 )
                 .await
             }
@@ -153,7 +173,7 @@ impl Provider {
                     agent,
                     permission_mode,
                     model,
-                    app,
+                    start_context,
                 )
                 .await
             }
