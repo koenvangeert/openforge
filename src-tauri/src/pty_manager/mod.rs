@@ -22,7 +22,7 @@ use events::{
 use pids::{shell_pid_file_name, shell_session_key};
 #[cfg(test)]
 use session::{frozen_seconds, PtySession, NEXT_INSTANCE_ID};
-use session::{LastOutputTimes, PtyOutputBuffers, PtySessions};
+use session::{AgentSpawnGenerations, LastOutputTimes, PtyOutputBuffers, PtySessions};
 
 // ============================================================================
 // Error Types
@@ -68,6 +68,7 @@ pub struct PtyManager {
     pid_dir_override: Option<PathBuf>,
     last_output: LastOutputTimes,
     output_buffers: PtyOutputBuffers,
+    agent_spawn_generations: AgentSpawnGenerations,
 }
 
 impl PtyManager {
@@ -77,6 +78,7 @@ impl PtyManager {
             pid_dir_override: None,
             last_output: Arc::new(Mutex::new(HashMap::new())),
             output_buffers: Arc::new(Mutex::new(HashMap::new())),
+            agent_spawn_generations: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 }
