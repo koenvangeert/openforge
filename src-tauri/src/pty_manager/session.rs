@@ -20,12 +20,14 @@ use super::{PtyError, PtyManager};
 pub(super) type PtySessions = Arc<Mutex<HashMap<String, PtySession>>>;
 pub(super) type LastOutputTimes = Arc<Mutex<HashMap<String, Arc<AtomicU64>>>>;
 pub(super) type PtyOutputBuffers = Arc<Mutex<HashMap<String, SharedRingBuffer>>>;
+pub(super) type AgentSpawnGenerations = Arc<Mutex<HashMap<String, u64>>>;
 
 // ============================================================================
 // Instance ID Generator
 // ============================================================================
 
 pub(super) static NEXT_INSTANCE_ID: AtomicU64 = AtomicU64::new(1);
+static NEXT_AGENT_SPAWN_GENERATION: AtomicU64 = AtomicU64::new(1);
 
 // ============================================================================
 // PTY Session
@@ -389,6 +391,32 @@ impl PtyManager {
         .await
     }
 
+    async fn is_current_agent_spawn(&self, task_id: &str, generation: u64) -> bool {
+        let generations = self.agent_spawn_generations.lock().await;
+        generations
+            .get(task_id)
+            .map(|current| *current == generation)
+            .unwrap_or(false)
+    }
+
+    async fn is_current_agent_session(&self, task_id: &str, instance_id: u64) -> bool {
+        let sessions = self.sessions.lock().await;
+        sessions
+            .get(task_id)
+            .map(|session| session.instance_id == instance_id)
+            .unwrap_or(false)
+    }
+
+    async fn is_current_agent_spawn_and_session(
+        &self,
+        task_id: &str,
+        generation: u64,
+        instance_id: u64,
+    ) -> bool {
+        self.is_current_agent_spawn(task_id, generation).await
+            && self.is_current_agent_session(task_id, instance_id).await
+    }
+
     async fn spawn_agent_pty<A: AgentPtyProviderAdapter>(
         &self,
         mut adapter: A,
@@ -399,21 +427,36 @@ impl PtyManager {
         app_handle: Option<crate::backend_runtime::AppHandle>,
         app_event_tx: Option<AppEventSender>,
     ) -> Result<u64, PtyError> {
-        let mut sessions = self.sessions.lock().await;
+        let spawn_generation = NEXT_AGENT_SPAWN_GENERATION.fetch_add(1, Ordering::Relaxed);
+        {
+            let mut generations = self.agent_spawn_generations.lock().await;
+            generations.insert(task_id.to_string(), spawn_generation);
+        }
 
-        if sessions.contains_key(task_id) {
+        let old_session = {
+            let mut sessions = self.sessions.lock().await;
+            sessions.remove(task_id)
+        };
+
+        if let Some(mut old_session) = old_session {
             info!(
                 "[PTY] Replacing existing {} PTY for task {}",
                 adapter.label(),
                 task_id
             );
-            if let Some(mut old_session) = sessions.remove(task_id) {
-                let _ = old_session.child.kill();
-            }
+            let _ = old_session.child.kill();
             if let Ok(pid_dir) = self.get_pid_dir() {
                 for file_name in adapter.stale_pid_file_names(task_id) {
                     let _ = std::fs::remove_file(pid_dir.join(file_name));
                 }
+            }
+            {
+                let mut times = self.last_output.lock().await;
+                times.remove(task_id);
+            }
+            {
+                let mut buffers = self.output_buffers.lock().await;
+                buffers.remove(task_id);
             }
         }
 
@@ -457,7 +500,7 @@ impl PtyManager {
             cmd.env(key, value);
         }
 
-        let child = pair
+        let mut child = pair
             .slave
             .spawn_command(cmd)
             .map_err(|e| PtyError::SpawnFailed(format!("Failed to spawn command: {}", e)))?;
@@ -482,27 +525,92 @@ impl PtyManager {
             .take_writer()
             .map_err(|e| PtyError::SpawnFailed(format!("Failed to take writer: {}", e)))?;
 
-        sessions.insert(
-            task_id.to_string(),
-            PtySession {
-                child,
-                master: pair.master,
-                writer,
-                instance_id,
-            },
-        );
+        let replaced_session = {
+            let generations = self.agent_spawn_generations.lock().await;
+            if generations
+                .get(task_id)
+                .map(|current| *current != spawn_generation)
+                .unwrap_or(true)
+            {
+                let _ = child.kill();
+                return Err(PtyError::SpawnFailed(format!(
+                    "{} PTY for task {} was replaced before session registration completed",
+                    adapter.label(),
+                    task_id
+                )));
+            }
 
-        drop(sessions);
+            let mut sessions = self.sessions.lock().await;
+            let replaced_session = sessions.insert(
+                task_id.to_string(),
+                PtySession {
+                    child,
+                    master: pair.master,
+                    writer,
+                    instance_id,
+                },
+            );
+            drop(sessions);
+            drop(generations);
+            replaced_session
+        };
+
+        if let Some(mut replaced_session) = replaced_session {
+            info!(
+                "[PTY] Replacing existing {} PTY for task {}",
+                adapter.label(),
+                task_id
+            );
+            let _ = replaced_session.child.kill();
+            if let Ok(pid_dir) = self.get_pid_dir() {
+                for file_name in adapter.stale_pid_file_names(task_id) {
+                    let _ = std::fs::remove_file(pid_dir.join(file_name));
+                }
+            }
+            {
+                let mut times = self.last_output.lock().await;
+                times.remove(task_id);
+            }
+            {
+                let mut buffers = self.output_buffers.lock().await;
+                buffers.remove(task_id);
+            }
+        }
 
         #[cfg(target_os = "macos")]
         {
             tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
         }
 
+        if !self
+            .is_current_agent_spawn_and_session(task_id, spawn_generation, instance_id)
+            .await
+        {
+            return Err(PtyError::SpawnFailed(format!(
+                "{} PTY for task {} was replaced before setup completed",
+                adapter.label(),
+                task_id
+            )));
+        }
+
         let pid_dir = self.get_pid_dir()?;
         std::fs::create_dir_all(&pid_dir)?;
         let pid_file = pid_dir.join(adapter.pid_file_name(task_id));
-        std::fs::write(&pid_file, pid.to_string())?;
+        let pid_string = pid.to_string();
+        std::fs::write(&pid_file, &pid_string)?;
+        if !self
+            .is_current_agent_spawn_and_session(task_id, spawn_generation, instance_id)
+            .await
+        {
+            if std::fs::read_to_string(&pid_file).ok().as_deref() == Some(pid_string.as_str()) {
+                let _ = std::fs::remove_file(&pid_file);
+            }
+            return Err(PtyError::SpawnFailed(format!(
+                "{} PTY for task {} was replaced before PID registration completed",
+                adapter.label(),
+                task_id
+            )));
+        }
 
         let last_output_time = adapter
             .track_last_output()
@@ -511,6 +619,27 @@ impl PtyManager {
             let mut times = self.last_output.lock().await;
             times.insert(task_id.to_string(), Arc::clone(last_output_time));
         }
+        if !self
+            .is_current_agent_spawn_and_session(task_id, spawn_generation, instance_id)
+            .await
+        {
+            if let Some(last_output_time) = &last_output_time {
+                let mut times = self.last_output.lock().await;
+                if times
+                    .get(task_id)
+                    .map(|stored| Arc::ptr_eq(stored, last_output_time))
+                    .unwrap_or(false)
+                {
+                    times.remove(task_id);
+                }
+            }
+            return Err(PtyError::SpawnFailed(format!(
+                "{} PTY for task {} was replaced before output tracking completed",
+                adapter.label(),
+                task_id
+            )));
+        }
+
         let ring_buffer = Arc::new(std::sync::Mutex::new(RingBuffer::new(
             CLAUDE_BUFFER_CAPACITY,
         )));
@@ -518,7 +647,36 @@ impl PtyManager {
             let mut buffers = self.output_buffers.lock().await;
             buffers.insert(task_id.to_string(), Arc::clone(&ring_buffer));
         }
+        if !self
+            .is_current_agent_spawn_and_session(task_id, spawn_generation, instance_id)
+            .await
+        {
+            let mut buffers = self.output_buffers.lock().await;
+            if buffers
+                .get(task_id)
+                .map(|stored| Arc::ptr_eq(stored, &ring_buffer))
+                .unwrap_or(false)
+            {
+                buffers.remove(task_id);
+            }
+            return Err(PtyError::SpawnFailed(format!(
+                "{} PTY for task {} was replaced before output buffer registration completed",
+                adapter.label(),
+                task_id
+            )));
+        }
         let ring_buffer_emitter = Arc::clone(&ring_buffer);
+
+        if !self
+            .is_current_agent_spawn_and_session(task_id, spawn_generation, instance_id)
+            .await
+        {
+            return Err(PtyError::SpawnFailed(format!(
+                "{} PTY for task {} was replaced before event streaming started",
+                adapter.label(),
+                task_id
+            )));
+        }
 
         let rx = spawn_pty_output_reader(
             reader,
@@ -542,6 +700,23 @@ impl PtyManager {
                 },
             },
         );
+
+        {
+            let mut generations = self.agent_spawn_generations.lock().await;
+            if generations
+                .get(task_id)
+                .map(|current| *current == spawn_generation)
+                .unwrap_or(false)
+            {
+                generations.remove(task_id);
+            } else {
+                return Err(PtyError::SpawnFailed(format!(
+                    "{} PTY for task {} was replaced before setup finished",
+                    adapter.label(),
+                    task_id
+                )));
+            }
+        }
 
         Ok(instance_id)
     }
@@ -733,6 +908,11 @@ impl PtyManager {
     /// # Arguments
     /// * `task_id` - Unique identifier for the task
     pub async fn kill_pty(&self, task_id: &str) -> Result<(), PtyError> {
+        {
+            let mut generations = self.agent_spawn_generations.lock().await;
+            generations.remove(task_id);
+        }
+
         let mut sessions = self.sessions.lock().await;
 
         if let Some(mut session) = sessions.remove(task_id) {
@@ -888,6 +1068,264 @@ pub(super) fn frozen_seconds(last_output_ms: u64, now_ms: u64) -> Option<u64> {
 mod tests {
     use super::*;
     use std::path::{Path, PathBuf};
+    use std::sync::mpsc;
+    use std::time::Duration;
+
+    struct LockCheckingAgentAdapter {
+        sessions: PtySessions,
+        prepared_tx: Option<mpsc::Sender<()>>,
+        command_delay: Duration,
+        output: &'static str,
+        check_lock: bool,
+    }
+
+    impl LockCheckingAgentAdapter {
+        fn assert_sessions_unlocked(&self, phase: &str) {
+            if self.check_lock {
+                assert!(
+                    self.sessions.try_lock().is_ok(),
+                    "sessions mutex should not be held during {phase}"
+                );
+            }
+        }
+    }
+
+    impl AgentPtyProviderAdapter for LockCheckingAgentAdapter {
+        fn label(&self) -> &'static str {
+            "LockChecking"
+        }
+
+        fn command_name(&self) -> &'static str {
+            "/bin/sh"
+        }
+
+        fn command_args(&self) -> Vec<String> {
+            self.assert_sessions_unlocked("command argument construction");
+            if !self.command_delay.is_zero() {
+                std::thread::sleep(self.command_delay);
+            }
+            vec![
+                "-lc".to_string(),
+                format!("printf {}; sleep 5", self.output),
+            ]
+        }
+
+        fn prepare(&mut self, _cwd: &Path) -> Result<(), PtyError> {
+            self.assert_sessions_unlocked("provider preparation");
+            if let Some(prepared_tx) = self.prepared_tx.take() {
+                let _ = prepared_tx.send(());
+            }
+            Ok(())
+        }
+
+        fn extra_env(&self, _task_id: &str, _instance_id: u64) -> HashMap<String, String> {
+            self.assert_sessions_unlocked("provider environment construction");
+            HashMap::new()
+        }
+
+        fn pid_file_name(&self, task_id: &str) -> String {
+            format!("{}-pty.pid", task_id)
+        }
+
+        fn track_last_output(&self) -> bool {
+            true
+        }
+    }
+
+    #[tokio::test]
+    async fn agent_spawn_keeps_session_mutex_out_of_provider_and_command_work() {
+        let mut manager = PtyManager::new();
+        let tmp_dir = tempfile::tempdir().expect("tempdir should succeed");
+        manager.set_pid_dir(tmp_dir.path().to_path_buf());
+        let task_id = "lock-free-agent-spawn";
+        let adapter = LockCheckingAgentAdapter {
+            sessions: Arc::clone(&manager.sessions),
+            prepared_tx: None,
+            command_delay: Duration::ZERO,
+            output: "lock-free-agent",
+            check_lock: true,
+        };
+
+        manager
+            .spawn_agent_pty(adapter, task_id, tmp_dir.path(), 80, 24, None, None)
+            .await
+            .expect("agent PTY should spawn without holding sessions lock during slow setup");
+
+        assert!(
+            tmp_dir.path().join(format!("{task_id}-pty.pid")).exists(),
+            "PID file should still be written after spawn"
+        );
+        assert!(
+            manager.output_buffers.lock().await.contains_key(task_id),
+            "output buffer should still be registered for replay"
+        );
+        assert!(
+            manager.last_output.lock().await.contains_key(task_id),
+            "last-output tracking should still be registered for frozen detection"
+        );
+
+        manager
+            .kill_pty(task_id)
+            .await
+            .expect("test PTY should be cleaned up");
+        assert!(
+            !tmp_dir.path().join(format!("{task_id}-pty.pid")).exists(),
+            "PID file should be removed on cleanup"
+        );
+        assert!(
+            !manager.output_buffers.lock().await.contains_key(task_id),
+            "output buffer should be removed on explicit kill"
+        );
+        assert!(
+            !manager.last_output.lock().await.contains_key(task_id),
+            "last-output tracking should be removed on explicit kill"
+        );
+    }
+
+    #[tokio::test]
+    async fn newer_agent_spawn_wins_when_older_spawn_finishes_setup_late() {
+        let mut manager = PtyManager::new();
+        let tmp_dir = tempfile::tempdir().expect("tempdir should succeed");
+        manager.set_pid_dir(tmp_dir.path().to_path_buf());
+        let task_id = "concurrent-agent-spawn";
+        let (old_prepared_tx, old_prepared_rx) = mpsc::channel();
+
+        let old_manager = manager.clone();
+        let old_cwd = tmp_dir.path().to_path_buf();
+        let old_task_id = task_id.to_string();
+        let old_adapter = LockCheckingAgentAdapter {
+            sessions: Arc::clone(&manager.sessions),
+            prepared_tx: Some(old_prepared_tx),
+            command_delay: Duration::from_millis(150),
+            output: "old-agent",
+            check_lock: false,
+        };
+        let old_spawn = std::thread::spawn(move || {
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .expect("test runtime should build");
+            runtime.block_on(old_manager.spawn_agent_pty(
+                old_adapter,
+                &old_task_id,
+                &old_cwd,
+                80,
+                24,
+                None,
+                None,
+            ))
+        });
+
+        old_prepared_rx
+            .recv_timeout(Duration::from_secs(1))
+            .expect("older spawn should reach provider preparation");
+
+        let new_adapter = LockCheckingAgentAdapter {
+            sessions: Arc::clone(&manager.sessions),
+            prepared_tx: None,
+            command_delay: Duration::ZERO,
+            output: "new-agent",
+            check_lock: false,
+        };
+        let new_instance_id = manager
+            .spawn_agent_pty(new_adapter, task_id, tmp_dir.path(), 80, 24, None, None)
+            .await
+            .expect("newer spawn should become current");
+
+        let old_result = old_spawn.join().expect("older spawn task should join");
+        assert!(
+            matches!(old_result, Err(PtyError::SpawnFailed(ref message)) if message.contains("replaced before session registration")),
+            "older spawn should abort instead of replacing the newer session: {old_result:?}"
+        );
+
+        {
+            let sessions = manager.sessions.lock().await;
+            let session = sessions
+                .get(task_id)
+                .expect("newer session should remain registered");
+            assert_eq!(session.instance_id, new_instance_id);
+        }
+        assert!(
+            manager.output_buffers.lock().await.contains_key(task_id),
+            "newer spawn should keep output buffer registration"
+        );
+        assert!(
+            manager.last_output.lock().await.contains_key(task_id),
+            "newer spawn should keep last-output registration"
+        );
+
+        manager
+            .kill_pty(task_id)
+            .await
+            .expect("newer test PTY should be cleaned up");
+    }
+
+    #[tokio::test]
+    async fn kill_pty_cancels_agent_spawn_before_session_insert() {
+        let mut manager = PtyManager::new();
+        let tmp_dir = tempfile::tempdir().expect("tempdir should succeed");
+        manager.set_pid_dir(tmp_dir.path().to_path_buf());
+        let task_id = "kill-pending-agent-spawn";
+        let (prepared_tx, prepared_rx) = mpsc::channel();
+
+        let spawn_manager = manager.clone();
+        let spawn_cwd = tmp_dir.path().to_path_buf();
+        let spawn_task_id = task_id.to_string();
+        let adapter = LockCheckingAgentAdapter {
+            sessions: Arc::clone(&manager.sessions),
+            prepared_tx: Some(prepared_tx),
+            command_delay: Duration::from_millis(150),
+            output: "killed-agent",
+            check_lock: false,
+        };
+        let pending_spawn = std::thread::spawn(move || {
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .expect("test runtime should build");
+            runtime.block_on(spawn_manager.spawn_agent_pty(
+                adapter,
+                &spawn_task_id,
+                &spawn_cwd,
+                80,
+                24,
+                None,
+                None,
+            ))
+        });
+
+        prepared_rx
+            .recv_timeout(Duration::from_secs(1))
+            .expect("spawn should reach provider preparation");
+        manager
+            .kill_pty(task_id)
+            .await
+            .expect("kill during pending spawn should be accepted");
+
+        let spawn_result = pending_spawn
+            .join()
+            .expect("pending spawn thread should join");
+        assert!(
+            matches!(spawn_result, Err(PtyError::SpawnFailed(ref message)) if message.contains("replaced before session registration")),
+            "pending spawn should abort after kill_pty invalidates it: {spawn_result:?}"
+        );
+        assert!(
+            !manager.sessions.lock().await.contains_key(task_id),
+            "killed pending spawn must not insert a session"
+        );
+        assert!(
+            !tmp_dir.path().join(format!("{task_id}-pty.pid")).exists(),
+            "killed pending spawn must not leave a PID file"
+        );
+        assert!(
+            !manager.output_buffers.lock().await.contains_key(task_id),
+            "killed pending spawn must not register an output buffer"
+        );
+        assert!(
+            !manager.last_output.lock().await.contains_key(task_id),
+            "killed pending spawn must not register last-output tracking"
+        );
+    }
 
     #[test]
     fn claude_adapter_owns_provider_specific_spawn_details() {
