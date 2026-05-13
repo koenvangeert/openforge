@@ -65,6 +65,15 @@ export function markAgentTerminalExited(taskId: string, currentPtyInstance: numb
   })
 }
 
+export function hydrateAgentTerminalPtyInstance(taskId: string, currentPtyInstance: number): void {
+  updateShellLifecycleState(taskId, {
+    ...getShellLifecycleState(taskId),
+    ptyActive: true,
+    shellExited: false,
+    currentPtyInstance,
+  })
+}
+
 export async function abortAgentTerminalSession({
   taskId,
   logPrefix,

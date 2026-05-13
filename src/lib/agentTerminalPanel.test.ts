@@ -15,6 +15,7 @@ import {
   abortAgentTerminalSession,
   getAgentStageLabel,
   getAgentStatusText,
+  hydrateAgentTerminalPtyInstance,
   markAgentTerminalExited,
   syncAgentPanelStatusFromSession,
   writeAgentTerminalTranscription,
@@ -107,6 +108,18 @@ describe('agent terminal panel helpers', () => {
       ptyActive: false,
       shellExited: true,
       currentPtyInstance: 99,
+    })
+  })
+
+  it('hydrates current PTY instance through terminalPool lifecycle state', () => {
+    vi.mocked(getShellLifecycleState).mockReturnValue({ ptyActive: false, shellExited: true, currentPtyInstance: null })
+
+    hydrateAgentTerminalPtyInstance('T-1', 123)
+
+    expect(updateShellLifecycleState).toHaveBeenCalledWith('T-1', {
+      ptyActive: true,
+      shellExited: false,
+      currentPtyInstance: 123,
     })
   })
 })

@@ -70,6 +70,20 @@ describe('agent panel session status synchronization', () => {
     expect(onRunning).not.toHaveBeenCalled()
   })
 
+  it('hydrates PTY instance ids from matching agent status events', () => {
+    const setStatus = vi.fn()
+    const onPtyInstanceId = vi.fn()
+    const handler = createAgentStatusChangedHandler({
+      taskId: 'T-1',
+      setStatus,
+      onPtyInstanceId,
+    })
+
+    handler({ payload: { task_id: 'T-1', status: 'running', pty_instance_id: 42 } })
+
+    expect(onPtyInstanceId).toHaveBeenCalledWith(42)
+  })
+
   it('subscribes through the desktop event adapter so Electron and Tauri share the same path', async () => {
     const unlisten = vi.fn()
     vi.mocked(listenDesktopEvent).mockResolvedValueOnce(unlisten)
