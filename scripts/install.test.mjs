@@ -106,6 +106,34 @@ install_openforge_cli ${shellQuote(appPath)} error
     await expect(readFile(join(home, '.openforge/bin/openforge'), 'utf8')).resolves.toContain(copiedCli)
   })
 
+  it('propagates payload copy failures without writing the launcher', async () => {
+    const root = await mkdtemp(join(tmpdir(), `openforge-install-cli-copy-failure-${process.pid}-`))
+    const home = join(root, 'home')
+    const appPath = join(root, 'Applications', 'Open Forge.app')
+    const payloadDir = join(appPath, 'Contents/Resources/openforge-cli')
+    const binDir = join(root, 'bin')
+    await mkdir(payloadDir, { recursive: true })
+    await mkdir(binDir, { recursive: true })
+    await writeFile(join(payloadDir, 'cli.js'), 'console.log("openforge cli")\n')
+    await writeFile(join(binDir, 'cp'), `#!/bin/sh
+echo "simulated payload copy failure" >&2
+exit 42
+`)
+    await chmod(join(binDir, 'cp'), 0o755)
+
+    const runner = await writeRunner(root, `
+HOME=${shellQuote(home)}
+PATH=${shellQuote(`${binDir}:${process.env.PATH ?? ''}`)}
+install_openforge_cli ${shellQuote(appPath)} error
+`)
+
+    const result = await runShell(runner)
+
+    expect(result.status).toBe(1)
+    expect(result.stderr).toContain('simulated payload copy failure')
+    await expect(readFile(join(home, '.openforge/bin/openforge'), 'utf8')).rejects.toThrow()
+  })
+
   it('does not write the launcher when strict payload installation fails', async () => {
     const root = await mkdtemp(join(tmpdir(), `openforge-install-cli-strict-${process.pid}-`))
     const home = join(root, 'home')
