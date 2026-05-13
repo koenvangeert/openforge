@@ -185,6 +185,24 @@ describe('registerAppDesktopEventListeners', () => {
     expect(get(activeSessions).get('task-1')?.status).toBe('running')
   })
 
+  it('does not reactivate an exited PTY from completed status metadata', async () => {
+    const { deps, handlers } = createHarness()
+    vi.mocked(getShellLifecycleState).mockReturnValue({
+      ptyActive: false,
+      shellExited: true,
+      currentPtyInstance: 42,
+    })
+    activeSessions.set(new Map([['task-1', createSession({ status: 'running' })]]))
+
+    await registerAppDesktopEventListeners(deps)
+    await handlers.get('agent-status-changed')?.({
+      payload: { task_id: 'task-1', status: 'completed', kind: 'ended', pty_instance_id: 42 },
+    })
+
+    expect(updateShellLifecycleState).not.toHaveBeenCalled()
+    expect(get(activeSessions).get('task-1')?.status).toBe('completed')
+  })
+
   it('finalizes agent PTY exits through the provider-neutral IPC wrapper', async () => {
     vi.useFakeTimers()
     const { deps, handlers } = createHarness()

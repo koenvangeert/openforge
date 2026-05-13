@@ -12,6 +12,7 @@ import {
 } from './stores'
 import { finalizeAgentSession, getLatestSession, getTaskDetail } from './ipc'
 import { getShellLifecycleState, release as releaseTerminal, replayPtyBuffersForActiveTerminals, updateShellLifecycleState } from './terminalPool'
+import { shouldHydratePtyInstanceFromAgentStatusMetadata, type AgentStatusChangedKind } from './agentPanelSessionSync'
 import { getOpenCodeSessionUpdate } from './opencodeSessionEvents'
 import { getTaskPromptText } from './taskPrompt'
 import type { AgentEvent, AgentSession } from './types'
@@ -54,8 +55,14 @@ function clearCheckpointForTask(taskId: string): void {
   }
 }
 
-function hydratePtyInstanceFromStatusMetadata(taskId: string, ptyInstanceId: number | null | undefined): void {
+function hydratePtyInstanceFromStatusMetadata(
+  taskId: string,
+  status: string,
+  kind: AgentStatusChangedKind | null | undefined,
+  ptyInstanceId: number | null | undefined,
+): void {
   if (typeof ptyInstanceId !== 'number') return
+  if (!shouldHydratePtyInstanceFromAgentStatusMetadata(status, kind)) return
 
   updateShellLifecycleState(taskId, {
     ...getShellLifecycleState(taskId),
@@ -251,9 +258,9 @@ export async function registerAppDesktopEventListeners(deps: AppDesktopEventDeps
   )
 
   unlisteners.push(
-    await listen<{ task_id: string; status: string; pty_instance_id?: number | null }>('agent-status-changed', async (event) => {
+    await listen<{ task_id: string; status: string; kind?: AgentStatusChangedKind | null; pty_instance_id?: number | null }>('agent-status-changed', async (event) => {
       const { task_id: taskId, status } = event.payload
-      hydratePtyInstanceFromStatusMetadata(taskId, event.payload.pty_instance_id)
+      hydratePtyInstanceFromStatusMetadata(taskId, status, event.payload.kind, event.payload.pty_instance_id)
       let session = get(activeSessions).get(taskId)
       if (!session) {
         try {
