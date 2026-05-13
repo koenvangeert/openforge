@@ -1,23 +1,27 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte'
+  import { onMount, onDestroy, untrack } from 'svelte'
   import type { DesktopUnlistenFn } from '../../lib/desktopIpc'
   import { activeSessions } from '../../lib/stores'
   import '@xterm/xterm/css/xterm.css'
   import { listenToAgentStatusChanged, type AgentPanelStatus } from '../../lib/agentPanelSessionSync'
-  import { acquire, attach, detach, type PoolEntry } from '../../lib/terminalPool'
+  import { acquire, attach, detach, isValidTerminalDimensions, type PoolEntry } from '../../lib/terminalPool'
   import {
     abortAgentTerminalSession,
     getAgentSessionStatusBadgeClass,
     getAgentStageLabel,
     getAgentStatusText,
+    markAgentTerminalExited,
     syncAgentPanelStatusFromSession,
     writeAgentTerminalTranscription,
     type AgentStageLabels,
+    type AgentSessionStatusBadgeVariant,
   } from '../../lib/agentTerminalPanel'
   import VoiceInput from '../shared/input/VoiceInput.svelte'
   import { getAgentResumeCommand, type AgentResumeCommandProvider } from '../../lib/agentResumeCommand'
+  import { parseCheckpointQuestion } from '../../lib/parseCheckpoint'
+  import { createSessionHistory } from '../../lib/useSessionHistory.svelte'
 
-  type ProviderSessionIdKey = 'claude_session_id' | 'pi_session_id'
+  type ProviderSessionIdKey = 'opencode_session_id' | 'claude_session_id' | 'pi_session_id'
 
   interface Props {
     taskId: string
@@ -27,6 +31,11 @@
     stageLabels: AgentStageLabels
     isStarting?: boolean
     rootTestId?: string | null
+    loadSessionHistory?: boolean
+    markLifecycleExitedOnAbort?: boolean
+    stageLabelPrefix?: string
+    uppercaseSessionStatus?: boolean
+    sessionStatusBadgeVariant?: AgentSessionStatusBadgeVariant
   }
 
   let {
@@ -37,19 +46,46 @@
     stageLabels,
     isStarting = false,
     rootTestId = null,
+    loadSessionHistory = false,
+    markLifecycleExitedOnAbort = false,
+    stageLabelPrefix = '// ',
+    uppercaseSessionStatus = true,
+    sessionStatusBadgeVariant = 'soft',
   }: Props = $props()
 
   let terminalEl: HTMLDivElement
   let unlisteners: DesktopUnlistenFn[] = []
   let poolEntry: PoolEntry | null = null
+  let poolEntryAttached = $state(false)
   let status = $state<AgentPanelStatus>('idle')
   let terminalActive = $state(false)
   let destroyed = false
 
+  const sessionHistory = createSessionHistory({
+    taskId: untrack(() => taskId),
+    onStatusUpdate: (nextStatus) => {
+      status = nextStatus
+      if ((nextStatus === 'complete' || nextStatus === 'error') && poolEntry) {
+        markAgentTerminalExited(taskId, poolEntry.currentPtyInstance)
+      }
+    },
+  })
+
   let session = $derived($activeSessions.get(taskId) || null)
   let providerSessionId = $derived(session ? session[sessionIdKey] : null)
-  let resumeCommandProvider: AgentResumeCommandProvider = $derived(sessionIdKey === 'claude_session_id' ? 'claude-code' : 'pi')
+  let resumeCommandProvider: AgentResumeCommandProvider = $derived(
+    sessionIdKey === 'opencode_session_id'
+      ? 'opencode'
+      : sessionIdKey === 'claude_session_id'
+        ? 'claude-code'
+        : 'pi'
+  )
   let resumeCommand = $derived(getAgentResumeCommand(resumeCommandProvider, providerSessionId))
+  let checkpointQuestion = $derived(
+    sessionIdKey === 'opencode_session_id' && session?.status === 'paused'
+      ? parseCheckpointQuestion(session.checkpoint_data)
+      : null
+  )
 
   function syncStatusFromSession(sessionStatus: string | null | undefined) {
     syncAgentPanelStatusFromSession({
@@ -64,13 +100,42 @@
     syncStatusFromSession(session?.status)
   })
 
+  let previousCheckpointQuestion: string | null = null
+
+  $effect(() => {
+    const nextCheckpointQuestion = checkpointQuestion
+    const entryReady = poolEntryAttached
+    const shouldRefitForCheckpointLayout = sessionIdKey === 'opencode_session_id' && entryReady && poolEntry && (
+      nextCheckpointQuestion !== null || previousCheckpointQuestion !== null
+    )
+
+    previousCheckpointQuestion = nextCheckpointQuestion
+
+    if (!shouldRefitForCheckpointLayout) return
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (!poolEntry) return
+        const proposed = poolEntry.fitAddon.proposeDimensions()
+        if (isValidTerminalDimensions(proposed)) {
+          poolEntry.fitAddon.fit()
+        }
+      })
+    })
+  })
+
   onMount(async () => {
     poolEntry = await acquire(taskId)
     if (destroyed || !poolEntry) return
     await attach(poolEntry, terminalEl)
     if (destroyed) return
+    poolEntryAttached = true
 
     syncStatusFromSession(session?.status)
+
+    if (loadSessionHistory) {
+      await sessionHistory.loadSessionHistory()
+    }
 
     unlisteners.push(await listenToAgentStatusChanged({
       taskId,
@@ -84,6 +149,7 @@
     unlisteners.forEach((fn) => {
       fn()
     })
+    poolEntryAttached = false
     if (poolEntry) {
       detach(poolEntry)
     }
@@ -93,6 +159,7 @@
     await abortAgentTerminalSession({
       taskId,
       logPrefix,
+      markLifecycleExited: markLifecycleExitedOnAbort,
       setStatus: (nextStatus) => { status = nextStatus },
     })
   }
@@ -110,7 +177,11 @@
   }
 
   function getSessionStatusBadgeClass(sessionStatus: string): string {
-    return getAgentSessionStatusBadgeClass(sessionStatus, 'soft')
+    return getAgentSessionStatusBadgeClass(sessionStatus, sessionStatusBadgeVariant)
+  }
+
+  function getSessionStatusLabel(sessionStatus: string): string {
+    return uppercaseSessionStatus ? sessionStatus.toUpperCase() : sessionStatus
   }
 </script>
 
@@ -122,9 +193,9 @@
         <span class="text-sm font-semibold text-base-content">{getStatusText()}</span>
         {#if session}
           <div class="flex items-center gap-2">
-            <span class="text-xs font-mono text-secondary">// {getStageLabel(session.stage)}</span>
+            <span class="text-xs font-mono text-secondary">{stageLabelPrefix}{getStageLabel(session.stage)}</span>
             <span class="badge badge-sm font-bold {getSessionStatusBadgeClass(session.status)}">
-              {session.status.toUpperCase()}
+              {getSessionStatusLabel(session.status)}
             </span>
             {#if resumeCommand}
               <code class="text-[0.6875rem] font-mono text-secondary whitespace-nowrap select-all" title={resumeCommand}>
@@ -145,9 +216,21 @@
     </div>
   </div>
 
+  {#if checkpointQuestion}
+    <div class="flex items-start gap-3 px-5 py-3 bg-warning/10 border border-warning/30 rounded-md">
+      <span class="flex items-center justify-center w-5 h-5 rounded-full bg-warning/20 text-warning text-xs font-bold shrink-0 mt-0.5">?</span>
+      <span class="text-[0.8125rem] text-base-content leading-relaxed line-clamp-3">{checkpointQuestion}</span>
+    </div>
+  {/if}
+
   <div class="flex-1 overflow-hidden min-h-0 bg-base-100 border border-base-300 rounded-md relative">
     <div class="shell-terminal-wrapper w-full h-full p-3" bind:this={terminalEl}></div>
-    {#if !session && !terminalActive}
+    {#if loadSessionHistory && sessionHistory.loadingHistory}
+      <div class="absolute inset-0 flex flex-col items-center justify-center p-16 gap-4 bg-base-100 z-[1] pointer-events-none">
+        <span class="loading loading-spinner loading-md text-primary"></span>
+        <div class="text-base font-semibold text-base-content">Loading session output...</div>
+      </div>
+    {:else if !session && !terminalActive}
       <div class="absolute inset-0 flex flex-col items-center justify-center p-16 gap-4 bg-base-100 z-[1] pointer-events-none">
         {#if isStarting}
           <span class="loading loading-spinner loading-lg text-primary"></span>

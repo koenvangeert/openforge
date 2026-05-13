@@ -56,7 +56,7 @@ const { listenCallbacks, mockPoolEntry, mockShellLifecycleState } = vi.hoisted((
   mockPoolEntry: {
     taskId: '',
     terminal: { write: vi.fn(), dispose: vi.fn(), reset: vi.fn(), cols: 80, rows: 24 },
-    fitAddon: { fit: vi.fn() },
+    fitAddon: { fit: vi.fn(), proposeDimensions: vi.fn().mockReturnValue({ cols: 80, rows: 24 }) },
     hostDiv: document.createElement('div'),
     ptyActive: false,
     needsClear: false,
@@ -92,6 +92,7 @@ vi.mock('../../lib/terminalPool', () => ({
   releaseAll: vi.fn(),
   getShellLifecycleState: vi.fn().mockImplementation(() => ({ ...mockShellLifecycleState })),
   isPtyActive: vi.fn().mockImplementation(() => mockShellLifecycleState.ptyActive),
+  isValidTerminalDimensions: vi.fn().mockReturnValue(true),
   updateShellLifecycleState: vi.fn().mockImplementation((_taskId: string, state: typeof mockShellLifecycleState) => {
     mockShellLifecycleState.ptyActive = state.ptyActive
     mockShellLifecycleState.shellExited = state.shellExited
