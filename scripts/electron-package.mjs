@@ -175,6 +175,21 @@ async function copyIcon(rustSidecarLayout, resourcesDir) {
   await cp(rustSidecarLayout.iconPath, join(resourcesDir, 'electron.icns'))
 }
 
+async function copyOpenForgeCliAssets(repoRoot, resourcesDir) {
+  const cliSourceDir = join(repoRoot, 'src-tauri', 'src', 'openforge-cli')
+  const cliSourcePath = join(cliSourceDir, 'cli.js')
+  if (!(await pathExists(cliSourcePath))) return
+
+  const skillSourcePath = join(cliSourceDir, 'openforge-skill.md')
+  await assertExists(skillSourcePath, 'OpenForge CLI skill template')
+
+  const cliResourcesDir = join(resourcesDir, 'openforge-cli')
+  await rm(cliResourcesDir, { recursive: true, force: true })
+  await mkdir(cliResourcesDir, { recursive: true })
+  await cp(cliSourcePath, join(cliResourcesDir, 'cli.js'))
+  await cp(skillSourcePath, join(cliResourcesDir, 'openforge-skill.md'))
+}
+
 async function updateInfoPlist(appPath, { appName = APP_NAME, bundleIdentifier = ELECTRON_BUNDLE_IDENTIFIER } = {}) {
   const plistPath = join(appPath, 'Contents', 'Info.plist')
   let plist = await readFile(plistPath, 'utf8')
@@ -245,6 +260,7 @@ export async function packageElectronApp({
     bundleIdentifier: packageIdentity.bundleIdentifier,
   })
   await copyIcon(rustSidecarLayout, resourcesDir)
+  await copyOpenForgeCliAssets(repoRoot, resourcesDir)
 
   return { appPath: outputAppPath, sidecarPath: sidecarTargetPath }
 }
