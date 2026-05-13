@@ -155,7 +155,7 @@ export function resetAgentTerminalTestState() {
 }
 
 export function createAgentSession(overrides: Partial<AgentSession> = {}): AgentSession {
-  const provider = overrides.provider ?? 'pi-code'
+  const provider = overrides.provider ?? 'pi'
 
   return {
     id: 'ses-1',
@@ -169,7 +169,7 @@ export function createAgentSession(overrides: Partial<AgentSession> = {}): Agent
     updated_at: 2000,
     provider,
     claude_session_id: provider === 'claude-code' ? 'claude-sess-abc123' : null,
-    pi_session_id: provider === 'pi-code' ? 'pi-sess-abc123' : null,
+    pi_session_id: provider === 'pi' ? 'pi-sess-abc123' : null,
     ...overrides,
   }
 }
