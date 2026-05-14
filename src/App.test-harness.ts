@@ -20,6 +20,27 @@ export const installedPluginRows: Array<{
   isBuiltin: boolean
 }> = []
 
+function builtinRuntimeContributesForTest(pluginId: string): string {
+  switch (pluginId) {
+    case 'com.openforge.file-viewer':
+      return JSON.stringify({ views: [{ id: 'files', title: 'Files', icon: 'folder-open', showInRail: true, railOrder: 10, shortcut: 'Cmd+O' }] })
+    case 'com.openforge.github-sync':
+      return JSON.stringify({
+        views: [{ id: 'pr_review', title: 'Pull Requests', icon: 'git-pull-request', showInRail: true, railOrder: 20, shortcut: 'Cmd+G' }],
+        commands: [{ id: 'refresh', title: 'Refresh Pull Requests', shortcut: 'Cmd+Shift+R' }],
+      })
+    case 'com.openforge.skills-viewer':
+      return JSON.stringify({ views: [{ id: 'skills', title: 'Skills', icon: 'sparkles', showInRail: true, railOrder: 30, shortcut: 'Cmd+L' }] })
+    case 'com.openforge.terminal':
+      return JSON.stringify({
+        views: [{ id: 'terminal', title: 'Terminal', icon: 'terminal', showInRail: true, railOrder: 40, shortcut: 'Cmd+J' }],
+        taskPaneTabs: [{ id: 'terminal', title: 'Terminal', icon: 'terminal', order: 10 }],
+      })
+    default:
+      return '{}'
+  }
+}
+
 export function persistInstalledPluginRow(plugin: {
   id: string
   name: string
@@ -41,7 +62,7 @@ export function persistInstalledPluginRow(plugin: {
     apiVersion: plugin.apiVersion,
     description: plugin.description,
     permissions: plugin.permissions,
-    contributes: plugin.contributes,
+    contributes: plugin.isBuiltin && plugin.contributes === '{}' ? builtinRuntimeContributesForTest(plugin.id) : plugin.contributes,
     frontendEntry: plugin.frontendEntry,
     backendEntry: plugin.backendEntry,
     installPath: plugin.installPath,

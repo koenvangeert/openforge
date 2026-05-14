@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
+    "build": "vite build",
     "test": "vitest run --config vitest.config.ts"
   },
   "dependencies": {
@@ -17,5 +18,14 @@
     "typescript": "^5.3.3",
     "vite": "^8.0.0",
     "vitest": "^4.1.0"
+  },
+  "openforge": {
+    "id": "com.openforge.skills-viewer",
+    "apiVersion": 1,
+    "displayName": "Skills Viewer",
+    "description": "Browse and manage AI skills",
+    "icon": "sparkles",
+    "frontend": "./dist/frontend.js",
+    "requires": ["views", "system.openUrl", "context"]
   }
 }

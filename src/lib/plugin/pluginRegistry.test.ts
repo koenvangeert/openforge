@@ -494,28 +494,36 @@ describe('pluginRegistry', () => {
     expect(get(installedPlugins).get('enable-runtime-plugin')?.manifest.contributes).toEqual({})
   })
 
-  it('activates builtin plugin modules inside the host bundle instead of loading plugin:// frontend bundles', async () => {
-    const Component = {} as never
-    const deactivateBuiltin = vi.fn(async () => undefined)
-    const manifest = makeManifest({ id: 'builtin-plugin' })
+  it('activates builtin defineFrontendPlugin modules inside the host bundle instead of loading plugin:// frontend bundles', async () => {
+    const Component = vi.fn() as never
+    const activateBuiltin = vi.fn((openforge, context) => {
+      context.subscriptions.add(openforge.views.register({
+        id: 'main',
+        title: 'Builtin Main',
+        icon: 'plug',
+        placement: 'rail',
+        component: Component,
+      }))
+    })
+    const manifest = makeManifest({ id: 'builtin-plugin', frontend: './dist/frontend.js', contributes: {} })
     installedPlugins.set(new Map([['builtin-plugin', { manifest, state: 'installed', error: null, isBuiltin: true }]]))
     enabledPluginIds.set(new Set(['builtin-plugin']))
-    getBuiltinPluginModuleMock.mockReturnValue({
-      activate: vi.fn(async () => ({ contributions: { views: [{ id: 'main', component: Component }] } })),
-      deactivate: deactivateBuiltin,
-    })
+    getBuiltinPluginModuleMock.mockReturnValue(defineFrontendPlugin({ activate: activateBuiltin }))
 
     await expect(activatePlugin('builtin-plugin')).resolves.toBe(true)
 
     expect(getBuiltinPluginModuleMock).toHaveBeenCalledWith('builtin-plugin')
     expect(loadPluginFrontendMock).not.toHaveBeenCalled()
     expect(activatePluginLoaderMock).not.toHaveBeenCalled()
+    expect(activateBuiltin).toHaveBeenCalledOnce()
+    expect(get(installedPlugins).get('builtin-plugin')?.manifest.contributes.views).toMatchObject([
+      { id: 'main', title: 'Builtin Main', icon: 'plug', showInRail: true },
+    ])
     expect(getRegisteredComponent('plugin:builtin-plugin:main')).toBe(Component)
     expect(get(installedPlugins).get('builtin-plugin')?.state).toBe('active')
 
     await deactivatePluginById('builtin-plugin')
 
-    expect(deactivateBuiltin).toHaveBeenCalledOnce()
     expect(deactivatePluginLoaderMock).not.toHaveBeenCalled()
     expect(getRegisteredComponent('plugin:builtin-plugin:main')).toBeUndefined()
     expect(get(installedPlugins).get('builtin-plugin')?.state).toBe('installed')
@@ -903,13 +911,16 @@ describe('pluginRegistry', () => {
     expect(getRegisteredComponent('plugin:test-plugin:main')).toBeUndefined()
   })
 
-  it('initializePluginRuntime installs builtin manifests without unused frontend bundle entries', async () => {
+  it('initializePluginRuntime installs builtin package metadata with built frontend entries', async () => {
     installPluginMock.mockResolvedValue(undefined)
 
     await initializePluginRuntime()
 
     expect(installPluginMock).toHaveBeenCalled()
     expect(installPluginMock.mock.calls.every(([row]) => row.isBuiltin === true)).toBe(true)
-    expect(installPluginMock.mock.calls.every(([row]) => row.frontendEntry === '')).toBe(true)
+    expect(installPluginMock.mock.calls.every(([row]) => row.sourceKind === 'builtin')).toBe(true)
+    expect(installPluginMock.mock.calls.every(([row]) => row.frontendEntry === './dist/frontend.js')).toBe(true)
+    expect(installPluginMock.mock.calls.every(([row]) => row.contributes === '{}')).toBe(true)
+    expect(installPluginMock.mock.calls.every(([row]) => JSON.parse(row.packageMetadata).frontend === './dist/frontend.js')).toBe(true)
   })
 })

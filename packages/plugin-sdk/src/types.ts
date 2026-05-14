@@ -185,6 +185,7 @@ export interface PluginViewRegistration {
   icon: string
   placement: 'rail'
   order?: number
+  shortcut?: string
   component: PluginComponentLoader<PluginViewProps> | PluginComponent<PluginViewProps>
 }
 

@@ -1,59 +1,64 @@
-import type { PluginActivationResult, PluginContext } from '../../../src/lib/plugin/types'
+import { defineFrontendPlugin } from '@openforge/plugin-sdk/frontend'
+import type { FrontendOpenForgeAPI, FrontendPluginContext } from '@openforge/plugin-sdk/frontend'
 import PrReviewView from './review/pr/PrReviewView.svelte'
 import { setPluginContext } from './pluginContext'
-
-type GithubSyncActivationResult = PluginActivationResult
+import type { PluginContext } from './pluginContext'
 
 export const PrReviewViewComponent = PrReviewView
 
-let stopNavigationListener: (() => void) | null = null
+function hostCommandId(command: string): string {
+  return `openforge.${command}`
+}
 
-export async function activate(context: PluginContext): Promise<GithubSyncActivationResult> {
-  setPluginContext(context)
+function createLegacyContext(openforge: FrontendOpenForgeAPI, context: FrontendPluginContext): PluginContext {
   return {
-    contributions: {
-      views: [
-        {
-          id: 'pr_review',
-          component: PrReviewView,
-        },
-      ],
-      commands: [
-        {
-          id: 'refresh',
-          execute: async () => {
-            await context.invokeHost('forceGithubSync')
-          },
-        },
-      ],
-      backgroundServices: [
-        {
-          id: 'initial-sync',
-          start: async () => {
-            const navigation = await context.invokeHost('getNavigation') as { activeProjectId?: string | null }
-            if (navigation.activeProjectId) {
-              await context.invokeHost('forceGithubSync')
-            }
-
-            stopNavigationListener?.()
-            stopNavigationListener = context.onEvent('navigation-changed', async (payload) => {
-              const nextNavigation = payload as { activeProjectId?: string | null }
-              if (nextNavigation.activeProjectId) {
-                await context.invokeHost('forceGithubSync')
-              }
-            })
-          },
-          stop: async () => {
-            stopNavigationListener?.()
-            stopNavigationListener = null
-          },
-        },
-      ],
+    pluginId: context.pluginId,
+    invokeHost: (command, payload) => openforge.commands.invokeGlobal(hostCommandId(command), payload),
+    invokeBackend: (method, payload) => openforge.backend.invoke(method, payload),
+    onEvent: (event, handler) => {
+      const subscription = openforge.events.onGlobal(hostCommandId(event), handler)
+      return () => subscription.dispose()
     },
+    storage: openforge.storage,
   }
 }
 
-export async function deactivate(): Promise<void> {
-  stopNavigationListener?.()
-  stopNavigationListener = null
-}
+export default defineFrontendPlugin({
+  activate(openforge, context) {
+    const legacyContext = createLegacyContext(openforge, context)
+    setPluginContext(legacyContext)
+
+    context.subscriptions.add(openforge.views.register({
+      id: 'pr_review',
+      title: 'Pull Requests',
+      icon: 'git-pull-request',
+      placement: 'rail',
+      order: 20,
+      shortcut: 'Cmd+G',
+      component: PrReviewView,
+    }))
+
+    context.subscriptions.add(openforge.commands.register({
+      id: 'refresh',
+      title: 'Refresh Pull Requests',
+      shortcut: 'Cmd+Shift+R',
+      handler: async () => {
+        await legacyContext.invokeHost('forceGithubSync')
+      },
+    }))
+
+    void (async () => {
+      const navigation = await legacyContext.invokeHost('getNavigation') as { activeProjectId?: string | null }
+      if (navigation.activeProjectId) {
+        await legacyContext.invokeHost('forceGithubSync')
+      }
+    })()
+
+    context.subscriptions.add(openforge.events.onGlobal('openforge.navigation-changed', (payload) => {
+      const nextNavigation = payload as { activeProjectId?: string | null }
+      if (nextNavigation.activeProjectId) {
+        void legacyContext.invokeHost('forceGithubSync')
+      }
+    }))
+  },
+})

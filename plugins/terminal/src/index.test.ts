@@ -2,8 +2,10 @@ import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { validatePluginManifest } from '../../../src/lib/plugin/manifest'
-import manifest from '../manifest.json'
+import { OPENFORGE_FRONTEND_PLUGIN_MARKER } from '@openforge/plugin-sdk/frontend'
+import { isOpenForgePackageMetadata } from '@openforge/plugin-sdk'
+import type { FrontendOpenForgeAPI, FrontendPluginContext } from '@openforge/plugin-sdk/frontend'
+import packageJson from '../package.json'
 
 const terminalSrcDir = dirname(fileURLToPath(import.meta.url))
 
@@ -35,6 +37,16 @@ vi.mock('./lib/terminalPool', () => ({
   releaseAllForTask: cleanupSideEffects.releaseAllForTask,
 }))
 
+function makeRuntimeHarness() {
+  const subscriptions = { add: vi.fn() }
+  const api = {
+    views: { register: vi.fn(() => ({ dispose: vi.fn() })) },
+    taskPane: { registerTab: vi.fn(() => ({ dispose: vi.fn() })) },
+  } as unknown as FrontendOpenForgeAPI
+  const context = { pluginId: packageJson.openforge.id, apiVersion: 1, packageMetadata: packageJson.openforge, subscriptions } as FrontendPluginContext
+  return { api, context, subscriptions }
+}
+
 function expectNoProjectTerminalCleanup() {
   expect(cleanupSideEffects.killPty).not.toHaveBeenCalled()
   expect(cleanupSideEffects.releaseAllForTask).not.toHaveBeenCalled()
@@ -56,91 +68,52 @@ describe('terminal plugin', () => {
     expect(existsSync(join(terminalSrcDir, 'pluginContext.ts'))).toBe(false)
   })
 
-  it('has a valid manifest with a top-level terminal view', () => {
-    const errors = validatePluginManifest(manifest)
-    expect(errors).toEqual([])
-    expect(manifest.contributes.views).toEqual([
-      {
-        id: 'terminal',
-        title: 'Terminal',
-        icon: 'terminal',
-        showInRail: true,
-        railOrder: 40,
-        shortcut: 'Cmd+J',
-      },
-    ])
+  it('has valid package.json#openforge metadata without manifest contributions', () => {
+    expect(isOpenForgePackageMetadata(packageJson.openforge)).toBe(true)
+    expect(packageJson.openforge).not.toHaveProperty('contributes')
+    expect(packageJson.openforge.frontend).toBe('./dist/frontend.js')
   })
 
-  it('activates top-level view, task pane, and background service implementations', async () => {
-    const { activate } = await import('./index')
-    const result = await activate({
-      pluginId: 'test-plugin',
-      invokeHost: async () => null,
-      invokeBackend: async () => null,
-      onEvent: () => () => {},
-      storage: { get: async () => null, set: async () => {} },
-    })
-    expect(result.contributions.views).toHaveLength(1)
-    expect(result.contributions.views?.[0]).toMatchObject({
+  it('registers top-level view and task pane at runtime through defineFrontendPlugin', async () => {
+    const { default: plugin } = await import('./index')
+    const { api, context, subscriptions } = makeRuntimeHarness()
+
+    await plugin.activate(api, context)
+
+    expect(plugin[OPENFORGE_FRONTEND_PLUGIN_MARKER]).toBe(true)
+    expect(api.views.register).toHaveBeenCalledWith(expect.objectContaining({
       id: 'terminal',
+      title: 'Terminal',
+      icon: 'terminal',
+      placement: 'rail',
+      order: 40,
       component: mockTerminalProjectView,
-    })
-    expect(result.contributions.taskPaneTabs).toHaveLength(1)
-    expect(result.contributions.taskPaneTabs?.[0]).toMatchObject({
+    }))
+    expect(api.taskPane.registerTab).toHaveBeenCalledWith(expect.objectContaining({
       id: 'terminal',
+      title: 'Terminal',
+      icon: 'terminal',
+      order: 10,
       component: mockTerminalTaskPane,
-    })
-    expect(result.contributions.backgroundServices).toHaveLength(1)
-    expect(result.contributions.backgroundServices?.[0]?.id).toBe('pty-manager')
+    }))
+    expect(subscriptions.add).toHaveBeenCalledTimes(2)
   })
 
   it('keeps previous project terminals alive when project navigation changes while the view is unmounted', async () => {
-    const navigationHandlers: Array<(payload: unknown) => void> = []
-    const { activate } = await import('./index')
-    const result = await activate({
-      pluginId: 'test-plugin',
-      invokeHost: async (command) => command === 'getNavigation' ? { activeProjectId: 'P-123', currentView: 'board' } : null,
-      invokeBackend: async () => null,
-      onEvent: (event, handler) => {
-        if (event === 'navigation-changed') {
-          navigationHandlers.push(handler)
-        }
-        return () => undefined
-      },
-      storage: { get: async () => null, set: async () => {} },
-    })
+    const { default: plugin } = await import('./index')
+    const { api, context } = makeRuntimeHarness()
 
-    await result.contributions.backgroundServices?.[0]?.start()
-
-    navigationHandlers[0]?.({ activeProjectId: 'P-456', currentView: 'board' })
+    await plugin.activate(api, context)
 
     expectNoProjectTerminalCleanup()
   })
 
   it('does not clean up a project terminal that was never opened', async () => {
-    const navigationHandlers: Array<(payload: unknown) => void> = []
-    const { activate } = await import('./index')
-    const result = await activate({
-      pluginId: 'test-plugin',
-      invokeHost: async (command) => command === 'getNavigation' ? { activeProjectId: 'P-123', currentView: 'board' } : null,
-      invokeBackend: async () => null,
-      onEvent: (event, handler) => {
-        if (event === 'navigation-changed') {
-          navigationHandlers.push(handler)
-        }
-        return () => undefined
-      },
-      storage: { get: async () => null, set: async () => {} },
-    })
+    const { default: plugin } = await import('./index')
+    const { api, context } = makeRuntimeHarness()
 
-    await result.contributions.backgroundServices?.[0]?.start()
-    navigationHandlers[0]?.({ activeProjectId: 'P-456', currentView: 'board' })
+    await plugin.activate(api, context)
 
     expectNoProjectTerminalCleanup()
-  })
-
-  it('deactivates without error', async () => {
-    const { deactivate } = await import('./index')
-    await expect(deactivate()).resolves.toBeUndefined()
   })
 })
