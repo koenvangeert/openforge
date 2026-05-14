@@ -905,7 +905,7 @@ CREATE TABLE plugin_storage (
     FOREIGN KEY (plugin_id) REFERENCES plugins(id) ON DELETE CASCADE
 );
 INSERT OR REPLACE INTO plugin_storage (plugin_id, scope, scope_id, key, value)
-SELECT plugin_id, 'global', '', key, value FROM plugin_storage_legacy;
+SELECT plugin_id, 'global', '', key, json_quote(value) FROM plugin_storage_legacy;
 DROP TABLE plugin_storage_legacy;
             "#,
         )
@@ -1141,6 +1141,77 @@ mod tests {
     }
 
     #[test]
+    fn test_plugin_storage_migration_preserves_legacy_strings_that_look_like_json() {
+        let path = std::env::temp_dir().join(format!(
+            "test_plugin_storage_legacy_json_literal_strings_{}.db",
+            std::process::id()
+        ));
+        let _ = fs::remove_file(&path);
+
+        {
+            let conn = rusqlite::Connection::open(&path).expect("open raw db");
+            let previous_version = LATEST_USER_VERSION - 1;
+            conn.execute(&format!("PRAGMA user_version = {previous_version}"), [])
+                .expect("set user_version");
+            conn.execute("CREATE TABLE plugins (id TEXT PRIMARY KEY)", [])
+                .expect("create legacy plugins table");
+            conn.execute("INSERT INTO plugins (id) VALUES ('legacy-plugin')", [])
+                .expect("insert legacy plugin row");
+            conn.execute(
+                "CREATE TABLE plugin_storage (
+                    plugin_id TEXT NOT NULL,
+                    key TEXT NOT NULL,
+                    value TEXT NOT NULL,
+                    PRIMARY KEY (plugin_id, key)
+                )",
+                [],
+            )
+            .expect("create legacy plugin_storage");
+            for (key, value) in [
+                ("boolean", "true"),
+                ("number", "123"),
+                ("nullish", "null"),
+                ("plain", "dark"),
+            ] {
+                conn.execute(
+                    "INSERT INTO plugin_storage (plugin_id, key, value) VALUES ('legacy-plugin', ?1, ?2)",
+                    [key, value],
+                )
+                .expect("insert legacy plugin storage row");
+            }
+        }
+
+        let db = Database::new(path.clone()).expect("Database::new");
+        let conn = db.connection();
+        let conn = conn.lock().unwrap();
+
+        for (key, expected) in [
+            ("boolean", "true"),
+            ("number", "123"),
+            ("nullish", "null"),
+            ("plain", "dark"),
+        ] {
+            let stored: String = conn
+                .query_row(
+                    "SELECT value FROM plugin_storage
+                     WHERE plugin_id = 'legacy-plugin' AND scope = 'global' AND scope_id = '' AND key = ?1",
+                    [key],
+                    |row| row.get(0),
+                )
+                .expect("legacy plugin storage row should be migrated");
+            assert_eq!(
+                serde_json::from_str::<serde_json::Value>(&stored)
+                    .expect("stored value should be JSON"),
+                serde_json::Value::String(expected.to_string())
+            );
+        }
+
+        drop(conn);
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
     fn test_pi_session_column_exists() {
         let path = std::env::temp_dir().join(format!(
             "test_pi_session_column_exists_{}.db",
@@ -1258,7 +1329,7 @@ mod tests {
 
         {
             let conn = rusqlite::Connection::open(&path).expect("open raw db");
-            let previous_version = LATEST_USER_VERSION - 1;
+            let previous_version = LATEST_USER_VERSION - 2;
             conn.execute(&format!("PRAGMA user_version = {previous_version}"), [])
                 .expect("set user_version");
             conn.execute_batch(
@@ -2111,7 +2182,7 @@ mod tests {
         {
             let conn = rusqlite::Connection::open(&path).expect("open raw db");
             conn.execute(
-                &format!("PRAGMA user_version = {}", LATEST_USER_VERSION - 4),
+                &format!("PRAGMA user_version = {}", LATEST_USER_VERSION - 5),
                 [],
             )
             .expect("set pre-upgrade user_version");
@@ -2157,7 +2228,7 @@ mod tests {
         {
             let conn = rusqlite::Connection::open(&path).expect("open raw db");
             conn.execute(
-                &format!("PRAGMA user_version = {}", LATEST_USER_VERSION - 4),
+                &format!("PRAGMA user_version = {}", LATEST_USER_VERSION - 5),
                 [],
             )
             .expect("set pre-upgrade user_version");
