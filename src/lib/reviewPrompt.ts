@@ -53,9 +53,12 @@ export function compileReviewPrompt(
   }
 
   // Closing instruction
-  sections.push("Please address ALL items above. For code comments, fix the issue at the referenced location.");
-  sections.push("For general feedback, investigate and fix the described behavior.");
-  sections.push("After making all fixes, commit the changes and push to the branch.");
+  sections.push("Please evaluate each review comment for validity and applicability before changing code.");
+  sections.push("Only apply fixes for comments that are valid for the current code and task context.");
+  sections.push("For valid code comments, fix the issue at the referenced location.");
+  sections.push("For valid general feedback, investigate and fix the described behavior.");
+  sections.push("If a comment is invalid, stale, already addressed, or not applicable, do not make a change for it; explain why in your response.");
+  sections.push("After making all valid fixes, commit the changes and push to the branch.");
 
   return sections.join("\n");
 }

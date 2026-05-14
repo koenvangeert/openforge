@@ -28,8 +28,10 @@ describe('compileReviewPrompt', () => {
     expect(result).toContain('Use parameterized query')
     expect(result).toContain('Add error handling throughout')
     expect(result).toContain('Consider splitting into smaller modules')
-    expect(result).toContain('Please address ALL items above')
-    expect(result).toContain('After making all fixes, commit the changes and push to the branch.')
+    expect(result).toContain('Please evaluate each review comment for validity and applicability before changing code.')
+    expect(result).toContain('Only apply fixes for comments that are valid for the current code and task context.')
+    expect(result).toContain('If a comment is invalid, stale, already addressed, or not applicable, do not make a change for it; explain why in your response.')
+    expect(result).toContain('After making all valid fixes, commit the changes and push to the branch.')
   })
 
   it('handles inline-only — omits General Feedback section', () => {
@@ -41,8 +43,8 @@ describe('compileReviewPrompt', () => {
     expect(result).not.toContain('## General Feedback')
     expect(result).toContain('`src/foo.ts:5`')
     expect(result).toContain('Fix this')
-    expect(result).toContain('Please address ALL items above')
-    expect(result).toContain('After making all fixes, commit the changes and push to the branch.')
+    expect(result).toContain('Please evaluate each review comment for validity and applicability before changing code.')
+    expect(result).toContain('After making all valid fixes, commit the changes and push to the branch.')
   })
 
   it('handles general-only — omits Code Comments section', () => {
@@ -53,8 +55,8 @@ describe('compileReviewPrompt', () => {
     expect(result).not.toContain('## Code Comments')
     expect(result).toContain('## General Feedback')
     expect(result).toContain('Improve test coverage')
-    expect(result).toContain('Please address ALL items above')
-    expect(result).toContain('After making all fixes, commit the changes and push to the branch.')
+    expect(result).toContain('Please evaluate each review comment for validity and applicability before changing code.')
+    expect(result).toContain('After making all valid fixes, commit the changes and push to the branch.')
   })
 
   it('handles special characters in comment body — backticks, quotes, newlines preserved', () => {
@@ -88,6 +90,24 @@ describe('compileReviewPrompt', () => {
   it('includes task title in opening instruction', () => {
     const result = compileReviewPrompt('My Special Feature', [{ path: 'x.ts', line: 1, body: 'Fix' }], [])
     expect(result).toContain('"My Special Feature"')
+  })
+
+  it('instructs agents to validate review comments before changing code', () => {
+    const result = compileReviewPrompt(
+      'Validation Guidance',
+      [{ path: 'src/auth.ts', line: 42, body: 'Missing null check' }],
+      [{ body: 'Add broader error handling' }],
+      [{ body: 'Use the new helper', author: 'reviewer', file_path: 'src/config.ts', line_number: 15 }]
+    )
+
+    expect(result).toContain('Please evaluate each review comment for validity and applicability before changing code.')
+    expect(result).toContain('Only apply fixes for comments that are valid for the current code and task context.')
+  })
+
+  it('instructs agents to explain invalid or inapplicable comments instead of acting on them', () => {
+    const result = compileReviewPrompt('Invalid Feedback', [], [{ body: 'Use a helper that no longer exists' }])
+
+    expect(result).toContain('If a comment is invalid, stale, already addressed, or not applicable, do not make a change for it; explain why in your response.')
   })
 
   it('includes PR review comments section when prReviewComments provided', () => {
