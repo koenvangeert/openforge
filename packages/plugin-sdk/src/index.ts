@@ -9,6 +9,18 @@ export {
 } from './manifest'
 
 export {
+  createMemoryPluginStorage,
+  createMockBackendOpenForgeApi,
+  createMockFrontendOpenForgeApi,
+  createMockOpenForgeApi,
+  createMockPluginContext,
+  createOpenForgeRegistryFake,
+  createTestingCalls,
+  TestingOpenForgeRegistryFake,
+  TestingSubscriptionSink,
+} from './testing'
+
+export {
   MAX_SUPPORTED_API_VERSION,
   MIN_SUPPORTED_API_VERSION,
   OPENFORGE_PLUGIN_API_VERSION,
@@ -59,6 +71,24 @@ export type {
   TasksAPI,
   ValidationError,
 } from './types'
+
+export type {
+  MockBackendOpenForgeAPI,
+  MockFrontendOpenForgeAPI,
+  TestingBackgroundServiceContribution,
+  TestingBackendMethodContribution,
+  TestingCommandContribution,
+  TestingContributionBase,
+  TestingEventListenerContribution,
+  TestingOpenForgeApiCalls,
+  TestingOpenForgeApiOptions,
+  TestingOpenForgeRegistrySnapshot,
+  TestingRuntimeKind,
+  TestingRuntimeScope,
+  TestingSettingsSectionContribution,
+  TestingTaskPaneTabContribution,
+  TestingViewContribution,
+} from './testing'
 
 export { parseStrictFiniteNumber } from './numberParsing'
 export {
