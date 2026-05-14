@@ -160,6 +160,7 @@ describe("ipc spawnShellPty", () => {
 			projectId: null,
 			permissionMode: null,
 			dependsOn: [],
+			labelNames: [],
 		});
 	});
 

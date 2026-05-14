@@ -504,6 +504,9 @@ impl super::Database {
 
     pub fn remove_task_label(&self, task_id: &str, label_id: i64) -> Result<()> {
         let conn = self.conn.lock().unwrap();
+        task_project_id(&conn, task_id)?.ok_or_else(|| {
+            rusqlite::Error::InvalidParameterName(format!("task {task_id} does not exist"))
+        })?;
         conn.execute(
             "DELETE FROM task_label_assignments WHERE task_id = ?1 AND label_id = ?2",
             rusqlite::params![task_id, label_id],
@@ -984,7 +987,7 @@ mod tests {
     }
 
     #[test]
-    fn test_task_label_validation_rejects_blank_long_and_projectless_tasks() {
+    fn test_task_label_validation_rejects_blank_long_projectless_and_missing_tasks() {
         let (db, path) = make_test_db("task_label_validation");
         let projectless = db
             .create_task("Projectless", "backlog", None, None, None)
@@ -996,6 +999,16 @@ mod tests {
         assert!(db.create_task_label(&project.id, "   ").is_err());
         assert!(db.create_task_label(&project.id, &"x".repeat(41)).is_err());
         assert!(db.add_task_label(&projectless.id, "bug").is_err());
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_remove_task_label_rejects_missing_task() {
+        let (db, path) = make_test_db("remove_task_label_missing_task");
+
+        assert!(db.remove_task_label("T-missing", 1).is_err());
 
         drop(db);
         let _ = fs::remove_file(&path);

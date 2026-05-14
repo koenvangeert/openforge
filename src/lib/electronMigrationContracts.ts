@@ -42,7 +42,7 @@ export interface DynamicShellEventContract {
 }
 
 export const ipcCommandContracts = [
-  { functionName: 'createTask', ipcCommand: 'create_task', payloadKeys: ['initialPrompt', 'status', 'projectId', 'permissionMode', 'dependsOn'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
+  { functionName: 'createTask', ipcCommand: 'create_task', payloadKeys: ['initialPrompt', 'status', 'projectId', 'permissionMode', 'dependsOn', 'labelNames'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
   { functionName: 'updateTask', ipcCommand: 'update_task', payloadKeys: ['id', 'prompt'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
   { functionName: 'updateTaskSummary', ipcCommand: 'update_task_summary', payloadKeys: ['id', 'summary'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
   { functionName: 'updateTaskStatus', ipcCommand: 'update_task_status', payloadKeys: ['id', 'status'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
@@ -59,6 +59,10 @@ export const ipcCommandContracts = [
   { functionName: 'setProjectConfig', ipcCommand: 'set_project_config', payloadKeys: ['projectId', 'key', 'value'], targetOwner: 'rust-sidecar', domain: 'config' },
   { functionName: 'getAllTasks', ipcCommand: 'get_tasks', payloadKeys: [], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
   { functionName: 'getTasksForProject', ipcCommand: 'get_tasks_for_project', payloadKeys: ['projectId'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
+  { functionName: 'getProjectTaskLabels', ipcCommand: 'get_project_task_labels', payloadKeys: ['projectId'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
+  { functionName: 'createTaskLabel', ipcCommand: 'create_task_label', payloadKeys: ['projectId', 'name'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
+  { functionName: 'addTaskLabel', ipcCommand: 'add_task_label', payloadKeys: ['taskId', 'name'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
+  { functionName: 'removeTaskLabel', ipcCommand: 'remove_task_label', payloadKeys: ['taskId', 'labelId'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
   { functionName: 'startImplementation', ipcCommand: 'start_implementation', payloadKeys: ['taskId', 'repoPath'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },
   { functionName: 'resumeStartupSessions', ipcCommand: 'resume_startup_sessions', payloadKeys: [], targetOwner: 'rust-sidecar', domain: 'agent-session-pty' },
   { functionName: 'abortImplementation', ipcCommand: 'abort_implementation', payloadKeys: ['taskId'], targetOwner: 'rust-sidecar', domain: 'tasks-projects' },

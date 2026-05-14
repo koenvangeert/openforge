@@ -37,6 +37,7 @@ vi.mock('../../lib/desktopIpc', () => ({
 }))
 
 const bugLabel: TaskLabel = { id: 1, project_id: 'proj-1', name: 'bug', color: 'error' }
+const uiLabel: TaskLabel = { id: 2, project_id: 'proj-1', name: 'ui', color: 'primary' }
 
 const baseTask: Task = {
   id: 'T-42',
@@ -114,6 +115,27 @@ describe('TaskInfoPanel', () => {
     await waitFor(() => {
       expect(addTaskLabel).toHaveBeenCalledWith('T-42', 'bug')
     })
+  })
+
+  it('resyncs rendered labels when the same task receives refreshed label data', async () => {
+    const view = render(TaskInfoPanel, {
+      props: {
+        task: { ...baseTask, labels: [bugLabel] } as Task & { labels: TaskLabel[] },
+        workspacePath: null,
+      },
+    })
+
+    expect(screen.getByRole('button', { name: 'Remove label bug' })).toBeTruthy()
+
+    await view.rerender({
+      task: { ...baseTask, labels: [uiLabel] } as Task & { labels: TaskLabel[] },
+      workspacePath: null,
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Remove label ui' })).toBeTruthy()
+    })
+    expect(screen.queryByRole('button', { name: 'Remove label bug' })).toBeNull()
   })
 
   it('renders prompt as read-only text (no input elements in prompt section)', () => {

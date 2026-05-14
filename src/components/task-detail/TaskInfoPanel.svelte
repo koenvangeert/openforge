@@ -20,16 +20,24 @@
 
   let labels = $state<TaskLabel[]>([])
   let previousTaskId: string | null = null
+  let previousTaskLabelSignature = ''
 
   let taskPrs = $derived($ticketPrs.get(task.id) || [])
   let dependencies = $derived(getTaskDependencySummaries(task, $allTasks))
   let waitingDependencyCount = $derived(getWaitingDependencyCount(task, $allTasks))
   let dependents = $derived(getTaskDependentSummaries(task, $allTasks))
 
+  function labelSignature(nextLabels: TaskLabel[]): string {
+    return JSON.stringify(nextLabels.map((label) => [label.id, label.name, label.color]))
+  }
+
   $effect(() => {
-    if (task.id !== previousTaskId) {
+    const taskLabels = getTaskLabels(task)
+    const nextTaskLabelSignature = labelSignature(taskLabels)
+    if (task.id !== previousTaskId || nextTaskLabelSignature !== previousTaskLabelSignature) {
       previousTaskId = task.id
-      labels = getTaskLabels(task)
+      previousTaskLabelSignature = nextTaskLabelSignature
+      labels = taskLabels
     }
   })
 
