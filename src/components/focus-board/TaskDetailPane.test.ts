@@ -194,6 +194,29 @@ describe('TaskDetailPane', () => {
 
       expect(screen.queryByLabelText('Dependencies')).toBeNull()
     })
+
+    it('renders dependent tasks for the selected task', () => {
+      const selectedTask = { ...baseTask, id: 'T-748' }
+      const readyDependent = { ...baseTask, id: 'T-800', status: 'backlog' as const, depends_on: ['T-748'], initial_prompt: 'Begin release train' }
+      const waitingDependent = { ...baseTask, id: 'T-801', status: 'backlog' as const, depends_on: ['T-748', 'T-802'], initial_prompt: 'Start after second prerequisite' }
+      const secondPrerequisite = { ...baseTask, id: 'T-802', status: 'doing' as const }
+
+      render(TaskDetailPane, {
+        props: {
+          task: selectedTask,
+          allTasks: [selectedTask, readyDependent, waitingDependent, secondPrerequisite],
+          session: null,
+          pullRequests: [],
+          onOpenFullView: vi.fn(),
+        },
+      })
+
+      const dependentsSection = screen.getByLabelText('Dependent tasks')
+      expect(dependentsSection.textContent).toContain('T-800')
+      expect(dependentsSection.textContent).toContain('ready after this')
+      expect(dependentsSection.textContent).toContain('T-801')
+      expect(dependentsSection.textContent).toContain('still waits on 1 dep')
+    })
   })
 
   describe('summary section', () => {
