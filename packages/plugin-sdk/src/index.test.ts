@@ -5,6 +5,8 @@ import {
   OPENFORGE_PACKAGE_METADATA_SCHEMA,
   OPENFORGE_PLUGIN_API_VERSION,
   isOpenForgePackageMetadata,
+  createMockOpenForgeApi,
+  createOpenForgeRegistryFake,
   validateOpenForgePackageMetadata,
 } from './index'
 
@@ -15,6 +17,8 @@ describe('Plugin SDK root export', () => {
     expect(typeof validateOpenForgePackageMetadata).toBe('function')
     expect(typeof isOpenForgePackageMetadata).toBe('function')
     expect(OPENFORGE_PACKAGE_METADATA_SCHEMA.title).toBe('OpenForge package metadata')
+    expect(typeof createMockOpenForgeApi).toBe('function')
+    expect(typeof createOpenForgeRegistryFake).toBe('function')
   })
 
   it('does not expose legacy manifest contribution validation from the root contract', async () => {

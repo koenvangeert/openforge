@@ -397,15 +397,320 @@ The cutover should:
 
 ## Testing, docs, and templates
 
-The SDK should include testing utilities/mocks for `OpenForgeAPI`, such as registry fakes and `createMockOpenForgeApi()`-style helpers.
+The SDK includes testing utilities/mocks for `OpenForgeAPI` under `@openforge/plugin-sdk/testing`:
 
-The rework should include minimal author documentation/templates:
+- `createMockOpenForgeApi()` / `createMockFrontendOpenForgeApi()` for frontend plugin unit tests.
+- `createMockBackendOpenForgeApi()` for backend plugin unit tests.
+- `createOpenForgeRegistryFake()` for activation tests that need runtime registry snapshots, command invocation, backend method invocation, service startup, event delivery, and cleanup assertions.
+- `createMemoryPluginStorage()` for global/project/task storage tests.
 
-- frontend-only plugin
-- backend method + frontend view
-- command + background service
-- global/project/task storage examples
-- package metadata examples
+Author packages should use the templates below as the v1 package/runtime contract. There is no `manifest.json`, no `openforge.contributes`, and no compatibility adapter for legacy manifest contributions; packages register views, commands, backend methods, services, and settings imperatively from `activate()`.
+
+### Author package template
+
+A plugin package ships normal npm metadata plus `package.json#openforge`. Installed packages must point at already-built JavaScript artifacts.
+
+```json
+{
+  "name": "@acme/openforge-notes",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/backend.js",
+  "peerDependencies": {
+    "@openforge/plugin-sdk": "^0.1.0",
+    "svelte": "^5.0.0"
+  },
+  "scripts": {
+    "build": "vite build && tsc --noEmit",
+    "test": "vitest run"
+  },
+  "openforge": {
+    "id": "acme.notes",
+    "apiVersion": 1,
+    "displayName": "Notes",
+    "description": "Project and task notes for OpenForge",
+    "icon": "notebook-text",
+    "frontend": "./dist/frontend.js",
+    "backend": "./dist/backend.js",
+    "requires": ["views", "commands", "backend", "background", "storage", "notifications"]
+  }
+}
+```
+
+Metadata variants:
+
+```json
+{
+  "openforge": {
+    "id": "acme.frontend-only",
+    "apiVersion": 1,
+    "displayName": "Frontend Only",
+    "description": "Adds a native Svelte view",
+    "frontend": "./dist/frontend.js",
+    "requires": ["views", "storage"]
+  }
+}
+```
+
+```json
+{
+  "openforge": {
+    "id": "acme.backend-only",
+    "apiVersion": 1,
+    "displayName": "Backend Watcher",
+    "description": "Runs a trusted project-scoped background service",
+    "backend": "./dist/backend.js",
+    "requires": ["background", "commands", "storage", "notifications"]
+  }
+}
+```
+
+Install source examples shown in the plugin manager should resolve to one of:
+
+```txt
+npm:@acme/openforge-notes@0.1.0
+git:github.com/acme/openforge-notes@main
+/path/to/local/openforge-notes
+```
+
+### Frontend-only plugin template
+
+`src/frontend.ts`:
+
+```ts
+import { defineFrontendPlugin } from '@openforge/plugin-sdk/frontend'
+
+export default defineFrontendPlugin({
+  activate(openforge, context) {
+    context.subscriptions.add(
+      openforge.views.register({
+        id: 'notes',
+        title: 'Notes',
+        icon: 'notebook-text',
+        placement: 'rail',
+        order: 60,
+        component: () => import('./NotesView.svelte')
+      })
+    )
+  }
+})
+```
+
+`src/NotesView.svelte`:
+
+```svelte
+<script lang="ts">
+  import type { PluginViewProps } from '@openforge/plugin-sdk/frontend'
+
+  interface Props extends PluginViewProps {}
+  let { api, context }: Props = $props()
+
+  let draft = $state('')
+
+  async function save() {
+    if (context.projectId) {
+      await api.storage.project(context.projectId).set('note', draft)
+    } else {
+      await api.storage.global.set('note', draft)
+    }
+    await api.notifications.notify({ title: 'Note saved' })
+  }
+</script>
+
+<section>
+  <h2>Notes</h2>
+  <textarea bind:value={draft}></textarea>
+  <button type="button" onclick={save}>Save</button>
+</section>
+```
+
+### Backend method plus frontend view template
+
+`src/backend.ts` registers plugin-local RPC methods. They are only callable by this plugin's frontend after backend readiness.
+
+```ts
+import { defineBackendPlugin } from '@openforge/plugin-sdk/backend'
+
+export default defineBackendPlugin({
+  activate(openforge, context) {
+    context.subscriptions.add(
+      openforge.backend.registerMethod('syncProject', {
+        input: {
+          type: 'object',
+          required: ['projectId'],
+          properties: { projectId: { type: 'string' } }
+        },
+        output: {
+          type: 'object',
+          required: ['synced'],
+          properties: { synced: { type: 'number' } }
+        },
+        handler: async ({ projectId }: { projectId: string }) => {
+          await openforge.storage.project(projectId).set('lastSyncStartedAt', Date.now())
+          return { synced: 1 }
+        }
+      })
+    )
+  }
+})
+```
+
+`src/frontend.ts`:
+
+```ts
+import { defineFrontendPlugin } from '@openforge/plugin-sdk/frontend'
+
+export default defineFrontendPlugin({
+  activate(openforge, context) {
+    context.subscriptions.add(openforge.views.register({
+      id: 'sync',
+      title: 'Sync',
+      icon: 'refresh-cw',
+      placement: 'rail',
+      component: () => import('./SyncView.svelte')
+    }))
+  }
+})
+```
+
+`src/SyncView.svelte`:
+
+```svelte
+<script lang="ts">
+  import type { PluginViewProps } from '@openforge/plugin-sdk/frontend'
+
+  interface Props extends PluginViewProps {}
+  let { api, context }: Props = $props()
+
+  let status = $state('Idle')
+
+  async function sync() {
+    if (!context.projectId) return
+    status = 'Waiting for backend...'
+    await api.backend.whenReady()
+    const result = await api.backend.invoke<{ synced: number }>('syncProject', { projectId: context.projectId })
+    status = `Synced ${result.synced} item(s)`
+  }
+</script>
+
+<button type="button" onclick={sync}>Sync project</button>
+<p>{status}</p>
+```
+
+### Command plus background service template
+
+Commands are app commands. Background services are backend contributions and start when the backend activates for an enabled project.
+
+```ts
+import { defineBackendPlugin } from '@openforge/plugin-sdk/backend'
+
+export default defineBackendPlugin({
+  activate(openforge, context) {
+    context.subscriptions.add(openforge.commands.register({
+      id: 'syncNow',
+      title: 'Sync Now',
+      icon: 'refresh-cw',
+      shortcut: { key: 'CmdOrCtrl+Shift+Y', scope: 'project' },
+      handler: async ({ projectId }: { projectId: string }) => {
+        await openforge.storage.project(projectId).set('lastManualSyncAt', Date.now())
+        await openforge.events.emit('sync.finished', { projectId })
+        return { ok: true }
+      }
+    }))
+
+    context.subscriptions.add(openforge.background.register({
+      id: 'projectPoller',
+      scope: 'project',
+      start: async () => {
+        const projectId = openforge.context.getSnapshot().projectId
+        if (!projectId) return
+        await openforge.storage.project(projectId).set('pollerStartedAt', Date.now())
+      },
+      stop: async () => {
+        // Release timers, watchers, or sockets here.
+      }
+    }))
+  }
+})
+```
+
+A frontend view or another plugin can invoke the command through the local or global command APIs:
+
+```ts
+await openforge.commands.invoke('syncNow', { projectId })
+await openforge.commands.invokeGlobal('acme.notes.syncNow', { projectId })
+```
+
+### Storage examples
+
+Plugin storage is JSON-only and automatically namespaced by plugin id. Use the narrowest scope that matches the state lifetime.
+
+```ts
+// Global: plugin-wide preferences shared across projects.
+await openforge.storage.global.set('preferences', { compact: true })
+const preferences = await openforge.storage.global.get<{ compact: boolean }>('preferences')
+
+// Project: repository or integration state for one OpenForge project.
+await openforge.storage.project(projectId).set('repo', { owner: 'acme', name: 'app' })
+const repo = await openforge.storage.project(projectId).get('repo')
+
+// Task: transient or durable task-pane state for one task.
+await openforge.storage.task(taskId).set('reviewState', { viewedFiles: ['README.md'] })
+const reviewState = await openforge.storage.task(taskId).get('reviewState')
+await openforge.storage.task(taskId).delete('reviewState')
+```
+
+### Plugin test utilities
+
+Use the SDK testing subpath for author tests. The registry fake is the preferred tool when the test should assert runtime registrations, namespacing, command execution, backend RPC, background service lifecycle, or cleanup.
+
+```ts
+import { describe, expect, it } from 'vitest'
+import plugin from '../src/frontend'
+import { createOpenForgeRegistryFake } from '@openforge/plugin-sdk/testing'
+
+describe('frontend activation', () => {
+  it('registers and disposes the Notes view', async () => {
+    const registry = createOpenForgeRegistryFake({ pluginId: 'acme.notes', projectId: 'P-1' })
+
+    await registry.activateFrontend(plugin)
+
+    expect(registry.snapshot.views).toMatchObject([
+      { id: 'notes', qualifiedId: 'acme.notes.notes', title: 'Notes' }
+    ])
+
+    await registry.disposeAll()
+    expect(registry.snapshot.views).toEqual([])
+  })
+})
+```
+
+For unit tests that only need an API object, use direct mocks. Calls to host-facing capabilities are recorded under `api.__testing.calls`.
+
+```ts
+import { createMockOpenForgeApi } from '@openforge/plugin-sdk/testing'
+
+const api = createMockOpenForgeApi({ pluginId: 'acme.notes', projectId: 'P-1' })
+
+await api.storage.project('P-1').set('repo', { owner: 'acme', name: 'app' })
+await api.system.openUrl('https://example.com')
+
+expect(await api.storage.project('P-1').get('repo')).toEqual({ owner: 'acme', name: 'app' })
+expect(api.__testing.calls.openUrl).toEqual(['https://example.com'])
+```
+
+Backend/plugin integration tests can activate both runtimes against one fake:
+
+```ts
+const registry = createOpenForgeRegistryFake({ pluginId: 'acme.notes', projectId: 'P-1' })
+
+await registry.activateBackend(backendPlugin)
+await registry.activateFrontend(frontendPlugin)
+
+await expect(registry.frontendApi.backend.invoke('syncProject', { projectId: 'P-1' }))
+  .resolves.toEqual({ synced: 1 })
+expect(registry.snapshot.backgroundServices[0].started).toBe(true)
+```
 
 Verification should cover business logic and contracts, including package metadata validation, registration validation, namespacing, lifecycle cleanup, backend readiness/RPC, project enablement, storage scoping, built-in plugin migration, and hard cutover removal of old manifest contribution paths.
 
