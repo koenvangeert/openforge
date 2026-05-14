@@ -22,7 +22,7 @@
   import type { Action, WhisperModelStatus, WhisperModelSizeId } from '../../lib/types'
   import type { TaskState } from '../../lib/taskState'
   import { resolveContributions } from '../../lib/plugin/contributionResolver'
-  import { enabledPluginIds, installedPlugins, runtimeContributionSources } from '../../lib/plugin/pluginStore'
+  import { enabledPluginIds, runtimeContributionSources } from '../../lib/plugin/pluginStore'
   import SettingsGeneralCard from './SettingsGeneralCard.svelte'
   import SettingsFocusFilterCard from './SettingsFocusFilterCard.svelte'
   import SettingsIntegrationsCard from './SettingsIntegrationsCard.svelte'

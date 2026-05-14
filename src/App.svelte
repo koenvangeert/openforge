@@ -26,7 +26,7 @@
   import PluginSlot from './components/plugin/PluginSlot.svelte'
 
   import { resolveContributions } from './lib/plugin/contributionResolver'
-  import { enabledPluginIds, installedPlugins, loadEnabledForProject, runtimeContributionSources } from './lib/plugin/pluginStore'
+  import { enabledPluginIds, loadEnabledForProject, runtimeContributionSources } from './lib/plugin/pluginStore'
   import { isPluginViewKey, makePluginViewKey } from './lib/plugin/types'
   import { activatePlugin, executePluginCommand, initializePluginRuntime } from './lib/plugin/pluginRegistry'
   import { useAppRouter } from './lib/router.svelte'

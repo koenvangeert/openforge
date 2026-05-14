@@ -10,7 +10,7 @@
   import PluginSlot from '../plugin/PluginSlot.svelte'
   import { resolveContributions } from '../../lib/plugin/contributionResolver'
   import type { ResolvedTab } from '../../lib/plugin/contributionResolver'
-  import { enabledPluginIds, installedPlugins, runtimeContributionSources } from '../../lib/plugin/pluginStore'
+  import { enabledPluginIds, runtimeContributionSources } from '../../lib/plugin/pluginStore'
   import { TERMINAL_PLUGIN_ID } from '../../lib/terminalPlugin'
   import { useShortcutRegistry } from '../../lib/shortcuts.svelte'
   import { releaseAllForTask } from '../../lib/terminalPool'
