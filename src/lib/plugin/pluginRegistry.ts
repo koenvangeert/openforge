@@ -46,8 +46,11 @@ import {
 import {
   installedPlugins,
   enabledPluginIds,
+  enablePlugin as enablePluginInStore,
+  disablePlugin as disablePluginInStore,
   loadEnabledForProject as loadEnabledPluginIdsForProject,
   loadInstalledPlugins,
+  manifestFromPluginRow,
 } from './pluginStore'
 import { get } from 'svelte/store'
 import {
@@ -55,8 +58,11 @@ import {
   activatePlugin as activatePluginLoader,
   deactivatePlugin as deactivatePluginLoader,
   isPluginLoaded,
+  isFrontendPluginModule,
 } from './pluginLoader'
 import type { PluginESM } from './pluginLoader'
+import type { OpenForgeContextSnapshot, OpenForgePackageMetadata } from '@openforge/plugin-sdk'
+import type { FrontendOpenForgeAPI } from '@openforge/plugin-sdk/frontend'
 import type { PluginContext } from './types'
 import type {
   PluginActivatedBackgroundService,
@@ -71,6 +77,8 @@ import { registerRenderableContributionComponent } from './componentRegistry'
 import { registerViewComponent } from './componentRegistry'
 import { unregisterViewComponentsForPlugin } from './componentRegistry'
 import { activeProjectId, currentView, selectedTaskId } from '../stores'
+import { createRuntimeContributionRegistry } from './runtimeContributionRegistry'
+import type { RuntimeContributionRegistryInstance, RuntimeContributionSnapshot } from './runtimeContributionRegistry'
 import type { AppView } from '../types'
 
 const STATIC_APP_VIEWS = new Set<AppView>(['board', 'settings', 'global_settings', 'files'])
@@ -104,6 +112,8 @@ const activationPromises = new Map<string, Promise<boolean>>()
 const pluginCommandHandlers = new Map<string, PluginActivatedCommandContribution['execute']>()
 const backgroundServiceStops = new Map<string, () => Promise<void>>()
 const activeBuiltinPluginModules = new Map<string, PluginESM>()
+const activeRuntimeRegistries = new Map<string, RuntimeContributionRegistryInstance>()
+const baseManifestContributions = new Map<string, PluginManifest['contributes']>()
 
 function normalizeErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
@@ -155,6 +165,116 @@ function validateExternalPluginIntegration(manifest: PluginManifest): void {
   }
 }
 
+function normalizePluginAssetUrl(pluginId: string, frontendEntry: string): string {
+  const entry = frontendEntry.replace(/^\.\//, '').replace(/^\//, '')
+  return `plugin://${pluginId}/${entry}`
+}
+
+function setManifestRuntimeContributions(pluginId: string, contributions: PluginManifest['contributes']): void {
+  installedPlugins.update(map => {
+    const entry = map.get(pluginId)
+    if (!entry) return map
+
+    if (!baseManifestContributions.has(pluginId)) {
+      baseManifestContributions.set(pluginId, entry.manifest.contributes)
+    }
+
+    const next = new Map(map)
+    next.set(pluginId, {
+      ...entry,
+      manifest: {
+        ...entry.manifest,
+        contributes: contributions,
+      },
+    })
+    return next
+  })
+}
+
+function restoreManifestContributions(pluginId: string): void {
+  const baseContributes = baseManifestContributions.get(pluginId)
+  if (!baseContributes) return
+
+  installedPlugins.update(map => {
+    const entry = map.get(pluginId)
+    if (!entry) return map
+
+    const next = new Map(map)
+    next.set(pluginId, {
+      ...entry,
+      manifest: {
+        ...entry.manifest,
+        contributes: baseContributes,
+      },
+    })
+    return next
+  })
+  baseManifestContributions.delete(pluginId)
+}
+
+function runtimeSnapshotToManifestContributions(snapshot: RuntimeContributionSnapshot): PluginManifest['contributes'] {
+  return {
+    views: snapshot.views.map((view) => ({
+      id: view.id,
+      title: view.title,
+      icon: view.icon,
+      showInRail: view.placement === 'rail',
+      railOrder: view.order,
+    })),
+    taskPaneTabs: snapshot.taskPaneTabs.map((tab) => ({
+      id: tab.id,
+      title: tab.title,
+      icon: tab.icon,
+      order: tab.order,
+    })),
+    settingsSections: snapshot.settingsSections.map((section) => ({
+      id: section.id,
+      title: section.title,
+    })),
+    commands: snapshot.commands.map((command) => ({
+      id: command.id,
+      title: command.title,
+      icon: command.icon,
+      shortcut: command.shortcut,
+    })),
+  }
+}
+
+function runtimeSnapshotToActivationResult(snapshot: RuntimeContributionSnapshot): PluginActivationResult {
+  const contributions: PluginActivationResult['contributions'] = {
+    views: snapshot.views.map((view) => ({
+      id: view.id,
+      title: view.title,
+      icon: view.icon,
+      showInRail: view.placement === 'rail',
+      railOrder: view.order,
+      component: view.component,
+    })),
+    taskPaneTabs: snapshot.taskPaneTabs.map((tab) => ({
+      id: tab.id,
+      title: tab.title,
+      icon: tab.icon,
+      order: tab.order,
+      component: tab.component,
+    })),
+    settingsSections: snapshot.settingsSections.map((section) => ({
+      id: section.id,
+      title: section.title,
+      order: section.order,
+      component: section.component,
+    })),
+    commands: snapshot.commands.map((command) => ({
+      id: command.id,
+      title: command.title,
+      icon: command.icon,
+      shortcut: command.shortcut,
+      execute: command.handler,
+    })),
+  }
+
+  return { contributions }
+}
+
 function clearPluginRuntimeContributions(pluginId: string): void {
   unregisterViewComponentsForPlugin(pluginId)
 
@@ -179,7 +299,7 @@ function registerRenderableContributions<T extends PluginActivatedTaskPaneTabCon
   contributions: T[] | undefined
 ): void {
   for (const contribution of contributions ?? []) {
-    registerRenderableContributionComponent(slotType, toNamespacedContributionId(pluginId, contribution.id), contribution.component)
+    registerRenderableContributionComponent(slotType, toNamespacedContributionId(pluginId, contribution.id), contribution.component as never)
   }
 }
 
@@ -240,8 +360,41 @@ async function activateExternalPluginModule(pluginId: string, manifest: PluginMa
     }
   }
 
-  const loaded = await loadPluginFrontend(pluginId, `plugin://${pluginId}/${manifest.frontend}`)
+  const loaded = await loadPluginFrontend(pluginId, normalizePluginAssetUrl(pluginId, manifest.frontend))
   if (!loaded) return null
+
+  if (isFrontendPluginModule(loaded.module)) {
+    const entry = get(installedPlugins).get(pluginId)
+    const packageMetadata: OpenForgePackageMetadata = entry?.packageMetadata ?? {
+      id: pluginId,
+      apiVersion: 1,
+      displayName: manifest.name,
+      description: manifest.description,
+      frontend: manifest.frontend,
+      backend: manifest.backend ?? undefined,
+    }
+    const runtimeRegistry = createRuntimeContributionRegistry({
+      pluginId,
+      projectId: get(activeProjectId),
+      packageMetadata,
+    })
+
+    try {
+      await runtimeRegistry.activateFrontend(loaded.module)
+      activeRuntimeRegistries.set(pluginId, runtimeRegistry)
+      const snapshot = runtimeRegistry.getSnapshot()
+      const activationResult = runtimeSnapshotToActivationResult(snapshot)
+      setManifestRuntimeContributions(pluginId, runtimeSnapshotToManifestContributions(snapshot))
+      setPluginRuntimeState(pluginId, 'active', null)
+      return activationResult
+    } catch (error) {
+      await runtimeRegistry.deactivate()
+      activeRuntimeRegistries.delete(pluginId)
+      setPluginRuntimeError(pluginId, error)
+      return null
+    }
+  }
+
   return activatePluginLoader(pluginId, context)
 }
 
@@ -268,6 +421,15 @@ async function deactivateLoadedPluginModule(pluginId: string): Promise<void> {
   if (activeBuiltinPluginModules.has(pluginId)) {
     await deactivateBuiltinPluginModule(pluginId)
     return
+  }
+
+  const runtimeRegistry = activeRuntimeRegistries.get(pluginId)
+  if (runtimeRegistry) {
+    try {
+      await runtimeRegistry.deactivate()
+    } finally {
+      activeRuntimeRegistries.delete(pluginId)
+    }
   }
 
   if (isBackendOnlyExternalPlugin(pluginId)) {
@@ -566,18 +728,18 @@ function upsertInstalledPlugin(row: {
   backendEntry: string | null
   installPath: string
   isBuiltin: boolean
+  sourceKind?: string
+  sourceSpec?: string
+  packageMetadata?: string
+  installedAt?: number
 }): void {
-  const manifest: PluginManifest = {
-    id: row.id,
-    name: row.name,
-    version: row.version,
-    apiVersion: row.apiVersion,
-    description: row.description,
-    permissions: JSON.parse(row.permissions),
-    contributes: JSON.parse(row.contributes),
-    frontend: row.frontendEntry || null,
-    backend: row.backendEntry,
-  }
+  const { manifest, packageMetadata } = manifestFromPluginRow({
+    sourceKind: 'legacy',
+    sourceSpec: '',
+    packageMetadata: '{}',
+    installedAt: 0,
+    ...row,
+  })
 
   installedPlugins.update(map => {
     const next = new Map(map)
@@ -587,6 +749,7 @@ function upsertInstalledPlugin(row: {
       error: null,
       installPath: row.installPath,
       isBuiltin: row.isBuiltin,
+      packageMetadata,
     })
     return next
   })
@@ -661,6 +824,20 @@ export async function uninstallPlugin(pluginId: string): Promise<void> {
 
 export async function loadEnabledForProject(projectId: string): Promise<void> {
   await loadEnabledPluginIdsForProject(projectId)
+
+  for (const pluginId of Array.from(get(enabledPluginIds))) {
+    void activatePlugin(pluginId)
+  }
+}
+
+export async function enablePluginForProject(projectId: string, pluginId: string): Promise<boolean> {
+  await enablePluginInStore(projectId, pluginId)
+  return activatePlugin(pluginId)
+}
+
+export async function disablePluginForProject(projectId: string, pluginId: string): Promise<void> {
+  await disablePluginInStore(projectId, pluginId)
+  await deactivatePluginById(pluginId)
 }
 
 export async function activatePlugin(pluginId: string): Promise<boolean> {
@@ -689,7 +866,7 @@ export async function activatePlugin(pluginId: string): Promise<boolean> {
 
       for (const view of result.contributions.views ?? []) {
         if (view.component) {
-          registerViewComponent(makePluginViewKey(pluginId, view.id), view.component)
+          registerViewComponent(makePluginViewKey(pluginId, view.id), view.component as never)
         }
       }
 
@@ -702,6 +879,7 @@ export async function activatePlugin(pluginId: string): Promise<boolean> {
       return true
     } catch (error) {
       clearPluginRuntimeContributions(pluginId)
+      restoreManifestContributions(pluginId)
       await stopPluginBackgroundServices(pluginId)
       await deactivateLoadedPluginModule(pluginId)
       setPluginRuntimeError(pluginId, error)
@@ -756,11 +934,78 @@ function makePluginContextForPlugin(pluginId: string): PluginContext {
   }
 }
 
+function createUnavailableFrontendApi(pluginId: string): FrontendOpenForgeAPI {
+  const unavailable = async () => {
+    throw new Error(`Frontend runtime API is unavailable for plugin ${pluginId}`)
+  }
+
+  return {
+    commands: {
+      register: () => ({ dispose: () => undefined }),
+      invoke: unavailable,
+      invokeGlobal: unavailable,
+    },
+    events: {
+      on: () => ({ dispose: () => undefined }),
+      onGlobal: () => ({ dispose: () => undefined }),
+      emit: unavailable,
+      emitGlobal: unavailable,
+    },
+    storage: {
+      global: { get: unavailable, set: unavailable, delete: unavailable },
+      project: () => ({ get: unavailable, set: unavailable, delete: unavailable }),
+      task: () => ({ get: unavailable, set: unavailable, delete: unavailable }),
+    },
+    context: {
+      getSnapshot: () => ({ pluginId, projectId: get(activeProjectId) }),
+    },
+    tasks: {},
+    projects: {},
+    fs: { readFile: unavailable, writeFile: unavailable },
+    shell: {},
+    notifications: {},
+    attention: {},
+    system: { openUrl: async (url: string) => openUrl(url) },
+    config: { get: unavailable, set: unavailable },
+    projectConfig: { get: unavailable, set: unavailable },
+    views: { register: () => ({ dispose: () => undefined }) },
+    taskPane: { registerTab: () => ({ dispose: () => undefined }) },
+    settings: { registerSection: () => ({ dispose: () => undefined }) },
+    backend: {
+      state: 'missing',
+      whenReady: unavailable,
+      onReady: () => ({ dispose: () => undefined }),
+      invoke: unavailable,
+    },
+  }
+}
+
+export function getPluginRenderProps(pluginId: string, options: { projectId: string | null; taskId?: string | null }): { api: FrontendOpenForgeAPI; context: OpenForgeContextSnapshot } {
+  const runtimeRegistry = activeRuntimeRegistries.get(pluginId)
+  if (!runtimeRegistry) {
+    return {
+      api: createUnavailableFrontendApi(pluginId),
+      context: {
+        pluginId,
+        projectId: options.projectId,
+        taskId: options.taskId ?? null,
+      },
+    }
+  }
+
+  return {
+    api: runtimeRegistry.getFrontendApi(),
+    context: runtimeRegistry.createRenderContextSnapshot(options.projectId, options.taskId ?? null),
+  }
+}
+
 export async function deactivatePluginById(pluginId: string): Promise<void> {
   await deactivateLoadedPluginModule(pluginId)
   clearPluginRuntimeContributions(pluginId)
+  restoreManifestContributions(pluginId)
   await stopPluginBackgroundServices(pluginId)
   clearPluginHostSubscriptions(pluginId)
+  setPluginRuntimeState(pluginId, 'installed', null)
 }
 
 export async function installFromLocal(pluginPath: string, _projectId: string): Promise<void> {

@@ -202,7 +202,7 @@ describe('SettingsView', () => {
 
     await vi.waitFor(() => {
       expect(screen.getByText('Advanced Plugin Settings')).toBeTruthy()
-      expect(screen.getByTestId('plugin-slot-view')).toBeTruthy()
+      expect(document.querySelector('[data-slot-type="settingsSections"][data-slot-id="plugin.settings:advanced"]')).toBeTruthy()
     })
   })
 

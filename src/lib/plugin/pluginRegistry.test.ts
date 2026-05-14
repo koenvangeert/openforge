@@ -1,3 +1,4 @@
+import { defineFrontendPlugin } from '@openforge/plugin-sdk/frontend'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { get } from 'svelte/store'
 
@@ -93,6 +94,9 @@ import {
   loadEnabledForProject as registryLoadEnabledForProject,
   activatePlugin,
   installFromLocal,
+  getPluginRenderProps,
+  enablePluginForProject,
+  disablePluginForProject,
 } from './pluginRegistry'
 import { installedPlugins, enabledPluginIds } from './pluginStore'
 import type { PluginManifest } from './types'
@@ -318,6 +322,126 @@ describe('pluginRegistry', () => {
 
     await calledCtx.storage.set('plugin-key', 'plugin-value')
     expect(setPluginStorageMock).toHaveBeenCalledWith('test-plugin', 'plugin-key', 'plugin-value')
+  })
+
+  it('activates defineFrontendPlugin package entries through plugin:// assets and runtime registries', async () => {
+    const LazyView = vi.fn() as never
+    const commandHandler = vi.fn(async () => ({ ok: true }))
+    const activateFrontend = vi.fn((openforge, context) => {
+      context.subscriptions.add(openforge.views.register({
+        id: 'prs',
+        title: 'Pull Requests',
+        icon: 'git-pull-request',
+        placement: 'rail',
+        order: 25,
+        component: () => Promise.resolve({ default: LazyView }),
+      }))
+      context.subscriptions.add(openforge.taskPane.registerTab({
+        id: 'activity',
+        title: 'Activity',
+        component: LazyView,
+      }))
+      context.subscriptions.add(openforge.settings.registerSection({
+        id: 'prefs',
+        title: 'Preferences',
+        component: LazyView,
+      }))
+      context.subscriptions.add(openforge.commands.register({
+        id: 'refresh',
+        title: 'Refresh',
+        handler: commandHandler,
+      }))
+    })
+    const frontendPlugin = defineFrontendPlugin({ activate: activateFrontend })
+    const manifest = makeManifest({
+      id: 'runtime-plugin',
+      frontend: './dist/frontend.js',
+      contributes: {},
+    })
+
+    installedPlugins.set(new Map([['runtime-plugin', {
+      manifest,
+      state: 'installed',
+      error: null,
+      packageMetadata: {
+        id: 'runtime-plugin',
+        apiVersion: 1,
+        displayName: 'Runtime Plugin',
+        description: 'Runtime plugin',
+        frontend: './dist/frontend.js',
+      },
+    }]]))
+    enabledPluginIds.set(new Set(['runtime-plugin']))
+    loadPluginFrontendMock.mockResolvedValue({ pluginId: 'runtime-plugin', module: frontendPlugin, activationResult: null })
+
+    await expect(activatePlugin('runtime-plugin')).resolves.toBe(true)
+
+    expect(loadPluginFrontendMock).toHaveBeenCalledWith('runtime-plugin', 'plugin://runtime-plugin/dist/frontend.js')
+    expect(activatePluginLoaderMock).not.toHaveBeenCalled()
+    expect(activateFrontend).toHaveBeenCalledOnce()
+    expect(get(installedPlugins).get('runtime-plugin')?.manifest.contributes.views).toMatchObject([
+      { id: 'prs', title: 'Pull Requests', icon: 'git-pull-request', showInRail: true, railOrder: 25 },
+    ])
+    expect(getRegisteredComponent('plugin:runtime-plugin:prs')).toBeDefined()
+    expect(getRegisteredRenderableComponent('taskPaneTabs', 'runtime-plugin:activity')).toBeDefined()
+    expect(getRegisteredRenderableComponent('settingsSections', 'runtime-plugin:prefs')).toBeDefined()
+    await expect(executePluginCommand('runtime-plugin', 'refresh', { source: 'test' })).resolves.toBe(true)
+    expect(commandHandler).toHaveBeenCalledWith({ source: 'test' })
+
+    const firstProps = getPluginRenderProps('runtime-plugin', { projectId: 'P-1', taskId: 'T-1' })
+    const secondProps = getPluginRenderProps('runtime-plugin', { projectId: 'P-1', taskId: 'T-2' })
+    expect(firstProps.api).toBe(secondProps.api)
+    expect(firstProps.context).toEqual({ pluginId: 'runtime-plugin', projectId: 'P-1', taskId: 'T-1' })
+    expect(secondProps.context).toEqual({ pluginId: 'runtime-plugin', projectId: 'P-1', taskId: 'T-2' })
+    expect(secondProps.api.context.getSnapshot()).toEqual({ pluginId: 'runtime-plugin', projectId: null })
+
+    const otherSlotProps = getPluginRenderProps('runtime-plugin', { projectId: 'P-2', taskId: 'T-99' })
+    expect(firstProps.context).toEqual({ pluginId: 'runtime-plugin', projectId: 'P-1', taskId: 'T-1' })
+    expect(otherSlotProps.context).toEqual({ pluginId: 'runtime-plugin', projectId: 'P-2', taskId: 'T-99' })
+    expect(firstProps.api.context.getSnapshot()).toEqual({ pluginId: 'runtime-plugin', projectId: null })
+  })
+
+  it('activates package plugins immediately when enabling and deactivates them when disabling', async () => {
+    const RuntimeView = vi.fn() as never
+    const frontendPlugin = defineFrontendPlugin({
+      activate(openforge, context) {
+        context.subscriptions.add(openforge.views.register({
+          id: 'main',
+          title: 'Main View',
+          icon: 'sparkles',
+          placement: 'rail',
+          component: RuntimeView,
+        }))
+      },
+    })
+    const manifest = makeManifest({ id: 'enable-runtime-plugin', frontend: './dist/frontend.js', contributes: {} })
+    installedPlugins.set(new Map([['enable-runtime-plugin', {
+      manifest,
+      state: 'installed',
+      error: null,
+      packageMetadata: {
+        id: 'enable-runtime-plugin',
+        apiVersion: 1,
+        displayName: 'Enable Runtime Plugin',
+        description: 'Runtime package plugin',
+        frontend: './dist/frontend.js',
+      },
+    }]]))
+    loadPluginFrontendMock.mockResolvedValue({ pluginId: 'enable-runtime-plugin', module: frontendPlugin, activationResult: null })
+
+    await expect(enablePluginForProject('P-1', 'enable-runtime-plugin')).resolves.toBe(true)
+
+    expect(get(enabledPluginIds)).toEqual(new Set(['enable-runtime-plugin']))
+    expect(get(installedPlugins).get('enable-runtime-plugin')?.state).toBe('active')
+    expect(get(installedPlugins).get('enable-runtime-plugin')?.manifest.contributes.views).toMatchObject([
+      { id: 'main', title: 'Main View' },
+    ])
+
+    await disablePluginForProject('P-1', 'enable-runtime-plugin')
+
+    expect(get(enabledPluginIds)).toEqual(new Set())
+    expect(get(installedPlugins).get('enable-runtime-plugin')?.state).toBe('installed')
+    expect(get(installedPlugins).get('enable-runtime-plugin')?.manifest.contributes).toEqual({})
   })
 
   it('activates builtin plugin modules inside the host bundle instead of loading plugin:// frontend bundles', async () => {

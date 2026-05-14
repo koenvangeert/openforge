@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, cleanup } from '@testing-library/svelte'
 import PluginSettingsPanel from './PluginSettingsPanel.svelte'
-import { installedPlugins, enabledPluginIds, enablePlugin, disablePlugin } from '../../lib/plugin/pluginStore'
+import { installedPlugins, enabledPluginIds } from '../../lib/plugin/pluginStore'
+import { enablePluginForProject, disablePluginForProject } from '../../lib/plugin/pluginRegistry'
 import type { PluginEntry } from '../../lib/plugin/types'
 
 // Mock the dependencies
@@ -10,10 +11,13 @@ vi.mock('../../lib/plugin/pluginStore', () => {
   return {
     installedPlugins: writable(new Map()),
     enabledPluginIds: writable(new Set()),
-    enablePlugin: vi.fn(),
-    disablePlugin: vi.fn(),
   }
 })
+
+vi.mock('../../lib/plugin/pluginRegistry', () => ({
+  enablePluginForProject: vi.fn(),
+  disablePluginForProject: vi.fn(),
+}))
 
 const mockPlugin: PluginEntry = {
   manifest: {
@@ -67,12 +71,12 @@ describe('PluginSettingsPanel', () => {
     expect(toggle.checked).toBe(false)
     
     await fireEvent.click(toggle)
-    expect(enablePlugin).toHaveBeenCalledWith('proj-1', 'test-plugin')
+    expect(enablePluginForProject).toHaveBeenCalledWith('proj-1', 'test-plugin')
     
     // Set enabled
     enabledPluginIds.set(new Set(['test-plugin']))
     await fireEvent.click(toggle)
-    expect(disablePlugin).toHaveBeenCalledWith('proj-1', 'test-plugin')
+    expect(disablePluginForProject).toHaveBeenCalledWith('proj-1', 'test-plugin')
   })
 
   it('does not render install and uninstall controls', () => {

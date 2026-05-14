@@ -2,10 +2,12 @@
   import { Blocks, AlertCircle } from 'lucide-svelte'
   import {
     installedPlugins,
-    enabledPluginIds,
-    enablePlugin,
-    disablePlugin
+    enabledPluginIds
   } from '../../lib/plugin/pluginStore'
+  import {
+    enablePluginForProject,
+    disablePluginForProject
+  } from '../../lib/plugin/pluginRegistry'
 
   interface Props {
     projectId: string
@@ -21,9 +23,9 @@
 
   async function handleToggle(pluginId: string, isCurrentlyEnabled: boolean) {
     if (isCurrentlyEnabled) {
-      await disablePlugin(projectId, pluginId)
+      await disablePluginForProject(projectId, pluginId)
     } else {
-      await enablePlugin(projectId, pluginId)
+      await enablePluginForProject(projectId, pluginId)
     }
   }
 </script>

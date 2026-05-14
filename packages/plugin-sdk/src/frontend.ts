@@ -16,8 +16,19 @@ import type {
   PluginViewRegistration,
 } from './types'
 
-export function defineFrontendPlugin<const TPlugin extends FrontendPlugin>(plugin: TPlugin): TPlugin {
-  return plugin
+export const OPENFORGE_FRONTEND_PLUGIN_MARKER = '__openforgeFrontendPlugin'
+
+export type MarkedFrontendPlugin<TPlugin extends FrontendPlugin = FrontendPlugin> = TPlugin & {
+  readonly [OPENFORGE_FRONTEND_PLUGIN_MARKER]: true
+}
+
+export function defineFrontendPlugin<const TPlugin extends FrontendPlugin>(plugin: TPlugin): MarkedFrontendPlugin<TPlugin> {
+  Object.defineProperty(plugin, OPENFORGE_FRONTEND_PLUGIN_MARKER, {
+    value: true,
+    enumerable: false,
+    configurable: false,
+  })
+  return plugin as MarkedFrontendPlugin<TPlugin>
 }
 
 export type {

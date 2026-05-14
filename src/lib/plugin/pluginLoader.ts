@@ -1,20 +1,29 @@
 import { installedPlugins } from './pluginStore'
+import { OPENFORGE_FRONTEND_PLUGIN_MARKER } from '@openforge/plugin-sdk/frontend'
+import type { FrontendPlugin } from '@openforge/plugin-sdk/frontend'
 import type { PluginActivationResult, PluginContext, PluginState } from './types'
 
 export interface PluginESM {
-  activate(context: PluginContext): Promise<PluginActivationResult>
-  deactivate?(): Promise<void>
+  activate(context: PluginContext): Promise<PluginActivationResult> | PluginActivationResult
+  deactivate?(): Promise<void> | void
 }
+
+export type FrontendPluginESM = FrontendPlugin & {
+  readonly [OPENFORGE_FRONTEND_PLUGIN_MARKER]?: true
+  deactivate?(): Promise<void> | void
+}
+
+export type LoadedPluginModule = PluginESM | FrontendPluginESM
 
 export interface LoadedPlugin {
   pluginId: string
-  module: PluginESM
+  module: LoadedPluginModule
   activationResult: PluginActivationResult | null
 }
 
 const loadedPlugins = new Map<string, LoadedPlugin>()
 
-let moduleLoader: (path: string) => Promise<PluginESM> = path => import(/* @vite-ignore */ path) as Promise<PluginESM>
+let moduleLoader: (path: string) => Promise<unknown> = path => import(/* @vite-ignore */ path) as Promise<unknown>
 
 function normalizeErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
@@ -31,17 +40,37 @@ function setPluginState(pluginId: string, state: PluginState, error: string | nu
   })
 }
 
-function isPluginESM(module: PluginESM | Record<string, unknown>): module is PluginESM {
-  return typeof module === 'object' && module !== null && typeof module.activate === 'function'
+function getModuleCandidate(module: unknown): unknown {
+  if (typeof module === 'object' && module !== null && 'default' in module) {
+    const defaultExport = (module as { default?: unknown }).default
+    if (isPluginModule(defaultExport)) {
+      return defaultExport
+    }
+  }
+
+  return module
 }
 
-export function _setModuleLoader(loader: (path: string) => Promise<PluginESM>): void {
+function isPluginModule(module: unknown): module is LoadedPluginModule {
+  return typeof module === 'object' && module !== null && typeof (module as { activate?: unknown }).activate === 'function'
+}
+
+export function isFrontendPluginModule(module: unknown): module is FrontendPluginESM {
+  if (typeof module !== 'object' || module === null || typeof (module as { activate?: unknown }).activate !== 'function') {
+    return false
+  }
+
+  return (module as { [OPENFORGE_FRONTEND_PLUGIN_MARKER]?: unknown })[OPENFORGE_FRONTEND_PLUGIN_MARKER] === true
+    || (module as { activate: (...args: never[]) => unknown }).activate.length >= 2
+}
+
+export function _setModuleLoader(loader: (path: string) => Promise<unknown>): void {
   moduleLoader = loader
 }
 
 export function _resetPluginLoaderForTests(): void {
   loadedPlugins.clear()
-  moduleLoader = path => import(/* @vite-ignore */ path) as Promise<PluginESM>
+  moduleLoader = path => import(/* @vite-ignore */ path) as Promise<unknown>
 }
 
 export async function loadPluginFrontend(pluginId: string, installPath: string): Promise<LoadedPlugin | null> {
@@ -49,8 +78,8 @@ export async function loadPluginFrontend(pluginId: string, installPath: string):
   if (existing) return existing
 
   try {
-    const loadedModule = await moduleLoader(installPath)
-    if (!isPluginESM(loadedModule)) {
+    const loadedModule = getModuleCandidate(await moduleLoader(installPath))
+    if (!isPluginModule(loadedModule)) {
       throw new Error(`Plugin ${pluginId} frontend is missing an activate() export`)
     }
 
@@ -74,6 +103,10 @@ export async function activatePlugin(pluginId: string, context: PluginContext): 
   if (!loadedPlugin) return null
 
   try {
+    if (isFrontendPluginModule(loadedPlugin.module)) {
+      throw new Error(`Plugin ${pluginId} uses defineFrontendPlugin and must be activated by the frontend runtime`)
+    }
+
     const activationResult = await loadedPlugin.module.activate(context)
     loadedPlugin.activationResult = activationResult
     setPluginState(pluginId, 'active', null)

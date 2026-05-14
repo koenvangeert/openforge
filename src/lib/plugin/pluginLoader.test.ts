@@ -65,6 +65,20 @@ describe('pluginLoader', () => {
     _resetPluginLoaderForTests()
   })
 
+  it('loads default-exported defineFrontendPlugin modules successfully', async () => {
+    seedPlugin('plugin.default')
+    const module = {
+      activate: vi.fn((_api, _context) => undefined),
+    }
+    const loader = vi.fn(async () => ({ default: module }))
+    _setModuleLoader(loader)
+
+    const loaded = await loadPluginFrontend('plugin.default', 'plugin://plugin.default/dist/frontend.js')
+
+    expect(loaded?.module).toBe(module)
+    expect(loader).toHaveBeenCalledWith('plugin://plugin.default/dist/frontend.js')
+  })
+
   it('loads plugin ESM successfully', async () => {
     seedPlugin('plugin.success')
     const module = {
