@@ -70,18 +70,20 @@ jobs:
       - name: Package Electron app
         run: pnpm electron:package
 
-      - name: Archive Electron app
+      - name: Build release DMG image
+        id: release-image
         run: |
+          VERSION="$(node -e "console.log(JSON.parse(require('fs').readFileSync('package.json', 'utf8')).version)")"
           APP_PATH="$(node scripts/rust-sidecar-layout.mjs electron-app-path)"
-          ditto -c -k --sequesterRsrc --keepParent \
-            "$APP_PATH" \
-            "openforge-${{ matrix.target }}.zip"
+          DMG_PATH="$(node scripts/release-image.mjs create "$APP_PATH" "$VERSION" "${{ matrix.target }}")"
+          echo "dmg-path=$DMG_PATH" >> "$GITHUB_OUTPUT"
+          echo "dmg-name=$(basename "$DMG_PATH")" >> "$GITHUB_OUTPUT"
 
       - name: Upload packaged app artifact
         uses: actions/upload-artifact@v4
         with:
-          name: openforge-${{ matrix.target }}
-          path: openforge-${{ matrix.target }}.zip
+          name: ${{ steps.release-image.outputs.dmg-name }}
+          path: ${{ steps.release-image.outputs.dmg-path }}
 
       - name: Draft GitHub release
         if: startsWith(github.ref, 'refs/tags/v')
@@ -97,4 +99,4 @@ jobs:
             ```
             xattr -rd com.apple.quarantine /Applications/Open\ Forge.app
             ```
-          files: openforge-${{ matrix.target }}.zip
+          files: ${{ steps.release-image.outputs.dmg-path }}
