@@ -20,6 +20,10 @@ import {
 	getTaskBatchFileContents,
 	getPtyBuffer,
 	installPlugin,
+	installPluginFromGit,
+	installPluginFromLocal,
+	installPluginFromNpm,
+	installPluginFromSource,
 	killPty,
 	killShellsForTask,
 	resizePty,
@@ -235,6 +239,42 @@ describe("ipc spawnShellPty", () => {
 				isBuiltin: false,
 			},
 		});
+	});
+
+	it("routes package-source plugin installs through typed IPC payloads", async () => {
+		invokeMock.mockResolvedValue({
+			id: "com.example.plugin",
+			name: "Example Plugin",
+			version: "1.2.3",
+			api_version: 1,
+			description: "Adds examples",
+			permissions: "[]",
+			contributes: "{}",
+			frontend_entry: "dist/frontend.js",
+			backend_entry: null,
+			install_path: "/plugins/example",
+			source_kind: "npm",
+			source_spec: "npm:@example/plugin@1.2.3",
+			package_metadata: "{}",
+			installed_at: 1234,
+			is_builtin: false,
+		});
+
+		await expect(installPluginFromNpm("@example/plugin@1.2.3")).resolves.toMatchObject({
+			id: "com.example.plugin",
+			sourceKind: "npm",
+			sourceSpec: "npm:@example/plugin@1.2.3",
+		});
+		expect(invokeMock).toHaveBeenLastCalledWith("install_plugin_from_npm", { packageName: "@example/plugin@1.2.3" });
+
+		await installPluginFromGit("github.com/example/openforge-plugin@main");
+		expect(invokeMock).toHaveBeenLastCalledWith("install_plugin_from_git", { gitSpec: "github.com/example/openforge-plugin@main" });
+
+		await installPluginFromLocal("/Users/me/plugin");
+		expect(invokeMock).toHaveBeenLastCalledWith("install_plugin_from_local", { sourcePath: "/Users/me/plugin" });
+
+		await installPluginFromSource("git:github.com/example/openforge-plugin@main");
+		expect(invokeMock).toHaveBeenLastCalledWith("install_plugin_from_source", { sourceSpec: "git:github.com/example/openforge-plugin@main" });
 	});
 
 	it("encodes voice audio as base64 little-endian Float32 PCM instead of a JSON number array", async () => {

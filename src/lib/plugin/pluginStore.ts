@@ -72,6 +72,9 @@ export async function loadInstalledPlugins(): Promise<void> {
           installPath: row.installPath,
           isBuiltin: row.isBuiltin,
           packageMetadata,
+          sourceKind: row.sourceKind,
+          sourceSpec: row.sourceSpec,
+          installedAt: row.installedAt,
         },
       ]
     })))

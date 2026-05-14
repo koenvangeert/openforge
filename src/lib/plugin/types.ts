@@ -149,6 +149,9 @@ export interface PluginEntry {
   installPath?: string
   isBuiltin?: boolean
   packageMetadata?: OpenForgePackageMetadata | null
+  sourceKind?: string
+  sourceSpec?: string
+  installedAt?: number
 }
 
 export const MAX_SUPPORTED_API_VERSION = 1
