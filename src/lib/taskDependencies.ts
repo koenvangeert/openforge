@@ -9,6 +9,10 @@ export interface TaskDependencySummary {
   tooltipTitle: string
 }
 
+export interface TaskDependentSummary extends TaskDependencySummary {
+  remainingDependencyCountAfterCurrentDone: number
+}
+
 export function getTaskDependencySummaries(task: Task, allTasks: Task[]): TaskDependencySummary[] {
   const tasksById = new Map(allTasks.map((knownTask) => [knownTask.id, knownTask]))
   return task.depends_on.map((dependencyId) => {
@@ -24,8 +28,37 @@ export function getTaskDependencySummaries(task: Task, allTasks: Task[]): TaskDe
   })
 }
 
+export function getTaskDependentSummaries(task: Task, allTasks: Task[]): TaskDependentSummary[] {
+  const tasksById = new Map(allTasks.map((knownTask) => [knownTask.id, knownTask]))
+
+  return allTasks
+    .filter((knownTask) => knownTask.id !== task.id && knownTask.depends_on.includes(task.id))
+    .map((dependentTask) => {
+      const displayTitle = getTaskTitle(dependentTask)
+      const remainingDependencyCountAfterCurrentDone = dependentTask.depends_on
+        .filter((dependencyId) => dependencyId !== task.id)
+        .filter((dependencyId) => tasksById.get(dependencyId)?.status !== 'done')
+        .length
+
+      return {
+        id: dependentTask.id,
+        status: dependentTask.status,
+        title: displayTitle,
+        displayTitle,
+        tooltipTitle: displayTitle,
+        remainingDependencyCountAfterCurrentDone,
+      }
+    })
+}
+
 export function getWaitingDependencyCount(task: Task, allTasks: Task[]): number {
   return getTaskDependencySummaries(task, allTasks).filter((dependency) => dependency.status !== 'done').length
+}
+
+export function getDependentReadinessLabel(dependent: TaskDependentSummary, longForm = false): string {
+  const dependencyLabel = longForm ? 'dependency' : 'dep'
+  if (dependent.remainingDependencyCountAfterCurrentDone === 0) return 'ready after this'
+  return `still waits on ${dependent.remainingDependencyCountAfterCurrentDone} ${dependencyLabel}${dependent.remainingDependencyCountAfterCurrentDone === 1 ? '' : 's'}`
 }
 
 export function getDependencyWaitLabel(task: Task, allTasks: Task[]): string | null {

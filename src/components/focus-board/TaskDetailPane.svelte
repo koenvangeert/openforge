@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { Task, PullRequestInfo, PrComment } from '../../lib/types'
   import { parseCheckRuns, splitCheckRuns } from '../../lib/types'
-  import { getTaskDependencySummaries, getWaitingDependencyCount } from '../../lib/taskDependencies'
+  import { getDependentReadinessLabel, getTaskDependentSummaries, getTaskDependencySummaries, getWaitingDependencyCount } from '../../lib/taskDependencies'
   import { getDependencyStatusPresentation } from '../../lib/dependencyStatusPresentation'
   import { getPrComments, markCommentAddressed, openUrl } from '../../lib/ipc'
   import MarkdownContent from '../shared/content/MarkdownContent.svelte'
@@ -23,6 +23,7 @@
   let markdownImageBaseUrlsByPrId = $derived(new Map(pullRequests.map((pr) => [pr.id, getGitHubMarkdownImageBaseUrl(pr)])))
   let dependencies = $derived(task ? getTaskDependencySummaries(task, allTasks) : [])
   let waitingDependencyCount = $derived(task ? getWaitingDependencyCount(task, allTasks) : 0)
+  let dependents = $derived(task ? getTaskDependentSummaries(task, allTasks) : [])
 
   async function fetchComments() {
     if (!task || pullRequests.length === 0) {
@@ -100,6 +101,25 @@
           {:else}
             Waiting on {waitingDependencyCount} {waitingDependencyCount === 1 ? 'dep' : 'deps'}
           {/if}
+        </p>
+      </section>
+    {/if}
+
+    {#if dependents.length > 0}
+      <section class="flex flex-col gap-2" aria-label="Dependent tasks" aria-live="polite">
+        <span class="font-mono text-[10px] font-bold text-primary">// DEPENDENTS</span>
+        <div class="flex flex-wrap gap-1.5">
+          {#each dependents as dependent (dependent.id)}
+            {@const statusPresentation = getDependencyStatusPresentation(dependent.status)}
+            <span class="badge badge-xs gap-1 border border-base-300 {statusPresentation.badgeClass}" title={dependent.title}>
+              <span class="font-mono">{dependent.id}</span>
+              <span class="opacity-80">{statusPresentation.label}</span>
+              <span class="opacity-80">· {getDependentReadinessLabel(dependent)}</span>
+            </span>
+          {/each}
+        </div>
+        <p class="text-xs text-base-content/40">
+          {dependents.length} {dependents.length === 1 ? 'task depends' : 'tasks depend'} on this one
         </p>
       </section>
     {/if}

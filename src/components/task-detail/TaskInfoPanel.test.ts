@@ -208,6 +208,35 @@ describe('TaskInfoPanel', () => {
     expect(dependenciesSection.textContent).toContain('Waiting on 1 dependency')
   })
 
+  it('renders tasks that depend on the selected task and highlights what is ready after this', () => {
+    const selectedTask = { ...baseTask, id: 'T-42' }
+    const donePrerequisite = { ...baseTask, id: 'T-7', status: 'done' as const, initial_prompt: 'Already completed prerequisite' }
+    const waitingPrerequisite = { ...baseTask, id: 'T-8', status: 'doing' as const, initial_prompt: 'Still in progress prerequisite' }
+    const readyDependent = {
+      ...baseTask,
+      id: 'T-50',
+      initial_prompt: 'Start rollout after auth middleware',
+      depends_on: ['T-42', 'T-7'],
+    }
+    const stillBlockedDependent = {
+      ...baseTask,
+      id: 'T-51',
+      initial_prompt: 'Deploy after remaining prerequisites',
+      depends_on: ['T-42', 'T-8'],
+    }
+    tasks.set([selectedTask, readyDependent, stillBlockedDependent, donePrerequisite, waitingPrerequisite])
+
+    render(TaskInfoPanel, { props: { task: selectedTask, workspacePath: null } })
+
+    const dependentsSection = screen.getByLabelText('Dependent tasks')
+    expect(dependentsSection.textContent).toContain('T-50')
+    expect(dependentsSection.textContent).toContain('Start rollout after auth middleware')
+    expect(dependentsSection.textContent).toContain('ready after this')
+    expect(dependentsSection.textContent).toContain('T-51')
+    expect(dependentsSection.textContent).toContain('Deploy after remaining prerequisites')
+    expect(dependentsSection.textContent).toContain('still waits on 1 dependency')
+  })
+
    it('renders pipeline status section when PRs have CI data', async () => {
      const prWithCi: PullRequestInfo = {
        id: 42,
