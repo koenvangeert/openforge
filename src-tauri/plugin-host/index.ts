@@ -103,6 +103,8 @@ class RuntimeValidationError extends Error {
 class RuntimeSubscriptionSink implements SubscriptionSink {
   readonly subscriptions: Disposable[] = []
 
+  constructor(private readonly pluginId: string) {}
+
   add(subscription: Disposable | (() => void)): void {
     if (typeof subscription === 'function') {
       this.subscriptions.push(createDisposable(subscription))
@@ -119,7 +121,11 @@ class RuntimeSubscriptionSink implements SubscriptionSink {
   async disposeAll(): Promise<void> {
     const subscriptions = this.subscriptions.splice(0).reverse()
     for (const subscription of subscriptions) {
-      await subscription.dispose()
+      try {
+        await subscription.dispose()
+      } catch (error) {
+        logPluginHostError(this.pluginId, `subscription dispose error: ${toError(error).message}`)
+      }
     }
   }
 }
@@ -217,7 +223,16 @@ function formatPluginValue(value: unknown): string {
   }
 }
 
+let pluginConsoleQueue: Promise<void> = Promise.resolve()
+
 async function withPluginConsole<T>(pluginId: string, operation: () => Promise<T> | T): Promise<T> {
+  const previousConsoleUse = pluginConsoleQueue
+  let releaseConsoleUse: () => void = () => undefined
+  pluginConsoleQueue = new Promise<void>((resolve) => {
+    releaseConsoleUse = resolve
+  })
+  await previousConsoleUse.catch(() => undefined)
+
   const originalConsole = {
     debug: console.debug,
     error: console.error,
@@ -243,6 +258,7 @@ async function withPluginConsole<T>(pluginId: string, operation: () => Promise<T
     console.info = originalConsole.info
     console.log = originalConsole.log
     console.warn = originalConsole.warn
+    releaseConsoleUse()
   }
 }
 
@@ -275,7 +291,7 @@ function createInitialPluginState(pluginId: string): RuntimePluginState {
     module: null,
     methods: new Map(),
     backgroundServices: new Map(),
-    subscriptions: new RuntimeSubscriptionSink(),
+    subscriptions: new RuntimeSubscriptionSink(pluginId),
     crashTimestamps: [],
     crashLoopGuardTripped: false,
   }
@@ -502,7 +518,7 @@ export class PluginHostRuntime {
 
     state.methods.clear()
     state.backgroundServices.clear()
-    state.subscriptions = new RuntimeSubscriptionSink()
+    state.subscriptions = new RuntimeSubscriptionSink(state.pluginId)
   }
 
   private async startBackgroundServices(state: RuntimePluginState): Promise<void> {
@@ -721,6 +737,8 @@ function startStdioServer(): void {
     crlfDelay: Infinity,
   })
 
+  let requestQueue: Promise<void> = Promise.resolve()
+
   input.on('line', (line) => {
     if (!line.trim()) {
       return
@@ -735,7 +753,14 @@ function startStdioServer(): void {
       return
     }
 
-    void handleRequest(request)
+    requestQueue = requestQueue
+      .catch(() => undefined)
+      .then(() => handleRequest(request))
+      .catch((error) => {
+        const message = error instanceof Error ? error.message : String(error)
+        process.stderr.write(`[plugin_host] request handling error: ${message}\n`)
+      })
+    void requestQueue
   })
 
   input.on('close', () => {
