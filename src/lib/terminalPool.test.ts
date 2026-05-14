@@ -288,9 +288,12 @@ describe("terminalPool", () => {
 	it("acquire preloads the bundled terminal web fonts before open", async () => {
 		await acquire("task-font-preload");
 
-		expect(fontLoadMock).toHaveBeenCalledWith('13px "JetBrains Mono"');
+		expect(fontLoadMock).toHaveBeenCalledWith('400 13px "JetBrains Mono"');
+		expect(fontLoadMock).toHaveBeenCalledWith('700 13px "JetBrains Mono"');
+		expect(fontLoadMock).toHaveBeenCalledWith('italic 400 13px "JetBrains Mono"');
+		expect(fontLoadMock).toHaveBeenCalledWith('italic 700 13px "JetBrains Mono"');
 		expect(fontLoadMock).toHaveBeenCalledWith(
-			'13px "NerdFontsSymbols Nerd Font"',
+			'400 13px "NerdFontsSymbols Nerd Font"',
 		);
 	});
 
