@@ -15,11 +15,16 @@ import packageJson from '../package.json'
 
 function makeRuntimeHarness() {
   const subscriptions = { add: vi.fn() }
+  const invokeGlobal = vi.fn()
   const api = {
     views: { register: vi.fn(() => ({ dispose: vi.fn() })) },
+    commands: { invokeGlobal },
+    events: { emitGlobal: vi.fn() },
+    system: { openUrl: vi.fn() },
+    context: { getSnapshot: vi.fn(() => ({ pluginId: packageJson.openforge.id, projectId: null })) },
   } as unknown as FrontendOpenForgeAPI
   const context = { pluginId: packageJson.openforge.id, apiVersion: 1, packageMetadata: packageJson.openforge, subscriptions } as FrontendPluginContext
-  return { api, context, subscriptions }
+  return { api, context, subscriptions, invokeGlobal }
 }
 
 describe('skills-viewer plugin', () => {
@@ -46,5 +51,26 @@ describe('skills-viewer plugin', () => {
     }))
     expect(SkillsViewComponent).toBe(mockSkillsView)
     expect(subscriptions.add).toHaveBeenCalledWith(expect.objectContaining({ dispose: expect.any(Function) }))
+  })
+
+  it('forwards skill list and save host commands through the runtime command bridge', async () => {
+    const { default: plugin } = await import('./index')
+    const { listOpenCodeSkills, saveSkillContent } = await import('./lib/ipc')
+    const { api, context, invokeGlobal } = makeRuntimeHarness()
+    const skills = [{ name: 'reviewer', level: 'project', source_dir: '/skills', description: 'Reviews code' }]
+    invokeGlobal.mockResolvedValueOnce(skills).mockResolvedValueOnce(undefined)
+
+    await plugin.activate(api, context)
+
+    await expect(listOpenCodeSkills('P-1')).resolves.toEqual(skills)
+    await expect(saveSkillContent('P-1', 'reviewer', 'project', '/skills', 'content')).resolves.toBeUndefined()
+    expect(invokeGlobal).toHaveBeenNthCalledWith(1, 'openforge.listOpenCodeSkills', { projectId: 'P-1' })
+    expect(invokeGlobal).toHaveBeenNthCalledWith(2, 'openforge.saveSkillContent', {
+      projectId: 'P-1',
+      name: 'reviewer',
+      level: 'project',
+      sourceDir: '/skills',
+      content: 'content',
+    })
   })
 })

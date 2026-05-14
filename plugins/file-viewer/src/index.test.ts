@@ -15,8 +15,11 @@ import packageJson from '../package.json'
 
 function makeRuntimeHarness() {
   const subscriptions = { add: vi.fn() }
+  const invokeGlobal = vi.fn()
   const api = {
     views: { register: vi.fn(() => ({ dispose: vi.fn() })) },
+    commands: { invokeGlobal },
+    system: { openUrl: vi.fn() },
   } as unknown as FrontendOpenForgeAPI
   const context = {
     pluginId: packageJson.openforge.id,
@@ -25,7 +28,7 @@ function makeRuntimeHarness() {
     subscriptions,
   } as FrontendPluginContext
 
-  return { api, context, subscriptions }
+  return { api, context, subscriptions, invokeGlobal }
 }
 
 describe('file-viewer plugin', () => {
@@ -52,5 +55,23 @@ describe('file-viewer plugin', () => {
     }))
     expect(FilesViewComponent).toBe(mockFilesView)
     expect(subscriptions.add).toHaveBeenCalledWith(expect.objectContaining({ dispose: expect.any(Function) }))
+  })
+
+  it('preserves file content metadata when bridging fsReadFile', async () => {
+    const { default: plugin } = await import('./index')
+    const { fsReadFile } = await import('./lib/ipc')
+    const { api, context, invokeGlobal } = makeRuntimeHarness()
+    const imageContent = {
+      type: 'image',
+      content: 'base64-image',
+      mimeType: 'image/png',
+      size: 12,
+    }
+    invokeGlobal.mockResolvedValue(imageContent)
+
+    await plugin.activate(api, context)
+
+    await expect(fsReadFile('P-1', 'logo.png')).resolves.toEqual(imageContent)
+    expect(invokeGlobal).toHaveBeenCalledWith('openforge.fsReadFile', { projectId: 'P-1', filePath: 'logo.png' })
   })
 })

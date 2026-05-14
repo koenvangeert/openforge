@@ -18,8 +18,9 @@ function createLegacyContext(openforge: FrontendOpenForgeAPI, context: FrontendP
           await openforge.events.emitGlobal('openforge.navigation.requested', request ?? {})
           return openforge.context.getSnapshot()
         case 'listOpenCodeSkills':
+          return openforge.commands.invokeGlobal('openforge.listOpenCodeSkills', request ?? {})
         case 'saveSkillContent':
-          throw new Error(`Skills host command ${command} is not available through the runtime API yet`)
+          return openforge.commands.invokeGlobal('openforge.saveSkillContent', request ?? {})
         default:
           throw new Error(`Unsupported skills-viewer host command: ${command}`)
       }

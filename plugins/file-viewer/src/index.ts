@@ -17,13 +17,11 @@ function createLegacyContext(openforge: FrontendOpenForgeAPI, context: FrontendP
             projectId: String(request?.projectId ?? ''),
             path: typeof request?.dirPath === 'string' ? request.dirPath : null,
           })
-        case 'fsReadFile': {
-          const content = await openforge.fs.readFile({
+        case 'fsReadFile':
+          return openforge.commands.invokeGlobal('openforge.fsReadFile', {
             projectId: String(request?.projectId ?? ''),
-            path: String(request?.filePath ?? ''),
+            filePath: String(request?.filePath ?? ''),
           })
-          return { type: 'text', content, mimeType: null, size: content.length }
-        }
         case 'openUrl':
           return openforge.system.openUrl(String(request?.url ?? ''))
         default:
