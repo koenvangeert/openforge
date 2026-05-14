@@ -1,90 +1,748 @@
 import { createInterface } from 'node:readline'
 import { pathToFileURL } from 'node:url'
+import type { OpenForgePackageMetadata, PluginStorage, SubscriptionSink } from '@openforge/plugin-sdk'
+import type { BackendMethodRegistration, BackendOpenForgeAPI, BackendPlugin, BackendPluginContext, BackgroundServiceRegistration, Disposable, OpenForgeContextSnapshot } from '@openforge/plugin-sdk/backend'
+
+type JsonRpcId = number | null | undefined
 
 type JsonRpcRequest = {
   jsonrpc?: string
-  id?: number
+  id?: JsonRpcId
   method?: string
   params?: {
     pluginId?: string
     command?: string
     backendPath?: string
+    projectId?: string | null
+    packageMetadata?: OpenForgePackageMetadata
     payload?: unknown
   }
 }
 
-const loadedBackends = new Map<string, Record<string, unknown>>()
-
-function respond(id: number | undefined, body: Record<string, unknown>): void {
-  process.stdout.write(`${JSON.stringify({ jsonrpc: '2.0', id, ...body })}\n`)
+type JsonRpcResponse = {
+  jsonrpc: '2.0'
+  id: JsonRpcId
+  result?: unknown
+  error?: {
+    code: number
+    message: string
+    data?: unknown
+  }
 }
 
-async function loadBackend(backendPath: string): Promise<Record<string, unknown>> {
-  const existing = loadedBackends.get(backendPath)
-  if (existing) {
-    return existing
-  }
+type BackendReadyState = 'missing' | 'starting' | 'ready' | 'error'
 
-  const module = (await import(pathToFileURL(backendPath).href)) as Record<string, unknown>
-  loadedBackends.set(backendPath, module)
-  return module
+type BackendStateSnapshot = {
+  pluginId: string
+  state: BackendReadyState
+  ready: boolean
+  error: string | null
+  methods: string[]
+  backgroundServices: string[]
+  crashLoopGuardTripped: boolean
 }
 
-async function handleRequest(request: JsonRpcRequest): Promise<void> {
-  if (request.jsonrpc !== '2.0' || typeof request.id !== 'number') {
-    respond(request.id, { error: { code: -32600, message: 'Invalid request' } })
-    return
+type RuntimeOptions = {
+  crashLoopLimit?: number
+  crashLoopWindowMs?: number
+}
+
+type ActivateBackendInput = {
+  pluginId: string
+  backendPath: string
+  projectId?: string | null
+  packageMetadata?: OpenForgePackageMetadata
+}
+
+type InvokeBackendInput = {
+  pluginId: string
+  command: string
+  backendPath?: string
+  projectId?: string | null
+  packageMetadata?: OpenForgePackageMetadata
+  payload?: unknown
+}
+
+type RuntimeBackendService = BackgroundServiceRegistration & {
+  localId: string
+  qualifiedId: string
+  started: boolean
+}
+
+type RuntimeBackendMethod = BackendMethodRegistration & {
+  localId: string
+  qualifiedId: string
+}
+
+type RuntimePluginState = {
+  pluginId: string
+  backendPath: string | null
+  projectId: string | null
+  packageMetadata: OpenForgePackageMetadata
+  state: BackendReadyState
+  error: Error | null
+  activationPromise: Promise<void> | null
+  module: Record<string, unknown> | null
+  methods: Map<string, RuntimeBackendMethod>
+  backgroundServices: Map<string, RuntimeBackendService>
+  subscriptions: RuntimeSubscriptionSink
+  crashTimestamps: number[]
+  crashLoopGuardTripped: boolean
+}
+
+const DEFAULT_CRASH_LOOP_LIMIT = 3
+const DEFAULT_CRASH_LOOP_WINDOW_MS = 60_000
+
+class RuntimeValidationError extends Error {
+  constructor(kind: 'backend' | 'background', message: string) {
+    super(`${kind} registration ${message}`)
+    this.name = 'RuntimeValidationError'
   }
+}
 
-  const pluginId = request.params?.pluginId
-  const command = request.params?.command
-  const backendPath = request.params?.backendPath
-  if (typeof pluginId !== 'string' || typeof command !== 'string' || typeof backendPath !== 'string') {
-    respond(request.id, { error: { code: -32602, message: 'Missing plugin invocation metadata' } })
-    return
-  }
+class RuntimeSubscriptionSink implements SubscriptionSink {
+  readonly subscriptions: Disposable[] = []
 
-  try {
-    const module = await loadBackend(backendPath)
-    const candidate = module[command] ?? (typeof module.default === 'object' && module.default !== null
-      ? (module.default as Record<string, unknown>)[command]
-      : undefined)
-
-    if (typeof candidate !== 'function') {
-      respond(request.id, { error: { code: -32601, message: `Backend method not found for ${pluginId}.${command}` } })
+  add(subscription: Disposable | (() => void)): void {
+    if (typeof subscription === 'function') {
+      this.subscriptions.push(createDisposable(subscription))
       return
     }
 
-    const result = await (candidate as (payload: unknown) => Promise<unknown> | unknown)(request.params?.payload)
-    respond(request.id, { result })
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
-    respond(request.id, { error: { code: -32603, message } })
+    if (!subscription || typeof subscription.dispose !== 'function') {
+      throw new Error('context.subscriptions.add requires a disposable or cleanup function')
+    }
+
+    this.subscriptions.push(subscription)
+  }
+
+  async disposeAll(): Promise<void> {
+    const subscriptions = this.subscriptions.splice(0).reverse()
+    for (const subscription of subscriptions) {
+      await subscription.dispose()
+    }
   }
 }
 
-const input = createInterface({
-  input: process.stdin,
-  crlfDelay: Infinity,
-})
+function createDisposable(dispose: () => void | Promise<void>): Disposable {
+  let disposed = false
+  return {
+    async dispose() {
+      if (disposed) return
+      disposed = true
+      await dispose()
+    },
+  }
+}
 
-input.on('line', (line) => {
-  if (!line.trim()) {
-    return
+function createMemoryStorageScope() {
+  const values = new Map<string, unknown>()
+  return {
+    async get<T>(key: string): Promise<T | null> {
+      return values.has(key) ? values.get(key) as T : null
+    },
+    async set<T>(key: string, value: T): Promise<void> {
+      values.set(key, value)
+    },
+    async delete(key: string): Promise<void> {
+      values.delete(key)
+    },
+  }
+}
+
+function createMemoryStorage(): PluginStorage {
+  const global = createMemoryStorageScope()
+  const projects = new Map<string, ReturnType<typeof createMemoryStorageScope>>()
+  const tasks = new Map<string, ReturnType<typeof createMemoryStorageScope>>()
+
+  return {
+    global,
+    project(projectId: string) {
+      let scope = projects.get(projectId)
+      if (!scope) {
+        scope = createMemoryStorageScope()
+        projects.set(projectId, scope)
+      }
+      return scope
+    },
+    task(taskId: string) {
+      let scope = tasks.get(taskId)
+      if (!scope) {
+        scope = createMemoryStorageScope()
+        tasks.set(taskId, scope)
+      }
+      return scope
+    },
+  }
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0
+}
+
+function assertLocalId(kind: 'backend' | 'background', id: unknown): asserts id is string {
+  if (!isNonEmptyString(id)) {
+    throw new RuntimeValidationError(kind, 'requires a non-empty id')
   }
 
-  let request: JsonRpcRequest
+  const trimmed = id.trim()
+  if (trimmed.startsWith('openforge.')) {
+    throw new RuntimeValidationError(kind, 'cannot use openforge.* reserved namespace')
+  }
+
+  if (trimmed.includes(':') || trimmed.startsWith('.') || trimmed.endsWith('.') || trimmed.includes('..')) {
+    throw new RuntimeValidationError(kind, `has invalid id "${trimmed}"`)
+  }
+}
+
+function assertScope(scope: unknown): asserts scope is BackgroundServiceRegistration['scope'] {
+  if (scope !== 'global' && scope !== 'project' && scope !== 'task') {
+    throw new RuntimeValidationError('background', 'requires scope to be global, project, or task')
+  }
+}
+
+function assertFunction(kind: 'backend' | 'background', label: string, value: unknown): asserts value is (...args: never[]) => unknown {
+  if (typeof value !== 'function') {
+    throw new RuntimeValidationError(kind, `requires a ${label} function`)
+  }
+}
+
+function formatPluginValue(value: unknown): string {
+  if (typeof value === 'string') return value
+  if (value instanceof Error) return value.stack ?? value.message
   try {
-    request = JSON.parse(line) as JsonRpcRequest
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
-    process.stdout.write(`${JSON.stringify({ jsonrpc: '2.0', id: null, error: { code: -32700, message } })}\n`)
-    return
+    return JSON.stringify(value)
+  } catch {
+    return String(value)
+  }
+}
+
+async function withPluginConsole<T>(pluginId: string, operation: () => Promise<T> | T): Promise<T> {
+  const originalConsole = {
+    debug: console.debug,
+    error: console.error,
+    info: console.info,
+    log: console.log,
+    warn: console.warn,
+  }
+  const write = (...values: unknown[]) => {
+    process.stderr.write(`[plugin:${pluginId}] ${values.map(formatPluginValue).join(' ')}\n`)
   }
 
-  void handleRequest(request)
-})
+  console.debug = write
+  console.error = write
+  console.info = write
+  console.log = write
+  console.warn = write
 
-input.on('close', () => {
-  process.exit(0)
-})
+  try {
+    return await operation()
+  } finally {
+    console.debug = originalConsole.debug
+    console.error = originalConsole.error
+    console.info = originalConsole.info
+    console.log = originalConsole.log
+    console.warn = originalConsole.warn
+  }
+}
+
+function logPluginHostError(pluginId: string, message: string): void {
+  process.stderr.write(`[plugin:${pluginId}] ${message}\n`)
+}
+
+function toError(error: unknown): Error {
+  return error instanceof Error ? error : new Error(String(error))
+}
+
+function createDefaultPackageMetadata(pluginId: string): OpenForgePackageMetadata {
+  return {
+    id: pluginId,
+    apiVersion: 1,
+    displayName: pluginId,
+    description: '',
+  }
+}
+
+function createInitialPluginState(pluginId: string): RuntimePluginState {
+  return {
+    pluginId,
+    backendPath: null,
+    projectId: null,
+    packageMetadata: createDefaultPackageMetadata(pluginId),
+    state: 'missing',
+    error: null,
+    activationPromise: null,
+    module: null,
+    methods: new Map(),
+    backgroundServices: new Map(),
+    subscriptions: new RuntimeSubscriptionSink(),
+    crashTimestamps: [],
+    crashLoopGuardTripped: false,
+  }
+}
+
+function extractBackendPlugin(module: Record<string, unknown>): BackendPlugin | null {
+  const candidate = module.default ?? module
+  if (typeof candidate === 'object' && candidate !== null && typeof (candidate as BackendPlugin).activate === 'function') {
+    return candidate as BackendPlugin
+  }
+  return null
+}
+
+async function loadBackendModule(backendPath: string): Promise<Record<string, unknown>> {
+  return await import(pathToFileURL(backendPath).href) as Record<string, unknown>
+}
+
+export class PluginHostRuntime {
+  private readonly plugins = new Map<string, RuntimePluginState>()
+  private readonly crashLoopLimit: number
+  private readonly crashLoopWindowMs: number
+
+  constructor(options: RuntimeOptions = {}) {
+    this.crashLoopLimit = options.crashLoopLimit ?? DEFAULT_CRASH_LOOP_LIMIT
+    this.crashLoopWindowMs = options.crashLoopWindowMs ?? DEFAULT_CRASH_LOOP_WINDOW_MS
+  }
+
+  async activateBackend(input: ActivateBackendInput): Promise<BackendStateSnapshot> {
+    assertLocalId('backend', input.pluginId)
+    if (!isNonEmptyString(input.backendPath)) {
+      throw new Error('backend activation requires a backendPath')
+    }
+
+    const state = this.getOrCreateState(input.pluginId)
+    if (state.crashLoopGuardTripped) {
+      throw new Error(`Plugin ${input.pluginId} activation blocked by crash-loop guard`)
+    }
+
+    if (state.state === 'ready' && state.backendPath === input.backendPath) {
+      return this.getBackendState(input.pluginId)
+    }
+
+    if (state.state === 'starting' && state.activationPromise) {
+      await state.activationPromise
+      return this.getBackendState(input.pluginId)
+    }
+
+    if (state.state === 'ready' || state.state === 'error') {
+      await this.cleanupPluginState(state)
+    }
+
+    state.backendPath = input.backendPath
+    state.projectId = input.projectId ?? null
+    state.packageMetadata = input.packageMetadata ?? createDefaultPackageMetadata(input.pluginId)
+    state.state = 'starting'
+    state.error = null
+
+    state.activationPromise = this.activatePluginState(state)
+    await state.activationPromise
+    return this.getBackendState(input.pluginId)
+  }
+
+  async deactivateBackend(pluginId: string): Promise<BackendStateSnapshot> {
+    assertLocalId('backend', pluginId)
+    const state = this.getOrCreateState(pluginId)
+    await this.cleanupPluginState(state)
+    state.state = 'missing'
+    state.error = null
+    state.backendPath = null
+    state.projectId = null
+    state.module = null
+    state.activationPromise = null
+    return this.getBackendState(pluginId)
+  }
+
+  async whenBackendReady(input: { pluginId: string; backendPath?: string; projectId?: string | null; packageMetadata?: OpenForgePackageMetadata }): Promise<BackendStateSnapshot> {
+    assertLocalId('backend', input.pluginId)
+    const state = this.getOrCreateState(input.pluginId)
+
+    if (state.state === 'ready') {
+      return this.getBackendState(input.pluginId)
+    }
+
+    if (state.state === 'starting' && state.activationPromise) {
+      await state.activationPromise
+      return this.getBackendState(input.pluginId)
+    }
+
+    if (input.backendPath) {
+      return await this.activateBackend({
+        pluginId: input.pluginId,
+        backendPath: input.backendPath,
+        projectId: input.projectId,
+        packageMetadata: input.packageMetadata,
+      })
+    }
+
+    if (state.state === 'error') {
+      throw new Error(state.error?.message ?? `Plugin ${input.pluginId} backend is in error state`)
+    }
+
+    throw new Error(`Plugin ${input.pluginId} backend is not ready`)
+  }
+
+  async invokeBackend(input: InvokeBackendInput): Promise<unknown> {
+    assertLocalId('backend', input.pluginId)
+    assertLocalId('backend', input.command)
+    await this.whenBackendReady(input)
+
+    const state = this.getOrCreateState(input.pluginId)
+    if (state.state !== 'ready') {
+      throw new Error(`Plugin ${input.pluginId} backend is not ready`)
+    }
+
+    const method = state.methods.get(input.command.trim())
+    if (!method) {
+      throw new Error(`Backend method not found for ${input.pluginId}.${input.command}`)
+    }
+
+    try {
+      return await withPluginConsole(input.pluginId, async () => await method.handler(input.payload as never))
+    } catch (error) {
+      const pluginError = toError(error)
+      logPluginHostError(input.pluginId, `handler error in ${input.pluginId}.${input.command}: ${pluginError.message}`)
+      throw pluginError
+    }
+  }
+
+  async getBackendState(pluginId: string): Promise<BackendStateSnapshot> {
+    assertLocalId('backend', pluginId)
+    const state = this.getOrCreateState(pluginId)
+    return {
+      pluginId,
+      state: state.state,
+      ready: state.state === 'ready',
+      error: state.error?.message ?? null,
+      methods: Array.from(state.methods.values()).map(method => method.qualifiedId),
+      backgroundServices: Array.from(state.backgroundServices.values()).map(service => service.qualifiedId),
+      crashLoopGuardTripped: state.crashLoopGuardTripped,
+    }
+  }
+
+  async handleJsonRpcRequest(request: JsonRpcRequest): Promise<JsonRpcResponse> {
+    if (request.jsonrpc !== '2.0' || typeof request.id !== 'number') {
+      return { jsonrpc: '2.0', id: request.id, error: { code: -32600, message: 'Invalid request' } }
+    }
+
+    try {
+      const params = request.params ?? {}
+      switch (request.method) {
+        case 'plugin.backend.activate':
+          return { jsonrpc: '2.0', id: request.id, result: await this.activateBackend(this.requireActivationParams(params)) }
+        case 'plugin.backend.deactivate':
+          return { jsonrpc: '2.0', id: request.id, result: await this.deactivateBackend(this.requirePluginId(params)) }
+        case 'plugin.backend.state':
+          return { jsonrpc: '2.0', id: request.id, result: await this.getBackendState(this.requirePluginId(params)) }
+        case 'plugin.backend.whenReady':
+          return { jsonrpc: '2.0', id: request.id, result: await this.whenBackendReady(this.requireReadyParams(params)) }
+        case 'plugin.backend.invoke':
+          return { jsonrpc: '2.0', id: request.id, result: await this.invokeBackend(this.requireInvokeParams(params, request.method)) }
+        default:
+          return { jsonrpc: '2.0', id: request.id, result: await this.invokeBackend(this.requireInvokeParams(params, request.method)) }
+      }
+    } catch (error) {
+      const pluginError = toError(error)
+      return { jsonrpc: '2.0', id: request.id, error: { code: this.errorCodeFor(error), message: pluginError.message } }
+    }
+  }
+
+  private async activatePluginState(state: RuntimePluginState): Promise<void> {
+    try {
+      state.module = await loadBackendModule(state.backendPath ?? '')
+      const plugin = extractBackendPlugin(state.module)
+
+      if (!plugin) {
+        throw new Error(`Backend entry for ${state.pluginId} does not export a defineBackendPlugin-compatible activate() function`)
+      }
+
+      await withPluginConsole(state.pluginId, async () => {
+        await plugin.activate(this.createBackendApi(state), this.createBackendContext(state))
+        await this.startBackgroundServices(state)
+      })
+
+      state.state = 'ready'
+      state.error = null
+    } catch (error) {
+      const pluginError = toError(error)
+      state.error = pluginError
+      await this.cleanupPluginState(state)
+      this.recordActivationCrash(state, pluginError)
+      state.state = 'error'
+      logPluginHostError(state.pluginId, `activation error: ${pluginError.message}`)
+      throw pluginError
+    } finally {
+      state.activationPromise = null
+    }
+  }
+
+  private recordActivationCrash(state: RuntimePluginState, error: Error): void {
+    const now = Date.now()
+    state.crashTimestamps = state.crashTimestamps.filter(timestamp => now - timestamp <= this.crashLoopWindowMs)
+    state.crashTimestamps.push(now)
+    if (state.crashTimestamps.length >= this.crashLoopLimit) {
+      state.crashLoopGuardTripped = true
+      state.error = new Error(`Plugin ${state.pluginId} activation blocked by crash-loop guard after ${state.crashTimestamps.length} crashes: ${error.message}`)
+    }
+  }
+
+  private async cleanupPluginState(state: RuntimePluginState): Promise<void> {
+    await state.subscriptions.disposeAll()
+
+    const services = Array.from(state.backgroundServices.values()).reverse()
+    for (const service of services) {
+      if (!service.started) continue
+      try {
+        await withPluginConsole(state.pluginId, async () => await service.stop?.())
+      } catch (error) {
+        const pluginError = toError(error)
+        logPluginHostError(state.pluginId, `background service stop error in ${service.qualifiedId}: ${pluginError.message}`)
+      } finally {
+        service.started = false
+      }
+    }
+
+    state.methods.clear()
+    state.backgroundServices.clear()
+    state.subscriptions = new RuntimeSubscriptionSink()
+  }
+
+  private async startBackgroundServices(state: RuntimePluginState): Promise<void> {
+    for (const service of state.backgroundServices.values()) {
+      if (service.started) continue
+      try {
+        await service.start()
+        service.started = true
+      } catch (error) {
+        const pluginError = toError(error)
+        logPluginHostError(state.pluginId, `background service start error in ${service.qualifiedId}: ${pluginError.message}`)
+        throw pluginError
+      }
+    }
+  }
+
+  private createBackendContext(state: RuntimePluginState): BackendPluginContext {
+    return {
+      pluginId: state.pluginId,
+      apiVersion: 1,
+      packageMetadata: state.packageMetadata,
+      subscriptions: state.subscriptions,
+    }
+  }
+
+  private createBackendApi(state: RuntimePluginState): BackendOpenForgeAPI {
+    const contextSnapshot: OpenForgeContextSnapshot = {
+      pluginId: state.pluginId,
+      projectId: state.projectId,
+    }
+    const storage = createMemoryStorage()
+    const config = createMemoryStorageScope()
+    const projectConfig = createMemoryStorageScope()
+
+    return {
+      commands: {
+        register: () => createDisposable(() => undefined),
+        invoke: async () => undefined as never,
+        invokeGlobal: async () => undefined as never,
+      },
+      events: {
+        on: () => createDisposable(() => undefined),
+        onGlobal: () => createDisposable(() => undefined),
+        emit: async () => undefined,
+        emitGlobal: async () => undefined,
+      },
+      storage,
+      context: {
+        getSnapshot: () => ({ ...contextSnapshot }),
+      },
+      tasks: {},
+      projects: {},
+      fs: {
+        readFile: async () => '',
+        writeFile: async () => undefined,
+      },
+      shell: {},
+      notifications: {},
+      attention: {},
+      system: {
+        openUrl: async () => undefined,
+      },
+      config,
+      projectConfig,
+      backend: {
+        registerMethod: (method, registration) => this.registerBackendMethod(state, method, registration),
+      },
+      background: {
+        register: (registration) => this.registerBackgroundService(state, registration),
+      },
+    }
+  }
+
+  private registerBackendMethod(state: RuntimePluginState, method: string, registration: BackendMethodRegistration): Disposable {
+    assertLocalId('backend', method)
+    assertFunction('backend', 'handler', registration?.handler)
+    const localId = method.trim()
+    if (state.methods.has(localId)) {
+      throw new Error(`Duplicate backend method id: ${state.pluginId}.${localId}`)
+    }
+
+    const runtimeMethod: RuntimeBackendMethod = {
+      ...registration,
+      localId,
+      qualifiedId: `${state.pluginId}.${localId}`,
+    }
+    state.methods.set(localId, runtimeMethod)
+
+    return createDisposable(() => {
+      state.methods.delete(localId)
+    })
+  }
+
+  private registerBackgroundService(state: RuntimePluginState, registration: BackgroundServiceRegistration): Disposable {
+    assertLocalId('background', registration?.id)
+    assertScope(registration?.scope)
+    assertFunction('background', 'start', registration?.start)
+    const localId = registration.id.trim()
+    if (state.backgroundServices.has(localId)) {
+      throw new Error(`Duplicate background service id: ${state.pluginId}.${localId}`)
+    }
+
+    const service: RuntimeBackendService = {
+      ...registration,
+      localId,
+      id: localId,
+      qualifiedId: `${state.pluginId}.${localId}`,
+      started: false,
+    }
+    state.backgroundServices.set(localId, service)
+
+    return createDisposable(async () => {
+      state.backgroundServices.delete(localId)
+      if (service.started) {
+        await service.stop?.()
+        service.started = false
+      }
+    })
+  }
+
+  private getOrCreateState(pluginId: string): RuntimePluginState {
+    let state = this.plugins.get(pluginId)
+    if (!state) {
+      state = createInitialPluginState(pluginId)
+      this.plugins.set(pluginId, state)
+    }
+    return state
+  }
+
+  private requirePluginId(params: JsonRpcRequest['params']): string {
+    const pluginId = params?.pluginId
+    if (!isNonEmptyString(pluginId)) {
+      throw new Error('Missing pluginId')
+    }
+    return pluginId
+  }
+
+  private requireActivationParams(params: JsonRpcRequest['params']): ActivateBackendInput {
+    const pluginId = this.requirePluginId(params)
+    if (!isNonEmptyString(params?.backendPath)) {
+      throw new Error('Missing backendPath')
+    }
+    return {
+      pluginId,
+      backendPath: params.backendPath,
+      projectId: params.projectId,
+      packageMetadata: params.packageMetadata,
+    }
+  }
+
+  private requireReadyParams(params: JsonRpcRequest['params']): { pluginId: string; backendPath?: string; projectId?: string | null; packageMetadata?: OpenForgePackageMetadata } {
+    return {
+      pluginId: this.requirePluginId(params),
+      backendPath: params?.backendPath,
+      projectId: params?.projectId,
+      packageMetadata: params?.packageMetadata,
+    }
+  }
+
+  private requireInvokeParams(params: JsonRpcRequest['params'], rpcMethod: string | undefined): InvokeBackendInput {
+    const pluginId = this.requirePluginId(params)
+    const command = isNonEmptyString(params?.command)
+      ? params.command
+      : this.commandFromRpcMethod(pluginId, rpcMethod)
+
+    if (!isNonEmptyString(command)) {
+      throw new Error('Missing backend command')
+    }
+
+    return {
+      pluginId,
+      command,
+      backendPath: params?.backendPath,
+      projectId: params?.projectId,
+      packageMetadata: params?.packageMetadata,
+      payload: params?.payload,
+    }
+  }
+
+  private commandFromRpcMethod(pluginId: string, rpcMethod: string | undefined): string | undefined {
+    if (!rpcMethod) return undefined
+    const prefix = `${pluginId}.`
+    return rpcMethod.startsWith(prefix) ? rpcMethod.slice(prefix.length) : undefined
+  }
+
+  private errorCodeFor(error: unknown): number {
+    const message = toError(error).message
+    if (message.includes('not found')) return -32601
+    if (message.includes('Missing') || message.includes('Invalid') || message.includes('requires')) return -32602
+    return -32603
+  }
+}
+
+export function createPluginHostRuntime(options?: RuntimeOptions): PluginHostRuntime {
+  return new PluginHostRuntime(options)
+}
+
+const defaultRuntime = createPluginHostRuntime()
+
+function respond(id: JsonRpcId, body: Omit<JsonRpcResponse, 'jsonrpc' | 'id'>): void {
+  process.stdout.write(`${JSON.stringify({ jsonrpc: '2.0', id, ...body })}\n`)
+}
+
+export async function handleRequest(request: JsonRpcRequest): Promise<void> {
+  const response = await defaultRuntime.handleJsonRpcRequest(request)
+  if (response.error) {
+    respond(response.id, { error: response.error })
+    return
+  }
+  respond(response.id, { result: response.result })
+}
+
+function startStdioServer(): void {
+  const input = createInterface({
+    input: process.stdin,
+    crlfDelay: Infinity,
+  })
+
+  input.on('line', (line) => {
+    if (!line.trim()) {
+      return
+    }
+
+    let request: JsonRpcRequest
+    try {
+      request = JSON.parse(line) as JsonRpcRequest
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      process.stdout.write(`${JSON.stringify({ jsonrpc: '2.0', id: null, error: { code: -32700, message } })}\n`)
+      return
+    }
+
+    void handleRequest(request)
+  })
+
+  input.on('close', () => {
+    process.exit(0)
+  })
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  startStdioServer()
+}

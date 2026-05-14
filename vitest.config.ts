@@ -52,6 +52,7 @@ export default defineConfig({
           include: [
             'scripts/**/*.test.mjs',
             'src-tauri/src/openforge-cli/**/*.test.js',
+            'src-tauri/plugin-host/**/*.test.ts',
           ],
         },
       },
