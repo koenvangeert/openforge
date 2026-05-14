@@ -40,8 +40,21 @@ function makeContext(): PluginContext {
     invokeBackend: vi.fn(async () => null),
     onEvent: vi.fn(() => () => {}),
     storage: {
-      get: vi.fn(async () => null),
-      set: vi.fn(async () => undefined),
+      global: {
+        get: vi.fn(async () => null),
+        set: vi.fn(async () => undefined),
+        delete: vi.fn(async () => undefined),
+      },
+      project: vi.fn(() => ({
+        get: vi.fn(async () => null),
+        set: vi.fn(async () => undefined),
+        delete: vi.fn(async () => undefined),
+      })),
+      task: vi.fn(() => ({
+        get: vi.fn(async () => null),
+        set: vi.fn(async () => undefined),
+        delete: vi.fn(async () => undefined),
+      })),
     },
   }
 }

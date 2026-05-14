@@ -216,6 +216,28 @@ describe('runtime contribution registry', () => {
     expect((await frontend.commands.list())[0]).not.toHaveProperty('handler')
   })
 
+  it('scopes JSON plugin storage by plugin, project, and task', async () => {
+    const github = makeRegistry()
+    const jira = createRuntimeContributionRegistry({ pluginId: 'jira', projectId: 'project-1' })
+
+    await github.getFrontendApi().storage.global.set('settings', { viewedFiles: ['README.md'], enabled: true })
+    await github.getFrontendApi().storage.project('project-1').set('repo', { owner: 'acme', name: 'app' })
+    await github.getFrontendApi().storage.project('project-2').set('repo', { owner: 'acme', name: 'other' })
+    await github.getFrontendApi().storage.task('task-1').set('reviewState', { viewedFiles: ['src/App.svelte'] })
+
+    await expect(github.getBackendApi().storage.global.get('settings')).resolves.toEqual({ viewedFiles: ['README.md'], enabled: true })
+    await expect(github.getFrontendApi().storage.project('project-1').get('repo')).resolves.toEqual({ owner: 'acme', name: 'app' })
+    await expect(github.getFrontendApi().storage.project('project-2').get('repo')).resolves.toEqual({ owner: 'acme', name: 'other' })
+    await expect(github.getFrontendApi().storage.task('task-1').get('reviewState')).resolves.toEqual({ viewedFiles: ['src/App.svelte'] })
+
+    await expect(github.getFrontendApi().storage.task('task-2').get('reviewState')).resolves.toBeNull()
+    await expect(jira.getFrontendApi().storage.global.get('settings')).resolves.toBeNull()
+
+    await github.getFrontendApi().storage.project('project-1').delete('repo')
+    await expect(github.getFrontendApi().storage.project('project-1').get('repo')).resolves.toBeNull()
+    await expect(github.getFrontendApi().storage.project('project-2').get('repo')).resolves.toEqual({ owner: 'acme', name: 'other' })
+  })
+
   it('exposes typed core API wrappers through the configured host bridge', async () => {
     const host = {
       listProjects: vi.fn(async () => [{ id: 'P-1', name: 'OpenForge', path: '/repo', created_at: 1, updated_at: 2 }]),

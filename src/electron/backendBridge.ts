@@ -126,6 +126,7 @@ const SIDECAR_BACKED_COMMANDS = new Set([
   'get_enabled_plugins',
   'get_plugin_storage',
   'set_plugin_storage',
+  'delete_plugin_storage',
   'plugin_invoke',
   'stop_plugin_sidecar',
   'transcribe_audio',

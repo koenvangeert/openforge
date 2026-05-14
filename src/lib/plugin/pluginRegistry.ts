@@ -17,7 +17,6 @@ import {
   getConfig,
   getFileAtRef,
   getFileContent,
-  getPluginStorage,
   getPrFileDiffs,
   getPrOverviewComments,
   getProjectAttention,
@@ -41,7 +40,6 @@ import {
   resizePty,
   saveSkillContent,
   setConfig,
-  setPluginStorage,
   setProjectConfig,
   spawnShellPty,
   startAgentReview,
@@ -87,6 +85,7 @@ import { registerViewComponent } from './componentRegistry'
 import { unregisterViewComponentsForPlugin } from './componentRegistry'
 import { activeProjectId, currentView, selectedTaskId } from '../stores'
 import { createRuntimeContributionRegistry } from './runtimeContributionRegistry'
+import { createIpcPluginStorage } from './pluginStorage'
 import type { RuntimeContributionRegistryInstance, RuntimeContributionSnapshot } from './runtimeContributionRegistry'
 import type { AppView } from '../types'
 
@@ -386,6 +385,7 @@ async function activateExternalPluginModule(pluginId: string, manifest: PluginMa
       pluginId,
       projectId: get(activeProjectId),
       packageMetadata,
+      storage: createIpcPluginStorage(pluginId),
       host: {
         listProjects: () => getProjects(),
         getProject: async (projectId) => (await getProjects()).find((project) => project.id === projectId) ?? null,
@@ -967,10 +967,7 @@ function makePluginContextForPlugin(pluginId: string): PluginContext {
       ensurePluginHostStoreSubscriptions()
       return subscribeToPluginHostEvent(pluginId, event, handler)
     },
-    storage: {
-      get: async (key: string) => getPluginStorage(pluginId, key),
-      set: async (key: string, value: string) => setPluginStorage(pluginId, key, value),
-    },
+    storage: createIpcPluginStorage(pluginId),
   }
 }
 

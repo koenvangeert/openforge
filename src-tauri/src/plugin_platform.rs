@@ -141,22 +141,45 @@ impl<'a> PluginPlatform<'a> {
     pub(crate) fn plugin_storage(
         &self,
         plugin_id: &str,
+        scope: &str,
+        scope_id: Option<&str>,
         key: &str,
-    ) -> Result<Option<String>, String> {
+    ) -> Result<Option<serde_json::Value>, String> {
+        validate_plugin_storage_scope(scope, scope_id)?;
         let db = db::acquire_db(self.db);
-        db.get_plugin_storage(plugin_id, key)
-            .map_err(|error| format!("Failed to get plugin storage: {error}"))
+        let raw = db
+            .get_plugin_storage(plugin_id, scope, scope_id, key)
+            .map_err(|error| format!("Failed to get plugin storage: {error}"))?;
+        Ok(raw.map(|value| serde_json::from_str(&value).unwrap_or(Value::String(value))))
     }
 
     pub(crate) fn set_plugin_storage(
         &self,
         plugin_id: &str,
+        scope: &str,
+        scope_id: Option<&str>,
         key: &str,
-        value: &str,
+        value: &serde_json::Value,
     ) -> Result<(), String> {
+        validate_plugin_storage_scope(scope, scope_id)?;
+        let serialized = serde_json::to_string(value)
+            .map_err(|error| format!("Failed to serialize plugin storage value: {error}"))?;
         let db = db::acquire_db(self.db);
-        db.set_plugin_storage(plugin_id, key, value)
+        db.set_plugin_storage(plugin_id, scope, scope_id, key, &serialized)
             .map_err(|error| format!("Failed to set plugin storage: {error}"))
+    }
+
+    pub(crate) fn delete_plugin_storage(
+        &self,
+        plugin_id: &str,
+        scope: &str,
+        scope_id: Option<&str>,
+        key: &str,
+    ) -> Result<(), String> {
+        validate_plugin_storage_scope(scope, scope_id)?;
+        let db = db::acquire_db(self.db);
+        db.delete_plugin_storage(plugin_id, scope, scope_id, key)
+            .map_err(|error| format!("Failed to delete plugin storage: {error}"))
     }
 
     pub(crate) fn resolve_plugin_asset_root(
@@ -210,6 +233,15 @@ impl<'a> PluginPlatform<'a> {
         self.app_data_dir
             .as_deref()
             .ok_or_else(|| "app data directory is required for this plugin operation".to_string())
+    }
+}
+
+fn validate_plugin_storage_scope(scope: &str, scope_id: Option<&str>) -> Result<(), String> {
+    match scope {
+        "global" => Ok(()),
+        "project" | "task" if scope_id.is_some_and(|value| !value.is_empty()) => Ok(()),
+        "project" | "task" => Err(format!("Plugin storage scope '{scope}' requires scopeId")),
+        _ => Err(format!("Unsupported plugin storage scope: {scope}")),
     }
 }
 

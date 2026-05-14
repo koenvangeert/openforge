@@ -96,6 +96,7 @@ type RuntimePluginState = {
   commands: Map<string, RuntimeBackendCommand>
   eventHandlers: Map<string, Set<RuntimeEventHandler>>
   backgroundServices: Map<string, RuntimeBackendService>
+  storage: PluginStorage
   subscriptions: RuntimeSubscriptionSink
   crashTimestamps: number[]
   crashLoopGuardTripped: boolean
@@ -368,6 +369,7 @@ function createInitialPluginState(pluginId: string): RuntimePluginState {
     commands: new Map(),
     eventHandlers: new Map(),
     backgroundServices: new Map(),
+    storage: createMemoryStorage(),
     subscriptions: new RuntimeSubscriptionSink(pluginId),
     crashTimestamps: [],
     crashLoopGuardTripped: false,
@@ -670,7 +672,7 @@ export class PluginHostRuntime {
       pluginId: state.pluginId,
       projectId: state.projectId,
     }
-    const storage = createMemoryStorage()
+    const storage = state.storage
     const config = createMemoryStorageScope()
     const projectConfig = createMemoryStorageScope()
 

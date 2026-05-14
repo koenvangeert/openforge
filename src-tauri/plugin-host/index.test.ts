@@ -65,6 +65,46 @@ describe('plugin-host backend runtime', () => {
     expect(await runtime.invokeBackend({ pluginId: 'backend', command: 'events' })).toEqual([{ pluginId: 'backend', projectId: 'P-1' }])
   })
 
+  it('exposes scoped JSON storage to backend plugins with plugin/project/task isolation', async () => {
+    const backendPath = await writeBackendModule(`
+      export default {
+        async activate(openforge, context) {
+          await openforge.storage.global.set('settings', { enabled: true, pluginId: context.pluginId })
+          await openforge.storage.project('P-1').set('repo', { owner: 'acme', name: context.pluginId })
+          await openforge.storage.project('P-2').set('repo', { owner: 'acme', name: 'other' })
+          await openforge.storage.task('T-1').set('reviewState', { viewedFiles: ['README.md'] })
+          context.subscriptions.add(openforge.backend.registerMethod('readStorage', {
+            async handler() {
+              return {
+                global: await openforge.storage.global.get('settings'),
+                projectOne: await openforge.storage.project('P-1').get('repo'),
+                projectTwo: await openforge.storage.project('P-2').get('repo'),
+                taskOne: await openforge.storage.task('T-1').get('reviewState'),
+                taskTwo: await openforge.storage.task('T-2').get('reviewState')
+              }
+            }
+          }))
+        }
+      }
+    `)
+    const runtime = createPluginHostRuntime()
+
+    await runtime.activateBackend({ pluginId: 'alpha', backendPath })
+    await runtime.activateBackend({ pluginId: 'beta', backendPath })
+
+    await expect(runtime.invokeBackend({ pluginId: 'alpha', command: 'readStorage' })).resolves.toEqual({
+      global: { enabled: true, pluginId: 'alpha' },
+      projectOne: { owner: 'acme', name: 'alpha' },
+      projectTwo: { owner: 'acme', name: 'other' },
+      taskOne: { viewedFiles: ['README.md'] },
+      taskTwo: null,
+    })
+    await expect(runtime.invokeBackend({ pluginId: 'beta', command: 'readStorage' })).resolves.toMatchObject({
+      global: { enabled: true, pluginId: 'beta' },
+      projectOne: { owner: 'acme', name: 'beta' },
+    })
+  })
+
   it('starts backend background services after activation and stops them during deactivation', async () => {
     const backendPath = await writeBackendModule(`
       export default {

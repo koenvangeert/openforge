@@ -159,11 +159,20 @@ impl super::Database {
         Ok(enabled)
     }
 
-    pub fn get_plugin_storage(&self, plugin_id: &str, key: &str) -> Result<Option<String>> {
+    pub fn get_plugin_storage(
+        &self,
+        plugin_id: &str,
+        scope: &str,
+        scope_id: Option<&str>,
+        key: &str,
+    ) -> Result<Option<String>> {
         let conn = self.conn.lock().unwrap();
-        let mut stmt =
-            conn.prepare("SELECT value FROM plugin_storage WHERE plugin_id = ?1 AND key = ?2")?;
-        let mut rows = stmt.query(rusqlite::params![plugin_id, key])?;
+        let scope_id = normalized_plugin_storage_scope_id(scope, scope_id);
+        let mut stmt = conn.prepare(
+            "SELECT value FROM plugin_storage
+             WHERE plugin_id = ?1 AND scope = ?2 AND scope_id = ?3 AND key = ?4",
+        )?;
+        let mut rows = stmt.query(rusqlite::params![plugin_id, scope, scope_id, key])?;
 
         match rows.next()? {
             Some(row) => Ok(Some(row.get(0)?)),
@@ -171,15 +180,48 @@ impl super::Database {
         }
     }
 
-    pub fn set_plugin_storage(&self, plugin_id: &str, key: &str, value: &str) -> Result<()> {
+    pub fn set_plugin_storage(
+        &self,
+        plugin_id: &str,
+        scope: &str,
+        scope_id: Option<&str>,
+        key: &str,
+        value: &str,
+    ) -> Result<()> {
         let conn = self.conn.lock().unwrap();
+        let scope_id = normalized_plugin_storage_scope_id(scope, scope_id);
         conn.execute(
-            "INSERT INTO plugin_storage (plugin_id, key, value)
-             VALUES (?1, ?2, ?3)
-             ON CONFLICT(plugin_id, key) DO UPDATE SET value = excluded.value",
-            rusqlite::params![plugin_id, key, value],
+            "INSERT INTO plugin_storage (plugin_id, scope, scope_id, key, value)
+             VALUES (?1, ?2, ?3, ?4, ?5)
+             ON CONFLICT(plugin_id, scope, scope_id, key) DO UPDATE SET value = excluded.value",
+            rusqlite::params![plugin_id, scope, scope_id, key, value],
         )?;
         Ok(())
+    }
+
+    pub fn delete_plugin_storage(
+        &self,
+        plugin_id: &str,
+        scope: &str,
+        scope_id: Option<&str>,
+        key: &str,
+    ) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        let scope_id = normalized_plugin_storage_scope_id(scope, scope_id);
+        conn.execute(
+            "DELETE FROM plugin_storage
+             WHERE plugin_id = ?1 AND scope = ?2 AND scope_id = ?3 AND key = ?4",
+            rusqlite::params![plugin_id, scope, scope_id, key],
+        )?;
+        Ok(())
+    }
+}
+
+fn normalized_plugin_storage_scope_id<'a>(scope: &str, scope_id: Option<&'a str>) -> &'a str {
+    if scope == "global" {
+        ""
+    } else {
+        scope_id.unwrap_or("")
     }
 }
 
@@ -330,22 +372,70 @@ mod tests {
     fn plugin_storage_round_trip() {
         let (db, _tmp) = make_test_db("plugins_storage_round_trip");
         db.install_plugin(&sample_plugin("plugin-a")).unwrap();
+        db.install_plugin(&sample_plugin("plugin-b")).unwrap();
 
         assert!(db
-            .get_plugin_storage("plugin-a", "theme")
+            .get_plugin_storage("plugin-a", "global", None, "settings")
             .unwrap()
             .is_none());
 
-        db.set_plugin_storage("plugin-a", "theme", "dark").unwrap();
-        assert_eq!(
-            db.get_plugin_storage("plugin-a", "theme").unwrap(),
-            Some("dark".to_string())
-        );
+        db.set_plugin_storage(
+            "plugin-a",
+            "global",
+            None,
+            "settings",
+            "{\"theme\":\"dark\"}",
+        )
+        .unwrap();
+        db.set_plugin_storage(
+            "plugin-a",
+            "project",
+            Some("project-1"),
+            "repo",
+            "{\"name\":\"app\"}",
+        )
+        .unwrap();
+        db.set_plugin_storage(
+            "plugin-a",
+            "task",
+            Some("task-1"),
+            "reviewState",
+            "{\"viewedFiles\":[]}",
+        )
+        .unwrap();
+        db.set_plugin_storage(
+            "plugin-b",
+            "global",
+            None,
+            "settings",
+            "{\"theme\":\"light\"}",
+        )
+        .unwrap();
 
-        db.set_plugin_storage("plugin-a", "theme", "light").unwrap();
         assert_eq!(
-            db.get_plugin_storage("plugin-a", "theme").unwrap(),
-            Some("light".to_string())
+            db.get_plugin_storage("plugin-a", "global", None, "settings")
+                .unwrap(),
+            Some("{\"theme\":\"dark\"}".to_string())
         );
+        assert_eq!(
+            db.get_plugin_storage("plugin-a", "project", Some("project-1"), "repo")
+                .unwrap(),
+            Some("{\"name\":\"app\"}".to_string())
+        );
+        assert!(db
+            .get_plugin_storage("plugin-a", "project", Some("project-2"), "repo")
+            .unwrap()
+            .is_none());
+        assert!(db
+            .get_plugin_storage("plugin-b", "global", None, "repo")
+            .unwrap()
+            .is_none());
+
+        db.delete_plugin_storage("plugin-a", "project", Some("project-1"), "repo")
+            .unwrap();
+        assert!(db
+            .get_plugin_storage("plugin-a", "project", Some("project-1"), "repo")
+            .unwrap()
+            .is_none());
     }
 }
