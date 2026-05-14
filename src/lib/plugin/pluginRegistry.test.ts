@@ -12,6 +12,7 @@ const {
   pluginInvokeMock,
   getPluginStorageMock,
   setPluginStorageMock,
+  deletePluginStorageMock,
   spawnShellPtyMock,
 } = vi.hoisted(() => ({
   forceGithubSyncMock: vi.fn(),
@@ -23,6 +24,7 @@ const {
   pluginInvokeMock: vi.fn(),
   getPluginStorageMock: vi.fn(),
   setPluginStorageMock: vi.fn(),
+  deletePluginStorageMock: vi.fn(),
   spawnShellPtyMock: vi.fn(),
 }))
 
@@ -38,6 +40,7 @@ vi.mock('../ipc', () => ({
   pluginInvoke: pluginInvokeMock,
   getPluginStorage: getPluginStorageMock,
   setPluginStorage: setPluginStorageMock,
+  deletePluginStorage: deletePluginStorageMock,
   spawnShellPty: spawnShellPtyMock,
 }))
 
@@ -149,6 +152,7 @@ describe('pluginRegistry', () => {
     pluginInvokeMock.mockReset()
     getPluginStorageMock.mockReset()
     setPluginStorageMock.mockReset()
+    deletePluginStorageMock.mockReset()
     spawnShellPtyMock.mockReset()
     listenDesktopEventMock.mockReset()
     desktopEventHandlers.clear()
@@ -302,7 +306,7 @@ describe('pluginRegistry', () => {
     loadPluginFrontendMock.mockResolvedValue({ pluginId: 'test-plugin', module: {}, activationResult: null })
     activatePluginLoaderMock.mockResolvedValue({ contributions: {} })
     pluginInvokeMock.mockResolvedValue('backend-result')
-    getPluginStorageMock.mockResolvedValue('stored-value')
+    getPluginStorageMock.mockResolvedValue({ stored: true })
     setPluginStorageMock.mockResolvedValue(undefined)
 
     const result = await activatePlugin('test-plugin')
@@ -317,11 +321,11 @@ describe('pluginRegistry', () => {
     await expect(calledCtx.invokeBackend('ping', { ok: true })).resolves.toBe('backend-result')
     expect(pluginInvokeMock).toHaveBeenCalledWith('test-plugin', 'ping', { ok: true })
 
-    await expect(calledCtx.storage.get('plugin-key')).resolves.toBe('stored-value')
-    expect(getPluginStorageMock).toHaveBeenCalledWith('test-plugin', 'plugin-key')
+    await expect(calledCtx.storage.global.get('plugin-key')).resolves.toEqual({ stored: true })
+    expect(getPluginStorageMock).toHaveBeenCalledWith('test-plugin', 'global', null, 'plugin-key')
 
-    await calledCtx.storage.set('plugin-key', 'plugin-value')
-    expect(setPluginStorageMock).toHaveBeenCalledWith('test-plugin', 'plugin-key', 'plugin-value')
+    await calledCtx.storage.project('P-1').set('plugin-key', { plugin: 'value' })
+    expect(setPluginStorageMock).toHaveBeenCalledWith('test-plugin', 'project', 'P-1', 'plugin-key', { plugin: 'value' })
   })
 
   it('activates defineFrontendPlugin package entries through plugin:// assets and runtime registries', async () => {
@@ -394,6 +398,12 @@ describe('pluginRegistry', () => {
     expect(firstProps.context).toEqual({ pluginId: 'runtime-plugin', projectId: 'P-1', taskId: 'T-1' })
     expect(secondProps.context).toEqual({ pluginId: 'runtime-plugin', projectId: 'P-1', taskId: 'T-2' })
     expect(secondProps.api.context.getSnapshot()).toEqual({ pluginId: 'runtime-plugin', projectId: null })
+
+    await firstProps.api.storage.task('T-1').set('reviewState', { viewedFiles: ['README.md'] })
+    expect(setPluginStorageMock).toHaveBeenCalledWith('runtime-plugin', 'task', 'T-1', 'reviewState', { viewedFiles: ['README.md'] })
+    getPluginStorageMock.mockResolvedValueOnce({ owner: 'acme', name: 'app' })
+    await expect(firstProps.api.storage.project('P-1').get('repo')).resolves.toEqual({ owner: 'acme', name: 'app' })
+    expect(getPluginStorageMock).toHaveBeenCalledWith('runtime-plugin', 'project', 'P-1', 'repo')
 
     const otherSlotProps = getPluginRenderProps('runtime-plugin', { projectId: 'P-2', taskId: 'T-99' })
     expect(firstProps.context).toEqual({ pluginId: 'runtime-plugin', projectId: 'P-1', taskId: 'T-1' })

@@ -1,10 +1,7 @@
 import type { Component } from 'svelte'
-import type { CommandShortcutMetadata, OpenForgePackageMetadata, PluginComponentLoader, PluginSettingsSectionProps as SdkPluginSettingsSectionProps, PluginTaskPaneProps as SdkPluginTaskPaneProps, PluginViewProps as SdkPluginViewProps } from '@openforge/plugin-sdk'
+import type { CommandShortcutMetadata, OpenForgePackageMetadata, PluginComponentLoader, PluginSettingsSectionProps as SdkPluginSettingsSectionProps, PluginStorage, PluginTaskPaneProps as SdkPluginTaskPaneProps, PluginViewProps as SdkPluginViewProps } from '@openforge/plugin-sdk'
 
-export interface PluginStorage {
-  get(key: string): Promise<string | null>
-  set(key: string, value: string): Promise<void>
-}
+export type { PluginStorage }
 
 export interface PluginManifest {
   id: string

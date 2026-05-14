@@ -69,6 +69,7 @@ type RuntimeOptions = {
   projectId: string | null
   packageMetadata?: OpenForgePackageMetadata
   host?: RuntimeHostBridge
+  storage?: PluginStorage
 }
 
 type RuntimeContributionBase = {
@@ -341,7 +342,7 @@ class RuntimeContributionRegistry {
   private readonly packageMetadata: OpenForgePackageMetadata
   private readonly contextSnapshot: OpenForgeContextSnapshot
   private readonly host: RuntimeHostBridge
-  private readonly storage = createMemoryStorage()
+  private readonly storage: PluginStorage
   private readonly frontendSubscriptions = new RuntimeSubscriptionSink()
   private readonly backendSubscriptions = new RuntimeSubscriptionSink()
   private frontendApi: FrontendOpenForgeAPI | null = null
@@ -368,6 +369,7 @@ class RuntimeContributionRegistry {
       description: '',
     }
     this.host = options.host ?? {}
+    this.storage = options.storage ?? createMemoryStorage()
     this.contextSnapshot = { pluginId: this.pluginId, projectId: this.projectId }
   }
 

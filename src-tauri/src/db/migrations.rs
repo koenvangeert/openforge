@@ -792,9 +792,11 @@ CREATE INDEX IF NOT EXISTS idx_task_dependencies_depends_on ON task_dependencies
         r#"
 CREATE TABLE IF NOT EXISTS plugin_storage (
     plugin_id TEXT NOT NULL,
+    scope TEXT NOT NULL DEFAULT 'global' CHECK (scope IN ('global', 'project', 'task')),
+    scope_id TEXT NOT NULL DEFAULT '',
     key TEXT NOT NULL,
     value TEXT NOT NULL,
-    PRIMARY KEY (plugin_id, key),
+    PRIMARY KEY (plugin_id, scope, scope_id, key),
     FOREIGN KEY (plugin_id) REFERENCES plugins(id) ON DELETE CASCADE
 );
         "#,
@@ -864,6 +866,50 @@ CREATE TABLE IF NOT EXISTS plugin_storage (
         drop_column_if_exists(tx, "worktrees", "opencode_port")?;
         drop_column_if_exists(tx, "worktrees", "opencode_pid")?;
         drop_column_if_exists(tx, "task_workspaces", "opencode_port")?;
+
+        Ok(())
+    }),
+    M::up_with_hook("SELECT 1;", |tx| {
+        let has_plugin_storage: bool = tx
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='plugin_storage'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(false);
+        if !has_plugin_storage {
+            return Ok(());
+        }
+
+        let has_scope_column: bool = tx
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM pragma_table_info('plugin_storage') WHERE name='scope'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(false);
+        if has_scope_column {
+            return Ok(());
+        }
+
+        tx.execute_batch(
+            r#"
+ALTER TABLE plugin_storage RENAME TO plugin_storage_legacy;
+CREATE TABLE plugin_storage (
+    plugin_id TEXT NOT NULL,
+    scope TEXT NOT NULL DEFAULT 'global' CHECK (scope IN ('global', 'project', 'task')),
+    scope_id TEXT NOT NULL DEFAULT '',
+    key TEXT NOT NULL,
+    value TEXT NOT NULL,
+    PRIMARY KEY (plugin_id, scope, scope_id, key),
+    FOREIGN KEY (plugin_id) REFERENCES plugins(id) ON DELETE CASCADE
+);
+INSERT OR REPLACE INTO plugin_storage (plugin_id, scope, scope_id, key, value)
+SELECT plugin_id, 'global', '', key, value FROM plugin_storage_legacy;
+DROP TABLE plugin_storage_legacy;
+            "#,
+        )
+        .map_err(rusqlite_migration::HookError::RusqliteError)?;
 
         Ok(())
     }),
@@ -1035,9 +1081,11 @@ CREATE TABLE IF NOT EXISTS project_plugins (
 );
 CREATE TABLE IF NOT EXISTS plugin_storage (
     plugin_id TEXT NOT NULL,
+    scope TEXT NOT NULL DEFAULT 'global' CHECK (scope IN ('global', 'project', 'task')),
+    scope_id TEXT NOT NULL DEFAULT '',
     key TEXT NOT NULL,
     value TEXT NOT NULL,
-    PRIMARY KEY (plugin_id, key),
+    PRIMARY KEY (plugin_id, scope, scope_id, key),
     FOREIGN KEY (plugin_id) REFERENCES plugins(id) ON DELETE CASCADE
 );
          "#,

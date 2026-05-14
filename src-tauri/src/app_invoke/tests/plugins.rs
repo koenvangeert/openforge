@@ -34,18 +34,38 @@ async fn handles_db_backed_commands() {
     invoke_ok(
         &state,
         "set_plugin_storage",
-        json!({ "pluginId": "com.example.echo", "key": "token", "value": "secret" }),
+        json!({ "pluginId": "com.example.echo", "scope": "project", "scopeId": project_id, "key": "settings", "value": { "token": "secret" } }),
     )
     .await;
     assert_eq!(
         invoke_ok(
             &state,
             "get_plugin_storage",
-            json!({ "pluginId": "com.example.echo", "key": "token" }),
+            json!({ "pluginId": "com.example.echo", "scope": "project", "scopeId": project_id, "key": "settings" }),
         )
         .await,
-        "secret"
+        json!({ "token": "secret" })
     );
+    assert!(invoke_ok(
+        &state,
+        "get_plugin_storage",
+        json!({ "pluginId": "com.example.echo", "scope": "task", "scopeId": "T-1", "key": "settings" }),
+    )
+    .await
+    .is_null());
+    invoke_ok(
+        &state,
+        "delete_plugin_storage",
+        json!({ "pluginId": "com.example.echo", "scope": "project", "scopeId": project_id, "key": "settings" }),
+    )
+    .await;
+    assert!(invoke_ok(
+        &state,
+        "get_plugin_storage",
+        json!({ "pluginId": "com.example.echo", "scope": "project", "scopeId": project_id, "key": "settings" }),
+    )
+    .await
+    .is_null());
 
     invoke_ok(
         &state,

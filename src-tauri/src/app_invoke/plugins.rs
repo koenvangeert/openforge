@@ -194,19 +194,37 @@ pub(super) async fn handle_app_plugin_command(
         }
         "get_plugin_storage" => {
             let plugin_id = payload_string(&request.payload, "pluginId")?;
+            let scope = payload_string(&request.payload, "scope")?;
+            let scope_id = payload_optional_string(&request.payload, "scopeId")?;
             let key = payload_string(&request.payload, "key")?;
             json_value(
                 plugin_platform(state, false)?
-                    .plugin_storage(&plugin_id, &key)
+                    .plugin_storage(&plugin_id, &scope, scope_id.as_deref(), &key)
                     .map_err(map_plugin_platform_error)?,
             )?
         }
         "set_plugin_storage" => {
             let plugin_id = payload_string(&request.payload, "pluginId")?;
+            let scope = payload_string(&request.payload, "scope")?;
+            let scope_id = payload_optional_string(&request.payload, "scopeId")?;
             let key = payload_string(&request.payload, "key")?;
-            let value = payload_string(&request.payload, "value")?;
+            let value = request
+                .payload
+                .get("value")
+                .cloned()
+                .unwrap_or(serde_json::Value::Null);
             plugin_platform(state, false)?
-                .set_plugin_storage(&plugin_id, &key, &value)
+                .set_plugin_storage(&plugin_id, &scope, scope_id.as_deref(), &key, &value)
+                .map_err(map_plugin_platform_error)?;
+            serde_json::Value::Null
+        }
+        "delete_plugin_storage" => {
+            let plugin_id = payload_string(&request.payload, "pluginId")?;
+            let scope = payload_string(&request.payload, "scope")?;
+            let scope_id = payload_optional_string(&request.payload, "scopeId")?;
+            let key = payload_string(&request.payload, "key")?;
+            plugin_platform(state, false)?
+                .delete_plugin_storage(&plugin_id, &scope, scope_id.as_deref(), &key)
                 .map_err(map_plugin_platform_error)?;
             serde_json::Value::Null
         }

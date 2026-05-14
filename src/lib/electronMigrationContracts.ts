@@ -143,8 +143,9 @@ export const ipcCommandContracts = [
   { functionName: 'listPlugins', ipcCommand: 'list_plugins', payloadKeys: [], targetOwner: 'rust-sidecar', domain: 'plugins' },
   { functionName: 'setPluginEnabled', ipcCommand: 'set_plugin_enabled', payloadKeys: ['projectId', 'pluginId', 'enabled'], targetOwner: 'rust-sidecar', domain: 'plugins' },
   { functionName: 'getEnabledPlugins', ipcCommand: 'get_enabled_plugins', payloadKeys: ['projectId'], targetOwner: 'rust-sidecar', domain: 'plugins' },
-  { functionName: 'getPluginStorage', ipcCommand: 'get_plugin_storage', payloadKeys: ['pluginId', 'key'], targetOwner: 'rust-sidecar', domain: 'plugins' },
-  { functionName: 'setPluginStorage', ipcCommand: 'set_plugin_storage', payloadKeys: ['pluginId', 'key', 'value'], targetOwner: 'rust-sidecar', domain: 'plugins' },
+  { functionName: 'getPluginStorage', ipcCommand: 'get_plugin_storage', payloadKeys: ['pluginId', 'scope', 'scopeId', 'key'], targetOwner: 'rust-sidecar', domain: 'plugins' },
+  { functionName: 'setPluginStorage', ipcCommand: 'set_plugin_storage', payloadKeys: ['pluginId', 'scope', 'scopeId', 'key', 'value'], targetOwner: 'rust-sidecar', domain: 'plugins' },
+  { functionName: 'deletePluginStorage', ipcCommand: 'delete_plugin_storage', payloadKeys: ['pluginId', 'scope', 'scopeId', 'key'], targetOwner: 'rust-sidecar', domain: 'plugins' },
   { functionName: 'pluginInvoke', ipcCommand: 'plugin_invoke', payloadKeys: ['pluginId', 'command', 'payload'], targetOwner: 'rust-sidecar', domain: 'plugins' },
   { functionName: 'stopPluginSidecar', ipcCommand: 'stop_plugin_sidecar', payloadKeys: [], targetOwner: 'rust-sidecar', domain: 'plugins' },
 ] as const satisfies readonly IpcCommandContract[]

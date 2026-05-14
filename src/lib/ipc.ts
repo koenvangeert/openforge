@@ -1,5 +1,6 @@
 import { invokeDesktopCommand as invoke, isElectronDesktopBridgeAvailable } from "./desktopIpc";
 import { normalizeTask } from "./boardStatus"
+import type { JsonValue } from '@openforge/plugin-sdk'
 import type { AgentReviewComment, AgentSession, AuthoredPullRequest, AutocompleteAgentInfo, BoardStatus, CommandInfo, CommitInfo, FileContent, FileEntry, ImplementationStatus, PollResult, PrComment, PrFileDiff, PrOverviewComment, Project, ProjectAttention, ProviderModelInfo, PullRequestInfo, ReviewComment, ReviewPullRequest, ReviewSubmissionComment, SelfReviewComment, SkillInfo, Task, TaskWorkspaceInfo, TranscriptionResult, WhisperModelSizeId, WhisperModelStatus, WorktreeInfo } from "./types";
 
 type RawTask = Omit<Task, 'status'> & { status: string }
@@ -545,12 +546,18 @@ export async function getEnabledPlugins(projectId: string): Promise<NormalizedPl
   return rows.map(normalizePluginRow);
 }
 
-export async function getPluginStorage(pluginId: string, key: string): Promise<string | null> {
-  return invoke<string | null>('get_plugin_storage', { pluginId, key })
+export type PluginStorageScopeKind = 'global' | 'project' | 'task'
+
+export async function getPluginStorage(pluginId: string, scope: PluginStorageScopeKind, scopeId: string | null, key: string): Promise<JsonValue | null> {
+  return invoke<JsonValue | null>('get_plugin_storage', { pluginId, scope, scopeId, key })
 }
 
-export async function setPluginStorage(pluginId: string, key: string, value: string): Promise<void> {
-  return invoke('set_plugin_storage', { pluginId, key, value })
+export async function setPluginStorage(pluginId: string, scope: PluginStorageScopeKind, scopeId: string | null, key: string, value: JsonValue): Promise<void> {
+  return invoke('set_plugin_storage', { pluginId, scope, scopeId, key, value })
+}
+
+export async function deletePluginStorage(pluginId: string, scope: PluginStorageScopeKind, scopeId: string | null, key: string): Promise<void> {
+  return invoke('delete_plugin_storage', { pluginId, scope, scopeId, key })
 }
 
 export async function pluginInvoke(pluginId: string, command: string, payload: unknown): Promise<unknown> {
