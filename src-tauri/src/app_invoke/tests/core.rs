@@ -159,6 +159,64 @@ async fn create_task_ignores_legacy_agent_payload() {
     let _ = std::fs::remove_file(path);
 }
 
+#[tokio::test]
+async fn task_label_commands_round_trip_labels_on_tasks() {
+    let (state, path) = test_state("app_invoke_task_labels");
+    let project = invoke_ok(
+        &state,
+        "create_project",
+        json!({ "name": "Open Forge", "path": "/tmp/openforge-labels" }),
+    )
+    .await;
+    let project_id = project["id"].as_str().expect("project id");
+
+    let task = invoke_ok(
+        &state,
+        "create_task",
+        json!({
+            "initialPrompt": "Label me",
+            "status": "backlog",
+            "projectId": project_id,
+            "permissionMode": null,
+            "labelNames": ["Bug", "bug"]
+        }),
+    )
+    .await;
+    assert_eq!(task["labels"].as_array().expect("labels").len(), 1);
+    assert_eq!(task["labels"][0]["name"], "Bug");
+    let task_id = task["id"].as_str().expect("task id");
+
+    let label = invoke_ok(
+        &state,
+        "add_task_label",
+        json!({ "taskId": task_id, "name": "ui" }),
+    )
+    .await;
+    assert_eq!(label["name"], "ui");
+
+    let labels = invoke_ok(
+        &state,
+        "get_project_task_labels",
+        json!({ "projectId": project_id }),
+    )
+    .await;
+    assert_eq!(labels.as_array().expect("project labels").len(), 2);
+
+    invoke_ok(
+        &state,
+        "remove_task_label",
+        json!({ "taskId": task_id, "labelId": label["id"].as_i64().expect("label id") }),
+    )
+    .await;
+    let updated = invoke_ok(&state, "get_task_detail", json!({ "taskId": task_id })).await;
+    assert_eq!(
+        updated["labels"].as_array().expect("updated labels").len(),
+        1
+    );
+
+    let _ = std::fs::remove_file(path);
+}
+
 async fn task_workspace_value(
     task_id: &str,
     state: &crate::http_server::AppState,

@@ -1,6 +1,24 @@
 use rusqlite::{OptionalExtension, Result};
 use serde::Serialize;
 
+const LABEL_COLORS: [&str; 7] = [
+    "primary",
+    "secondary",
+    "accent",
+    "info",
+    "success",
+    "warning",
+    "error",
+];
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct TaskLabelRow {
+    pub id: i64,
+    pub project_id: String,
+    pub name: String,
+    pub color: String,
+}
+
 /// Task row from database
 #[derive(Debug, Clone, Serialize)]
 pub struct TaskRow {
@@ -15,6 +33,7 @@ pub struct TaskRow {
     pub agent: Option<String>,
     pub permission_mode: Option<String>,
     pub depends_on: Vec<String>,
+    pub labels: Vec<TaskLabelRow>,
 }
 
 fn load_task_dependency_ids(conn: &rusqlite::Connection, task_id: &str) -> Result<Vec<String>> {
@@ -27,6 +46,78 @@ fn load_task_dependency_ids(conn: &rusqlite::Connection, task_id: &str) -> Resul
         result.push(row?);
     }
     Ok(result)
+}
+
+fn load_task_labels(conn: &rusqlite::Connection, task_id: &str) -> Result<Vec<TaskLabelRow>> {
+    let mut stmt = conn.prepare(
+        r#"
+SELECT l.id, l.project_id, l.name, l.color
+FROM task_labels l
+INNER JOIN task_label_assignments tla ON tla.label_id = l.id
+WHERE tla.task_id = ?1
+ORDER BY l.name COLLATE NOCASE ASC, l.id ASC
+        "#,
+    )?;
+    let rows = stmt.query_map([task_id], |row| {
+        Ok(TaskLabelRow {
+            id: row.get(0)?,
+            project_id: row.get(1)?,
+            name: row.get(2)?,
+            color: row.get(3)?,
+        })
+    })?;
+    let mut result = Vec::new();
+    for row in rows {
+        result.push(row?);
+    }
+    Ok(result)
+}
+
+fn normalize_label_name(name: &str) -> Result<String> {
+    let trimmed = name.trim();
+    if trimmed.is_empty() {
+        return Err(rusqlite::Error::InvalidParameterName(
+            "label name is required".to_string(),
+        ));
+    }
+    if trimmed.chars().count() > 40 {
+        return Err(rusqlite::Error::InvalidParameterName(
+            "label names must be 40 characters or fewer".to_string(),
+        ));
+    }
+    Ok(trimmed.to_string())
+}
+
+fn normalized_label_key(name: &str) -> Result<String> {
+    Ok(normalize_label_name(name)?.to_lowercase())
+}
+
+fn label_color_for_name(name: &str) -> String {
+    let key = name.trim().to_lowercase();
+    let mut hash: usize = 0;
+    for byte in key.bytes() {
+        hash = hash.wrapping_mul(31).wrapping_add(byte as usize);
+    }
+    LABEL_COLORS[hash % LABEL_COLORS.len()].to_string()
+}
+
+fn query_task_label_by_id(
+    conn: &rusqlite::Connection,
+    label_id: i64,
+) -> Result<Option<TaskLabelRow>> {
+    conn.query_row(
+        "SELECT id, project_id, name, color FROM task_labels WHERE id = ?1",
+        [label_id],
+        |row| {
+            Ok(TaskLabelRow {
+                id: row.get(0)?,
+                project_id: row.get(1)?,
+                name: row.get(2)?,
+                color: row.get(3)?,
+            })
+        },
+    )
+    .optional()
 }
 
 fn task_project_id(conn: &rusqlite::Connection, task_id: &str) -> Result<Option<Option<String>>> {
@@ -127,6 +218,7 @@ impl super::Database {
                 agent: row.get(8)?,
                 permission_mode: row.get(9)?,
                 depends_on: Vec::new(),
+                labels: Vec::new(),
             })
         })?;
 
@@ -134,6 +226,7 @@ impl super::Database {
         for task in tasks {
             let mut task = task?;
             task.depends_on = load_task_dependency_ids(&conn, &task.id)?;
+            task.labels = load_task_labels(&conn, &task.id)?;
             result.push(task);
         }
         Ok(result)
@@ -162,6 +255,7 @@ impl super::Database {
                 agent: row.get(8)?,
                 permission_mode: row.get(9)?,
                 depends_on: Vec::new(),
+                labels: Vec::new(),
             })
         })?;
 
@@ -169,6 +263,7 @@ impl super::Database {
         for task in tasks {
             let mut task = task?;
             task.depends_on = load_task_dependency_ids(&conn, &task.id)?;
+            task.labels = load_task_labels(&conn, &task.id)?;
             result.push(task);
         }
         Ok(result)
@@ -249,6 +344,7 @@ impl super::Database {
             agent: None,
             permission_mode: permission_mode.map(|s| s.to_string()),
             depends_on: Vec::new(),
+            labels: Vec::new(),
         })
     }
 
@@ -272,6 +368,7 @@ impl super::Database {
                 agent: row.get(8)?,
                 permission_mode: row.get(9)?,
                 depends_on: Vec::new(),
+                labels: Vec::new(),
             })
         })?;
 
@@ -279,6 +376,7 @@ impl super::Database {
         for task in tasks {
             let mut task = task?;
             task.depends_on = load_task_dependency_ids(&conn, &task.id)?;
+            task.labels = load_task_labels(&conn, &task.id)?;
             result.push(task);
         }
         Ok(result)
@@ -304,10 +402,173 @@ impl super::Database {
                 agent: row.get(8)?,
                 permission_mode: row.get(9)?,
                 depends_on: load_task_dependency_ids(&conn, id)?,
+                labels: load_task_labels(&conn, id)?,
             }))
         } else {
             Ok(None)
         }
+    }
+
+    pub fn get_project_task_labels(&self, project_id: &str) -> Result<Vec<TaskLabelRow>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT id, project_id, name, color FROM task_labels WHERE project_id = ?1 ORDER BY name COLLATE NOCASE ASC, id ASC",
+        )?;
+        let rows = stmt.query_map([project_id], |row| {
+            Ok(TaskLabelRow {
+                id: row.get(0)?,
+                project_id: row.get(1)?,
+                name: row.get(2)?,
+                color: row.get(3)?,
+            })
+        })?;
+        let mut result = Vec::new();
+        for row in rows {
+            result.push(row?);
+        }
+        Ok(result)
+    }
+
+    pub fn create_task_label(&self, project_id: &str, name: &str) -> Result<TaskLabelRow> {
+        let conn = self.conn.lock().unwrap();
+        let name = normalize_label_name(name)?;
+        let key = name.to_lowercase();
+
+        if let Some(existing) = conn
+            .query_row(
+                "SELECT id FROM task_labels WHERE project_id = ?1 AND name_normalized = ?2",
+                rusqlite::params![project_id, key],
+                |row| row.get::<_, i64>(0),
+            )
+            .optional()?
+        {
+            return query_task_label_by_id(&conn, existing)?.ok_or_else(|| {
+                rusqlite::Error::InvalidParameterName(format!("label {existing} does not exist"))
+            });
+        }
+
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("time went backwards")
+            .as_secs() as i64;
+        let color = label_color_for_name(&name);
+        conn.execute(
+            "INSERT INTO task_labels (project_id, name, name_normalized, color, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            rusqlite::params![project_id, name, key, color, now, now],
+        )?;
+        let label_id = conn.last_insert_rowid();
+        query_task_label_by_id(&conn, label_id)?.ok_or_else(|| {
+            rusqlite::Error::InvalidParameterName(format!("label {label_id} does not exist"))
+        })
+    }
+
+    pub fn add_task_label(&self, task_id: &str, label_name: &str) -> Result<TaskLabelRow> {
+        let conn = self.conn.lock().unwrap();
+        let project_id = task_project_id(&conn, task_id)?
+            .ok_or_else(|| {
+                rusqlite::Error::InvalidParameterName(format!("task {task_id} does not exist"))
+            })?
+            .ok_or_else(|| {
+                rusqlite::Error::InvalidParameterName(format!(
+                    "task {task_id} must belong to a project before labels can be assigned"
+                ))
+            })?;
+        drop(conn);
+
+        let label = self.create_task_label(&project_id, label_name)?;
+        let conn = self.conn.lock().unwrap();
+        let task_project = task_project_id(&conn, task_id)?.flatten().ok_or_else(|| {
+            rusqlite::Error::InvalidParameterName(format!(
+                "task {task_id} must belong to a project before labels can be assigned"
+            ))
+        })?;
+        if task_project != label.project_id {
+            return Err(rusqlite::Error::InvalidParameterName(
+                "label must belong to the same project as the task".to_string(),
+            ));
+        }
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("time went backwards")
+            .as_secs() as i64;
+        conn.execute(
+            "INSERT OR IGNORE INTO task_label_assignments (task_id, label_id, created_at) VALUES (?1, ?2, ?3)",
+            rusqlite::params![task_id, label.id, now],
+        )?;
+        conn.execute(
+            "UPDATE tasks SET updated_at = ?1 WHERE id = ?2",
+            rusqlite::params![now, task_id],
+        )?;
+        Ok(label)
+    }
+
+    pub fn remove_task_label(&self, task_id: &str, label_id: i64) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "DELETE FROM task_label_assignments WHERE task_id = ?1 AND label_id = ?2",
+            rusqlite::params![task_id, label_id],
+        )?;
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("time went backwards")
+            .as_secs() as i64;
+        conn.execute(
+            "UPDATE tasks SET updated_at = ?1 WHERE id = ?2",
+            rusqlite::params![now, task_id],
+        )?;
+        Ok(())
+    }
+
+    pub fn set_task_labels(
+        &self,
+        task_id: &str,
+        label_names: &[String],
+    ) -> Result<Vec<TaskLabelRow>> {
+        let conn = self.conn.lock().unwrap();
+        let project_id = task_project_id(&conn, task_id)?
+            .ok_or_else(|| {
+                rusqlite::Error::InvalidParameterName(format!("task {task_id} does not exist"))
+            })?
+            .ok_or_else(|| {
+                rusqlite::Error::InvalidParameterName(format!(
+                    "task {task_id} must belong to a project before labels can be assigned"
+                ))
+            })?;
+        drop(conn);
+
+        let mut labels = Vec::new();
+        let mut seen = Vec::new();
+        for label_name in label_names {
+            let key = normalized_label_key(label_name)?;
+            if seen.iter().any(|existing| existing == &key) {
+                continue;
+            }
+            seen.push(key);
+            labels.push(self.create_task_label(&project_id, label_name)?);
+        }
+
+        let mut conn = self.conn.lock().unwrap();
+        let tx = conn.transaction()?;
+        tx.execute(
+            "DELETE FROM task_label_assignments WHERE task_id = ?1",
+            rusqlite::params![task_id],
+        )?;
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("time went backwards")
+            .as_secs() as i64;
+        for label in &labels {
+            tx.execute(
+                "INSERT INTO task_label_assignments (task_id, label_id, created_at) VALUES (?1, ?2, ?3)",
+                rusqlite::params![task_id, label.id, now],
+            )?;
+        }
+        tx.execute(
+            "UPDATE tasks SET updated_at = ?1 WHERE id = ?2",
+            rusqlite::params![now, task_id],
+        )?;
+        tx.commit()?;
+        Ok(labels)
     }
 
     pub fn update_task(&self, id: &str, prompt: &str) -> Result<()> {
@@ -460,6 +721,10 @@ impl super::Database {
             )?;
             conn.execute(
                 "DELETE FROM task_dependencies WHERE task_id = ?1 OR depends_on_task_id = ?1",
+                rusqlite::params![id],
+            )?;
+            conn.execute(
+                "DELETE FROM task_label_assignments WHERE task_id = ?1",
                 rusqlite::params![id],
             )?;
             conn.execute("DELETE FROM tasks WHERE id = ?1", rusqlite::params![id])?;
@@ -647,6 +912,90 @@ mod tests {
 
         let missing = db.get_task("T-999").expect("get failed");
         assert!(missing.is_none());
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_task_labels_are_project_scoped_case_insensitive_and_return_with_tasks() {
+        let (db, path) = make_test_db("task_labels_round_trip");
+        db.set_config("task_id_prefix", "T").unwrap();
+        let project_a = db
+            .create_project("A", "/tmp/labels-a")
+            .expect("create project a");
+        let project_b = db
+            .create_project("B", "/tmp/labels-b")
+            .expect("create project b");
+        let task_a = db
+            .create_task("A task", "backlog", Some(&project_a.id), None, None)
+            .expect("create task a");
+        let task_b = db
+            .create_task("B task", "backlog", Some(&project_b.id), None, None)
+            .expect("create task b");
+
+        let first = db.add_task_label(&task_a.id, "  Bug  ").expect("add bug");
+        let duplicate = db
+            .add_task_label(&task_a.id, "bug")
+            .expect("add duplicate bug");
+        let other_project = db
+            .add_task_label(&task_b.id, "bug")
+            .expect("add project b bug");
+
+        assert_eq!(first.id, duplicate.id);
+        assert_eq!(first.name, "Bug");
+        assert_ne!(first.id, other_project.id);
+
+        let retrieved = db.get_task(&task_a.id).expect("get task").unwrap();
+        assert_eq!(retrieved.labels, vec![first.clone()]);
+
+        let project_a_labels = db
+            .get_project_task_labels(&project_a.id)
+            .expect("get project labels");
+        assert_eq!(project_a_labels, vec![first]);
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_set_task_labels_replaces_assignments_but_keeps_unused_labels() {
+        let (db, path) = make_test_db("task_labels_replace");
+        db.set_config("task_id_prefix", "T").unwrap();
+        let project = db
+            .create_project("A", "/tmp/labels-replace")
+            .expect("create project");
+        let task = db
+            .create_task("Task", "backlog", Some(&project.id), None, None)
+            .expect("create task");
+
+        let bug = db.add_task_label(&task.id, "bug").expect("add bug");
+        let ui = db.add_task_label(&task.id, "ui").expect("add ui");
+        db.set_task_labels(&task.id, &["bug".to_string()])
+            .expect("replace labels");
+
+        let retrieved = db.get_task(&task.id).expect("get task").unwrap();
+        assert_eq!(retrieved.labels, vec![bug]);
+        let all_labels = db.get_project_task_labels(&project.id).expect("all labels");
+        assert!(all_labels.iter().any(|label| label.id == ui.id));
+
+        drop(db);
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_task_label_validation_rejects_blank_long_and_projectless_tasks() {
+        let (db, path) = make_test_db("task_label_validation");
+        let projectless = db
+            .create_task("Projectless", "backlog", None, None, None)
+            .expect("create projectless task");
+        let project = db
+            .create_project("A", "/tmp/labels-validation")
+            .expect("create project");
+
+        assert!(db.create_task_label(&project.id, "   ").is_err());
+        assert!(db.create_task_label(&project.id, &"x".repeat(41)).is_err());
+        assert!(db.add_task_label(&projectless.id, "bug").is_err());
 
         drop(db);
         let _ = fs::remove_file(&path);

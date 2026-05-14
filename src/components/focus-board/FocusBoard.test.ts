@@ -1,9 +1,10 @@
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/svelte'
+import { get } from 'svelte/store'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { requireElement } from '../../test-utils/dom'
 import FocusBoard from './FocusBoard.svelte'
-import type { Task, AgentSession, PullRequestInfo, BoardStatus } from '../../lib/types'
-import { commandHeld, focusBoardFilters } from '../../lib/stores'
+import type { Task, AgentSession, PullRequestInfo, BoardStatus, TaskLabel } from '../../lib/types'
+import { backlogLabelFilters, commandHeld, focusBoardFilters } from '../../lib/stores'
 
 vi.mock('../../lib/ipc', () => ({
   getPrComments: vi.fn().mockResolvedValue([]),
@@ -13,6 +14,7 @@ vi.mock('../../lib/ipc', () => ({
   deleteTask: vi.fn().mockResolvedValue(undefined),
   getProjectConfig: vi.fn().mockResolvedValue(null),
   setProjectConfig: vi.fn().mockResolvedValue(undefined),
+  getProjectTaskLabels: vi.fn().mockResolvedValue([]),
 }))
 
 vi.mock('../../lib/boardFilters', async (importOriginal) => {
@@ -23,7 +25,10 @@ vi.mock('../../lib/boardFilters', async (importOriginal) => {
   }
 })
 
-const makeTask = (id: string, status: BoardStatus, prompt: string): Task => ({
+const bugLabel: TaskLabel = { id: 1, project_id: 'proj-1', name: 'bug', color: 'error' }
+const uiLabel: TaskLabel = { id: 2, project_id: 'proj-1', name: 'ui', color: 'primary' }
+
+const makeTask = (id: string, status: BoardStatus, prompt: string, labels: TaskLabel[] = []): Task => ({
   id,
   initial_prompt: prompt,
   status,
@@ -35,7 +40,8 @@ const makeTask = (id: string, status: BoardStatus, prompt: string): Task => ({
   project_id: 'proj-1',
   created_at: 1000,
   updated_at: 2000,
-})
+  labels,
+} as Task & { labels: TaskLabel[] })
 
 const makeSession = (taskId: string, status: string, checkpoint_data: string | null): AgentSession => ({
   id: `session-${taskId}`,
@@ -114,11 +120,14 @@ function renderBoard(overrides?: {
 }
 
 describe('FocusBoard', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     Element.prototype.scrollIntoView = vi.fn()
     vi.clearAllMocks()
+    const ipc = await import('../../lib/ipc')
+    vi.mocked(ipc.getProjectTaskLabels).mockResolvedValue([])
     commandHeld.set(false)
     focusBoardFilters.set(new Map())
+    backlogLabelFilters.set(new Map())
   })
 
   it('renders the project name as the board heading', async () => {
@@ -153,6 +162,134 @@ describe('FocusBoard', () => {
     expect(screen.queryByText('Focus task')).toBeNull()
     expect(screen.queryByText('Doing task')).toBeNull()
     expect(screen.queryByText('Done task')).toBeNull()
+  })
+
+  it('filters backlog tasks by selected label chips using OR semantics and shows backlog counts', async () => {
+    const ipc = await import('../../lib/ipc')
+    vi.mocked(ipc.getProjectTaskLabels).mockResolvedValue([bugLabel, uiLabel])
+    const bugTask = makeTask('T-5', 'backlog', 'Bug task', [bugLabel])
+    const uiTask = makeTask('T-6', 'backlog', 'UI task', [uiLabel])
+    const unlabelledTask = makeTask('T-7', 'backlog', 'Unlabelled task')
+    const doingBugTask = makeTask('T-8', 'doing', 'Doing bug', [bugLabel])
+
+    renderBoard({
+      tasks: [bugTask, uiTask, unlabelledTask, doingBugTask],
+      sessions: new Map(),
+    })
+
+    await fireEvent.click(await screen.findByRole('button', { name: /Backlog 3/i }))
+
+    expect(await screen.findByRole('button', { name: /bug 1/i })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /ui 1/i })).toBeTruthy()
+
+    await fireEvent.click(screen.getByRole('button', { name: /bug 1/i }))
+    expect(screen.getAllByText('Bug task').length).toBeGreaterThan(0)
+    expect(screen.queryByText('UI task')).toBeNull()
+    expect(screen.queryByText('Unlabelled task')).toBeNull()
+
+    await fireEvent.click(screen.getByRole('button', { name: /ui 1/i }))
+    expect(screen.getAllByText('Bug task').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('UI task').length).toBeGreaterThan(0)
+  })
+
+  it('hides label filter chips with zero backlog tasks', async () => {
+    const ipc = await import('../../lib/ipc')
+    vi.mocked(ipc.getProjectTaskLabels).mockResolvedValue([bugLabel, uiLabel])
+    const doingBugTask = makeTask('T-8', 'doing', 'Doing bug', [bugLabel])
+    const uiTask = makeTask('T-6', 'backlog', 'UI task', [uiLabel])
+
+    renderBoard({ tasks: [doingBugTask, uiTask], sessions: new Map() })
+
+    await fireEvent.click(await screen.findByRole('button', { name: /Backlog 1/i }))
+
+    expect(await screen.findByRole('button', { name: /ui 1/i })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /bug 0/i })).toBeNull()
+  })
+
+  it('prunes selected backlog label filters when their backlog count drops to zero', async () => {
+    const ipc = await import('../../lib/ipc')
+    vi.mocked(ipc.getProjectTaskLabels).mockResolvedValue([bugLabel, uiLabel])
+    focusBoardFilters.set(new Map([['proj-1', 'backlog']]))
+    backlogLabelFilters.set(new Map([['proj-1', new Set([bugLabel.id])]]))
+    const doingBugTask = makeTask('T-8', 'doing', 'Doing bug', [bugLabel])
+    const uiTask = makeTask('T-6', 'backlog', 'UI task', [uiLabel])
+
+    renderBoard({ tasks: [doingBugTask, uiTask], sessions: new Map() })
+
+    await waitFor(() => {
+      expect(get(backlogLabelFilters).get('proj-1')).toBeUndefined()
+    })
+    await waitFor(() => {
+      expect(screen.getAllByText('UI task').length).toBeGreaterThan(0)
+    })
+    expect(screen.queryByRole('button', { name: /bug 0/i })).toBeNull()
+  })
+
+  it('keeps selected backlog label filters when the board unmounts and remounts for the same project', async () => {
+    const ipc = await import('../../lib/ipc')
+    vi.mocked(ipc.getProjectTaskLabels).mockResolvedValue([bugLabel, uiLabel])
+    const bugTask = makeTask('T-5', 'backlog', 'Bug task', [bugLabel])
+    const uiTask = makeTask('T-6', 'backlog', 'UI task', [uiLabel])
+
+    const view = renderBoard({ tasks: [bugTask, uiTask], sessions: new Map() })
+    await fireEvent.click(await screen.findByRole('button', { name: /Backlog 2/i }))
+    await fireEvent.click(await screen.findByRole('button', { name: /bug 1/i }))
+
+    expect(screen.getAllByText('Bug task').length).toBeGreaterThan(0)
+    expect(screen.queryByText('UI task')).toBeNull()
+
+    view.unmount()
+    renderBoard({ tasks: [bugTask, uiTask], sessions: new Map() })
+
+    const bugFilter = await screen.findByRole('button', { name: /bug 1/i })
+    expect(bugFilter.getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getAllByText('Bug task').length).toBeGreaterThan(0)
+    expect(screen.queryByText('UI task')).toBeNull()
+  })
+
+  it('clears selected backlog label filters when switching projects', async () => {
+    const ipc = await import('../../lib/ipc')
+    vi.mocked(ipc.getProjectTaskLabels).mockResolvedValue([bugLabel, uiLabel])
+    const bugTask = makeTask('T-5', 'backlog', 'Bug task', [bugLabel])
+
+    const view = renderBoard({ tasks: [bugTask], sessions: new Map() })
+    await fireEvent.click(await screen.findByRole('button', { name: /Backlog 1/i }))
+    await fireEvent.click(await screen.findByRole('button', { name: /bug 1/i }))
+
+    expect(get(backlogLabelFilters).get('proj-1')).toEqual(new Set([bugLabel.id]))
+
+    await view.rerender({
+      projectId: 'proj-2',
+      projectName: 'Second Project',
+      tasks: [{ ...bugTask, id: 'T-6', project_id: 'proj-2' }],
+      activeSessions: new Map(),
+      ticketPrs: new Map(),
+      onOpenTask,
+      onRunAction,
+    })
+
+    await waitFor(() => {
+      expect(get(backlogLabelFilters).size).toBe(0)
+    })
+  })
+
+  it('renders at most three labels on backlog cards with a hidden count', async () => {
+    const extraLabels: TaskLabel[] = [
+      bugLabel,
+      uiLabel,
+      { id: 3, project_id: 'proj-1', name: 'backend', color: 'secondary' },
+      { id: 4, project_id: 'proj-1', name: 'blocked', color: 'warning' },
+    ]
+    renderBoard({ tasks: [makeTask('T-9', 'backlog', 'Many labels', extraLabels)], sessions: new Map() })
+
+    await fireEvent.click(await screen.findByRole('button', { name: /Backlog 1/i }))
+
+    const taskLabels = screen.getByLabelText('Task labels')
+    expect(within(taskLabels).getByText('bug')).toBeTruthy()
+    expect(within(taskLabels).getByText('ui')).toBeTruthy()
+    expect(within(taskLabels).getByText('backend')).toBeTruthy()
+    expect(within(taskLabels).getByText('+1')).toBeTruthy()
+    expect(within(taskLabels).queryByText('blocked')).toBeNull()
   })
 
   it('shows dependency wait hint on backlog rows only in the Backlog filter', async () => {

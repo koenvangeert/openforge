@@ -1,12 +1,15 @@
 <script lang="ts">
-  import type { Task } from '../../lib/types'
+  import type { Task, TaskLabel } from '../../lib/types'
   import { tasks as allTasks, ticketPrs } from '../../lib/stores'
+  import { addTaskLabel, removeTaskLabel } from '../../lib/ipc'
+  import { getTaskLabels, hasLabelNamed } from '../../lib/taskLabels'
   import { getDependentReadinessLabel, getTaskDependentSummaries, getTaskDependencySummaries, getWaitingDependencyCount } from '../../lib/taskDependencies'
   import { getDependencyStatusPresentation } from '../../lib/dependencyStatusPresentation'
   import CopyButton from '../shared/ui/CopyButton.svelte'
   import TaskPromptSummary from './TaskPromptSummary.svelte'
   import TaskPullRequestStatus from './TaskPullRequestStatus.svelte'
   import TaskMergeStatus from './TaskMergeStatus.svelte'
+  import TaskLabelEditor from '../shared/tasks/TaskLabelEditor.svelte'
 
   interface Props {
     task: Task
@@ -15,15 +18,54 @@
 
   let { task, workspacePath }: Props = $props()
 
+  let labels = $state<TaskLabel[]>([])
+  let previousTaskId: string | null = null
+
   let taskPrs = $derived($ticketPrs.get(task.id) || [])
   let dependencies = $derived(getTaskDependencySummaries(task, $allTasks))
   let waitingDependencyCount = $derived(getWaitingDependencyCount(task, $allTasks))
   let dependents = $derived(getTaskDependentSummaries(task, $allTasks))
 
+  $effect(() => {
+    if (task.id !== previousTaskId) {
+      previousTaskId = task.id
+      labels = getTaskLabels(task)
+    }
+  })
+
+  function replaceTaskLabelsInStore(nextLabels: TaskLabel[]) {
+    allTasks.update((current) => current.map((storedTask) => {
+      if (storedTask.id !== task.id) return storedTask
+      return { ...storedTask, labels: nextLabels } as Task & { labels: TaskLabel[] }
+    }))
+  }
+
+  async function handleAddLabel(labelOrName: TaskLabel | string) {
+    if (hasLabelNamed(labels, typeof labelOrName === 'string' ? labelOrName : labelOrName.name)) return
+    const label = typeof labelOrName === 'string'
+      ? await addTaskLabel(task.id, labelOrName)
+      : await addTaskLabel(task.id, labelOrName.name)
+    labels = [...labels, label]
+    replaceTaskLabelsInStore(labels)
+  }
+
+  async function handleRemoveLabel(label: TaskLabel) {
+    await removeTaskLabel(task.id, label.id)
+    labels = labels.filter((selected) => selected.id !== label.id)
+    replaceTaskLabelsInStore(labels)
+  }
+
 </script>
 
 <div class="flex flex-col gap-5 p-5 overflow-y-auto bg-base-200 h-full">
   <TaskPromptSummary {task} />
+
+  <TaskLabelEditor
+    projectId={task.project_id}
+    selectedLabels={labels}
+    onAdd={handleAddLabel}
+    onRemove={handleRemoveLabel}
+  />
 
   {#if dependencies.length > 0}
     <section class="flex flex-col gap-2.5" aria-label="Dependencies" aria-live="polite">

@@ -1,5 +1,7 @@
 <script lang="ts">
   import type { Task, AgentSession, PullRequestInfo } from '../../lib/types'
+  import { getTaskLabels } from '../../lib/taskLabels'
+  import TaskLabelPills from '../shared/tasks/TaskLabelPills.svelte'
   import type { TaskState } from '../../lib/taskState'
   import { getStateDrivingPr } from '../../lib/taskState'
   import { getTaskListItemPresentation, getTaskStateBadgeClass } from '../../lib/taskStatePresentation'
@@ -13,6 +15,7 @@
     pullRequests: PullRequestInfo[]
     reasonText: string
     dependencyHint?: string | null
+    showLabels?: boolean
     isSelected: boolean
     isFocused: boolean
     isMerging: boolean
@@ -20,7 +23,7 @@
     onContextMenu: (e: MouseEvent) => void
   }
 
-  let { task, state, session, pullRequests, reasonText, dependencyHint = null, isSelected, isFocused, isMerging, onSelect, onContextMenu }: Props = $props()
+  let { task, state, session, pullRequests, reasonText, dependencyHint = null, showLabels = false, isSelected, isFocused, isMerging, onSelect, onContextMenu }: Props = $props()
 
   function truncate(text: string, max: number): string {
     return text.length > max ? text.slice(0, max) + '...' : text
@@ -29,6 +32,7 @@
   let badgeClass = $derived(getTaskStateBadgeClass(state))
   let presentation = $derived(getTaskListItemPresentation(state, reasonText, isMerging))
   let firstPr = $derived(getStateDrivingPr(pullRequests))
+  let labels = $derived(getTaskLabels(task))
 </script>
 
 <div
@@ -72,6 +76,10 @@
 
   {#if dependencyHint}
     <div class="text-xs text-warning truncate">{dependencyHint}</div>
+  {/if}
+
+  {#if showLabels && labels.length > 0}
+    <TaskLabelPills {labels} max={3} />
   {/if}
 
   {#if firstPr}

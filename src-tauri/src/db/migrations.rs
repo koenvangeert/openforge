@@ -1052,6 +1052,34 @@ CREATE INDEX IF NOT EXISTS idx_task_dependencies_depends_on ON task_dependencies
     Ok(())
 }
 
+pub(super) fn ensure_task_label_tables(conn: &Connection) -> Result<()> {
+    conn.execute_batch(
+        r#"
+CREATE TABLE IF NOT EXISTS task_labels (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    name_normalized TEXT NOT NULL,
+    color TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    UNIQUE(project_id, name_normalized)
+);
+CREATE INDEX IF NOT EXISTS idx_task_labels_project ON task_labels(project_id, name_normalized);
+
+CREATE TABLE IF NOT EXISTS task_label_assignments (
+    task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+    label_id INTEGER NOT NULL REFERENCES task_labels(id) ON DELETE CASCADE,
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (task_id, label_id)
+);
+CREATE INDEX IF NOT EXISTS idx_task_label_assignments_task ON task_label_assignments(task_id);
+CREATE INDEX IF NOT EXISTS idx_task_label_assignments_label ON task_label_assignments(label_id);
+        "#,
+    )?;
+    Ok(())
+}
+
 pub(super) fn ensure_plugin_tables(conn: &Connection) -> Result<()> {
     conn.execute_batch(
         r#"

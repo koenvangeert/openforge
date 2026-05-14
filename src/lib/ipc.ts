@@ -1,12 +1,12 @@
 import { invokeDesktopCommand as invoke, isElectronDesktopBridgeAvailable } from "./desktopIpc";
 import { normalizeTask } from "./boardStatus"
 import type { JsonValue } from '@openforge/plugin-sdk'
-import type { AgentReviewComment, AgentSession, AuthoredPullRequest, AutocompleteAgentInfo, BoardStatus, CommandInfo, CommitInfo, FileContent, FileEntry, ImplementationStatus, PollResult, PrComment, PrFileDiff, PrOverviewComment, Project, ProjectAttention, ProviderModelInfo, PullRequestInfo, ReviewComment, ReviewPullRequest, ReviewSubmissionComment, SelfReviewComment, SkillInfo, Task, TaskWorkspaceInfo, TranscriptionResult, WhisperModelSizeId, WhisperModelStatus, WorktreeInfo } from "./types";
+import type { AgentReviewComment, AgentSession, AuthoredPullRequest, AutocompleteAgentInfo, BoardStatus, CommandInfo, CommitInfo, FileContent, FileEntry, ImplementationStatus, PollResult, PrComment, PrFileDiff, PrOverviewComment, Project, ProjectAttention, ProviderModelInfo, PullRequestInfo, ReviewComment, ReviewPullRequest, ReviewSubmissionComment, SelfReviewComment, SkillInfo, Task, TaskLabel, TaskWorkspaceInfo, TranscriptionResult, WhisperModelSizeId, WhisperModelStatus, WorktreeInfo } from "./types";
 
 type RawTask = Omit<Task, 'status'> & { status: string }
 
-export async function createTask(initialPrompt: string, status: BoardStatus, projectId: string | null, permissionMode: string | null, dependsOn: string[] = []): Promise<Task> {
-  const task = await invoke<RawTask>("create_task", { initialPrompt, status, projectId, permissionMode, dependsOn });
+export async function createTask(initialPrompt: string, status: BoardStatus, projectId: string | null, permissionMode: string | null, dependsOn: string[] = [], labelNames: string[] = []): Promise<Task> {
+  const task = await invoke<RawTask>("create_task", { initialPrompt, status, projectId, permissionMode, dependsOn, labelNames });
   return normalizeTask(task)
 }
 
@@ -75,6 +75,22 @@ export async function getAllTasks(): Promise<Task[]> {
 export async function getTasksForProject(projectId: string): Promise<Task[]> {
   const tasks = await invoke<RawTask[]>("get_tasks_for_project", { projectId });
   return tasks.map(normalizeTask)
+}
+
+export async function getProjectTaskLabels(projectId: string): Promise<TaskLabel[]> {
+  return invoke<TaskLabel[]>("get_project_task_labels", { projectId })
+}
+
+export async function createTaskLabel(projectId: string, name: string): Promise<TaskLabel> {
+  return invoke<TaskLabel>("create_task_label", { projectId, name })
+}
+
+export async function addTaskLabel(taskId: string, name: string): Promise<TaskLabel> {
+  return invoke<TaskLabel>("add_task_label", { taskId, name })
+}
+
+export async function removeTaskLabel(taskId: string, labelId: number): Promise<void> {
+  return invoke("remove_task_label", { taskId, labelId })
 }
 
 export async function startImplementation(taskId: string, repoPath: string): Promise<ImplementationStatus> {

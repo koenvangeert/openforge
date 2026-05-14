@@ -209,6 +209,7 @@ pub(super) async fn handle_app_unmatched_command(
             let project_id = payload_optional_string(&request.payload, "projectId")?;
             let permission_mode = payload_optional_string(&request.payload, "permissionMode")?;
             let depends_on = payload_optional_string_vec(&request.payload, "dependsOn")?;
+            let label_names = payload_optional_string_vec(&request.payload, "labelNames")?;
             let task = db
                 .create_task(
                     &initial_prompt,
@@ -230,6 +231,17 @@ pub(super) async fn handle_app_unmatched_command(
                         return Err((
                             StatusCode::BAD_REQUEST,
                             format!("Failed to set task dependencies: {e}"),
+                        ));
+                    }
+                }
+            }
+            if let Some(label_names) = label_names {
+                if !label_names.is_empty() {
+                    if let Err(e) = db.set_task_labels(&task.id, &label_names) {
+                        let _ = db.delete_task(&task.id);
+                        return Err((
+                            StatusCode::BAD_REQUEST,
+                            format!("Failed to set task labels: {e}"),
                         ));
                     }
                 }
@@ -406,6 +418,46 @@ pub(super) async fn handle_app_unmatched_command(
                     );
                 }
             }
+            serde_json::Value::Null
+        }
+        "get_project_task_labels" => {
+            let project_id = payload_string(&request.payload, "projectId")?;
+            json_value(db.get_project_task_labels(&project_id).map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Failed to get project labels: {e}"),
+                )
+            })?)?
+        }
+        "create_task_label" => {
+            let project_id = payload_string(&request.payload, "projectId")?;
+            let name = payload_string(&request.payload, "name")?;
+            json_value(db.create_task_label(&project_id, &name).map_err(|e| {
+                (
+                    StatusCode::BAD_REQUEST,
+                    format!("Failed to create task label: {e}"),
+                )
+            })?)?
+        }
+        "add_task_label" => {
+            let task_id = payload_string(&request.payload, "taskId")?;
+            let name = payload_string(&request.payload, "name")?;
+            json_value(db.add_task_label(&task_id, &name).map_err(|e| {
+                (
+                    StatusCode::BAD_REQUEST,
+                    format!("Failed to add task label: {e}"),
+                )
+            })?)?
+        }
+        "remove_task_label" => {
+            let task_id = payload_string(&request.payload, "taskId")?;
+            let label_id = payload_i64(&request.payload, "labelId")?;
+            db.remove_task_label(&task_id, label_id).map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Failed to remove task label: {e}"),
+                )
+            })?;
             serde_json::Value::Null
         }
         "get_task_detail" => {

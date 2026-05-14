@@ -325,10 +325,15 @@ mod tests {
 
         let cli_content = std::fs::read_to_string(&cli_js).unwrap();
         assert!(cli_content.contains("create-task"));
+        assert!(cli_content.contains("--label"));
+        assert!(cli_content.contains("add-task-label"));
+        assert!(cli_content.contains("list-task-labels"));
+        assert!(cli_content.contains("remove-task-label"));
         assert!(!cli_content.contains("'mcp'"));
 
         let skill_content = std::fs::read_to_string(&skill_md).unwrap();
         assert!(skill_content.contains("openforge update-task"));
+        assert!(skill_content.contains("openforge add-task-label"));
         assert!(skill_content.contains("Task summaries are Markdown-formatted"));
         assert!(skill_content.contains("$HOME/.openforge/bin/openforge"));
         assert!(!skill_content.contains("cli.js"));
@@ -364,6 +369,8 @@ mod tests {
             assert!(content.contains("name: openforge"));
             assert!(content.contains("OPENFORGE_HTTP_PORT"));
             assert!(content.contains("openforge get-task"));
+            assert!(content.contains("openforge list-task-labels"));
+            assert!(content.contains("Use labels to record task categories"));
             assert!(content.contains("Task summaries are Markdown-formatted"));
             assert!(content.contains("$HOME/.openforge/bin/openforge"));
             assert!(!content.contains("openforge/cli/cli.js"));

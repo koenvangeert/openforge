@@ -1,11 +1,11 @@
-import { render, screen, fireEvent } from '@testing-library/svelte'
+import { render, screen, fireEvent, waitFor } from '@testing-library/svelte'
 import { beforeEach, describe, it, expect, vi } from 'vitest'
 import { writable } from 'svelte/store'
 import { requireElement } from '../../test-utils/dom'
 import TaskInfoPanel from './TaskInfoPanel.svelte'
-import type { Task, PullRequestInfo } from '../../lib/types'
+import type { Task, PullRequestInfo, TaskLabel } from '../../lib/types'
 import { mergingTaskIds, tasks, ticketPrs } from '../../lib/stores'
-import { forceGithubSync, getPullRequests, mergePullRequest } from '../../lib/ipc'
+import { addTaskLabel, forceGithubSync, getPullRequests, mergePullRequest, removeTaskLabel } from '../../lib/ipc'
 
 vi.mock('../../lib/stores', () => ({
   ticketPrs: writable(new Map()),
@@ -27,11 +27,16 @@ vi.mock('../../lib/ipc', () => ({
   getPullRequests: vi.fn().mockResolvedValue([]),
   mergePullRequest: vi.fn().mockResolvedValue(undefined),
   openUrl: vi.fn().mockResolvedValue(undefined),
+  getProjectTaskLabels: vi.fn().mockResolvedValue([]),
+  addTaskLabel: vi.fn().mockResolvedValue({ id: 1, project_id: 'proj-1', name: 'bug', color: 'error' }),
+  removeTaskLabel: vi.fn().mockResolvedValue(undefined),
 }))
 
 vi.mock('../../lib/desktopIpc', () => ({
   listenDesktopEvent: vi.fn().mockResolvedValue(() => {}),
 }))
+
+const bugLabel: TaskLabel = { id: 1, project_id: 'proj-1', name: 'bug', color: 'error' }
 
 const baseTask: Task = {
   id: 'T-42',
@@ -42,10 +47,10 @@ const baseTask: Task = {
   agent: null,
   permission_mode: null,
   depends_on: [],
-  project_id: null,
+  project_id: 'proj-1',
   created_at: 1000,
   updated_at: 2000,
-}
+} as Task & { labels?: TaskLabel[] }
 
 describe('TaskInfoPanel', () => {
   beforeEach(() => {
@@ -86,6 +91,29 @@ describe('TaskInfoPanel', () => {
     expect(screen.getByText('// INITIAL_PROMPT')).toBeTruthy()
     expect(screen.getByText('Implement auth middleware')).toBeTruthy()
     expect(screen.queryByText('Build the auth middleware implementation with JWT support')).toBeNull()
+  })
+
+  it('renders existing labels and adds/removes labels through IPC', async () => {
+    render(TaskInfoPanel, {
+      props: {
+        task: { ...baseTask, labels: [bugLabel] } as Task & { labels: TaskLabel[] },
+        workspacePath: null,
+      },
+    })
+
+    expect(screen.getByText('// LABELS')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Remove label bug' })).toBeTruthy()
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Remove label bug' }))
+    expect(removeTaskLabel).toHaveBeenCalledWith('T-42', bugLabel.id)
+
+    const input = screen.getByRole('textbox', { name: 'Add label' })
+    await fireEvent.input(input, { target: { value: 'bug' } })
+    await fireEvent.keyDown(input, { key: 'Enter' })
+
+    await waitFor(() => {
+      expect(addTaskLabel).toHaveBeenCalledWith('T-42', 'bug')
+    })
   })
 
   it('renders prompt as read-only text (no input elements in prompt section)', () => {
