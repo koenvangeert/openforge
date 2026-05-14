@@ -4,12 +4,15 @@ const HTTP_PORT = process.env.OPENFORGE_HTTP_PORT ?? '17422';
 const BASE_URL = `http://127.0.0.1:${HTTP_PORT}`;
 
 const COMMAND_FLAGS = {
-  'create-task': new Set(['initialPrompt', 'projectId', 'worktree', 'dependsOn']),
+  'create-task': new Set(['initialPrompt', 'projectId', 'worktree', 'dependsOn', 'label']),
   'update-task': new Set(['taskId', 'summary']),
   'set-task-dependencies': new Set(['taskId', 'dependsOn']),
   'add-task-dependency': new Set(['taskId', 'dependsOn']),
   'link-tasks': new Set(['chain']),
   'get-task': new Set(['taskId']),
+  'list-task-labels': new Set(['taskId']),
+  'add-task-label': new Set(['taskId', 'label']),
+  'remove-task-label': new Set(['taskId', 'labelId']),
   'list-tasks': new Set(['projectId', 'state']),
   'list-projects': new Set(),
 };
@@ -20,12 +23,15 @@ function printHelp() {
   console.log(`OpenForge CLI
 
 Usage:
-  openforge create-task --initial-prompt <text> [--project-id <id>] [--worktree <path>] [--depends-on <task-id>[,<task-id>...]]
+  openforge create-task --initial-prompt <text> [--project-id <id>] [--worktree <path>] [--depends-on <task-id>[,<task-id>...]] [--label <name>[,<name>...]]
   openforge update-task --task-id <id> --summary <text>
   openforge set-task-dependencies --task-id <id> --depends-on <task-id>[,<task-id>...]
   openforge add-task-dependency --task-id <id> --depends-on <task-id>
   openforge link-tasks --chain "T-1 -> T-2 -> T-3"
   openforge get-task --task-id <id>
+  openforge list-task-labels --task-id <id>
+  openforge add-task-label --task-id <id> --label <name>
+  openforge remove-task-label --task-id <id> --label-id <id>
   openforge list-tasks --project-id <id> [--state backlog|doing|done]
   openforge list-projects
 
@@ -95,7 +101,7 @@ function optionalString(flags, name) {
   return typeof flags[name] === 'string' ? flags[name] : undefined;
 }
 
-function dependencyIdsFromFlag(flags, name = 'dependsOn') {
+function stringListFromFlag(flags, name) {
   const raw = flags[name];
   const values = Array.isArray(raw) ? raw : raw === undefined ? [] : [raw];
   const result = [];
@@ -107,6 +113,14 @@ function dependencyIdsFromFlag(flags, name = 'dependsOn') {
     }
   }
   return result;
+}
+
+function dependencyIdsFromFlag(flags, name = 'dependsOn') {
+  return stringListFromFlag(flags, name);
+}
+
+function labelNamesFromFlag(flags) {
+  return stringListFromFlag(flags, 'label');
 }
 
 function parseTaskChain(value) {
@@ -162,11 +176,13 @@ async function main(argv) {
   switch (command) {
     case 'create-task': {
       const dependsOn = dependencyIdsFromFlag(flags);
+      const labels = labelNamesFromFlag(flags);
       const payload = {
         initial_prompt: requireFlag(flags, 'initialPrompt'),
         project_id: optionalString(flags, 'projectId'),
         worktree: optionalString(flags, 'worktree'),
         depends_on: dependsOn.length > 0 ? dependsOn : undefined,
+        labels: labels.length > 0 ? labels : undefined,
       };
       printJson(await requestJson('/create_task', { method: 'POST', body: JSON.stringify(payload) }));
       return;
@@ -220,6 +236,36 @@ async function main(argv) {
     case 'get-task': {
       const taskId = encodeURIComponent(requireFlag(flags, 'taskId'));
       printJson(await requestJson(`/task/${taskId}`));
+      return;
+    }
+    case 'list-task-labels': {
+      const taskId = encodeURIComponent(requireFlag(flags, 'taskId'));
+      printJson(await requestJson(`/task/${taskId}/labels`));
+      return;
+    }
+    case 'add-task-label': {
+      const labels = labelNamesFromFlag(flags);
+      if (labels.length !== 1) {
+        throw new Error('add-task-label requires exactly one --label');
+      }
+      const payload = {
+        task_id: requireFlag(flags, 'taskId'),
+        label: labels[0],
+      };
+      printJson(await requestJson('/add_task_label', { method: 'POST', body: JSON.stringify(payload) }));
+      return;
+    }
+    case 'remove-task-label': {
+      const labelIdRaw = requireFlag(flags, 'labelId');
+      const labelId = Number(labelIdRaw);
+      if (!Number.isInteger(labelId) || labelId <= 0) {
+        throw new Error('remove-task-label requires a positive integer --label-id');
+      }
+      const payload = {
+        task_id: requireFlag(flags, 'taskId'),
+        label_id: labelId,
+      };
+      printJson(await requestJson('/remove_task_label', { method: 'POST', body: JSON.stringify(payload) }));
       return;
     }
     case 'list-tasks': {

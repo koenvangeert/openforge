@@ -70,6 +70,22 @@ export const taskDraftNotes = writable<Map<string, string>>(new Map());
 
 export const focusBoardFilters = writable<Map<string, BoardFilter>>(new Map())
 
+function createBacklogLabelFilters() {
+  const store = writable<Map<string, Set<number>>>(new Map())
+  let previousProjectId: string | null | undefined = undefined
+
+  activeProjectId.subscribe((projectId) => {
+    if (previousProjectId !== undefined && projectId !== previousProjectId) {
+      store.set(new Map())
+    }
+    previousProjectId = projectId
+  })
+
+  return store
+}
+
+export const backlogLabelFilters = createBacklogLabelFilters()
+
 export const authoredPrs = writable<AuthoredPullRequest[]>([]);
 export const authoredPrCount = writable<number>(0);
 export const commandHeld = writable<boolean>(false);

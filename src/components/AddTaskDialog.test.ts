@@ -21,6 +21,7 @@ vi.mock('../lib/ipc', () => ({
   }),
   updateTask: vi.fn().mockResolvedValue(undefined),
   getProjectConfig: vi.fn().mockResolvedValue('claude-code'),
+  getProjectTaskLabels: vi.fn().mockResolvedValue([]),
 }))
 
 vi.mock('../lib/actions', () => ({
@@ -36,6 +37,13 @@ vi.mock('../lib/stores', () => {
     activeProjectId: writable('test-project-id'),
   }
 })
+
+async function findPromptTextbox(): Promise<HTMLTextAreaElement> {
+  await waitFor(() => {
+    expect(screen.getAllByRole('textbox').length).toBeGreaterThan(0)
+  })
+  return screen.getAllByRole('textbox')[0] as HTMLTextAreaElement
+}
 
 const mockTask = {
   id: 'T-42',
@@ -63,11 +71,8 @@ describe('AddTaskDialog', () => {
   it('renders in create mode with empty fields via PromptInput', async () => {
     render(AddTaskDialog, { props: { mode: 'create' } })
     expect(screen.getByRole('heading', { name: 'Create Task' })).toBeTruthy()
-    // Wait for PromptInput to be ready
-    await waitFor(() => {
-      const textbox = screen.getByRole('textbox') as HTMLTextAreaElement
-      expect(textbox.value).toBe('')
-    })
+    const textbox = await findPromptTextbox()
+    expect(textbox.value).toBe('')
   })
 
   it('closes before awaiting the async start flow', async () => {
@@ -79,7 +84,7 @@ describe('AddTaskDialog', () => {
 
     render(AddTaskDialog, { props: { mode: 'create', onClose, onRunAction } })
 
-    const textbox = await screen.findByRole('textbox')
+    const textbox = await findPromptTextbox()
     await fireEvent.input(textbox, { target: { value: 'Start me' } })
     await fireEvent.click(await screen.findByRole('button', { name: /Start Task/ }))
 
@@ -96,7 +101,7 @@ describe('AddTaskDialog', () => {
     const onTaskSaved = vi.fn()
     render(AddTaskDialog, { props: { mode: 'create', onTaskSaved } })
     
-    const textbox = await screen.findByRole('textbox')
+    const textbox = await findPromptTextbox()
     // Svelte bind:value needs the value to be updated, or we fire `input` event
     await fireEvent.input(textbox, { target: { value: 'My new task' } })
     
@@ -110,11 +115,19 @@ describe('AddTaskDialog', () => {
     })
   })
 
+  it('does not show label controls while creating a task', async () => {
+    render(AddTaskDialog, { props: { mode: 'create' } })
+
+    await findPromptTextbox()
+
+    expect(screen.queryByRole('textbox', { name: 'Add label' })).toBeNull()
+  })
+
   it('pre-fills fields in edit mode', async () => {
     render(AddTaskDialog, { props: { mode: 'edit', task: mockTask } })
     expect(screen.getByRole('heading', { name: 'Edit Task' })).toBeTruthy()
     
-    const textbox = await screen.findByRole('textbox') as HTMLTextAreaElement
+    const textbox = await findPromptTextbox()
     expect(textbox.value).toBe('Existing Task')
   })
 
@@ -126,7 +139,7 @@ describe('AddTaskDialog', () => {
       },
     })
 
-    const textbox = await screen.findByRole('textbox') as HTMLTextAreaElement
+    const textbox = await findPromptTextbox()
     expect(textbox.value).toBe('Mutable prompt text')
   })
 
@@ -155,7 +168,7 @@ describe('AddTaskDialog', () => {
     vi.mocked(getProjectConfig).mockResolvedValue('opencode')
     render(AddTaskDialog, { props: { mode: 'create', onRunAction } })
 
-    const textbox = await screen.findByRole('textbox')
+    const textbox = await findPromptTextbox()
 
     await waitFor(() => {
       expect(screen.queryByRole('combobox')).toBeNull()
@@ -174,7 +187,7 @@ describe('AddTaskDialog', () => {
     const onRunAction = vi.fn()
     render(AddTaskDialog, { props: { mode: 'create', onRunAction } })
 
-    const textbox = await screen.findByRole('textbox')
+    const textbox = await findPromptTextbox()
     await fireEvent.input(textbox, { target: { value: 'Task with action' } })
 
     const actionButton = await screen.findByRole('button', { name: 'Test Action' })
@@ -190,7 +203,7 @@ describe('AddTaskDialog', () => {
     const onRunAction = vi.fn()
     render(AddTaskDialog, { props: { mode: 'create', onRunAction } })
     
-    const textbox = await screen.findByRole('textbox')
+    const textbox = await findPromptTextbox()
     await fireEvent.input(textbox, { target: { value: 'Task to start' } })
     
     const startBtn = await screen.findByRole('button', { name: /Start Task/ })

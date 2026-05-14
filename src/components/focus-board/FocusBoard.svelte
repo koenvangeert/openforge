@@ -1,6 +1,6 @@
 <script lang="ts">
   import { untrack } from 'svelte'
-  import { commandHeld, focusBoardFilters, mergingTaskIds } from '../../lib/stores'
+  import { backlogLabelFilters, commandHeld, focusBoardFilters, mergingTaskIds } from '../../lib/stores'
   import { filterTasks, getFilterCounts, DEFAULT_FOCUS_STATES, loadFocusFilterStates } from '../../lib/boardFilters'
   import type { BoardFilter } from '../../lib/boardFilters'
   import { getDependencyWaitLabel } from '../../lib/taskDependencies'
@@ -11,11 +11,13 @@
   import { useVimNavigation } from '../../lib/useVimNavigation.svelte'
   import { getHTMLElementAt, isInputFocused } from '../../lib/domUtils'
   import { loadActions, getEnabledActions } from '../../lib/actions'
+  import { getProjectTaskLabels } from '../../lib/ipc'
+  import { getBacklogLabelCounts, getLabelsWithBacklogItems, getTaskLabels, pruneSelectedBacklogLabelIds, taskMatchesAnySelectedLabel } from '../../lib/taskLabels'
   import TaskListItem from './TaskListItem.svelte'
   import TaskDetailPane from './TaskDetailPane.svelte'
   import TaskContextMenu from '../shared/tasks/TaskContextMenu.svelte'
   import FocusEmptyState from './FocusEmptyState.svelte'
-  import type { Task, AgentSession, PullRequestInfo, Action } from '../../lib/types'
+  import type { Task, AgentSession, PullRequestInfo, Action, TaskLabel } from '../../lib/types'
 
   interface Props {
     projectId: string | null
@@ -39,20 +41,42 @@
   let paneHasFocus = $state(false)
   let contextMenu = $state({ visible: false, x: 0, y: 0, taskId: '' })
   let projectActions = $state<Action[]>([])
+  let projectLabels = $state<TaskLabel[]>([])
   let focusStates = $state<TaskState[]>(DEFAULT_FOCUS_STATES)
   let fallbackFilter: BoardFilter = $state('focus')
+  let previousProjectId: string | null | undefined = undefined
+  let labelLoadRequest = 0
 
   let activeFilter = $derived.by(() => {
     if (!projectId) return fallbackFilter
     return $focusBoardFilters.get(projectId) ?? 'focus'
   })
 
+  let selectedLabelIds = $derived.by(() => {
+    if (!projectId) return new Set<number>()
+    return $backlogLabelFilters.get(projectId) ?? new Set<number>()
+  })
+
   let filteredTasks = $derived.by(() => {
     const filtered = filterTasks(tasks, activeFilter, activeSessions, ticketPrs, focusStates)
-    return sortBySessionActivity(filtered, activeSessions)
+    const labelFiltered = activeFilter === 'backlog'
+      ? filtered.filter((task) => taskMatchesAnySelectedLabel(task, selectedLabelIds))
+      : filtered
+    return sortBySessionActivity(labelFiltered, activeSessions)
   })
 
   let filterCounts = $derived.by(() => getFilterCounts(tasks, activeSessions, ticketPrs, focusStates))
+  let displayProjectLabels = $derived.by(() => {
+    const labelsById = new Map(projectLabels.map((label) => [label.id, label]))
+    for (const task of tasks) {
+      for (const label of getTaskLabels(task)) {
+        labelsById.set(label.id, label)
+      }
+    }
+    return Array.from(labelsById.values()).sort((a, b) => a.name.localeCompare(b.name))
+  })
+  let labelCounts = $derived.by(() => getBacklogLabelCounts(tasks, displayProjectLabels))
+  let visibleFilterLabels = $derived.by(() => getLabelsWithBacklogItems(displayProjectLabels, labelCounts))
 
   let selectedTask = $derived.by(() => {
     if (!selectedTaskIdLocal) return null
@@ -70,9 +94,46 @@
   }
 
   $effect(() => {
+    const isInitialProject = previousProjectId === undefined
+    if (!isInitialProject && projectId !== previousProjectId) {
+      backlogLabelFilters.set(new Map())
+      selectedTaskIdLocal = null
+    }
+    previousProjectId = projectId
+
+    if (!projectId) {
+      projectLabels = []
+      return
+    }
+    const requestId = ++labelLoadRequest
+    getProjectTaskLabels(projectId)
+      .then((labels) => {
+        if (requestId === labelLoadRequest) projectLabels = labels
+      })
+      .catch(() => {
+        if (requestId === labelLoadRequest) projectLabels = []
+      })
+  })
+
+  $effect(() => {
     if (selectedTaskIdLocal && !filteredTasks.find(t => t.id === selectedTaskIdLocal)) {
       selectedTaskIdLocal = null
     }
+  })
+
+  $effect(() => {
+    if (!projectId || selectedLabelIds.size === 0) return
+
+    const prunedSelectedIds = pruneSelectedBacklogLabelIds(selectedLabelIds, visibleFilterLabels)
+    if (prunedSelectedIds.size === selectedLabelIds.size) return
+
+    const nextFilters = new Map($backlogLabelFilters)
+    if (prunedSelectedIds.size > 0) {
+      nextFilters.set(projectId, prunedSelectedIds)
+    } else {
+      nextFilters.delete(projectId)
+    }
+    backlogLabelFilters.set(nextFilters)
   })
 
   const vim = useVimNavigation({
@@ -159,6 +220,25 @@
     vim.handleKeydown(e)
   }
 
+  function toggleLabelFilter(labelId: number) {
+    if (!projectId) return
+    const nextSelectedIds = new Set(selectedLabelIds)
+    if (nextSelectedIds.has(labelId)) {
+      nextSelectedIds.delete(labelId)
+    } else {
+      nextSelectedIds.add(labelId)
+    }
+    const nextFilters = new Map($backlogLabelFilters)
+    if (nextSelectedIds.size > 0) {
+      nextFilters.set(projectId, nextSelectedIds)
+    } else {
+      nextFilters.delete(projectId)
+    }
+    backlogLabelFilters.set(nextFilters)
+    selectedTaskIdLocal = null
+    vim.setFocusedIndex(0)
+  }
+
   function handleContextMenu(event: MouseEvent, taskId: string) {
     event.preventDefault()
     contextMenu = { visible: true, x: event.clientX, y: event.clientY, taskId }
@@ -210,6 +290,22 @@
         </div>
       {/if}
 
+      {#if activeFilter === 'backlog' && visibleFilterLabels.length > 0}
+        <div class="flex flex-wrap items-center gap-2" aria-label="Backlog label filters">
+          <span class="text-xs font-semibold text-base-content/50">Labels</span>
+          {#each visibleFilterLabels as label (label.id)}
+            <button
+              class="badge badge-sm gap-1 {selectedLabelIds.has(label.id) ? 'badge-primary' : 'badge-ghost'}"
+              aria-pressed={selectedLabelIds.has(label.id)}
+              onclick={() => toggleLabelFilter(label.id)}
+            >
+              <span>{label.name}</span>
+              <span class="opacity-70">{labelCounts.get(label.id) ?? 0}</span>
+            </button>
+          {/each}
+        </div>
+      {/if}
+
       {#if filteredTasks.length === 0}
         <FocusEmptyState filter={activeFilter} />
       {:else}
@@ -224,6 +320,7 @@
             {pullRequests}
             reasonText={getTaskReasonText(state, pullRequests)}
             dependencyHint={activeFilter === 'backlog' ? getDependencyWaitLabel(task, tasks) : null}
+            showLabels={activeFilter === 'backlog'}
             isSelected={selectedTaskIdLocal === task.id}
             isFocused={vim.focusedIndex === i}
             isMerging={$mergingTaskIds.has(task.id)}

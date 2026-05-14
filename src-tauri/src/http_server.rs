@@ -43,6 +43,8 @@ pub struct CreateTaskRequest {
     pub worktree: Option<String>,
     #[serde(default)]
     pub depends_on: Vec<String>,
+    #[serde(default)]
+    pub labels: Vec<String>,
 }
 
 #[derive(Clone)]
@@ -228,6 +230,32 @@ pub struct GetTaskInfoResponse {
     pub summary: Option<String>,
     pub status: String,
     pub depends_on: Vec<String>,
+    pub labels: Vec<db::TaskLabelRow>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct TaskLabelsResponse {
+    pub task_id: String,
+    pub labels: Vec<db::TaskLabelRow>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AddTaskLabelRequest {
+    pub task_id: String,
+    pub label: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RemoveTaskLabelRequest {
+    pub task_id: String,
+    pub label_id: i64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct AddTaskLabelResponse {
+    pub task_id: String,
+    pub status: String,
+    pub label: db::TaskLabelRow,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -458,6 +486,16 @@ pub async fn create_task_handler(
         }
     }
 
+    if !request.labels.is_empty() {
+        if let Err(e) = db.set_task_labels(&task.id, &request.labels) {
+            let _ = db.delete_task(&task.id);
+            return Err((
+                StatusCode::BAD_REQUEST,
+                format!("Failed to set task labels: {e}"),
+            ));
+        }
+    }
+
     drop(db);
 
     emit_task_changed(&state, "created", &task.id, task.project_id.as_deref());
@@ -597,9 +635,74 @@ pub async fn get_task_info_handler(
             summary: task.summary,
             status: task.status,
             depends_on: task.depends_on,
+            labels: task.labels,
         })),
         None => Err(StatusCode::NOT_FOUND),
     }
+}
+
+pub async fn list_task_labels_handler(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<Json<TaskLabelsResponse>, StatusCode> {
+    let db = state.db.lock().unwrap();
+
+    match db
+        .get_task(&id)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    {
+        Some(task) => Ok(Json(TaskLabelsResponse {
+            task_id: task.id,
+            labels: task.labels,
+        })),
+        None => Err(StatusCode::NOT_FOUND),
+    }
+}
+
+pub async fn add_task_label_handler(
+    State(state): State<AppState>,
+    Json(request): Json<AddTaskLabelRequest>,
+) -> Result<Json<AddTaskLabelResponse>, (StatusCode, String)> {
+    let db = state.db.lock().unwrap();
+    let label = db
+        .add_task_label(&request.task_id, &request.label)
+        .map_err(|e| {
+            (
+                StatusCode::BAD_REQUEST,
+                format!("Failed to add task label: {e}"),
+            )
+        })?;
+    drop(db);
+
+    emit_task_changed(&state, "updated", &request.task_id, None);
+
+    Ok(Json(AddTaskLabelResponse {
+        task_id: request.task_id,
+        status: "updated".to_string(),
+        label,
+    }))
+}
+
+pub async fn remove_task_label_handler(
+    State(state): State<AppState>,
+    Json(request): Json<RemoveTaskLabelRequest>,
+) -> Result<Json<UpdateTaskResponse>, (StatusCode, String)> {
+    let db = state.db.lock().unwrap();
+    db.remove_task_label(&request.task_id, request.label_id)
+        .map_err(|e| {
+            (
+                StatusCode::BAD_REQUEST,
+                format!("Failed to remove task label: {e}"),
+            )
+        })?;
+    drop(db);
+
+    emit_task_changed(&state, "updated", &request.task_id, None);
+
+    Ok(Json(UpdateTaskResponse {
+        task_id: request.task_id,
+        status: "updated".to_string(),
+    }))
 }
 
 pub async fn get_projects_handler(
@@ -1089,6 +1192,9 @@ pub fn create_router(state: AppState) -> Router {
         )
         .route("/add_task_dependency", post(add_task_dependency_handler))
         .route("/link_task_chain", post(link_task_chain_handler))
+        .route("/task/:id/labels", get(list_task_labels_handler))
+        .route("/add_task_label", post(add_task_label_handler))
+        .route("/remove_task_label", post(remove_task_label_handler))
         .route("/task/:id", get(get_task_info_handler))
         .route("/projects", get(get_projects_handler))
         .route("/tasks", get(get_tasks_handler))

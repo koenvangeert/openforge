@@ -285,6 +285,7 @@ mod tests {
             agent: None,
             permission_mode: None,
             depends_on: Vec::new(),
+            labels: Vec::new(),
         }
     }
 

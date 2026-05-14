@@ -118,6 +118,129 @@ async fn test_create_task_handler_persists_dependency_ids() {
 }
 
 #[tokio::test]
+async fn test_create_task_handler_persists_labels() {
+    let (state, path) = test_state("http_create_task_handler_labels");
+    {
+        let db = state.db.lock().expect("lock db");
+        db.create_project("Project", "/tmp/project")
+            .expect("create project");
+        db.set_config("task_id_prefix", "T")
+            .expect("set task prefix");
+    }
+
+    let router = create_router(state.clone());
+    let response = router
+        .oneshot(
+            Request::builder()
+                .uri("/create_task")
+                .method("POST")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    r#"{"initial_prompt":"Labelled task","project_id":"P-1","labels":["bug","ui"]}"#,
+                ))
+                .expect("build request"),
+        )
+        .await
+        .expect("request should succeed");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let task = state
+        .db
+        .lock()
+        .expect("lock db")
+        .get_task("T-1")
+        .expect("get task")
+        .expect("task exists");
+    let label_names: Vec<_> = task
+        .labels
+        .iter()
+        .map(|label| label.name.as_str())
+        .collect();
+    assert_eq!(label_names, vec!["bug", "ui"]);
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
+async fn test_task_label_handlers_list_add_and_remove_labels() {
+    let (state, path) = test_state("http_task_label_handlers");
+    {
+        let db = state.db.lock().expect("lock db");
+        let project = db
+            .create_project("Project", "/tmp/project")
+            .expect("create project");
+        db.set_config("task_id_prefix", "T")
+            .expect("set task prefix");
+        db.create_task("Task", "backlog", Some(&project.id), None, None)
+            .expect("create task");
+    }
+
+    let router = create_router(state.clone());
+    let add_response = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/add_task_label")
+                .method("POST")
+                .header("content-type", "application/json")
+                .body(Body::from(r#"{"task_id":"T-1","label":"bug"}"#))
+                .expect("build add request"),
+        )
+        .await
+        .expect("add request should succeed");
+
+    assert_eq!(add_response.status(), StatusCode::OK);
+    let add_json = response_body_json(add_response).await;
+    assert_eq!(add_json["task_id"], "T-1");
+    assert_eq!(add_json["status"], "updated");
+    assert_eq!(add_json["label"]["name"], "bug");
+    let label_id = add_json["label"]["id"].as_i64().expect("label id");
+
+    let list_response = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/task/T-1/labels")
+                .method("GET")
+                .body(Body::empty())
+                .expect("build list request"),
+        )
+        .await
+        .expect("list request should succeed");
+
+    assert_eq!(list_response.status(), StatusCode::OK);
+    let list_json = response_body_json(list_response).await;
+    assert_eq!(list_json["task_id"], "T-1");
+    assert_eq!(list_json["labels"][0]["name"], "bug");
+
+    let remove_response = router
+        .oneshot(
+            Request::builder()
+                .uri("/remove_task_label")
+                .method("POST")
+                .header("content-type", "application/json")
+                .body(Body::from(format!(
+                    r#"{{"task_id":"T-1","label_id":{label_id}}}"#
+                )))
+                .expect("build remove request"),
+        )
+        .await
+        .expect("remove request should succeed");
+
+    assert_eq!(remove_response.status(), StatusCode::OK);
+    let task = state
+        .db
+        .lock()
+        .expect("lock db")
+        .get_task("T-1")
+        .expect("get task")
+        .expect("task exists");
+    assert!(task.labels.is_empty());
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
 async fn test_set_task_dependencies_handler_replaces_dependencies() {
     let (state, path) = test_state("http_set_task_dependencies_handler");
     {

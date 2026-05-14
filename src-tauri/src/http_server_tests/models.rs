@@ -14,10 +14,15 @@ fn test_create_task_request_creation() {
         project_id: Some("PROJ-1".to_string()),
         worktree: Some("/path/to/wt".to_string()),
         depends_on: vec!["T-1".to_string()],
+        labels: vec!["bug".to_string(), "needs review".to_string()],
     };
     assert_eq!(request.initial_prompt, "Test Task");
     assert_eq!(request.project_id, Some("PROJ-1".to_string()));
     assert_eq!(request.depends_on, vec!["T-1".to_string()]);
+    assert_eq!(
+        request.labels,
+        vec!["bug".to_string(), "needs review".to_string()]
+    );
 }
 
 #[test]
@@ -27,15 +32,17 @@ fn test_create_task_request_minimal_fields() {
         project_id: None,
         worktree: None,
         depends_on: Vec::new(),
+        labels: Vec::new(),
     };
     assert_eq!(request.initial_prompt, "Minimal Task");
     assert!(request.project_id.is_none());
     assert!(request.depends_on.is_empty());
+    assert!(request.labels.is_empty());
 }
 
 #[test]
 fn test_create_task_request_deserialize_all_fields() {
-    let json = r#"{"initial_prompt": "Implement Feature X", "project_id": "PROJ-42", "worktree": "/path/to/wt", "depends_on": ["T-1", "T-2"]}"#;
+    let json = r#"{"initial_prompt": "Implement Feature X", "project_id": "PROJ-42", "worktree": "/path/to/wt", "depends_on": ["T-1", "T-2"], "labels": ["bug", "needs review"]}"#;
     let request: CreateTaskRequest = serde_json::from_str(json).expect("Failed to deserialize");
     assert_eq!(request.initial_prompt, "Implement Feature X");
     assert_eq!(request.project_id, Some("PROJ-42".to_string()));
@@ -43,6 +50,10 @@ fn test_create_task_request_deserialize_all_fields() {
     assert_eq!(
         request.depends_on,
         vec!["T-1".to_string(), "T-2".to_string()]
+    );
+    assert_eq!(
+        request.labels,
+        vec!["bug".to_string(), "needs review".to_string()]
     );
 }
 
@@ -53,6 +64,14 @@ fn test_create_task_request_deserialize_only_required() {
     assert_eq!(request.initial_prompt, "Simple Task");
     assert!(request.project_id.is_none());
     assert!(request.depends_on.is_empty());
+    assert!(request.labels.is_empty());
+}
+
+#[test]
+fn test_create_task_request_deserialize_labels_only() {
+    let json = r#"{"initial_prompt": "Task with labels", "labels": ["bug", "ui"]}"#;
+    let request: CreateTaskRequest = serde_json::from_str(json).expect("deserialize labels");
+    assert_eq!(request.labels, vec!["bug".to_string(), "ui".to_string()]);
 }
 
 #[test]
@@ -63,6 +82,7 @@ fn test_create_task_request_deserialize_partial_optional() {
     assert_eq!(request.project_id, Some("PROJ-99".to_string()));
     assert!(request.worktree.is_none());
     assert!(request.depends_on.is_empty());
+    assert!(request.labels.is_empty());
 }
 
 #[test]
@@ -73,6 +93,7 @@ fn test_create_task_request_deserialize_empty_strings() {
     assert_eq!(request.project_id, Some("".to_string()));
     assert_eq!(request.worktree, Some("".to_string()));
     assert!(request.depends_on.is_empty());
+    assert!(request.labels.is_empty());
 }
 
 #[test]
@@ -92,6 +113,7 @@ fn test_create_task_request_serialize_roundtrip() {
         project_id: Some("PROJ-99".to_string()),
         worktree: Some("/path/to/worktree".to_string()),
         depends_on: vec!["T-1".to_string()],
+        labels: vec!["bug".to_string()],
     };
     let json = serde_json::to_string(&original).expect("Failed to serialize");
     let deserialized: CreateTaskRequest =
@@ -100,6 +122,7 @@ fn test_create_task_request_serialize_roundtrip() {
     assert_eq!(deserialized.project_id, original.project_id);
     assert_eq!(deserialized.worktree, original.worktree);
     assert_eq!(deserialized.depends_on, original.depends_on);
+    assert_eq!(deserialized.labels, original.labels);
 }
 
 #[test]
@@ -137,6 +160,40 @@ fn test_create_task_response_json_structure() {
     assert_eq!(json_value["task_id"], "T-789");
     assert_eq!(json_value["project_id"], "P-2");
     assert_eq!(json_value["status"], "created");
+}
+
+#[test]
+fn test_task_label_request_models_serialize_expected_fields() {
+    let add_request: AddTaskLabelRequest =
+        serde_json::from_str(r#"{"task_id":"T-1","label":"bug"}"#).expect("add request");
+    assert_eq!(add_request.task_id, "T-1");
+    assert_eq!(add_request.label, "bug");
+
+    let remove_request: RemoveTaskLabelRequest =
+        serde_json::from_str(r#"{"task_id":"T-1","label_id":42}"#).expect("remove request");
+    assert_eq!(remove_request.task_id, "T-1");
+    assert_eq!(remove_request.label_id, 42);
+
+    let label = crate::db::TaskLabelRow {
+        id: 42,
+        project_id: "P-1".to_string(),
+        name: "bug".to_string(),
+        color: "error".to_string(),
+    };
+    let list_response = TaskLabelsResponse {
+        task_id: "T-1".to_string(),
+        labels: vec![label.clone()],
+    };
+    let list_json = serde_json::to_value(&list_response).expect("list response");
+    assert_eq!(list_json["labels"][0]["name"], "bug");
+
+    let add_response = AddTaskLabelResponse {
+        task_id: "T-1".to_string(),
+        status: "updated".to_string(),
+        label,
+    };
+    let add_json = serde_json::to_value(&add_response).expect("add response");
+    assert_eq!(add_json["label"]["id"], 42);
 }
 
 #[test]
@@ -262,6 +319,7 @@ fn test_get_task_info_response_creation_all_fields() {
         summary: Some("Did the thing".to_string()),
         status: "doing".to_string(),
         depends_on: vec!["T-1".to_string()],
+        labels: Vec::new(),
     };
     assert_eq!(response.id, "T-42");
     assert_eq!(response.initial_prompt, "My Task");
@@ -279,6 +337,7 @@ fn test_get_task_info_response_creation_nullable_fields_none() {
         summary: None,
         status: "backlog".to_string(),
         depends_on: Vec::new(),
+        labels: Vec::new(),
     };
     assert!(response.prompt.is_none());
     assert!(response.summary.is_none());
@@ -293,6 +352,7 @@ fn test_get_task_info_response_serialize_all_fields() {
         summary: Some("Implemented X".to_string()),
         status: "done".to_string(),
         depends_on: Vec::new(),
+        labels: Vec::new(),
     };
     let json = serde_json::to_string(&response).expect("Failed to serialize");
     assert!(json.contains("\"id\":\"T-99\""));
@@ -311,6 +371,7 @@ fn test_get_task_info_response_only_exposes_expected_fields() {
         summary: Some("Implemented X".to_string()),
         status: "done".to_string(),
         depends_on: Vec::new(),
+        labels: Vec::new(),
     };
 
     let json_value = serde_json::to_value(&response).expect("Failed to serialize");
@@ -321,11 +382,12 @@ fn test_get_task_info_response_only_exposes_expected_fields() {
             && json_value.get("summary").is_some()
             && json_value.get("status").is_some()
             && json_value.get("depends_on").is_some()
+            && json_value.get("labels").is_some()
             && json_value
                 .as_object()
                 .map(|obj| obj.len())
                 .unwrap_or_default()
-                == 6,
+                == 7,
         "HTTP task info response must only expose the expected task fields"
     );
 }
@@ -339,6 +401,7 @@ fn test_get_task_info_response_serialize_nulls() {
         summary: None,
         status: "backlog".to_string(),
         depends_on: Vec::new(),
+        labels: Vec::new(),
     };
     let json_value = serde_json::to_value(&response).expect("Failed to serialize");
     assert_eq!(json_value["id"], "T-1");
@@ -347,7 +410,8 @@ fn test_get_task_info_response_serialize_nulls() {
     assert!(json_value["summary"].is_null());
     assert_eq!(json_value["status"], "backlog");
     assert_eq!(json_value["depends_on"], serde_json::json!([]));
-    assert_eq!(json_value.as_object().map(|obj| obj.len()), Some(6));
+    assert_eq!(json_value["labels"], serde_json::json!([]));
+    assert_eq!(json_value.as_object().map(|obj| obj.len()), Some(7));
 }
 
 #[test]
@@ -359,6 +423,7 @@ fn test_get_task_info_response_json_structure() {
         summary: None,
         status: "doing".to_string(),
         depends_on: vec!["T-1".to_string()],
+        labels: Vec::new(),
     };
     let json_value = serde_json::to_value(&response).expect("Failed to convert to JSON value");
     assert_eq!(json_value["id"], "T-7");
@@ -367,5 +432,6 @@ fn test_get_task_info_response_json_structure() {
     assert!(json_value["summary"].is_null());
     assert_eq!(json_value["status"], "doing");
     assert_eq!(json_value["depends_on"], serde_json::json!(["T-1"]));
-    assert_eq!(json_value.as_object().map(|obj| obj.len()), Some(6));
+    assert_eq!(json_value["labels"], serde_json::json!([]));
+    assert_eq!(json_value.as_object().map(|obj| obj.len()), Some(7));
 }
