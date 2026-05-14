@@ -36,6 +36,35 @@ describe('plugin-host backend runtime', () => {
     expect(await runtime.getBackendState('github')).toMatchObject({ state: 'ready', ready: true })
   })
 
+  it('routes backend commands and explicit global event listeners through public integration primitives', async () => {
+    const backendPath = await writeBackendModule(`
+      export default {
+        async activate(openforge, context) {
+          context.subscriptions.add(openforge.commands.register({
+            id: 'sync',
+            title: 'Backend Sync',
+            input: { type: 'object', required: ['projectId'], properties: { projectId: { type: 'string' } } },
+            output: { type: 'object', required: ['ok'], properties: { ok: { type: 'boolean' } } },
+            async handler(input) {
+              await openforge.events.emit('sync.finished', { pluginId: context.pluginId, projectId: input.projectId })
+              return { ok: true }
+            }
+          }))
+          const events = []
+          context.subscriptions.add(openforge.events.onGlobal('backend.sync.finished', event => events.push(event)))
+          context.subscriptions.add(openforge.backend.registerMethod('events', { handler() { return events } }))
+        }
+      }
+    `)
+    const runtime = createPluginHostRuntime()
+
+    await runtime.activateBackend({ pluginId: 'backend', backendPath })
+    await expect(runtime.invokeCommand({ pluginId: 'backend', command: 'sync', payload: { projectId: 'P-1' } })).resolves.toEqual({ ok: true })
+    await expect(runtime.invokeCommand({ pluginId: 'backend', command: 'sync', payload: {} })).rejects.toThrow(/backend\.sync input.*projectId/i)
+    await expect(runtime.listCommands()).resolves.toMatchObject([{ id: 'sync', qualifiedId: 'backend.sync', pluginId: 'backend', title: 'Backend Sync' }])
+    expect(await runtime.invokeBackend({ pluginId: 'backend', command: 'events' })).toEqual([{ pluginId: 'backend', projectId: 'P-1' }])
+  })
+
   it('starts backend background services after activation and stops them during deactivation', async () => {
     const backendPath = await writeBackendModule(`
       export default {

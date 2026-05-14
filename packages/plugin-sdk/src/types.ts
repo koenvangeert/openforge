@@ -1,4 +1,13 @@
 import type { Component } from 'svelte'
+import type {
+  AgentSession,
+  BoardStatus,
+  FileEntry,
+  Project,
+  ProjectAttention,
+  Task,
+  TaskWorkspaceInfo,
+} from './domain'
 
 export const OPENFORGE_PLUGIN_API_VERSION = 1
 export const MIN_SUPPORTED_API_VERSION = 1
@@ -105,20 +114,39 @@ export interface PluginStorage {
   task(taskId: string): PluginStorageScope
 }
 
+export type CommandShortcutMetadata = string | {
+  key: string
+  scope?: 'global' | 'project' | 'task'
+  when?: string
+}
+
 export interface CommandRegistration<TInput = unknown, TOutput = unknown> {
   id: string
   title: string
   icon?: string
-  shortcut?: string
+  shortcut?: CommandShortcutMetadata
   input?: JsonSchema
   output?: JsonSchema
   handler(input: TInput): MaybePromise<TOutput>
+}
+
+export interface CommandDescriptor {
+  id: string
+  qualifiedId: string
+  pluginId: string
+  projectId: string | null
+  title: string
+  icon?: string
+  shortcut?: CommandShortcutMetadata
+  input?: JsonSchema
+  output?: JsonSchema
 }
 
 export interface CommandRegistry {
   register<TInput = unknown, TOutput = unknown>(registration: CommandRegistration<TInput, TOutput>): Disposable
   invoke<TOutput = unknown>(id: string, payload?: unknown): Promise<TOutput>
   invokeGlobal<TOutput = unknown>(qualifiedId: string, payload?: unknown): Promise<TOutput>
+  list(): Promise<CommandDescriptor[]>
 }
 
 export type EventHandler<TPayload = unknown> = (payload: TPayload) => void
@@ -223,8 +251,54 @@ export interface ProjectScopedFileRequest {
 }
 
 export interface FileSystemAPI {
+  readDir(request: { projectId: string; path?: string | null }): Promise<FileEntry[]>
   readFile(request: ProjectScopedFileRequest): Promise<string>
   writeFile(request: ProjectScopedFileRequest & { content: string }): Promise<void>
+  searchFiles(request: { projectId: string; query: string; limit?: number }): Promise<string[]>
+}
+
+export interface ShellSpawnRequest {
+  taskId: string
+  cwd: string
+  cols: number
+  rows: number
+  terminalIndex: number
+}
+
+export interface ShellAPI {
+  spawn(request: ShellSpawnRequest): Promise<number>
+  write(request: { taskId: string; data: string }): Promise<void>
+  resize(request: { taskId: string; cols: number; rows: number }): Promise<void>
+  kill(request: { taskId: string }): Promise<void>
+  getBuffer(request: { taskId: string }): Promise<string | null>
+}
+
+export interface TasksAPI {
+  list(request?: { projectId?: string | null }): Promise<Task[]>
+  get(taskId: string): Promise<Task>
+  updateSummary(taskId: string, summary: string): Promise<void>
+  updateStatus(taskId: string, status: BoardStatus): Promise<void>
+  getWorkspace(taskId: string): Promise<TaskWorkspaceInfo | null>
+  getLatestSession(taskId: string): Promise<AgentSession | null>
+}
+
+export interface ProjectsAPI {
+  list(): Promise<Project[]>
+  get(projectId: string): Promise<Project | null>
+}
+
+export type NotificationRequest = {
+  title: string
+  body?: string
+  [key: string]: JsonValue | undefined
+}
+
+export interface NotificationsAPI {
+  notify(request: NotificationRequest): Promise<void>
+}
+
+export interface AttentionAPI {
+  listProjects(): Promise<ProjectAttention[]>
 }
 
 export interface SystemAPI {
@@ -232,8 +306,8 @@ export interface SystemAPI {
 }
 
 export interface KeyValueConfigAPI {
-  get<T extends JsonValue = JsonValue>(key: string): Promise<T | null>
-  set<T extends JsonValue = JsonValue>(key: string, value: T): Promise<void>
+  get<T extends JsonValue = JsonValue>(key: string, projectId?: string): Promise<T | null>
+  set<T extends JsonValue = JsonValue>(key: string, value: T, projectId?: string): Promise<void>
 }
 
 export interface OpenForgeCommonAPI {
@@ -243,12 +317,12 @@ export interface OpenForgeCommonAPI {
   context: {
     getSnapshot(): OpenForgeContextSnapshot
   }
-  tasks: Record<string, unknown>
-  projects: Record<string, unknown>
+  tasks: TasksAPI
+  projects: ProjectsAPI
   fs: FileSystemAPI
-  shell: Record<string, unknown>
-  notifications: Record<string, unknown>
-  attention: Record<string, unknown>
+  shell: ShellAPI
+  notifications: NotificationsAPI
+  attention: AttentionAPI
   system: SystemAPI
   config: KeyValueConfigAPI
   projectConfig: KeyValueConfigAPI

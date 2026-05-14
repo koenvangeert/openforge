@@ -6,6 +6,10 @@ import type {
   BackendPluginContext,
   BackgroundServiceRegistration,
   BackgroundServiceRegistry,
+  CommandDescriptor,
+  CommandRegistry,
+  CommandRegistration,
+  CommandShortcutMetadata,
   Disposable,
   OpenForgeContextSnapshot,
 } from './types'
@@ -22,6 +26,10 @@ export type {
   BackendPluginContext,
   BackgroundServiceRegistration,
   BackgroundServiceRegistry,
+  CommandDescriptor,
+  CommandRegistry,
+  CommandRegistration,
+  CommandShortcutMetadata,
   Disposable,
   OpenForgeContextSnapshot,
 }

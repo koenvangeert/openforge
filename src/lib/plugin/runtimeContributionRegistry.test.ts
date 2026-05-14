@@ -154,6 +154,98 @@ describe('runtime contribution registry', () => {
     expect(secondHandler).toHaveBeenCalledTimes(2)
   })
 
+  it('routes global command invocation and explicit global event listeners across plugin registries', async () => {
+    const github = makeRegistry()
+    const jira = createRuntimeContributionRegistry({ pluginId: 'jira', projectId: 'project-1' })
+    const globalListener = vi.fn()
+    const localListener = vi.fn()
+
+    github.getFrontendApi().commands.register({
+      id: 'sync',
+      title: 'Sync Pull Requests',
+      shortcut: 'mod+shift+s',
+      handler: async (payload) => ({ source: 'github', payload }),
+    })
+    jira.getFrontendApi().events.onGlobal('github.sync.finished', globalListener)
+    jira.getFrontendApi().events.on('sync.finished', localListener)
+
+    await expect(jira.getFrontendApi().commands.invokeGlobal('github.sync', { projectId: 'project-1' }))
+      .resolves.toEqual({ source: 'github', payload: { projectId: 'project-1' } })
+
+    await github.getFrontendApi().events.emit('sync.finished', { synced: 2 })
+
+    expect(globalListener).toHaveBeenCalledWith({ synced: 2 })
+    expect(localListener).not.toHaveBeenCalled()
+    await github.deactivate()
+    await jira.deactivate()
+  })
+
+  it('discovers commands without exposing handlers and validates optional input and output schemas', async () => {
+    const registry = makeRegistry()
+    const frontend = registry.getFrontendApi()
+
+    frontend.commands.register({
+      id: 'sync',
+      title: 'Sync Pull Requests',
+      shortcut: { key: 'mod+shift+s', scope: 'project' },
+      input: {
+        type: 'object',
+        required: ['projectId'],
+        properties: { projectId: { type: 'string' } },
+      },
+      output: {
+        type: 'object',
+        required: ['synced'],
+        properties: { synced: { type: 'number' } },
+      },
+      handler: async (payload) => ({ synced: (payload as { projectId: string }).projectId.length }),
+    })
+
+    await expect(frontend.commands.invoke('sync', { projectId: 'P-1' })).resolves.toEqual({ synced: 3 })
+    await expect(frontend.commands.invoke('sync', {})).rejects.toThrow(/github\.sync input.*projectId/i)
+
+    await expect(frontend.commands.list()).resolves.toMatchObject([
+      {
+        id: 'sync',
+        qualifiedId: 'github.sync',
+        pluginId: 'github',
+        title: 'Sync Pull Requests',
+        shortcut: { key: 'mod+shift+s', scope: 'project' },
+      },
+    ])
+    expect((await frontend.commands.list())[0]).not.toHaveProperty('handler')
+  })
+
+  it('exposes typed core API wrappers through the configured host bridge', async () => {
+    const host = {
+      listProjects: vi.fn(async () => [{ id: 'P-1', name: 'OpenForge', path: '/repo', created_at: 1, updated_at: 2 }]),
+      listTasks: vi.fn(async () => [{ id: 'T-1', initial_prompt: 'Prompt', prompt: null, summary: null, status: 'doing' as const, agent: null, permission_mode: null, depends_on: [], project_id: 'P-1', created_at: 1, updated_at: 2 }]),
+      readFile: vi.fn(async () => ({ content: 'hello' })),
+      openUrl: vi.fn(async () => undefined),
+      getConfig: vi.fn(async () => 'dark'),
+      setProjectConfig: vi.fn(async () => undefined),
+      spawnShell: vi.fn(async () => 42),
+      getAttention: vi.fn(async () => [{ project_id: 'P-1', needs_input: 0, running_agents: 1, ci_failures: 0, unaddressed_comments: 0, completed_agents: 0 }]),
+      notify: vi.fn(async () => undefined),
+    }
+    const registry = createRuntimeContributionRegistry({ pluginId: 'github', projectId: 'P-1', host })
+    const api = registry.getFrontendApi()
+
+    await expect(api.projects.list()).resolves.toHaveLength(1)
+    await expect(api.tasks.list({ projectId: 'P-1' })).resolves.toHaveLength(1)
+    await expect(api.fs.readFile({ projectId: 'P-1', path: 'README.md' })).resolves.toBe('hello')
+    await expect(api.shell.spawn({ taskId: 'T-1', cwd: '/repo', cols: 80, rows: 24, terminalIndex: 1 })).resolves.toBe(42)
+    await api.system.openUrl('https://example.com')
+    await expect(api.config.get('theme')).resolves.toBe('dark')
+    await api.projectConfig.set('repo', 'openforge', 'P-1')
+    await expect(api.attention.listProjects()).resolves.toHaveLength(1)
+    await api.notifications.notify({ title: 'Sync complete', body: '1 PR updated' })
+
+    expect(host.readFile).toHaveBeenCalledWith({ projectId: 'P-1', path: 'README.md' })
+    expect(host.openUrl).toHaveBeenCalledWith('https://example.com')
+    expect(host.setProjectConfig).toHaveBeenCalledWith('P-1', 'repo', 'openforge')
+  })
+
   it('rejects reserved openforge.* plugin-local registrations while allowing explicit global host listeners', () => {
     const registry = makeRegistry()
     const frontend = registry.getFrontendApi()

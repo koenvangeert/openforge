@@ -1,6 +1,6 @@
 import { createInterface } from 'node:readline'
 import { pathToFileURL } from 'node:url'
-import type { OpenForgePackageMetadata, PluginStorage, SubscriptionSink } from '@openforge/plugin-sdk'
+import type { CommandDescriptor, CommandRegistration, JsonSchema, OpenForgePackageMetadata, PluginStorage, SubscriptionSink } from '@openforge/plugin-sdk'
 import type { BackendMethodRegistration, BackendOpenForgeAPI, BackendPlugin, BackendPluginContext, BackgroundServiceRegistration, Disposable, OpenForgeContextSnapshot } from '@openforge/plugin-sdk/backend'
 
 type JsonRpcId = number | null | undefined
@@ -74,6 +74,15 @@ type RuntimeBackendMethod = BackendMethodRegistration & {
   qualifiedId: string
 }
 
+type RuntimeBackendCommand = CommandRegistration & {
+  localId: string
+  qualifiedId: string
+  pluginId: string
+  projectId: string | null
+}
+
+type RuntimeEventHandler = (payload: unknown) => void
+
 type RuntimePluginState = {
   pluginId: string
   backendPath: string | null
@@ -84,6 +93,8 @@ type RuntimePluginState = {
   activationPromise: Promise<void> | null
   module: Record<string, unknown> | null
   methods: Map<string, RuntimeBackendMethod>
+  commands: Map<string, RuntimeBackendCommand>
+  eventHandlers: Map<string, Set<RuntimeEventHandler>>
   backgroundServices: Map<string, RuntimeBackendService>
   subscriptions: RuntimeSubscriptionSink
   crashTimestamps: number[]
@@ -93,8 +104,72 @@ type RuntimePluginState = {
 const DEFAULT_CRASH_LOOP_LIMIT = 3
 const DEFAULT_CRASH_LOOP_WINDOW_MS = 60_000
 
+const globalCommands = new Map<string, RuntimeBackendCommand>()
+const globalEventHandlers = new Map<string, Set<RuntimeEventHandler>>()
+
+function schemaTypeMatches(expected: string, value: unknown): boolean {
+  switch (expected) {
+    case 'string': return typeof value === 'string'
+    case 'number': return typeof value === 'number' && Number.isFinite(value)
+    case 'integer': return Number.isInteger(value)
+    case 'boolean': return typeof value === 'boolean'
+    case 'object': return value !== null && typeof value === 'object' && !Array.isArray(value)
+    case 'array': return Array.isArray(value)
+    case 'null': return value === null
+    default: return true
+  }
+}
+
+function validateSchemaValue(schema: JsonSchema | undefined, value: unknown, label: string): void {
+  if (!schema) return
+  const oneOf = Array.isArray(schema.oneOf) ? schema.oneOf : Array.isArray(schema.anyOf) ? schema.anyOf : null
+  if (oneOf) {
+    for (const candidate of oneOf) {
+      try {
+        validateSchemaValue(candidate as JsonSchema, value, label)
+        return
+      } catch {
+        // Try the next schema candidate.
+      }
+    }
+    throw new Error(`${label} does not match any allowed schema`)
+  }
+  if (typeof schema.type === 'string' && !schemaTypeMatches(schema.type, value)) {
+    throw new Error(`${label} expected ${schema.type}`)
+  }
+  if (schema.type === 'object' && value !== null && typeof value === 'object' && !Array.isArray(value)) {
+    const objectValue = value as Record<string, unknown>
+    const required = Array.isArray(schema.required) ? schema.required : []
+    for (const key of required) {
+      if (typeof key === 'string' && !(key in objectValue)) {
+        throw new Error(`${label} missing required property ${key}`)
+      }
+    }
+    const properties = schema.properties && typeof schema.properties === 'object' && !Array.isArray(schema.properties)
+      ? schema.properties as Record<string, JsonSchema>
+      : {}
+    for (const [key, propertySchema] of Object.entries(properties)) {
+      if (key in objectValue) validateSchemaValue(propertySchema, objectValue[key], `${label}.${key}`)
+    }
+  }
+}
+
+function commandDescriptor(command: RuntimeBackendCommand): CommandDescriptor {
+  return {
+    id: command.localId,
+    qualifiedId: command.qualifiedId,
+    pluginId: command.pluginId,
+    projectId: command.projectId,
+    title: command.title,
+    icon: command.icon,
+    shortcut: command.shortcut,
+    input: command.input,
+    output: command.output,
+  }
+}
+
 class RuntimeValidationError extends Error {
-  constructor(kind: 'backend' | 'background', message: string) {
+  constructor(kind: 'backend' | 'background' | 'commands' | 'events', message: string) {
     super(`${kind} registration ${message}`)
     this.name = 'RuntimeValidationError'
   }
@@ -186,7 +261,7 @@ function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0
 }
 
-function assertLocalId(kind: 'backend' | 'background', id: unknown): asserts id is string {
+function assertLocalId(kind: 'backend' | 'background' | 'commands' | 'events', id: unknown): asserts id is string {
   if (!isNonEmptyString(id)) {
     throw new RuntimeValidationError(kind, 'requires a non-empty id')
   }
@@ -207,7 +282,7 @@ function assertScope(scope: unknown): asserts scope is BackgroundServiceRegistra
   }
 }
 
-function assertFunction(kind: 'backend' | 'background', label: string, value: unknown): asserts value is (...args: never[]) => unknown {
+function assertFunction(kind: 'backend' | 'background' | 'commands' | 'events', label: string, value: unknown): asserts value is (...args: never[]) => unknown {
   if (typeof value !== 'function') {
     throw new RuntimeValidationError(kind, `requires a ${label} function`)
   }
@@ -290,6 +365,8 @@ function createInitialPluginState(pluginId: string): RuntimePluginState {
     activationPromise: null,
     module: null,
     methods: new Map(),
+    commands: new Map(),
+    eventHandlers: new Map(),
     backgroundServices: new Map(),
     subscriptions: new RuntimeSubscriptionSink(pluginId),
     crashTimestamps: [],
@@ -420,6 +497,34 @@ export class PluginHostRuntime {
     }
   }
 
+  async invokeCommand(input: InvokeBackendInput): Promise<unknown> {
+    assertLocalId('commands', input.pluginId)
+    assertLocalId('commands', input.command)
+    await this.whenBackendReady(input)
+    return this.invokeGlobalCommand(`${input.pluginId}.${input.command.trim()}`, input.payload)
+  }
+
+  async invokeGlobalCommand(qualifiedId: string, payload?: unknown): Promise<unknown> {
+    const command = globalCommands.get(qualifiedId)
+    if (!command) {
+      throw new Error(`Command not found: ${qualifiedId}`)
+    }
+    validateSchemaValue(command.input, payload, `${qualifiedId} input`)
+    try {
+      const result = await withPluginConsole(command.pluginId, async () => await command.handler(payload as never))
+      validateSchemaValue(command.output, result, `${qualifiedId} output`)
+      return result
+    } catch (error) {
+      const pluginError = toError(error)
+      logPluginHostError(command.pluginId, `command error in ${qualifiedId}: ${pluginError.message}`)
+      throw pluginError
+    }
+  }
+
+  async listCommands(): Promise<CommandDescriptor[]> {
+    return Array.from(globalCommands.values()).map(commandDescriptor)
+  }
+
   async getBackendState(pluginId: string): Promise<BackendStateSnapshot> {
     assertLocalId('backend', pluginId)
     const state = this.getOrCreateState(pluginId)
@@ -516,7 +621,23 @@ export class PluginHostRuntime {
       }
     }
 
+    for (const command of state.commands.values()) {
+      globalCommands.delete(command.qualifiedId)
+    }
+    for (const [event, handlers] of state.eventHandlers.entries()) {
+      const globalHandlers = globalEventHandlers.get(event)
+      if (!globalHandlers) continue
+      for (const handler of handlers) {
+        globalHandlers.delete(handler)
+      }
+      if (globalHandlers.size === 0) {
+        globalEventHandlers.delete(event)
+      }
+    }
+
     state.methods.clear()
+    state.commands.clear()
+    state.eventHandlers.clear()
     state.backgroundServices.clear()
     state.subscriptions = new RuntimeSubscriptionSink(state.pluginId)
   }
@@ -555,15 +676,16 @@ export class PluginHostRuntime {
 
     return {
       commands: {
-        register: () => createDisposable(() => undefined),
-        invoke: async () => undefined as never,
-        invokeGlobal: async () => undefined as never,
+        register: (registration) => this.registerCommand(state, registration),
+        invoke: async (command, payload) => this.invokeCommand({ pluginId: state.pluginId, command, payload }),
+        invokeGlobal: async (qualifiedId, payload) => this.invokeGlobalCommand(qualifiedId, payload),
+        list: async () => this.listCommands(),
       },
       events: {
-        on: () => createDisposable(() => undefined),
-        onGlobal: () => createDisposable(() => undefined),
-        emit: async () => undefined,
-        emitGlobal: async () => undefined,
+        on: (event, handler) => this.registerEventListener(state, event, handler as RuntimeEventHandler, false),
+        onGlobal: (event, handler) => this.registerEventListener(state, event, handler as RuntimeEventHandler, true),
+        emit: async (event, payload) => this.emitEvent(`${state.pluginId}.${event}`, payload),
+        emitGlobal: async (event, payload) => this.emitEvent(event, payload),
       },
       storage,
       context: {
@@ -589,6 +711,68 @@ export class PluginHostRuntime {
       background: {
         register: (registration) => this.registerBackgroundService(state, registration),
       },
+    }
+  }
+
+  private registerCommand(state: RuntimePluginState, registration: CommandRegistration): Disposable {
+    assertLocalId('commands', registration?.id)
+    assertFunction('commands', 'handler', registration?.handler)
+    if (!isNonEmptyString(registration.title)) {
+      throw new RuntimeValidationError('commands', 'requires a non-empty title')
+    }
+    const localId = registration.id.trim()
+    const qualifiedId = `${state.pluginId}.${localId}`
+    if (state.commands.has(localId)) {
+      throw new Error(`Duplicate command id: ${qualifiedId}`)
+    }
+
+    const runtimeCommand: RuntimeBackendCommand = {
+      ...registration,
+      localId,
+      qualifiedId,
+      pluginId: state.pluginId,
+      projectId: state.projectId,
+      title: registration.title.trim(),
+    }
+    state.commands.set(localId, runtimeCommand)
+    globalCommands.set(qualifiedId, runtimeCommand)
+
+    return createDisposable(() => {
+      state.commands.delete(localId)
+      globalCommands.delete(qualifiedId)
+    })
+  }
+
+  private registerEventListener(state: RuntimePluginState, event: string, handler: RuntimeEventHandler, global: boolean): Disposable {
+    const qualifiedId = global ? event : `${state.pluginId}.${event}`
+    if (!isNonEmptyString(qualifiedId)) {
+      throw new RuntimeValidationError('events', 'requires a non-empty id')
+    }
+    if (!global) {
+      assertLocalId('events', event)
+    }
+    assertFunction('events', 'handler', handler)
+
+    const handlers = globalEventHandlers.get(qualifiedId) ?? new Set<RuntimeEventHandler>()
+    handlers.add(handler)
+    globalEventHandlers.set(qualifiedId, handlers)
+
+    const tracked = state.eventHandlers.get(qualifiedId) ?? new Set<RuntimeEventHandler>()
+    tracked.add(handler)
+    state.eventHandlers.set(qualifiedId, tracked)
+
+    return createDisposable(() => {
+      handlers.delete(handler)
+      if (handlers.size === 0) globalEventHandlers.delete(qualifiedId)
+      tracked.delete(handler)
+      if (tracked.size === 0) state.eventHandlers.delete(qualifiedId)
+    })
+  }
+
+  private async emitEvent(qualifiedId: string, payload: unknown): Promise<void> {
+    const handlers = Array.from(globalEventHandlers.get(qualifiedId) ?? [])
+    for (const handler of handlers) {
+      handler(payload)
     }
   }
 
