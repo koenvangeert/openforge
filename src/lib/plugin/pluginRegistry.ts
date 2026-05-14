@@ -10,7 +10,9 @@ import {
   forceGithubSync,
   fsReadDir,
   fsReadFile,
+  fsSearchFiles,
   getAgentReviewComments,
+  getAllTasks,
   getAuthoredPrs,
   getConfig,
   getFileAtRef,
@@ -18,13 +20,18 @@ import {
   getPluginStorage,
   getPrFileDiffs,
   getPrOverviewComments,
+  getProjectAttention,
   getProjectConfig,
+  getProjects,
   getPtyBuffer,
   getReviewComments,
   getReviewPrs,
+  getTaskDetail,
+  getTasksForProject,
   getTaskWorkspace,
   installPlugin,
   killPty,
+  getLatestSession,
   listOpenCodeSkills,
   markReviewPrViewed,
   installPluginFromLocal as installPluginFromLocalIpc,
@@ -41,6 +48,8 @@ import {
   submitPrReview,
   uninstallPlugin as uninstallPluginIpc,
   updateAgentReviewCommentStatus,
+  updateTaskStatus,
+  updateTaskSummary,
   writePty,
 } from '../ipc'
 import {
@@ -377,6 +386,37 @@ async function activateExternalPluginModule(pluginId: string, manifest: PluginMa
       pluginId,
       projectId: get(activeProjectId),
       packageMetadata,
+      host: {
+        listProjects: () => getProjects(),
+        getProject: async (projectId) => (await getProjects()).find((project) => project.id === projectId) ?? null,
+        listTasks: (request) => request?.projectId ? getTasksForProject(request.projectId) : getAllTasks(),
+        getTask: (taskId) => getTaskDetail(taskId),
+        updateTaskSummary: (taskId, summary) => updateTaskSummary(taskId, summary),
+        updateTaskStatus: (taskId, status) => updateTaskStatus(taskId, status),
+        getTaskWorkspace: (taskId) => getTaskWorkspace(taskId),
+        getLatestSession: (taskId) => getLatestSession(taskId),
+        readDir: (request) => fsReadDir(request.projectId, request.path ?? null),
+        readFile: (request) => fsReadFile(request.projectId, request.path),
+        searchFiles: (request) => fsSearchFiles(request.projectId, request.query, request.limit),
+        spawnShell: async (request) => {
+          await waitForTerminalEventSubscriptions(request)
+          return spawnShellPty(request.taskId, request.cwd, request.cols, request.rows, request.terminalIndex)
+        },
+        writeShell: (request) => writePty(request.taskId, request.data),
+        resizeShell: (request) => resizePty(request.taskId, request.cols, request.rows),
+        killShell: (request) => killPty(request.taskId),
+        getShellBuffer: (request) => getPtyBuffer(request.taskId),
+        notify: async (request) => {
+          await Promise.resolve()
+          emitPluginHostEvent('openforge.notification', request)
+        },
+        getAttention: () => getProjectAttention(),
+        openUrl: (url) => openUrl(url),
+        getConfig: (key) => getConfig(key),
+        setConfig: (key, value) => setConfig(key, typeof value === 'string' ? value : JSON.stringify(value)),
+        getProjectConfig: (projectId, key) => getProjectConfig(projectId, key),
+        setProjectConfig: (projectId, key, value) => setProjectConfig(projectId, key, typeof value === 'string' ? value : JSON.stringify(value)),
+      },
     })
 
     try {
@@ -944,6 +984,7 @@ function createUnavailableFrontendApi(pluginId: string): FrontendOpenForgeAPI {
       register: () => ({ dispose: () => undefined }),
       invoke: unavailable,
       invokeGlobal: unavailable,
+      list: unavailable,
     },
     events: {
       on: () => ({ dispose: () => undefined }),
@@ -959,12 +1000,22 @@ function createUnavailableFrontendApi(pluginId: string): FrontendOpenForgeAPI {
     context: {
       getSnapshot: () => ({ pluginId, projectId: get(activeProjectId) }),
     },
-    tasks: {},
-    projects: {},
-    fs: { readFile: unavailable, writeFile: unavailable },
-    shell: {},
-    notifications: {},
-    attention: {},
+    tasks: {
+      list: unavailable,
+      get: unavailable,
+      updateSummary: unavailable,
+      updateStatus: unavailable,
+      getWorkspace: unavailable,
+      getLatestSession: unavailable,
+    },
+    projects: {
+      list: unavailable,
+      get: unavailable,
+    },
+    fs: { readDir: unavailable, readFile: unavailable, writeFile: unavailable, searchFiles: unavailable },
+    shell: { spawn: unavailable, write: unavailable, resize: unavailable, kill: unavailable, getBuffer: unavailable },
+    notifications: { notify: unavailable },
+    attention: { listProjects: unavailable },
     system: { openUrl: async (url: string) => openUrl(url) },
     config: { get: unavailable, set: unavailable },
     projectConfig: { get: unavailable, set: unavailable },

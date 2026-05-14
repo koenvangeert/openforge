@@ -1,5 +1,5 @@
 import type { Component } from 'svelte'
-import type { OpenForgePackageMetadata, PluginComponentLoader, PluginSettingsSectionProps as SdkPluginSettingsSectionProps, PluginTaskPaneProps as SdkPluginTaskPaneProps, PluginViewProps as SdkPluginViewProps } from '@openforge/plugin-sdk'
+import type { CommandShortcutMetadata, OpenForgePackageMetadata, PluginComponentLoader, PluginSettingsSectionProps as SdkPluginSettingsSectionProps, PluginTaskPaneProps as SdkPluginTaskPaneProps, PluginViewProps as SdkPluginViewProps } from '@openforge/plugin-sdk'
 
 export interface PluginStorage {
   get(key: string): Promise<string | null>
@@ -53,7 +53,7 @@ export interface PluginSidebarPanelContribution {
 export interface PluginCommandContribution {
   id: string
   title: string
-  shortcut?: string
+  shortcut?: CommandShortcutMetadata
 }
 
 export interface PluginSettingsSection {

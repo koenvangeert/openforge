@@ -15,10 +15,20 @@ import type {
   BackgroundServiceRegistration,
 } from '@openforge/plugin-sdk/backend'
 import type {
+  AgentSession,
+  BoardStatus,
+  CommandDescriptor,
+  CommandShortcutMetadata,
+  FileEntry,
+  JsonSchema,
   OpenForgeContextSnapshot,
   OpenForgePackageMetadata,
   PluginStorage,
+  Project,
+  ProjectAttention,
   SubscriptionSink,
+  Task,
+  TaskWorkspaceInfo,
 } from '@openforge/plugin-sdk'
 
 type MaybePromise<T> = T | Promise<T>
@@ -27,10 +37,38 @@ type RuntimeScope = 'global' | 'project' | 'task'
 type RuntimeHandler = (payload?: unknown) => MaybePromise<unknown>
 type RuntimeEventHandler = (payload: unknown) => void
 
+export type RuntimeHostBridge = {
+  listProjects?(): Promise<Project[]>
+  getProject?(projectId: string): Promise<Project | null>
+  listTasks?(request?: { projectId?: string | null }): Promise<Task[]>
+  getTask?(taskId: string): Promise<Task>
+  updateTaskSummary?(taskId: string, summary: string): Promise<void>
+  updateTaskStatus?(taskId: string, status: BoardStatus): Promise<void>
+  getTaskWorkspace?(taskId: string): Promise<TaskWorkspaceInfo | null>
+  getLatestSession?(taskId: string): Promise<AgentSession | null>
+  readDir?(request: { projectId: string; path?: string | null }): Promise<FileEntry[]>
+  readFile?(request: { projectId: string; path: string }): Promise<string | { content: string }>
+  writeFile?(request: { projectId: string; path: string; content: string }): Promise<void>
+  searchFiles?(request: { projectId: string; query: string; limit?: number }): Promise<string[]>
+  spawnShell?(request: { taskId: string; cwd: string; cols: number; rows: number; terminalIndex: number }): Promise<number>
+  writeShell?(request: { taskId: string; data: string }): Promise<void>
+  resizeShell?(request: { taskId: string; cols: number; rows: number }): Promise<void>
+  killShell?(request: { taskId: string }): Promise<void>
+  getShellBuffer?(request: { taskId: string }): Promise<string | null>
+  notify?(request: { title: string; body?: string; [key: string]: unknown }): Promise<void>
+  getAttention?(): Promise<ProjectAttention[]>
+  openUrl?(url: string): Promise<void>
+  getConfig?(key: string): Promise<unknown>
+  setConfig?(key: string, value: unknown): Promise<void>
+  getProjectConfig?(projectId: string, key: string): Promise<unknown>
+  setProjectConfig?(projectId: string, key: string, value: unknown): Promise<void>
+}
+
 type RuntimeOptions = {
   pluginId: string
   projectId: string | null
   packageMetadata?: OpenForgePackageMetadata
+  host?: RuntimeHostBridge
 }
 
 type RuntimeContributionBase = {
@@ -43,7 +81,9 @@ type RuntimeContributionBase = {
 export type RuntimeCommandContribution = RuntimeContributionBase & {
   title: string
   icon?: string
-  shortcut?: string
+  shortcut?: CommandShortcutMetadata
+  input?: JsonSchema
+  output?: JsonSchema
   handler: RuntimeHandler
 }
 
@@ -210,6 +250,85 @@ function createMemoryStorage(): PluginStorage {
   }
 }
 
+const globalCommands = new Map<string, RuntimeCommandContribution>()
+const globalEventHandlers = new Map<string, Set<RuntimeEventHandler>>()
+
+function commandDescriptor(command: RuntimeCommandContribution): CommandDescriptor {
+  return {
+    id: command.id,
+    qualifiedId: command.qualifiedId,
+    pluginId: command.pluginId,
+    projectId: command.projectId,
+    title: command.title,
+    icon: command.icon,
+    shortcut: command.shortcut,
+    input: command.input,
+    output: command.output,
+  }
+}
+
+function schemaTypeMatches(expected: string, value: unknown): boolean {
+  switch (expected) {
+    case 'string': return typeof value === 'string'
+    case 'number': return typeof value === 'number' && Number.isFinite(value)
+    case 'integer': return Number.isInteger(value)
+    case 'boolean': return typeof value === 'boolean'
+    case 'object': return value !== null && typeof value === 'object' && !Array.isArray(value)
+    case 'array': return Array.isArray(value)
+    case 'null': return value === null
+    default: return true
+  }
+}
+
+function validateSchemaValue(schema: JsonSchema | undefined, value: unknown, label: string): void {
+  if (!schema) return
+  const oneOf = Array.isArray(schema.oneOf) ? schema.oneOf : Array.isArray(schema.anyOf) ? schema.anyOf : null
+  if (oneOf) {
+    const errors: string[] = []
+    for (const candidate of oneOf) {
+      try {
+        validateSchemaValue(candidate as JsonSchema, value, label)
+        return
+      } catch (error) {
+        errors.push(error instanceof Error ? error.message : String(error))
+      }
+    }
+    throw new Error(`${label} does not match any allowed schema: ${errors.join('; ')}`)
+  }
+
+  const type = schema.type
+  if (typeof type === 'string' && !schemaTypeMatches(type, value)) {
+    throw new Error(`${label} expected ${type}`)
+  }
+
+  if (type === 'object' && value !== null && typeof value === 'object' && !Array.isArray(value)) {
+    const objectValue = value as Record<string, unknown>
+    const required = Array.isArray(schema.required) ? schema.required : []
+    for (const key of required) {
+      if (typeof key === 'string' && !(key in objectValue)) {
+        throw new Error(`${label} missing required property ${key}`)
+      }
+    }
+
+    const properties = schema.properties && typeof schema.properties === 'object' && !Array.isArray(schema.properties)
+      ? schema.properties as Record<string, JsonSchema>
+      : {}
+    for (const [key, propertySchema] of Object.entries(properties)) {
+      if (key in objectValue) {
+        validateSchemaValue(propertySchema, objectValue[key], `${label}.${key}`)
+      }
+    }
+  }
+
+  if (type === 'array' && Array.isArray(value) && schema.items && typeof schema.items === 'object' && !Array.isArray(schema.items)) {
+    value.forEach((item, index) => validateSchemaValue(schema.items as JsonSchema, item, `${label}[${index}]`))
+  }
+}
+
+function unavailableCapability(name: string): never {
+  throw new Error(`OpenForge core capability is unavailable: ${name}`)
+}
+
 export function createRuntimeContributionRegistry(options: RuntimeOptions) {
   return new RuntimeContributionRegistry(options)
 }
@@ -221,6 +340,7 @@ class RuntimeContributionRegistry {
   private readonly projectId: string | null
   private readonly packageMetadata: OpenForgePackageMetadata
   private readonly contextSnapshot: OpenForgeContextSnapshot
+  private readonly host: RuntimeHostBridge
   private readonly storage = createMemoryStorage()
   private readonly frontendSubscriptions = new RuntimeSubscriptionSink()
   private readonly backendSubscriptions = new RuntimeSubscriptionSink()
@@ -228,7 +348,6 @@ class RuntimeContributionRegistry {
   private backendApi: BackendOpenForgeAPI | null = null
   private readonly duplicateKeys = new Set<string>()
   private readonly eventHandlers = new Map<string, Set<RuntimeEventHandler>>()
-  private readonly globalEventHandlers = new Map<string, Set<RuntimeEventHandler>>()
   private readonly commands = new Map<string, RuntimeCommandContribution>()
   private readonly views = new Map<string, RuntimeViewContribution>()
   private readonly taskPaneTabs = new Map<string, RuntimeTaskPaneTabContribution>()
@@ -248,6 +367,7 @@ class RuntimeContributionRegistry {
       displayName: options.pluginId,
       description: '',
     }
+    this.host = options.host ?? {}
     this.contextSnapshot = { pluginId: this.pluginId, projectId: this.projectId }
   }
 
@@ -364,6 +484,7 @@ class RuntimeContributionRegistry {
         register: (registration: Parameters<FrontendOpenForgeAPI['commands']['register']>[0]) => this.registerCommand(registration),
         invoke: async <TOutput>(id: string, payload?: unknown) => this.invokeCommand<TOutput>(id, payload),
         invokeGlobal: async <TOutput>(qualifiedId: string, payload?: unknown) => this.invokeGlobalCommand<TOutput>(qualifiedId, payload),
+        list: async () => Array.from(globalCommands.values()).map(commandDescriptor),
       },
       events: {
         on: <TPayload>(event: string, handler: (payload: TPayload) => void) => this.registerEventListener(event, handler as RuntimeEventHandler, false),
@@ -375,20 +496,52 @@ class RuntimeContributionRegistry {
       context: {
         getSnapshot: () => this.getContextSnapshot(),
       },
-      tasks: {},
-      projects: {},
+      tasks: {
+        list: async (request) => this.host.listTasks ? this.host.listTasks(request) : unavailableCapability('tasks.list'),
+        get: async (taskId) => this.host.getTask ? this.host.getTask(taskId) : unavailableCapability('tasks.get'),
+        updateSummary: async (taskId, summary) => this.host.updateTaskSummary ? this.host.updateTaskSummary(taskId, summary) : unavailableCapability('tasks.updateSummary'),
+        updateStatus: async (taskId, status) => this.host.updateTaskStatus ? this.host.updateTaskStatus(taskId, status) : unavailableCapability('tasks.updateStatus'),
+        getWorkspace: async (taskId) => this.host.getTaskWorkspace ? this.host.getTaskWorkspace(taskId) : unavailableCapability('tasks.getWorkspace'),
+        getLatestSession: async (taskId) => this.host.getLatestSession ? this.host.getLatestSession(taskId) : unavailableCapability('tasks.getLatestSession'),
+      },
+      projects: {
+        list: async () => this.host.listProjects ? this.host.listProjects() : unavailableCapability('projects.list'),
+        get: async (projectId) => this.host.getProject ? this.host.getProject(projectId) : unavailableCapability('projects.get'),
+      },
       fs: {
-        readFile: async () => '',
-        writeFile: async () => undefined,
+        readDir: async (request) => this.host.readDir ? this.host.readDir(request) : unavailableCapability('fs.readDir'),
+        readFile: async (request) => {
+          if (!this.host.readFile) return unavailableCapability('fs.readFile')
+          const result = await this.host.readFile(request)
+          return typeof result === 'string' ? result : result.content
+        },
+        writeFile: async (request) => this.host.writeFile ? this.host.writeFile(request) : unavailableCapability('fs.writeFile'),
+        searchFiles: async (request) => this.host.searchFiles ? this.host.searchFiles(request) : unavailableCapability('fs.searchFiles'),
       },
-      shell: {},
-      notifications: {},
-      attention: {},
+      shell: {
+        spawn: async (request) => this.host.spawnShell ? this.host.spawnShell(request) : unavailableCapability('shell.spawn'),
+        write: async (request) => this.host.writeShell ? this.host.writeShell(request) : unavailableCapability('shell.write'),
+        resize: async (request) => this.host.resizeShell ? this.host.resizeShell(request) : unavailableCapability('shell.resize'),
+        kill: async (request) => this.host.killShell ? this.host.killShell(request) : unavailableCapability('shell.kill'),
+        getBuffer: async (request) => this.host.getShellBuffer ? this.host.getShellBuffer(request) : unavailableCapability('shell.getBuffer'),
+      },
+      notifications: {
+        notify: async (request) => this.host.notify ? this.host.notify(request) : unavailableCapability('notifications.notify'),
+      },
+      attention: {
+        listProjects: async () => this.host.getAttention ? this.host.getAttention() : unavailableCapability('attention.listProjects'),
+      },
       system: {
-        openUrl: async () => undefined,
+        openUrl: async (url) => this.host.openUrl ? this.host.openUrl(url) : unavailableCapability('system.openUrl'),
       },
-      config: createMemoryStorageScope(),
-      projectConfig: createMemoryStorageScope(),
+      config: {
+        get: async (key) => this.host.getConfig ? this.host.getConfig(key) as never : unavailableCapability('config.get'),
+        set: async (key, value) => this.host.setConfig ? this.host.setConfig(key, value) : unavailableCapability('config.set'),
+      },
+      projectConfig: {
+        get: async (key, projectId = this.projectId ?? '') => this.host.getProjectConfig ? this.host.getProjectConfig(projectId, key) as never : unavailableCapability('projectConfig.get'),
+        set: async (key, value, projectId = this.projectId ?? '') => this.host.setProjectConfig ? this.host.setProjectConfig(projectId, key, value) : unavailableCapability('projectConfig.set'),
+      },
     } satisfies Omit<FrontendOpenForgeAPI, 'views' | 'taskPane' | 'settings' | 'backend'>
   }
 
@@ -427,9 +580,11 @@ class RuntimeContributionRegistry {
       handler: registration.handler as RuntimeHandler,
     }
     this.commands.set(qualifiedId, contribution)
+    globalCommands.set(qualifiedId, contribution)
 
     return createDisposable(() => {
       this.commands.delete(qualifiedId)
+      globalCommands.delete(qualifiedId)
       this.release('commands', qualifiedId)
     })
   }
@@ -441,7 +596,7 @@ class RuntimeContributionRegistry {
     }
     assertHandler('events', handler)
 
-    const target = global ? this.globalEventHandlers : this.eventHandlers
+    const target = global ? globalEventHandlers : this.eventHandlers
     const handlers = target.get(qualifiedId) ?? new Set<RuntimeEventHandler>()
     handlers.add(handler)
     target.set(qualifiedId, handlers)
@@ -598,11 +753,14 @@ class RuntimeContributionRegistry {
   }
 
   private async invokeGlobalCommand<TOutput>(qualifiedId: string, payload?: unknown): Promise<TOutput> {
-    const command = this.commands.get(qualifiedId)
+    const command = globalCommands.get(qualifiedId)
     if (!command) {
       throw new Error(`Unknown command: ${qualifiedId}`)
     }
-    return await command.handler(payload) as TOutput
+    validateSchemaValue(command.input, payload, `${qualifiedId} input`)
+    const output = await command.handler(payload)
+    validateSchemaValue(command.output, output, `${qualifiedId} output`)
+    return output as TOutput
   }
 
   private async invokeBackendMethod<TOutput>(method: string, payload?: unknown): Promise<TOutput> {
@@ -617,7 +775,7 @@ class RuntimeContributionRegistry {
   private async emitEvent<TPayload>(qualifiedEvent: string, payload: TPayload): Promise<void> {
     const handlers = [
       ...Array.from(this.eventHandlers.get(qualifiedEvent) ?? []),
-      ...Array.from(this.globalEventHandlers.get(qualifiedEvent) ?? []),
+      ...Array.from(globalEventHandlers.get(qualifiedEvent) ?? []),
     ]
     for (const handler of handlers) {
       handler(payload)

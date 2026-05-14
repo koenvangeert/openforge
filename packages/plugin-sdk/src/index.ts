@@ -19,12 +19,22 @@ export {
 } from './types'
 
 export type {
+  AttentionAPI,
+  CommandDescriptor,
+  CommandRegistry,
+  CommandRegistration,
+  CommandShortcutMetadata,
   Disposable,
+  FileSystemAPI,
   JsonObject,
   JsonPrimitive,
   JsonSchema,
   JsonValue,
   MaybePromise,
+  KeyValueConfigAPI,
+  NotificationRequest,
+  NotificationsAPI,
+  OpenForgeCommonAPI,
   OpenForgeContextSnapshot,
   OpenForgePackageMetadata,
   OpenForgePluginCapability,
@@ -40,8 +50,13 @@ export type {
   PluginStorage,
   PluginStorageScope,
   PluginViewKey,
+  ProjectsAPI,
+  ShellAPI,
+  ShellSpawnRequest,
   SubscriptionSink,
   SupportedOpenForgeApiVersion,
+  SystemAPI,
+  TasksAPI,
   ValidationError,
 } from './types'
 

@@ -1,4 +1,8 @@
 import type {
+  CommandDescriptor,
+  CommandRegistry,
+  CommandRegistration,
+  CommandShortcutMetadata,
   Disposable,
   FrontendBackendBridge,
   FrontendOpenForgeAPI,
@@ -32,6 +36,10 @@ export function defineFrontendPlugin<const TPlugin extends FrontendPlugin>(plugi
 }
 
 export type {
+  CommandDescriptor,
+  CommandRegistry,
+  CommandRegistration,
+  CommandShortcutMetadata,
   Disposable,
   FrontendBackendBridge,
   FrontendOpenForgeAPI,
