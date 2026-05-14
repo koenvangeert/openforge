@@ -22,6 +22,7 @@ import {
   getProjectAttention,
   getProjectConfig,
   getProjects,
+  getPlugin as getPluginIpc,
   getPtyBuffer,
   getReviewComments,
   getReviewPrs,
@@ -33,6 +34,7 @@ import {
   getLatestSession,
   listOpenCodeSkills,
   markReviewPrViewed,
+  installPluginFromGit as installPluginFromGitIpc,
   installPluginFromLocal as installPluginFromLocalIpc,
   installPluginFromNpm as installPluginFromNpmIpc,
   openUrl,
@@ -790,6 +792,9 @@ function upsertInstalledPlugin(row: {
       installPath: row.installPath,
       isBuiltin: row.isBuiltin,
       packageMetadata,
+      sourceKind: row.sourceKind,
+      sourceSpec: row.sourceSpec,
+      installedAt: row.installedAt,
     })
     return next
   })
@@ -797,6 +802,11 @@ function upsertInstalledPlugin(row: {
 
 export async function installPluginFromNpm(packageName: string): Promise<void> {
   const row = await installPluginFromNpmIpc(packageName)
+  upsertInstalledPlugin(row)
+}
+
+export async function installPluginFromGit(gitSpec: string): Promise<void> {
+  const row = await installPluginFromGitIpc(gitSpec)
   upsertInstalledPlugin(row)
 }
 
@@ -878,6 +888,30 @@ export async function enablePluginForProject(projectId: string, pluginId: string
 export async function disablePluginForProject(projectId: string, pluginId: string): Promise<void> {
   await disablePluginInStore(projectId, pluginId)
   await deactivatePluginById(pluginId)
+}
+
+export async function reloadPluginForProject(projectId: string, pluginId: string): Promise<boolean> {
+  await deactivatePluginById(pluginId)
+
+  const refreshedPlugin = await getPluginIpc(pluginId)
+  if (!refreshedPlugin) {
+    installedPlugins.update(map => {
+      const next = new Map(map)
+      next.delete(pluginId)
+      return next
+    })
+    await loadEnabledPluginIdsForProject(projectId)
+    return false
+  }
+
+  upsertInstalledPlugin(refreshedPlugin)
+  await loadEnabledPluginIdsForProject(projectId)
+
+  if (!get(enabledPluginIds).has(pluginId)) {
+    return false
+  }
+
+  return activatePlugin(pluginId)
 }
 
 export async function activatePlugin(pluginId: string): Promise<boolean> {

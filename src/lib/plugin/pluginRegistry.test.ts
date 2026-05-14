@@ -5,6 +5,9 @@ import { get } from 'svelte/store'
 const {
   forceGithubSyncMock,
   installPluginMock,
+  getPluginIpcMock,
+  listPluginsMock,
+  installPluginFromGitIpcMock,
   installPluginFromLocalIpcMock,
   installPluginFromNpmIpcMock,
   uninstallPluginIpcMock,
@@ -17,6 +20,9 @@ const {
 } = vi.hoisted(() => ({
   forceGithubSyncMock: vi.fn(),
   installPluginMock: vi.fn(),
+  getPluginIpcMock: vi.fn(),
+  listPluginsMock: vi.fn(),
+  installPluginFromGitIpcMock: vi.fn(),
   installPluginFromLocalIpcMock: vi.fn(),
   installPluginFromNpmIpcMock: vi.fn(),
   uninstallPluginIpcMock: vi.fn(),
@@ -33,8 +39,10 @@ vi.mock('../ipc', () => ({
   installPlugin: installPluginMock,
   uninstallPlugin: uninstallPluginIpcMock,
   getEnabledPlugins: getEnabledPluginsMock,
-  listPlugins: vi.fn().mockResolvedValue([]),
+  getPlugin: getPluginIpcMock,
+  listPlugins: listPluginsMock,
   setPluginEnabled: vi.fn(),
+  installPluginFromGit: installPluginFromGitIpcMock,
   installPluginFromLocal: installPluginFromLocalIpcMock,
   installPluginFromNpm: installPluginFromNpmIpcMock,
   pluginInvoke: pluginInvokeMock,
@@ -92,6 +100,7 @@ import {
   executePluginCommand,
   initializePluginRuntime,
   installPluginFromManifest,
+  installPluginFromGit,
   installPluginFromNpm,
   uninstallPlugin,
   loadEnabledForProject as registryLoadEnabledForProject,
@@ -100,6 +109,7 @@ import {
   getPluginRenderProps,
   enablePluginForProject,
   disablePluginForProject,
+  reloadPluginForProject,
 } from './pluginRegistry'
 import { installedPlugins, enabledPluginIds } from './pluginStore'
 import type { PluginManifest } from './types'
@@ -145,6 +155,10 @@ describe('pluginRegistry', () => {
   beforeEach(() => {
     installPluginMock.mockReset()
     forceGithubSyncMock.mockReset()
+    getPluginIpcMock.mockReset()
+    listPluginsMock.mockReset()
+    listPluginsMock.mockResolvedValue([])
+    installPluginFromGitIpcMock.mockReset()
     installPluginFromLocalIpcMock.mockReset()
     installPluginFromNpmIpcMock.mockReset()
     uninstallPluginIpcMock.mockReset()
@@ -241,13 +255,39 @@ describe('pluginRegistry', () => {
     expect(get(installedPlugins).has('test-plugin')).toBe(false)
   })
 
-  it('installPluginFromNpm installs through IPC and updates the store', async () => {
-    installPluginFromNpmIpcMock.mockResolvedValue(makeNormalized('npm-plugin'))
+  it('installPluginFromNpm installs app-wide through IPC without enabling the project', async () => {
+    installPluginFromNpmIpcMock.mockResolvedValue({
+      ...makeNormalized('npm-plugin'),
+      sourceKind: 'npm',
+      sourceSpec: 'npm:@acme/plugin@1.0.0',
+    })
 
-    await installPluginFromNpm('some-package')
+    await installPluginFromNpm('@acme/plugin@1.0.0')
 
-    expect(installPluginFromNpmIpcMock).toHaveBeenCalledWith('some-package')
-    expect(get(installedPlugins).get('npm-plugin')?.installPath).toBe('/tmp/plugin')
+    expect(installPluginFromNpmIpcMock).toHaveBeenCalledWith('@acme/plugin@1.0.0')
+    const entry = get(installedPlugins).get('npm-plugin')
+    expect(entry?.installPath).toBe('/tmp/plugin')
+    expect(entry?.sourceKind).toBe('npm')
+    expect(entry?.sourceSpec).toBe('npm:@acme/plugin@1.0.0')
+    expect(get(enabledPluginIds).has('npm-plugin')).toBe(false)
+  })
+
+  it('installPluginFromGit installs app-wide through IPC without enabling the project', async () => {
+    installPluginFromGitIpcMock.mockResolvedValue({
+      ...makeNormalized('git-plugin'),
+      sourceKind: 'git',
+      sourceSpec: 'git:github.com/acme/openforge-tools@main',
+    })
+
+    await installPluginFromGit('github.com/acme/openforge-tools@main')
+
+    expect(installPluginFromGitIpcMock).toHaveBeenCalledWith('github.com/acme/openforge-tools@main')
+    expect(get(installedPlugins).get('git-plugin')).toMatchObject({
+      sourceKind: 'git',
+      sourceSpec: 'git:github.com/acme/openforge-tools@main',
+      state: 'installed',
+    })
+    expect(get(enabledPluginIds).has('git-plugin')).toBe(false)
   })
 
   it('loadEnabledForProject populates enabled set', async () => {
@@ -760,13 +800,67 @@ describe('pluginRegistry', () => {
     expect(installPluginMock).not.toHaveBeenCalled()
   })
 
-  it('installFromLocal reads manifest via IPC and installs', async () => {
-    installPluginFromLocalIpcMock.mockResolvedValue(makeNormalized('local-plugin'))
+  it('installFromLocal reads package metadata via IPC and does not enable the project', async () => {
+    installPluginFromLocalIpcMock.mockResolvedValue({
+      ...makeNormalized('local-plugin'),
+      sourceKind: 'local',
+      sourceSpec: '/plugins/test',
+    })
 
     await installFromLocal('/plugins/test', 'project-1')
 
     expect(installPluginFromLocalIpcMock).toHaveBeenCalledWith('/plugins/test')
-    expect(get(installedPlugins).has('local-plugin')).toBe(true)
+    expect(get(installedPlugins).get('local-plugin')).toMatchObject({
+      sourceKind: 'local',
+      sourceSpec: '/plugins/test',
+      state: 'installed',
+    })
+    expect(get(enabledPluginIds).has('local-plugin')).toBe(false)
+  })
+
+  it('reloadPluginForProject refreshes target metadata and preserves other active plugins', async () => {
+    const reloadManifest = makeManifest({ id: 'reload-plugin' })
+    const otherManifest = makeManifest({ id: 'other-plugin' })
+    enabledPluginIds.set(new Set(['reload-plugin', 'other-plugin']))
+    installedPlugins.set(new Map([
+      ['reload-plugin', { manifest: reloadManifest, state: 'active', error: 'old error' }],
+      ['other-plugin', { manifest: otherManifest, state: 'active', error: null }],
+    ]))
+    getPluginIpcMock.mockResolvedValue({
+      ...makeNormalized('reload-plugin'),
+      name: 'Reloaded Plugin',
+      sourceKind: 'local',
+      sourceSpec: '/plugins/reload-plugin',
+    })
+    getEnabledPluginsMock.mockResolvedValue([makeNormalized('reload-plugin'), makeNormalized('other-plugin')])
+    loadPluginFrontendMock.mockResolvedValue({ pluginId: 'reload-plugin', module: {}, activationResult: null })
+    deactivatePluginLoaderMock.mockResolvedValue(undefined)
+    activatePluginLoaderMock.mockImplementation(async (pluginId: string) => {
+      installedPlugins.update(map => {
+        const entry = map.get(pluginId)
+        if (!entry) return map
+        const next = new Map(map)
+        next.set(pluginId, { ...entry, state: 'active', error: null })
+        return next
+      })
+      return { contributions: {} }
+    })
+
+    await expect(reloadPluginForProject('project-1', 'reload-plugin')).resolves.toBe(true)
+
+    expect(deactivatePluginLoaderMock).toHaveBeenCalledWith('reload-plugin')
+    expect(getPluginIpcMock).toHaveBeenCalledWith('reload-plugin')
+    expect(getEnabledPluginsMock).toHaveBeenCalledWith('project-1')
+    expect(activatePluginLoaderMock).toHaveBeenCalledOnce()
+    expect(get(installedPlugins).get('reload-plugin')).toMatchObject({
+      state: 'active',
+      sourceKind: 'local',
+      sourceSpec: '/plugins/reload-plugin',
+    })
+    expect(get(installedPlugins).get('other-plugin')).toMatchObject({
+      state: 'active',
+      error: null,
+    })
   })
 
   it('activatePlugin dedupes concurrent activation for the same plugin', async () => {
