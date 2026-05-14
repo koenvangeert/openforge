@@ -1,4 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
+import { OPENFORGE_FRONTEND_PLUGIN_MARKER } from '@openforge/plugin-sdk/frontend'
+import { isOpenForgePackageMetadata } from '@openforge/plugin-sdk'
+import type { FrontendOpenForgeAPI, FrontendPluginContext } from '@openforge/plugin-sdk/frontend'
 
 const { mockFilesView } = vi.hoisted(() => ({
   mockFilesView: { name: 'FilesViewComponent' },
@@ -8,38 +11,67 @@ vi.mock('./FilesView.svelte', () => ({
   default: mockFilesView,
 }))
 
-import manifest from '../manifest.json'
-import { validatePluginManifest } from '../../../src/lib/plugin/manifest'
+import packageJson from '../package.json'
+
+function makeRuntimeHarness() {
+  const subscriptions = { add: vi.fn() }
+  const invokeGlobal = vi.fn()
+  const api = {
+    views: { register: vi.fn(() => ({ dispose: vi.fn() })) },
+    commands: { invokeGlobal },
+    system: { openUrl: vi.fn() },
+  } as unknown as FrontendOpenForgeAPI
+  const context = {
+    pluginId: packageJson.openforge.id,
+    apiVersion: 1,
+    packageMetadata: packageJson.openforge,
+    subscriptions,
+  } as FrontendPluginContext
+
+  return { api, context, subscriptions, invokeGlobal }
+}
 
 describe('file-viewer plugin', () => {
-  it('has a valid manifest', () => {
-    const errors = validatePluginManifest(manifest)
-    expect(errors).toEqual([])
+  it('has valid package.json#openforge metadata without manifest contributions', () => {
+    expect(isOpenForgePackageMetadata(packageJson.openforge)).toBe(true)
+    expect(packageJson.openforge).not.toHaveProperty('contributes')
+    expect(packageJson.openforge.frontend).toBe('./dist/frontend.js')
   })
 
-  it('activates the Files view contribution', async () => {
-    const { activate, FilesViewComponent } = await import('./index')
+  it('registers the Files view at runtime through defineFrontendPlugin', async () => {
+    const { default: plugin, FilesViewComponent } = await import('./index')
+    const { api, context, subscriptions } = makeRuntimeHarness()
 
-    const result = await activate({
-      pluginId: 'test-plugin',
-      invokeHost: async () => null,
-      invokeBackend: async () => null,
-      onEvent: () => () => {},
-      storage: {
-        get: async () => null,
-        set: async () => {},
-      },
-    })
+    await plugin.activate(api, context)
 
-    expect(result.contributions.views).toHaveLength(1)
-    expect(result.contributions.views?.[0]?.id).toBe('files')
-    expect(result.contributions.views?.[0]?.component).toBe(FilesViewComponent)
+    expect(plugin[OPENFORGE_FRONTEND_PLUGIN_MARKER]).toBe(true)
+    expect(api.views.register).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'files',
+      title: 'Files',
+      icon: 'folder-open',
+      placement: 'rail',
+      order: 10,
+      component: FilesViewComponent,
+    }))
     expect(FilesViewComponent).toBe(mockFilesView)
+    expect(subscriptions.add).toHaveBeenCalledWith(expect.objectContaining({ dispose: expect.any(Function) }))
   })
 
-  it('deactivates without throwing', async () => {
-    const { deactivate } = await import('./index')
+  it('preserves file content metadata when bridging fsReadFile', async () => {
+    const { default: plugin } = await import('./index')
+    const { fsReadFile } = await import('./lib/ipc')
+    const { api, context, invokeGlobal } = makeRuntimeHarness()
+    const imageContent = {
+      type: 'image',
+      content: 'base64-image',
+      mimeType: 'image/png',
+      size: 12,
+    }
+    invokeGlobal.mockResolvedValue(imageContent)
 
-    await expect(deactivate()).resolves.toBeUndefined()
+    await plugin.activate(api, context)
+
+    await expect(fsReadFile('P-1', 'logo.png')).resolves.toEqual(imageContent)
+    expect(invokeGlobal).toHaveBeenCalledWith('openforge.fsReadFile', { projectId: 'P-1', filePath: 'logo.png' })
   })
 })

@@ -81,7 +81,7 @@ import type {
   PluginActivatedSidebarPanelContribution,
   PluginActivatedTaskPaneTabContribution,
 } from './types'
-import { BUILTIN_PLUGIN_MANIFESTS } from './builtinPlugins'
+import { BUILTIN_PLUGIN_MANIFESTS, BUILTIN_PLUGIN_PACKAGE_METADATA } from './builtinPlugins'
 import { registerRenderableContributionComponent } from './componentRegistry'
 import { registerViewComponent } from './componentRegistry'
 import { unregisterViewComponentsForPlugin } from './componentRegistry'
@@ -228,6 +228,7 @@ function runtimeSnapshotToManifestContributions(snapshot: RuntimeContributionSna
       id: view.id,
       title: view.title,
       icon: view.icon,
+      shortcut: view.shortcut,
       showInRail: view.placement === 'rail',
       railOrder: view.order,
     })),
@@ -256,6 +257,7 @@ function runtimeSnapshotToActivationResult(snapshot: RuntimeContributionSnapshot
       id: view.id,
       title: view.title,
       icon: view.icon,
+      shortcut: view.shortcut,
       showInRail: view.placement === 'rail',
       railOrder: view.order,
       component: view.component,
@@ -331,12 +333,94 @@ async function startBackgroundServices(pluginId: string, contributions: PluginAc
   }
 }
 
+function getPackageMetadataForPlugin(pluginId: string, manifest: PluginManifest): OpenForgePackageMetadata {
+  const entry = get(installedPlugins).get(pluginId)
+  const builtinMetadata = BUILTIN_PLUGIN_PACKAGE_METADATA.find(metadata => metadata.id === pluginId)
+  return entry?.packageMetadata ?? builtinMetadata ?? {
+    id: pluginId,
+    apiVersion: 1,
+    displayName: manifest.name,
+    description: manifest.description,
+    frontend: manifest.frontend ?? undefined,
+    backend: manifest.backend ?? undefined,
+  }
+}
+
+function createFrontendRuntimeRegistryForPlugin(pluginId: string, manifest: PluginManifest): RuntimeContributionRegistryInstance {
+  return createRuntimeContributionRegistry({
+    pluginId,
+    projectId: get(activeProjectId),
+    packageMetadata: getPackageMetadataForPlugin(pluginId, manifest),
+    storage: createIpcPluginStorage(pluginId),
+    host: {
+      listProjects: () => getProjects(),
+      getProject: async (projectId) => (await getProjects()).find((project) => project.id === projectId) ?? null,
+      listTasks: (request) => request?.projectId ? getTasksForProject(request.projectId) : getAllTasks(),
+      getTask: (taskId) => getTaskDetail(taskId),
+      updateTaskSummary: (taskId, summary) => updateTaskSummary(taskId, summary),
+      updateTaskStatus: (taskId, status) => updateTaskStatus(taskId, status),
+      getTaskWorkspace: (taskId) => getTaskWorkspace(taskId),
+      getLatestSession: (taskId) => getLatestSession(taskId),
+      readDir: (request) => fsReadDir(request.projectId, request.path ?? null),
+      readFile: (request) => fsReadFile(request.projectId, request.path),
+      searchFiles: (request) => fsSearchFiles(request.projectId, request.query, request.limit),
+      spawnShell: async (request) => {
+        await waitForTerminalEventSubscriptions(request)
+        return spawnShellPty(request.taskId, request.cwd, request.cols, request.rows, request.terminalIndex)
+      },
+      writeShell: (request) => writePty(request.taskId, request.data),
+      resizeShell: (request) => resizePty(request.taskId, request.cols, request.rows),
+      killShell: (request) => killPty(request.taskId),
+      getShellBuffer: (request) => getPtyBuffer(request.taskId),
+      notify: async (request) => {
+        await Promise.resolve()
+        emitPluginHostEvent('openforge.notification', request)
+      },
+      getAttention: () => getProjectAttention(),
+      openUrl: (url) => openUrl(url),
+      getConfig: (key) => getConfig(key),
+      setConfig: (key, value) => setConfig(key, typeof value === 'string' ? value : JSON.stringify(value)),
+      getProjectConfig: (projectId, key) => getProjectConfig(projectId, key),
+      setProjectConfig: (projectId, key, value) => setProjectConfig(projectId, key, typeof value === 'string' ? value : JSON.stringify(value)),
+      invokeHostCommand: (command, payload) => invokePluginHostCommand(command, payload),
+      onHostEvent: (event, handler) => subscribeToPluginHostEvent(pluginId, event, handler),
+    },
+  })
+}
+
+async function activateFrontendRuntimePlugin(pluginId: string, manifest: PluginManifest, frontendPlugin: Parameters<RuntimeContributionRegistryInstance['activateFrontend']>[0]): Promise<PluginActivationResult | null> {
+  const runtimeRegistry = createFrontendRuntimeRegistryForPlugin(pluginId, manifest)
+
+  try {
+    await runtimeRegistry.activateFrontend(frontendPlugin)
+    activeRuntimeRegistries.set(pluginId, runtimeRegistry)
+    const snapshot = runtimeRegistry.getSnapshot()
+    const activationResult = runtimeSnapshotToActivationResult(snapshot)
+    setManifestRuntimeContributions(pluginId, runtimeSnapshotToManifestContributions(snapshot))
+    setPluginRuntimeState(pluginId, 'active', null)
+    return activationResult
+  } catch (error) {
+    await runtimeRegistry.deactivate()
+    activeRuntimeRegistries.delete(pluginId)
+    setPluginRuntimeError(pluginId, error)
+    return null
+  }
+}
+
 async function activateBuiltinPluginModule(pluginId: string, context: PluginContext): Promise<PluginActivationResult | null> {
   try {
     const { getBuiltinPluginModule } = await import('./builtinPluginModules')
     const builtinModule = getBuiltinPluginModule(pluginId)
     if (!builtinModule) {
       throw new Error(`Unknown builtin plugin: ${pluginId}`)
+    }
+
+    if (isFrontendPluginModule(builtinModule)) {
+      const manifest = get(installedPlugins).get(pluginId)?.manifest
+      if (!manifest) {
+        throw new Error(`Builtin plugin ${pluginId} is not installed`)
+      }
+      return activateFrontendRuntimePlugin(pluginId, manifest, builtinModule)
     }
 
     const activationResult = await builtinModule.activate(context)
@@ -472,6 +556,8 @@ async function deactivateLoadedPluginModule(pluginId: string): Promise<void> {
     } finally {
       activeRuntimeRegistries.delete(pluginId)
     }
+    setPluginRuntimeState(pluginId, 'installed', null)
+    return
   }
 
   if (isBackendOnlyExternalPlugin(pluginId)) {
@@ -843,6 +929,7 @@ export async function initializePluginRuntime(): Promise<void> {
   await loadInstalledPlugins()
 
   for (const manifest of BUILTIN_PLUGIN_MANIFESTS) {
+    const packageMetadata = getPackageMetadataForPlugin(manifest.id, manifest)
     await installPlugin({
       id: manifest.id,
       name: manifest.name,
@@ -854,6 +941,9 @@ export async function initializePluginRuntime(): Promise<void> {
       frontendEntry: manifest.frontend ?? '',
       backendEntry: manifest.backend,
       installPath: `builtin:${manifest.id}`,
+      sourceKind: 'builtin',
+      sourceSpec: manifest.id,
+      packageMetadata: JSON.stringify(packageMetadata),
       installedAt: Date.now(),
       isBuiltin: true,
     })
@@ -923,7 +1013,7 @@ export async function activatePlugin(pluginId: string): Promise<boolean> {
   const entry = map.get(pluginId)
   if (!entry) return false
 
-  if (entry.state === 'active' && (isPluginLoaded(pluginId) || activeBuiltinPluginModules.has(pluginId))) {
+  if (entry.state === 'active' && (isPluginLoaded(pluginId) || activeBuiltinPluginModules.has(pluginId) || activeRuntimeRegistries.has(pluginId))) {
     return true
   }
 

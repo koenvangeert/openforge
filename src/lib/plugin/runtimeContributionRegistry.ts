@@ -62,6 +62,8 @@ export type RuntimeHostBridge = {
   setConfig?(key: string, value: unknown): Promise<void>
   getProjectConfig?(projectId: string, key: string): Promise<unknown>
   setProjectConfig?(projectId: string, key: string, value: unknown): Promise<void>
+  invokeHostCommand?(command: string, payload?: unknown): Promise<unknown>
+  onHostEvent?(event: string, handler: (payload: unknown) => void): () => void
 }
 
 type RuntimeOptions = {
@@ -598,6 +600,11 @@ class RuntimeContributionRegistry {
     }
     assertHandler('events', handler)
 
+    if (global && qualifiedId.startsWith('openforge.') && this.host.onHostEvent) {
+      const unsubscribe = this.host.onHostEvent(qualifiedId.slice('openforge.'.length), handler)
+      return createDisposable(() => unsubscribe())
+    }
+
     const target = global ? globalEventHandlers : this.eventHandlers
     const handlers = target.get(qualifiedId) ?? new Set<RuntimeEventHandler>()
     handlers.add(handler)
@@ -757,6 +764,9 @@ class RuntimeContributionRegistry {
   private async invokeGlobalCommand<TOutput>(qualifiedId: string, payload?: unknown): Promise<TOutput> {
     const command = globalCommands.get(qualifiedId)
     if (!command) {
+      if (qualifiedId.startsWith('openforge.') && this.host.invokeHostCommand) {
+        return await this.host.invokeHostCommand(qualifiedId.slice('openforge.'.length), payload) as TOutput
+      }
       throw new Error(`Unknown command: ${qualifiedId}`)
     }
     validateSchemaValue(command.input, payload, `${qualifiedId} input`)
