@@ -1,20 +1,12 @@
 import { describe, expect, it, vi } from 'vitest'
 import PluginSlot from '../components/plugin/PluginSlot.svelte'
-import type { PluginManifest } from './plugin/types'
+import type { RuntimeContributionSource } from './plugin/contributionResolver'
 import { ICON_RAIL_HIDDEN_VIEWS, TASK_CLEARING_VIEWS, VIEWS, getPluginViewEntries, getViews } from './views'
 import type { ViewContext } from './views'
 
-function makeManifest(overrides: Partial<PluginManifest> = {}): PluginManifest {
+function makeSource(overrides: Partial<RuntimeContributionSource> = {}): RuntimeContributionSource {
   return {
-    id: 'plugin.example',
-    name: 'Example Plugin',
-    version: '1.0.0',
-    apiVersion: 1,
-    description: 'Example plugin',
-    permissions: [],
-    contributes: {},
-    frontend: 'dist/index.js',
-    backend: null,
+    pluginId: 'plugin.example',
     ...overrides,
   }
 }
@@ -73,140 +65,104 @@ describe('views registry', () => {
     expect('files' in resolvedViews).toBe(false)
   })
 
-  it('returns no plugin view entries when no manifests are enabled', () => {
+  it('returns no plugin view entries when no runtime contributions are enabled', () => {
     expect(getPluginViewEntries([])).toEqual([])
   })
 
   it('merges plugin views with the static registry', () => {
     const pluginViews = getViews([
-      makeManifest({
-        id: 'plugin.analytics',
-        contributes: {
-          views: [
-            {
-              id: 'dashboard',
-              title: 'Analytics',
-              icon: 'plug',
-              showInRail: true,
-            },
-          ],
-        },
+      makeSource({
+        pluginId: 'plugin.analytics',
+        views: [
+          {
+            id: 'dashboard',
+            title: 'Analytics',
+            icon: 'plug',
+            showInRail: true,
+          },
+        ],
       }),
     ])
 
     expect(pluginViews['plugin:plugin.analytics:dashboard']).toBeDefined()
   })
 
-  it('resolves the file viewer view through plugin entries', () => {
+  it('resolves builtin package runtime views through plugin entries', () => {
     const pluginViews = getViews([
-      makeManifest({
-        id: 'com.openforge.file-viewer',
-        contributes: {
-          views: [
-            {
-              id: 'files',
-              title: 'Files',
-              icon: 'folder-open',
-              shortcut: 'Cmd+O',
-              showInRail: true,
-              railOrder: 10,
-            },
-          ],
-        },
+      makeSource({
+        pluginId: 'com.openforge.file-viewer',
+        views: [
+          {
+            id: 'files',
+            title: 'Files',
+            icon: 'folder-open',
+            shortcut: 'Cmd+O',
+            showInRail: true,
+            railOrder: 10,
+          },
+        ],
+      }),
+      makeSource({
+        pluginId: 'com.openforge.skills-viewer',
+        views: [
+          {
+            id: 'skills',
+            title: 'Skills',
+            icon: 'sparkles',
+            shortcut: 'Cmd+L',
+            showInRail: true,
+            railOrder: 30,
+          },
+        ],
+      }),
+      makeSource({
+        pluginId: 'com.openforge.github-sync',
+        views: [
+          {
+            id: 'pr_review',
+            title: 'Pull Requests',
+            icon: 'git-pull-request',
+            shortcut: 'Cmd+G',
+            showInRail: true,
+            railOrder: 20,
+          },
+        ],
+      }),
+      makeSource({
+        pluginId: 'com.openforge.terminal',
+        views: [
+          {
+            id: 'terminal',
+            title: 'Terminal',
+            icon: 'terminal',
+            shortcut: 'Cmd+J',
+            showInRail: true,
+            railOrder: 40,
+          },
+        ],
       }),
     ])
 
     expect(pluginViews['plugin:com.openforge.file-viewer:files']).toBeDefined()
+    expect(pluginViews['plugin:com.openforge.skills-viewer:skills']).toBeDefined()
+    expect(pluginViews['plugin:com.openforge.github-sync:pr_review']).toBeDefined()
+    expect(pluginViews['plugin:com.openforge.terminal:terminal']).toBeDefined()
     expect('files' in pluginViews).toBe(false)
     expect(pluginViews['plugin:com.openforge.file-viewer:files']?.component).toBe(PluginSlot)
   })
 
-  it('resolves the skills viewer view through plugin entries', () => {
-    const pluginViews = getViews([
-      makeManifest({
-        id: 'com.openforge.skills-viewer',
-        contributes: {
-          views: [
-            {
-              id: 'skills',
-              title: 'Skills',
-              icon: 'sparkles',
-              shortcut: 'Cmd+L',
-              showInRail: true,
-              railOrder: 30,
-            },
-          ],
-        },
-      }),
-    ])
-
-    expect(pluginViews['plugin:com.openforge.skills-viewer:skills']).toBeDefined()
-    expect('skills' in pluginViews).toBe(false)
-    expect(pluginViews['plugin:com.openforge.skills-viewer:skills']?.component).toBe(PluginSlot)
-  })
-
-  it('resolves the github sync PR review view through plugin entries', () => {
-    const pluginViews = getViews([
-      makeManifest({
-        id: 'com.openforge.github-sync',
-        contributes: {
-          views: [
-            {
-              id: 'pr_review',
-              title: 'Pull Requests',
-              icon: 'git-pull-request',
-              shortcut: 'Cmd+G',
-              showInRail: true,
-              railOrder: 20,
-            },
-          ],
-        },
-      }),
-    ])
-
-    expect(pluginViews['plugin:com.openforge.github-sync:pr_review']).toBeDefined()
-    expect('pr_review' in pluginViews).toBe(false)
-    expect(pluginViews['plugin:com.openforge.github-sync:pr_review']?.component).toBe(PluginSlot)
-  })
-
-  it('resolves the terminal view through plugin entries', () => {
-    const pluginViews = getViews([
-      makeManifest({
-        id: 'com.openforge.terminal',
-        contributes: {
-          views: [
-            {
-              id: 'terminal',
-              title: 'Terminal',
-              icon: 'terminal',
-              shortcut: 'Cmd+J',
-              showInRail: true,
-              railOrder: 40,
-            },
-          ],
-        },
-      }),
-    ])
-
-    expect(pluginViews['plugin:com.openforge.terminal:terminal']).toBeDefined()
-    expect('terminal' in pluginViews).toBe(false)
-    expect(pluginViews['plugin:com.openforge.terminal:terminal']?.component).toBe(PluginSlot)
-  })
-
   it('passes plugin slot props for builtin fullpage views', () => {
     const pluginViews = getViews([
-      makeManifest({
-        id: 'com.openforge.file-viewer',
-        contributes: {
-          views: [
-            {
-              id: 'files',
-              title: 'Files',
-              icon: 'folder-open',
-              showInRail: true,
-            },
-          ],
-        },
+      makeSource({
+        pluginId: 'com.openforge.file-viewer',
+        views: [
+          {
+            id: 'files',
+            title: 'Files',
+            icon: 'folder-open',
+            showInRail: true,
+          },
+        ],
       }),
     ])
 

@@ -10,9 +10,8 @@
   import PluginSlot from '../plugin/PluginSlot.svelte'
   import { resolveContributions } from '../../lib/plugin/contributionResolver'
   import type { ResolvedTab } from '../../lib/plugin/contributionResolver'
-  import { enabledPluginIds, installedPlugins } from '../../lib/plugin/pluginStore'
+  import { enabledPluginIds, runtimeContributionSources } from '../../lib/plugin/pluginStore'
   import { TERMINAL_PLUGIN_ID } from '../../lib/terminalPlugin'
-  import type { PluginManifest } from '../../lib/plugin/types'
   import { useShortcutRegistry } from '../../lib/shortcuts.svelte'
   import { releaseAllForTask } from '../../lib/terminalPool'
   import type { Action, BoardStatus, Task } from '../../lib/types'
@@ -38,12 +37,12 @@
   const taskShortcuts = useShortcutRegistry()
 
   let displayTitle = $derived(task.initial_prompt || (task.prompt ? task.prompt.split('\n')[0] : '') || task.id)
-  let enabledPluginManifests = $derived(
+  let enabledPluginContributionSources = $derived(
     Array.from($enabledPluginIds)
-      .map((id) => $installedPlugins.get(id)?.manifest)
-      .filter((manifest): manifest is PluginManifest => manifest !== undefined)
+      .map((id) => $runtimeContributionSources.get(id))
+      .filter((source) => source !== undefined)
   )
-  let pluginTaskPaneTabs = $derived(resolveContributions(enabledPluginManifests).taskPaneTabs)
+  let pluginTaskPaneTabs = $derived(resolveContributions(enabledPluginContributionSources).taskPaneTabs)
   let sortedTaskPaneTabs = $derived([...pluginTaskPaneTabs].sort((a, b) => a.order - b.order || a.title.localeCompare(b.title)))
   let terminalTaskPaneTab = $derived(
     sortedTaskPaneTabs.find((tab) => tab.pluginId === TERMINAL_PLUGIN_ID && tab.contributionId === 'terminal') ?? null

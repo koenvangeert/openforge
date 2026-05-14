@@ -24,6 +24,7 @@ import {
   isPluginEnabled,
   getContributions,
   loadEnabledForProject,
+  runtimeContributionSources,
 } from './pluginStore'
 import type { NormalizedPluginRow } from '../ipc'
 
@@ -56,6 +57,7 @@ describe('pluginStore', () => {
     enabledPluginIds.set(new Set())
     loading.set(false)
     error.set(null)
+    runtimeContributionSources.set(new Map())
   })
 
   it('loads installed plugins from backend', async () => {
@@ -94,7 +96,6 @@ describe('pluginStore', () => {
       id: 'package-id',
       name: 'Package Plugin',
       description: 'Package metadata description',
-      contributes: {},
       frontend: './dist/frontend.js',
       backend: './dist/backend.js',
     })
@@ -121,7 +122,7 @@ describe('pluginStore', () => {
     expect(isPluginEnabled('p2')).toBe(false)
   })
 
-  it('getContributions returns empty array (stub)', () => {
+  it('getContributions resolves enabled runtime contribution sources only', () => {
     installedPlugins.set(new Map([[
       'p1',
       {
@@ -132,15 +133,16 @@ describe('pluginStore', () => {
           apiVersion: 1,
           description: 'Test plugin',
           permissions: [],
-          contributes: {
-            views: [{ id: 'main', title: 'Main', icon: 'sparkles' }],
-          },
           frontend: 'index.js',
           backend: null,
         },
         state: 'installed',
         error: null,
       },
+    ]]))
+    runtimeContributionSources.set(new Map([[
+      'p1',
+      { pluginId: 'p1', views: [{ id: 'main', title: 'Main', icon: 'sparkles' }] },
     ]]))
     enabledPluginIds.set(new Set(['p1']))
 
@@ -187,7 +189,6 @@ describe('pluginStore', () => {
           apiVersion: 1,
           description: 'Builtin plugin',
           permissions: [],
-          contributes: {},
           frontend: 'index.js',
           backend: null,
         },

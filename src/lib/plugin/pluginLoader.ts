@@ -1,10 +1,10 @@
 import { installedPlugins } from './pluginStore'
 import { OPENFORGE_FRONTEND_PLUGIN_MARKER } from '@openforge/plugin-sdk/frontend'
 import type { FrontendPlugin } from '@openforge/plugin-sdk/frontend'
-import type { PluginActivationResult, PluginContext, PluginState } from './types'
+import type { PluginState } from './types'
 
 export interface PluginESM {
-  activate(context: PluginContext): Promise<PluginActivationResult> | PluginActivationResult
+  activate(context: unknown): Promise<unknown> | unknown
   deactivate?(): Promise<void> | void
 }
 
@@ -18,7 +18,6 @@ export type LoadedPluginModule = PluginESM | FrontendPluginESM
 export interface LoadedPlugin {
   pluginId: string
   module: LoadedPluginModule
-  activationResult: PluginActivationResult | null
 }
 
 const loadedPlugins = new Map<string, LoadedPlugin>()
@@ -86,7 +85,6 @@ export async function loadPluginFrontend(pluginId: string, installPath: string):
     const loadedPlugin: LoadedPlugin = {
       pluginId,
       module: loadedModule,
-      activationResult: null,
     }
 
     loadedPlugins.set(pluginId, loadedPlugin)
@@ -98,24 +96,15 @@ export async function loadPluginFrontend(pluginId: string, installPath: string):
   }
 }
 
-export async function activatePlugin(pluginId: string, context: PluginContext): Promise<PluginActivationResult | null> {
+export async function activatePlugin(pluginId: string): Promise<null> {
   const loadedPlugin = loadedPlugins.get(pluginId)
   if (!loadedPlugin) return null
 
-  try {
-    if (isFrontendPluginModule(loadedPlugin.module)) {
-      throw new Error(`Plugin ${pluginId} uses defineFrontendPlugin and must be activated by the frontend runtime`)
-    }
-
-    const activationResult = await loadedPlugin.module.activate(context)
-    loadedPlugin.activationResult = activationResult
-    setPluginState(pluginId, 'active', null)
-    return activationResult
-  } catch (error) {
-    loadedPlugin.activationResult = null
-    setPluginState(pluginId, 'error', normalizeErrorMessage(error))
-    return null
-  }
+  const message = isFrontendPluginModule(loadedPlugin.module)
+    ? `Plugin ${pluginId} uses defineFrontendPlugin and must be activated by the frontend runtime`
+    : `Plugin ${pluginId} uses the legacy activate(context) API, which is no longer supported; export defineFrontendPlugin(...) and register contributions at runtime`
+  setPluginState(pluginId, 'error', message)
+  return null
 }
 
 export async function deactivatePlugin(pluginId: string): Promise<void> {

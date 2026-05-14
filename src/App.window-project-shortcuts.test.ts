@@ -49,6 +49,10 @@ describe('App window and project shortcuts', () => {
         expect(installedPluginRows.some((row) => row.id === 'com.openforge.github-sync')).toBe(true)
       })
       pluginStore.enabledPluginIds.set(new Set(['com.openforge.github-sync']))
+      pluginStore.runtimeContributionSources.set(new Map([[
+        'com.openforge.github-sync',
+        { pluginId: 'com.openforge.github-sync', commands: [{ id: 'refresh', title: 'Refresh Pull Requests', shortcut: 'Cmd+Shift+R' }] },
+      ]]))
 
       await fireEvent.keyDown(window, { key: 'R', metaKey: true, shiftKey: true, bubbles: true })
 

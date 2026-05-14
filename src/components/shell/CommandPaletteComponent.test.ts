@@ -12,6 +12,7 @@ const mockSelectedTaskId = writable<string | null>(null)
 const mockTasks = writable<Task[]>([])
 const mockInstalledPlugins = writable<Map<string, PluginEntry>>(new Map())
 const mockEnabledPluginIds = writable<Set<string>>(new Set())
+const mockRuntimeContributionSources = writable(new Map<string, { pluginId: string; commands?: unknown[] }>())
 
 const mockGetAllTasks = vi.fn<() => Promise<Task[]>>()
 const mockGetLatestSessions = vi.fn<(taskIds: string[]) => Promise<AgentSession[]>>()
@@ -29,6 +30,7 @@ vi.mock('../../lib/stores', () => ({
 vi.mock('../../lib/plugin/pluginStore', () => ({
   installedPlugins: mockInstalledPlugins,
   enabledPluginIds: mockEnabledPluginIds,
+  runtimeContributionSources: mockRuntimeContributionSources,
 }))
 
 vi.mock('../../lib/plugin/pluginRegistry', () => ({
@@ -90,6 +92,7 @@ describe('CommandPalette component', () => {
     mockTasks.set([])
     mockInstalledPlugins.set(new Map())
     mockEnabledPluginIds.set(new Set())
+    mockRuntimeContributionSources.set(new Map())
     mockExecutePluginCommand.mockResolvedValue(true)
   })
 
@@ -137,17 +140,18 @@ describe('CommandPalette component', () => {
           apiVersion: 1,
           description: 'Adds commands',
           permissions: [],
-          contributes: {
-            commands: [{ id: 'sync-now', title: 'Sync Now', shortcut: 'Cmd+Shift+S' }],
-          },
           frontend: 'index.js',
           backend: null,
         },
-        state: 'active',
+        state: 'installed',
         error: null,
       },
     ]]))
     mockEnabledPluginIds.set(new Set(['plugin.commands']))
+    mockRuntimeContributionSources.set(new Map([[
+      'plugin.commands',
+      { pluginId: 'plugin.commands', commands: [{ id: 'sync-now', title: 'Sync Now', shortcut: 'Cmd+Shift+S' }] },
+    ]]))
 
     const { default: CommandPalette } = await import('./CommandPalette.svelte')
     const onClose = vi.fn()

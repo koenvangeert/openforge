@@ -1,5 +1,4 @@
-import type { Component } from 'svelte'
-import type { CommandShortcutMetadata, OpenForgePackageMetadata, PluginComponentLoader, PluginSettingsSectionProps as SdkPluginSettingsSectionProps, PluginStorage, PluginTaskPaneProps as SdkPluginTaskPaneProps, PluginViewProps as SdkPluginViewProps } from '@openforge/plugin-sdk'
+import type { CommandShortcutMetadata, OpenForgePackageMetadata, PluginStorage } from '@openforge/plugin-sdk'
 
 export type { PluginStorage }
 
@@ -10,18 +9,8 @@ export interface PluginManifest {
   apiVersion: number
   description: string
   permissions: string[]
-  contributes: PluginContributionPoints
   frontend: string | null
   backend: string | null
-}
-
-export interface PluginContributionPoints {
-  views?: PluginViewContribution[]
-  taskPaneTabs?: PluginTaskPaneTabContribution[]
-  sidebarPanels?: PluginSidebarPanelContribution[]
-  commands?: PluginCommandContribution[]
-  settingsSections?: PluginSettingsSection[]
-  backgroundServices?: PluginBackgroundService[]
 }
 
 export interface PluginViewContribution {
@@ -96,48 +85,6 @@ export interface PluginTaskPaneProps extends Record<string, unknown> {
   taskId: string
   projectId?: string | null
   projectName?: string
-}
-
-export interface PluginActivatedViewContribution extends Partial<PluginViewContribution> {
-  id: string
-  component: Component<SdkPluginViewProps> | PluginComponentLoader<SdkPluginViewProps>
-}
-
-export interface PluginActivatedTaskPaneTabContribution extends Partial<PluginTaskPaneTabContribution> {
-  id: string
-  component: Component<SdkPluginTaskPaneProps> | PluginComponentLoader<SdkPluginTaskPaneProps>
-}
-
-export interface PluginActivatedSidebarPanelContribution extends Partial<PluginSidebarPanelContribution> {
-  id: string
-  component: Component<Record<string, unknown>> | PluginComponentLoader<Record<string, unknown>>
-}
-
-export interface PluginActivatedSettingsSectionContribution extends Partial<PluginSettingsSection> {
-  id: string
-  component: Component<SdkPluginSettingsSectionProps> | PluginComponentLoader<SdkPluginSettingsSectionProps>
-}
-
-export interface PluginActivatedCommandContribution extends Partial<PluginCommandContribution> {
-  id: string
-  execute(payload?: unknown): Promise<unknown> | unknown
-}
-
-export interface PluginActivatedBackgroundService extends Partial<PluginBackgroundService> {
-  id: string
-  start(): Promise<void> | void
-  stop?(): Promise<void> | void
-}
-
-export interface PluginActivationResult {
-  contributions: Omit<PluginContributionPoints, 'views' | 'taskPaneTabs' | 'sidebarPanels' | 'commands' | 'settingsSections' | 'backgroundServices'> & {
-    views?: PluginActivatedViewContribution[]
-    taskPaneTabs?: PluginActivatedTaskPaneTabContribution[]
-    sidebarPanels?: PluginActivatedSidebarPanelContribution[]
-    commands?: PluginActivatedCommandContribution[]
-    settingsSections?: PluginActivatedSettingsSectionContribution[]
-    backgroundServices?: PluginActivatedBackgroundService[]
-  }
 }
 
 export type PluginState = 'installed' | 'active' | 'error' | 'disabled'

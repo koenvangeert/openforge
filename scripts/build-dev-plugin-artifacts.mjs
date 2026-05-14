@@ -150,7 +150,6 @@ async function collectBundledPluginInputs(workspaceRoot) {
         includeExtensions: PLUGIN_INPUT_EXTENSIONS,
       })),
       ...(await existingFiles([
-        path.join(pluginDir, 'manifest.json'),
         path.join(pluginDir, 'package.json'),
         path.join(pluginDir, 'tsconfig.json'),
         path.join(pluginDir, 'vite.config.ts'),

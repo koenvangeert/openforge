@@ -62,7 +62,7 @@ import {
 import { activeProjectColorId, activeProjectId, projects } from '../../lib/stores'
 import PluginSlotTestView from '../plugin/PluginSlotTestView.svelte'
 import { clearComponentRegistry, registerRenderableContributionComponent } from '../../lib/plugin/componentRegistry'
-import { enabledPluginIds, installedPlugins } from '../../lib/plugin/pluginStore'
+import { enabledPluginIds, installedPlugins, runtimeContributionSources } from '../../lib/plugin/pluginStore'
 import SettingsView from './SettingsView.svelte'
 
 const defaultProps = {
@@ -96,6 +96,7 @@ describe('SettingsView', () => {
     ])
     installedPlugins.set(new Map())
     enabledPluginIds.set(new Set())
+    runtimeContributionSources.set(new Map())
     clearComponentRegistry()
   })
 
@@ -185,17 +186,18 @@ describe('SettingsView', () => {
           apiVersion: 1,
           description: 'Adds a settings section',
           permissions: [],
-          contributes: {
-            settingsSections: [{ id: 'advanced', title: 'Advanced Plugin Settings' }],
-          },
           frontend: 'index.js',
           backend: null,
         },
-        state: 'active',
+        state: 'installed',
         error: null,
       },
     ]]))
     enabledPluginIds.set(new Set(['plugin.settings']))
+    runtimeContributionSources.set(new Map([[
+      'plugin.settings',
+      { pluginId: 'plugin.settings', settingsSections: [{ id: 'advanced', title: 'Advanced Plugin Settings' }] },
+    ]]))
     registerRenderableContributionComponent('settingsSections', 'plugin.settings:advanced', PluginSlotTestView)
 
     render(SettingsView, { props: defaultProps })

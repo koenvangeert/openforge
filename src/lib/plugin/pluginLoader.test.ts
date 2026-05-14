@@ -1,5 +1,6 @@
 import { get } from 'svelte/store'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { defineFrontendPlugin } from '@openforge/plugin-sdk/frontend'
 import * as pluginLoader from './pluginLoader'
 import {
   _resetPluginLoaderForTests,
@@ -11,7 +12,7 @@ import {
   loadPluginFrontend,
 } from './pluginLoader'
 import { installedPlugins } from './pluginStore'
-import type { PluginActivationResult, PluginContext, PluginManifest } from './types'
+import type { PluginManifest } from './types'
 
 function makeManifest(pluginId: string): PluginManifest {
   return {
@@ -21,7 +22,6 @@ function makeManifest(pluginId: string): PluginManifest {
     apiVersion: 1,
     description: 'Test plugin',
     permissions: [],
-    contributes: {},
     frontend: 'index.js',
     backend: null,
   }
@@ -31,40 +31,6 @@ function seedPlugin(pluginId: string): void {
   installedPlugins.set(new Map([
     [pluginId, { manifest: makeManifest(pluginId), state: 'installed', error: null }],
   ]))
-}
-
-function makeContext(): PluginContext {
-  return {
-    pluginId: 'test-plugin',
-    invokeHost: vi.fn(async () => null),
-    invokeBackend: vi.fn(async () => null),
-    onEvent: vi.fn(() => () => {}),
-    storage: {
-      global: {
-        get: vi.fn(async () => null),
-        set: vi.fn(async () => undefined),
-        delete: vi.fn(async () => undefined),
-      },
-      project: vi.fn(() => ({
-        get: vi.fn(async () => null),
-        set: vi.fn(async () => undefined),
-        delete: vi.fn(async () => undefined),
-      })),
-      task: vi.fn(() => ({
-        get: vi.fn(async () => null),
-        set: vi.fn(async () => undefined),
-        delete: vi.fn(async () => undefined),
-      })),
-    },
-  }
-}
-
-function makeActivationResult(id: string): PluginActivationResult {
-  return {
-    contributions: {
-      commands: [{ id, title: `Command ${id}`, execute: vi.fn(async () => undefined) }],
-    },
-  }
 }
 
 describe('pluginLoader', () => {
@@ -80,9 +46,7 @@ describe('pluginLoader', () => {
 
   it('loads default-exported defineFrontendPlugin modules successfully', async () => {
     seedPlugin('plugin.default')
-    const module = {
-      activate: vi.fn((_api, _context) => undefined),
-    }
+    const module = defineFrontendPlugin({ activate: vi.fn((_api, _context) => undefined) })
     const loader = vi.fn(async () => ({ default: module }))
     _setModuleLoader(loader)
 
@@ -92,21 +56,29 @@ describe('pluginLoader', () => {
     expect(loader).toHaveBeenCalledWith('plugin://plugin.default/dist/frontend.js')
   })
 
-  it('loads plugin ESM successfully', async () => {
-    seedPlugin('plugin.success')
+  it('loads legacy activate(context) ESM but does not activate it through compatibility paths', async () => {
+    seedPlugin('plugin.legacy')
     const module = {
-      activate: vi.fn(async () => makeActivationResult('success')),
+      activate: vi.fn(async () => ({ contributions: { commands: [{ id: 'legacy', title: 'Legacy' }] } })),
     }
     const loader = vi.fn(async () => module)
     _setModuleLoader(loader)
 
-    const loaded = await loadPluginFrontend('plugin.success', '/plugins/plugin.success/index.js')
+    const loaded = await loadPluginFrontend('plugin.legacy', '/plugins/plugin.legacy/index.js')
 
     expect(loaded).not.toBeNull()
-    expect(loaded?.pluginId).toBe('plugin.success')
+    expect(loaded?.pluginId).toBe('plugin.legacy')
     expect(loaded?.module).toBe(module)
-    expect(isPluginLoaded('plugin.success')).toBe(true)
-    expect(loader).toHaveBeenCalledWith('/plugins/plugin.success/index.js')
+    expect(isPluginLoaded('plugin.legacy')).toBe(true)
+    expect(loader).toHaveBeenCalledWith('/plugins/plugin.legacy/index.js')
+
+    await expect(activatePlugin('plugin.legacy')).resolves.toBeNull()
+    expect(module.activate).not.toHaveBeenCalled()
+    expect(getLoadedPlugin('plugin.legacy')).not.toHaveProperty('activationResult')
+    expect(get(installedPlugins).get('plugin.legacy')).toMatchObject({
+      state: 'error',
+      error: 'Plugin plugin.legacy uses the legacy activate(context) API, which is no longer supported; export defineFrontendPlugin(...) and register contributions at runtime',
+    })
   })
 
   it('catches syntax error on load', async () => {
@@ -125,55 +97,29 @@ describe('pluginLoader', () => {
     })
   })
 
-  it('activates plugin and returns result', async () => {
-    seedPlugin('plugin.activate')
-    const activationResult = makeActivationResult('activate')
-    const module = {
-      activate: vi.fn(async (_context: PluginContext) => activationResult),
-    }
+  it('refuses direct activation of defineFrontendPlugin modules because the runtime registry owns them', async () => {
+    seedPlugin('plugin.frontend')
+    const module = defineFrontendPlugin({ activate: vi.fn((_api, _context) => undefined) })
     _setModuleLoader(async () => module)
-    await loadPluginFrontend('plugin.activate', '/plugins/plugin.activate/index.js')
+    await loadPluginFrontend('plugin.frontend', '/plugins/plugin.frontend/index.js')
 
-    const result = await activatePlugin('plugin.activate', makeContext())
-
-    expect(result).toEqual(activationResult)
-    expect(module.activate).toHaveBeenCalledOnce()
-    expect(getLoadedPlugin('plugin.activate')?.activationResult).toEqual(activationResult)
-    expect(get(installedPlugins).get('plugin.activate')).toMatchObject({
-      state: 'active',
-      error: null,
-    })
-  })
-
-  it('catches activate error', async () => {
-    seedPlugin('plugin.activate-error')
-    const module = {
-      activate: vi.fn(async () => {
-        throw new Error('activate failed')
-      }),
-    }
-    _setModuleLoader(async () => module)
-    await loadPluginFrontend('plugin.activate-error', '/plugins/plugin.activate-error/index.js')
-
-    const result = await activatePlugin('plugin.activate-error', makeContext())
+    const result = await activatePlugin('plugin.frontend')
 
     expect(result).toBeNull()
-    expect(getLoadedPlugin('plugin.activate-error')?.activationResult).toBeNull()
-    expect(get(installedPlugins).get('plugin.activate-error')).toMatchObject({
+    expect(get(installedPlugins).get('plugin.frontend')).toMatchObject({
       state: 'error',
-      error: 'activate failed',
+      error: 'Plugin plugin.frontend uses defineFrontendPlugin and must be activated by the frontend runtime',
     })
   })
 
   it('deactivates plugin successfully', async () => {
     seedPlugin('plugin.deactivate')
     const module = {
-      activate: vi.fn(async () => makeActivationResult('deactivate')),
+      activate: vi.fn(async () => undefined),
       deactivate: vi.fn(async () => undefined),
     }
     _setModuleLoader(async () => module)
     await loadPluginFrontend('plugin.deactivate', '/plugins/plugin.deactivate/index.js')
-    await activatePlugin('plugin.deactivate', makeContext())
 
     await deactivatePlugin('plugin.deactivate')
 
@@ -188,7 +134,7 @@ describe('pluginLoader', () => {
   it('catches deactivate error and still cleans up', async () => {
     seedPlugin('plugin.deactivate-error')
     const module = {
-      activate: vi.fn(async () => makeActivationResult('deactivate-error')),
+      activate: vi.fn(async () => undefined),
       deactivate: vi.fn(async () => {
         throw new Error('deactivate failed')
       }),
@@ -207,16 +153,14 @@ describe('pluginLoader', () => {
   })
 
   it('returns null when activating unloaded plugin', async () => {
-    const result = await activatePlugin('plugin.unknown', makeContext())
+    const result = await activatePlugin('plugin.unknown')
 
     expect(result).toBeNull()
   })
 
   it('returns cached instance for already loaded plugin', async () => {
     seedPlugin('plugin.cached')
-    const module = {
-      activate: vi.fn(async () => makeActivationResult('cached')),
-    }
+    const module = defineFrontendPlugin({ activate: vi.fn((_api, _context) => undefined) })
     const loader = vi.fn(async () => module)
     _setModuleLoader(loader)
 

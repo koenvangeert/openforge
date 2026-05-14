@@ -46,8 +46,10 @@ describe('App navigation shortcuts', () => {
       const App = (await import('./App.svelte')).default
       const stores = await import('./lib/stores')
       const pluginStore = await import('./lib/plugin/pluginStore')
+      const pluginRegistry = await import('./lib/plugin/pluginRegistry')
       const { GITHUB_SYNC_PLUGIN_ID } = await import('./lib/githubSyncPlugin')
       const { get } = await import('svelte/store')
+      const { tick } = await import('svelte')
 
       stores.currentView.set('board')
       render(App)
@@ -55,9 +57,14 @@ describe('App navigation shortcuts', () => {
         expect(get(pluginStore.installedPlugins).has(GITHUB_SYNC_PLUGIN_ID)).toBe(true)
       })
       pluginStore.enabledPluginIds.set(new Set([GITHUB_SYNC_PLUGIN_ID]))
+      await pluginRegistry.activatePlugin(GITHUB_SYNC_PLUGIN_ID)
+      pluginStore.setRuntimeContributionSource(GITHUB_SYNC_PLUGIN_ID, {
+        views: [{ id: 'pr_review', title: 'Pull Requests', icon: 'git-pull-request', showInRail: true, railOrder: 20, shortcut: 'Cmd+G' }],
+      })
+      await tick()
 
       await vi.waitFor(() => {
-        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'g', metaKey: true, bubbles: true }))
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'g', code: 'KeyG', metaKey: true, bubbles: true }))
         expect(get(stores.currentView)).toBe('plugin:com.openforge.github-sync:pr_review')
       })
     })
@@ -66,7 +73,9 @@ describe('App navigation shortcuts', () => {
     const App = (await import('./App.svelte')).default
     const stores = await import('./lib/stores')
     const { get } = await import('svelte/store')
+    const { tick } = await import('svelte')
     const pluginStore = await import('./lib/plugin/pluginStore')
+    const pluginRegistry = await import('./lib/plugin/pluginRegistry')
     const { FILE_VIEWER_PLUGIN_ID } = await import('./lib/fileViewerPlugin')
 
     stores.currentView.set('board')
@@ -75,9 +84,14 @@ describe('App navigation shortcuts', () => {
       expect(get(pluginStore.installedPlugins).has(FILE_VIEWER_PLUGIN_ID)).toBe(true)
     })
     pluginStore.enabledPluginIds.set(new Set([FILE_VIEWER_PLUGIN_ID]))
+    await pluginRegistry.activatePlugin(FILE_VIEWER_PLUGIN_ID)
+    pluginStore.setRuntimeContributionSource(FILE_VIEWER_PLUGIN_ID, {
+      views: [{ id: 'files', title: 'Files', icon: 'folder-open', showInRail: true, railOrder: 10, shortcut: 'Cmd+O' }],
+    })
+    await tick()
 
     await vi.waitFor(() => {
-      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'o', metaKey: true, bubbles: true }))
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'o', code: 'KeyO', metaKey: true, bubbles: true }))
       expect(get(stores.currentView)).toBe('plugin:com.openforge.file-viewer:files')
     })
   })
@@ -86,8 +100,10 @@ describe('App navigation shortcuts', () => {
       const App = (await import('./App.svelte')).default
       const stores = await import('./lib/stores')
       const pluginStore = await import('./lib/plugin/pluginStore')
+      const pluginRegistry = await import('./lib/plugin/pluginRegistry')
       const { SKILLS_VIEWER_PLUGIN_ID } = await import('./lib/skillsViewerPlugin')
       const { get } = await import('svelte/store')
+      const { tick } = await import('svelte')
 
       stores.currentView.set('board')
       render(App)
@@ -95,9 +111,14 @@ describe('App navigation shortcuts', () => {
         expect(get(pluginStore.installedPlugins).has(SKILLS_VIEWER_PLUGIN_ID)).toBe(true)
       })
       pluginStore.enabledPluginIds.set(new Set([SKILLS_VIEWER_PLUGIN_ID]))
+      await pluginRegistry.activatePlugin(SKILLS_VIEWER_PLUGIN_ID)
+      pluginStore.setRuntimeContributionSource(SKILLS_VIEWER_PLUGIN_ID, {
+        views: [{ id: 'skills', title: 'Skills', icon: 'sparkles', showInRail: true, railOrder: 30, shortcut: 'Cmd+L' }],
+      })
+      await tick()
 
       await vi.waitFor(() => {
-        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'l', metaKey: true, bubbles: true }))
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'l', code: 'KeyL', metaKey: true, bubbles: true }))
         expect(get(stores.currentView)).toBe('plugin:com.openforge.skills-viewer:skills')
       })
     })

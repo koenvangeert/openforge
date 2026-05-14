@@ -26,7 +26,6 @@ export function manifestFromBuiltinPackage(packageJson: BuiltinPluginPackageJson
     apiVersion: metadata.apiVersion,
     description: metadata.description,
     permissions: [],
-    contributes: {},
     frontend: metadata.frontend ?? null,
     backend: metadata.backend ?? null,
   }

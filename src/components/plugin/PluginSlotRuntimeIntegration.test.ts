@@ -4,7 +4,7 @@ import { defineFrontendPlugin } from '@openforge/plugin-sdk/frontend'
 
 import PluginSlot from './PluginSlot.svelte'
 import PluginSlotRuntimePropsView from './PluginSlotRuntimePropsView.svelte'
-import { installedPlugins, enabledPluginIds } from '../../lib/plugin/pluginStore'
+import { installedPlugins, enabledPluginIds, runtimeContributionSources } from '../../lib/plugin/pluginStore'
 import { activatePlugin } from '../../lib/plugin/pluginRegistry'
 import { clearComponentRegistry } from '../../lib/plugin/componentRegistry'
 import { _resetPluginLoaderForTests, _setModuleLoader } from '../../lib/plugin/pluginLoader'
@@ -18,7 +18,6 @@ function makePackageManifest(): PluginManifest {
     apiVersion: 1,
     description: 'Runtime slot integration plugin',
     permissions: [],
-    contributes: {},
     frontend: './dist/frontend.js',
     backend: null,
   }
@@ -29,6 +28,7 @@ describe('PluginSlot runtime integration', () => {
     cleanup()
     installedPlugins.set(new Map())
     enabledPluginIds.set(new Set())
+    runtimeContributionSources.set(new Map())
     clearComponentRegistry()
     _resetPluginLoaderForTests()
   })
