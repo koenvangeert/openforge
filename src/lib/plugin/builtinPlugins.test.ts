@@ -7,7 +7,7 @@ describe('built-in plugin package metadata', () => {
     expect(BUILTIN_PLUGIN_PACKAGE_METADATA).not.toEqual([])
     expect(BUILTIN_PLUGIN_PACKAGE_METADATA.every(isOpenForgePackageMetadata)).toBe(true)
     expect(BUILTIN_PLUGIN_PACKAGE_METADATA.map(metadata => metadata.id)).toEqual(BUILTIN_PLUGIN_MANIFESTS.map(manifest => manifest.id))
-    expect(BUILTIN_PLUGIN_MANIFESTS.every(manifest => manifest.contributes && Object.keys(manifest.contributes).length === 0)).toBe(true)
+    expect(BUILTIN_PLUGIN_MANIFESTS.every(manifest => !('contributes' in manifest))).toBe(true)
     expect(BUILTIN_PLUGIN_MANIFESTS.every(manifest => manifest.frontend === './dist/frontend.js')).toBe(true)
   })
 })

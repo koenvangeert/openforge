@@ -1,28 +1,19 @@
 import { describe, expect, it } from 'vitest'
 
 import { resolveContributions, resolveContributionsForSlot } from './contributionResolver'
+import type { RuntimeContributionSource } from './contributionResolver'
 import type {
   PluginBackgroundService,
   PluginCommandContribution,
-  PluginContributionPoints,
-  PluginManifest,
   PluginSettingsSection,
   PluginSidebarPanelContribution,
   PluginTaskPaneTabContribution,
   PluginViewContribution,
 } from './types'
 
-function makeManifest(overrides: Partial<PluginManifest> = {}): PluginManifest {
+function makeSource(overrides: Partial<RuntimeContributionSource> = {}): RuntimeContributionSource {
   return {
-    id: 'plugin.test',
-    name: 'Test Plugin',
-    version: '1.0.0',
-    apiVersion: 1,
-    description: 'Test plugin',
-    permissions: [],
-    contributes: {},
-    frontend: 'dist/index.js',
-    backend: null,
+    pluginId: 'plugin.test',
     ...overrides,
   }
 }
@@ -78,18 +69,16 @@ function makeBackgroundService(overrides: Partial<PluginBackgroundService> = {})
 }
 
 describe('resolveContributions', () => {
-  it('resolves views from a single plugin', () => {
-    const manifest = makeManifest({
-      id: 'plugin.alpha',
-      contributes: {
-        views: [
-          makeView({ id: 'one', title: 'One' }),
-          makeView({ id: 'two', title: 'Two', icon: 'folder-open' }),
-        ],
-      },
+  it('resolves views from a single plugin runtime source', () => {
+    const source = makeSource({
+      pluginId: 'plugin.alpha',
+      views: [
+        makeView({ id: 'one', title: 'One' }),
+        makeView({ id: 'two', title: 'Two', icon: 'folder-open' }),
+      ],
     })
 
-    const result = resolveContributions([manifest])
+    const result = resolveContributions([source])
 
     expect(result.views).toHaveLength(2)
     expect(result.views).toEqual([
@@ -109,13 +98,13 @@ describe('resolveContributions', () => {
   })
 
   it('resolves views from multiple plugins', () => {
-    const pluginA = makeManifest({
-      id: 'plugin.a',
-      contributes: { views: [makeView({ id: 'main', title: 'Plugin A' })] },
+    const pluginA = makeSource({
+      pluginId: 'plugin.a',
+      views: [makeView({ id: 'main', title: 'Plugin A' })],
     })
-    const pluginB = makeManifest({
-      id: 'plugin.b',
-      contributes: { views: [makeView({ id: 'main', title: 'Plugin B', icon: 'folder-open' })] },
+    const pluginB = makeSource({
+      pluginId: 'plugin.b',
+      views: [makeView({ id: 'main', title: 'Plugin B', icon: 'folder-open' })],
     })
 
     const result = resolveContributions([pluginA, pluginB])
@@ -125,14 +114,12 @@ describe('resolveContributions', () => {
   })
 
   it('resolves task-pane tabs', () => {
-    const manifest = makeManifest({
-      id: 'plugin.tabs',
-      contributes: {
-        taskPaneTabs: [makeTab({ id: 'activity', title: 'Activity', icon: 'sparkles', order: 5 })],
-      },
+    const source = makeSource({
+      pluginId: 'plugin.tabs',
+      taskPaneTabs: [makeTab({ id: 'activity', title: 'Activity', icon: 'sparkles', order: 5 })],
     })
 
-    const result = resolveContributions([manifest])
+    const result = resolveContributions([source])
 
     expect(result.taskPaneTabs).toEqual([
       {
@@ -146,24 +133,8 @@ describe('resolveContributions', () => {
     ])
   })
 
-  it('handles empty contributions gracefully', () => {
-    const result = resolveContributions([makeManifest({ contributes: {} })])
-
-    expect(result).toEqual({
-      views: [],
-      taskPaneTabs: [],
-      sidebarPanels: [],
-      commands: [],
-      settingsSections: [],
-      backgroundServices: [],
-    })
-  })
-
-  it('handles undefined contributes gracefully', () => {
-    const manifest = makeManifest()
-    Reflect.deleteProperty(manifest, 'contributes')
-
-    const result = resolveContributions([manifest])
+  it('handles empty contribution sources gracefully', () => {
+    const result = resolveContributions([makeSource()])
 
     expect(result).toEqual({
       views: [],
@@ -176,13 +147,13 @@ describe('resolveContributions', () => {
   })
 
   it('handles duplicate slot contributions by namespacing', () => {
-    const pluginA = makeManifest({
-      id: 'plugin-a',
-      contributes: { views: [makeView({ id: 'main', title: 'Main A' })] },
+    const pluginA = makeSource({
+      pluginId: 'plugin-a',
+      views: [makeView({ id: 'main', title: 'Main A' })],
     })
-    const pluginB = makeManifest({
-      id: 'plugin-b',
-      contributes: { views: [makeView({ id: 'main', title: 'Main B' })] },
+    const pluginB = makeSource({
+      pluginId: 'plugin-b',
+      views: [makeView({ id: 'main', title: 'Main B' })],
     })
 
     const result = resolveContributions([pluginA, pluginB])
@@ -191,44 +162,44 @@ describe('resolveContributions', () => {
   })
 
   it('filters views with invalid icons', () => {
-    const manifest = makeManifest({
-      contributes: {
-        views: [makeView({ id: 'bad', icon: 'nonexistent' }), makeView({ id: 'good', icon: 'plug' })],
-      },
+    const source = makeSource({
+      views: [makeView({ id: 'bad', icon: 'nonexistent' }), makeView({ id: 'good', icon: 'plug' })],
     })
 
-    const result = resolveContributions([manifest])
+    const result = resolveContributions([source])
 
     expect(result.views).toHaveLength(1)
     expect(result.views[0]?.contributionId).toBe('good')
   })
 
   it('normalizes view shortcuts', () => {
-    const manifest = makeManifest({
-      contributes: { views: [makeView({ shortcut: 'Cmd+O' })] },
-    })
+    const source = makeSource({ views: [makeView({ shortcut: 'Cmd+O' })] })
 
-    const result = resolveContributions([manifest])
+    const result = resolveContributions([source])
 
     expect(result.views[0]?.shortcut).toBe('⌘o')
   })
 
-  it('defaults showInRail to true', () => {
-    const manifest = makeManifest({
-      contributes: { views: [makeView()] },
-    })
+  it('normalizes command shortcut metadata', () => {
+    const source = makeSource({ commands: [makeCommand({ shortcut: { key: 'Cmd+K', scope: 'project' } })] })
 
-    const result = resolveContributions([manifest])
+    const result = resolveContributions([source])
+
+    expect(result.commands[0]?.shortcut).toBe('⌘k')
+  })
+
+  it('defaults showInRail to true', () => {
+    const source = makeSource({ views: [makeView()] })
+
+    const result = resolveContributions([source])
 
     expect(result.views[0]?.showInRail).toBe(true)
   })
 
   it('defaults railOrder to 100', () => {
-    const manifest = makeManifest({
-      contributes: { views: [makeView()] },
-    })
+    const source = makeSource({ views: [makeView()] })
 
-    const result = resolveContributions([manifest])
+    const result = resolveContributions([source])
 
     expect(result.views[0]?.railOrder).toBe(100)
   })
@@ -237,20 +208,16 @@ describe('resolveContributions', () => {
     const malformedView = makeView({ title: 'Broken' })
     Reflect.deleteProperty(malformedView, 'id')
 
-    const manifest = makeManifest({
-      contributes: {
-        views: [malformedView, makeView({ id: 'valid', title: 'Valid' })],
-      },
-    })
+    const source = makeSource({ views: [malformedView, makeView({ id: 'valid', title: 'Valid' })] })
 
-    const result = resolveContributions([manifest])
+    const result = resolveContributions([source])
 
     expect(result.views).toHaveLength(1)
     expect(result.views[0]?.contributionId).toBe('valid')
   })
 
   it('resolves all contribution types in one call', () => {
-    const contributions: PluginContributionPoints = {
+    const contributions: Partial<RuntimeContributionSource> = {
       views: [makeView({ id: 'view' })],
       taskPaneTabs: [makeTab({ id: 'tab' })],
       sidebarPanels: [makePanel({ id: 'panel', side: 'left', order: 2 })],
@@ -258,9 +225,9 @@ describe('resolveContributions', () => {
       settingsSections: [makeSettingsSection({ id: 'settings' })],
       backgroundServices: [makeBackgroundService({ id: 'service', name: 'Worker' })],
     }
-    const manifest = makeManifest({ id: 'plugin.all', contributes: contributions })
+    const source = makeSource({ pluginId: 'plugin.all', ...contributions })
 
-    const result = resolveContributions([manifest])
+    const result = resolveContributions([source])
 
     expect(result.views).toHaveLength(1)
     expect(result.taskPaneTabs).toHaveLength(1)
@@ -273,19 +240,18 @@ describe('resolveContributions', () => {
 })
 
 describe('resolveContributionsForSlot', () => {
-  it('matches contributions by contributionId or namespacedId', () => {
+  it('matches contributions by contributionId, namespacedId, or plugin view key', () => {
     const resolved = resolveContributions([
-      makeManifest({
-        id: 'plugin.slot',
-        contributes: {
-          views: [makeView({ id: 'main' })],
-          taskPaneTabs: [makeTab({ id: 'details' })],
-        },
+      makeSource({
+        pluginId: 'plugin.slot',
+        views: [makeView({ id: 'main' })],
+        taskPaneTabs: [makeTab({ id: 'details' })],
       }),
     ])
 
     expect(resolveContributionsForSlot(resolved, 'views', 'main')).toHaveLength(1)
     expect(resolveContributionsForSlot(resolved, 'views', 'plugin.slot:main')).toHaveLength(1)
+    expect(resolveContributionsForSlot(resolved, 'views', 'plugin:plugin.slot:main')).toHaveLength(1)
     expect(resolveContributionsForSlot(resolved, 'taskPaneTabs', 'plugin.slot:details')).toHaveLength(1)
     expect(resolveContributionsForSlot(resolved, 'views', 'missing')).toEqual([])
   })

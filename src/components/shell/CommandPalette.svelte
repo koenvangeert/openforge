@@ -5,8 +5,7 @@
   import { getAllTasks, getLatestSessions } from '../../lib/ipc'
   import { resolveContributions } from '../../lib/plugin/contributionResolver'
   import { executePluginCommand } from '../../lib/plugin/pluginRegistry'
-  import { enabledPluginIds, installedPlugins } from '../../lib/plugin/pluginStore'
-  import type { PluginManifest } from '../../lib/plugin/types'
+  import { enabledPluginIds, installedPlugins, runtimeContributionSources } from '../../lib/plugin/pluginStore'
   import { useListNavigation } from '../../lib/useListNavigation.svelte'
   import type { Task } from '../../lib/types'
   import PaletteModal from './PaletteModal.svelte'
@@ -23,12 +22,12 @@
   let loading = $state(true)
 
   let projectMap = $derived(new Map($projects.map(p => [p.id, p])))
-  let enabledPluginManifests = $derived(
+  let enabledPluginContributionSources = $derived(
     Array.from($enabledPluginIds)
-      .map((pluginId) => $installedPlugins.get(pluginId)?.manifest)
-      .filter((manifest): manifest is PluginManifest => manifest !== undefined)
+      .map((pluginId) => $runtimeContributionSources.get(pluginId))
+      .filter((source) => source !== undefined)
   )
-  let pluginCommands = $derived(resolveContributions(enabledPluginManifests).commands)
+  let pluginCommands = $derived(resolveContributions(enabledPluginContributionSources).commands)
 
   async function loadAllTasks() {
     loading = true

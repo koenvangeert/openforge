@@ -227,7 +227,7 @@ import type { Task, AgentSession, TaskWorkspaceInfo } from '../../lib/types'
 import PluginSlotTestView from '../plugin/PluginSlotTestView.svelte'
 import TerminalTaskPane from './TerminalTaskPane.svelte'
 import { clearComponentRegistry, registerRenderableContributionComponent } from '../../lib/plugin/componentRegistry'
-import { enabledPluginIds, installedPlugins } from '../../lib/plugin/pluginStore'
+import { enabledPluginIds, installedPlugins, runtimeContributionSources } from '../../lib/plugin/pluginStore'
 import { clearTerminalTaskPaneControllers } from './terminalTaskPaneController'
 import TaskDetailView from './TaskDetailView.svelte'
 
@@ -316,17 +316,18 @@ describe('TaskDetailView', () => {
           apiVersion: 1,
           description: 'Embedded terminal plugin',
           permissions: [],
-          contributes: {
-            taskPaneTabs: [{ id: 'terminal', title: 'Terminal', icon: 'terminal', order: 10 }],
-          },
           frontend: 'index.js',
           backend: null,
         },
-        state: 'active',
+        state: 'installed',
         error: null,
       },
     ]]))
     enabledPluginIds.set(new Set(['com.openforge.terminal']))
+    runtimeContributionSources.set(new Map([[
+      'com.openforge.terminal',
+      { pluginId: 'com.openforge.terminal', taskPaneTabs: [{ id: 'terminal', title: 'Terminal', icon: 'terminal', order: 10 }] },
+    ]]))
     clearComponentRegistry()
     registerRenderableContributionComponent('taskPaneTabs', TERMINAL_VIEW_ID, TerminalTaskPane)
   })
@@ -419,17 +420,18 @@ describe('TaskDetailView', () => {
           apiVersion: 1,
           description: 'Adds a task tab',
           permissions: [],
-          contributes: {
-            taskPaneTabs: [{ id: 'activity', title: 'Activity', icon: 'sparkles', order: 5 }],
-          },
           frontend: 'index.js',
           backend: null,
         },
-        state: 'active',
+        state: 'installed',
         error: null,
       },
     ]]))
     enabledPluginIds.set(new Set(['plugin.task-pane']))
+    runtimeContributionSources.set(new Map([[
+      'plugin.task-pane',
+      { pluginId: 'plugin.task-pane', taskPaneTabs: [{ id: 'activity', title: 'Activity', icon: 'sparkles', order: 5 }] },
+    ]]))
     registerRenderableContributionComponent('taskPaneTabs', 'plugin.task-pane:activity', PluginSlotTestView)
 
     render(TaskDetailView, { props: { task: { ...baseTask, status: 'doing' }, onRunAction: mockOnRunAction } })
@@ -452,11 +454,10 @@ describe('TaskDetailView', () => {
           apiVersion: 1,
           description: 'Plugin A tab',
           permissions: [],
-          contributes: { taskPaneTabs: [{ id: 'activity', title: 'Activity A', order: 1 }] },
           frontend: 'index.js',
           backend: null,
         },
-        state: 'active',
+        state: 'installed',
         error: null,
       }],
       ['plugin.b', {
@@ -467,15 +468,18 @@ describe('TaskDetailView', () => {
           apiVersion: 1,
           description: 'Plugin B tab',
           permissions: [],
-          contributes: { taskPaneTabs: [{ id: 'activity', title: 'Activity B', order: 2 }] },
           frontend: 'index.js',
           backend: null,
         },
-        state: 'active',
+        state: 'installed',
         error: null,
       }],
     ]))
     enabledPluginIds.set(new Set(['plugin.a', 'plugin.b']))
+    runtimeContributionSources.set(new Map([
+      ['plugin.a', { pluginId: 'plugin.a', taskPaneTabs: [{ id: 'activity', title: 'Activity A', order: 1 }] }],
+      ['plugin.b', { pluginId: 'plugin.b', taskPaneTabs: [{ id: 'activity', title: 'Activity B', order: 2 }] }],
+    ]))
     registerRenderableContributionComponent('taskPaneTabs', 'plugin.a:activity', PluginSlotTestView)
     registerRenderableContributionComponent('taskPaneTabs', 'plugin.b:activity', PluginSlotTestView)
 
@@ -510,15 +514,18 @@ describe('TaskDetailView', () => {
           apiVersion: 1,
           description: 'Terminal plugin',
           permissions: [],
-          contributes: { taskPaneTabs: [{ id: 'terminal', title: 'Terminal', icon: 'terminal', order: 1 }] },
           frontend: 'index.js',
           backend: null,
         },
-        state: 'active',
+        state: 'installed',
         error: null,
       },
     ]]))
     enabledPluginIds.set(new Set(['com.openforge.terminal']))
+    runtimeContributionSources.set(new Map([[
+      'com.openforge.terminal',
+      { pluginId: 'com.openforge.terminal', taskPaneTabs: [{ id: 'terminal', title: 'Terminal', icon: 'terminal', order: 1 }] },
+    ]]))
     registerRenderableContributionComponent('taskPaneTabs', 'com.openforge.terminal:terminal', PluginSlotTestView)
 
     render(TaskDetailView, { props: { task: { ...baseTask, status: 'doing' }, onRunAction: mockOnRunAction } })

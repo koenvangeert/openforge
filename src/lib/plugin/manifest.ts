@@ -7,22 +7,9 @@ export interface ValidationError {
   message: string
 }
 
-type ContributionFieldKind = 'nonEmptyString' | 'icon' | 'number' | 'shortcut' | 'enum'
-
-interface ContributionFieldSpec {
-  kind: ContributionFieldKind
-  required?: boolean
-  values?: string[]
-}
-
-interface ContributionPointSpec {
-  fields: Record<string, ContributionFieldSpec>
-}
-
 interface ManifestContributionSchema {
   allowedIconKeys: string[]
   shortcutPattern: string
-  contributionPoints: Record<string, ContributionPointSpec>
 }
 
 const contributionSchema = contributionSchemaData as ManifestContributionSchema
@@ -65,133 +52,6 @@ function isObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
 }
 
-function getRequiredStringError(path: string): ValidationError {
-  return { path, message: 'Required string' }
-}
-
-function validateNonEmptyString(value: unknown, path: string, required: boolean): ValidationError[] {
-  if (value === undefined) {
-    return required ? [getRequiredStringError(path)] : []
-  }
-
-  if (!isString(value) || !value) {
-    return [required ? getRequiredStringError(path) : { path, message: 'Must be a string' }]
-  }
-
-  return []
-}
-
-function validateIcon(value: unknown, path: string, required: boolean): ValidationError[] {
-  const errors = validateNonEmptyString(value, path, required)
-  if (errors.length > 0 || value === undefined) {
-    return errors
-  }
-
-  if (!ALLOWED_ICON_KEYS.has(value as string)) {
-    return [{ path, message: `Icon key "${value as string}" not allowed` }]
-  }
-
-  return []
-}
-
-function validateNumber(value: unknown, path: string, required: boolean): ValidationError[] {
-  if (value === undefined) {
-    return required ? [{ path, message: 'Required number' }] : []
-  }
-
-  if (!isNumber(value)) {
-    return [{ path, message: 'Must be a number' }]
-  }
-
-  return []
-}
-
-function validateShortcut(value: unknown, path: string, required: boolean): ValidationError[] {
-  if (value === undefined) {
-    return required ? [getRequiredStringError(path)] : []
-  }
-
-  if (!isString(value)) {
-    return [{ path, message: 'Must be a string' }]
-  }
-
-  if (!isValidShortcutFormat(value)) {
-    return [{ path, message: 'Invalid shortcut format' }]
-  }
-
-  return []
-}
-
-function validateEnum(value: unknown, path: string, required: boolean, values: string[] | undefined): ValidationError[] {
-  if (value === undefined) {
-    return required ? [getRequiredStringError(path)] : []
-  }
-
-  if (!isString(value) || !values?.includes(value)) {
-    return [{ path, message: values === undefined ? 'Invalid value' : `Must be ${values.map((option) => `"${option}"`).join(' or ')}` }]
-  }
-
-  return []
-}
-
-function validateContributionField(value: unknown, path: string, spec: ContributionFieldSpec): ValidationError[] {
-  const required = spec.required === true
-
-  switch (spec.kind) {
-    case 'nonEmptyString':
-      return validateNonEmptyString(value, path, required)
-    case 'icon':
-      return validateIcon(value, path, required)
-    case 'number':
-      return validateNumber(value, path, required)
-    case 'shortcut':
-      return validateShortcut(value, path, required)
-    case 'enum':
-      return validateEnum(value, path, required, spec.values)
-  }
-}
-
-function validateContributionArray(value: unknown, path: string, spec: ContributionPointSpec): ValidationError[] {
-  const errors: ValidationError[] = []
-
-  if (!isArray(value)) {
-    errors.push({ path, message: 'Must be an array' })
-    return errors
-  }
-
-  value.forEach((item, index) => {
-    const itemPath = `${path}[${index}]`
-    if (!isObject(item)) {
-      errors.push({ path: itemPath, message: 'Must be an object' })
-      return
-    }
-
-    Object.entries(spec.fields).forEach(([fieldName, fieldSpec]) => {
-      errors.push(...validateContributionField(item[fieldName], `${itemPath}.${fieldName}`, fieldSpec))
-    })
-  })
-
-  return errors
-}
-
-function validateContributionPoints(contributes: unknown): ValidationError[] {
-  const errors: ValidationError[] = []
-
-  if (!isObject(contributes)) {
-    errors.push({ path: 'contributes', message: 'Must be an object' })
-    return errors
-  }
-
-  Object.entries(contributionSchema.contributionPoints).forEach(([contributionName, contributionSpec]) => {
-    const value = contributes[contributionName]
-    if (value !== undefined) {
-      errors.push(...validateContributionArray(value, `contributes.${contributionName}`, contributionSpec))
-    }
-  })
-
-  return errors
-}
-
 export function validatePluginManifest(data: unknown): ValidationError[] {
   const errors: ValidationError[] = []
 
@@ -227,7 +87,7 @@ export function validatePluginManifest(data: unknown): ValidationError[] {
   }
 
   if (data.contributes !== undefined) {
-    errors.push(...validateContributionPoints(data.contributes))
+    errors.push({ path: 'contributes', message: 'Manifest contribution arrays are not supported; register contributions at runtime' })
   }
 
   if (data.frontend === undefined) {

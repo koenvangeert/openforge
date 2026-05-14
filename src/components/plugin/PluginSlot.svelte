@@ -2,9 +2,8 @@
   import { onDestroy, type Component } from 'svelte'
   import { get } from 'svelte/store'
   import PluginErrorBoundary from './PluginErrorBoundary.svelte'
-  import { enabledPluginIds, installedPlugins } from '../../lib/plugin/pluginStore'
+  import { enabledPluginIds, installedPlugins, runtimeContributionSources } from '../../lib/plugin/pluginStore'
   import { resolveContributions, resolveContributionsForSlot } from '../../lib/plugin/contributionResolver'
-  import type { PluginManifest } from '../../lib/plugin/types'
   import { makePluginViewKey } from '../../lib/plugin/types'
   import { getRegisteredComponent, getRegisteredRenderableComponent, resolvePluginComponent } from '../../lib/plugin/componentRegistry'
   import type { PluginComponentSource } from '../../lib/plugin/componentRegistry'
@@ -29,13 +28,13 @@
   let slotLayout = $derived(slotType === 'views' || slotType === 'taskPaneTabs' ? 'fill' : null)
   let slotHostClass = $derived(slotLayout === 'fill' ? 'flex flex-col flex-1 min-h-0 overflow-hidden' : '')
 
-  let enabledManifests = $derived(
+  let enabledContributionSources = $derived(
     Array.from($enabledPluginIds)
-      .map(id => $installedPlugins.get(id)?.manifest)
-      .filter((m): m is PluginManifest => m !== undefined)
+      .map(id => $runtimeContributionSources.get(id))
+      .filter((source) => source !== undefined)
   )
 
-  let allContributions = $derived(resolveContributions(enabledManifests))
+  let allContributions = $derived(resolveContributions(enabledContributionSources))
   let slotContributions = $derived.by(() => {
     const baseContributions = slotId
       ? resolveContributionsForSlot(allContributions, slotType, slotId)

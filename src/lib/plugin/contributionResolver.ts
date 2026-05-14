@@ -1,6 +1,6 @@
 import { ALLOWED_ICON_KEYS, normalizeShortcut } from './manifest'
 import { isPluginViewKey, parsePluginViewKey } from './types'
-import type { PluginManifest } from './types'
+import type { CommandShortcutMetadata } from '@openforge/plugin-sdk'
 
 export interface ResolvedView {
   pluginId: string
@@ -51,6 +51,16 @@ export interface ResolvedBackgroundService {
   contributionId: string
   namespacedId: string
   name: string
+}
+
+export interface RuntimeContributionSource {
+  pluginId: string
+  views?: unknown[]
+  taskPaneTabs?: unknown[]
+  sidebarPanels?: unknown[]
+  commands?: unknown[]
+  settingsSections?: unknown[]
+  backgroundServices?: unknown[]
 }
 
 export interface ResolvedContributions {
@@ -164,6 +174,19 @@ function resolvePanel(pluginId: string, item: unknown): ResolvedPanel | null {
   }
 }
 
+function normalizeCommandShortcut(shortcut: unknown): string | null {
+  if (isNonEmptyString(shortcut)) {
+    return normalizeShortcut(shortcut)
+  }
+
+  const shortcutMetadata = shortcut as CommandShortcutMetadata | undefined
+  if (isRecord(shortcutMetadata) && isNonEmptyString(shortcutMetadata.key)) {
+    return normalizeShortcut(shortcutMetadata.key)
+  }
+
+  return null
+}
+
 function resolveCommand(pluginId: string, item: unknown): ResolvedCommand | null {
   if (!isRecord(item)) {
     return null
@@ -179,7 +202,7 @@ function resolveCommand(pluginId: string, item: unknown): ResolvedCommand | null
     contributionId: id,
     namespacedId: toNamespacedId(pluginId, id),
     title,
-    shortcut: isNonEmptyString(shortcut) ? normalizeShortcut(shortcut) : null,
+    shortcut: normalizeCommandShortcut(shortcut),
   }
 }
 
@@ -230,7 +253,7 @@ function collectResolved<T>(pluginId: string, items: unknown, resolver: (pluginI
   })
 }
 
-export function resolveContributions(enabledPlugins: PluginManifest[]): ResolvedContributions {
+export function resolveContributions(enabledPlugins: RuntimeContributionSource[]): ResolvedContributions {
   const resolved: ResolvedContributions = {
     views: [],
     taskPaneTabs: [],
@@ -241,21 +264,16 @@ export function resolveContributions(enabledPlugins: PluginManifest[]): Resolved
   }
 
   for (const plugin of enabledPlugins) {
-    if (!isRecord(plugin) || !isNonEmptyString(plugin.id)) {
+    if (!isRecord(plugin) || !isNonEmptyString(plugin.pluginId)) {
       continue
     }
 
-    const contributes = isRecord(plugin.contributes) ? plugin.contributes : null
-    if (contributes === null) {
-      continue
-    }
-
-    resolved.views.push(...collectResolved(plugin.id, contributes.views, resolveView))
-    resolved.taskPaneTabs.push(...collectResolved(plugin.id, contributes.taskPaneTabs, resolveTab))
-    resolved.sidebarPanels.push(...collectResolved(plugin.id, contributes.sidebarPanels, resolvePanel))
-    resolved.commands.push(...collectResolved(plugin.id, contributes.commands, resolveCommand))
-    resolved.settingsSections.push(...collectResolved(plugin.id, contributes.settingsSections, resolveSettingsSection))
-    resolved.backgroundServices.push(...collectResolved(plugin.id, contributes.backgroundServices, resolveBackgroundService))
+    resolved.views.push(...collectResolved(plugin.pluginId, plugin.views, resolveView))
+    resolved.taskPaneTabs.push(...collectResolved(plugin.pluginId, plugin.taskPaneTabs, resolveTab))
+    resolved.sidebarPanels.push(...collectResolved(plugin.pluginId, plugin.sidebarPanels, resolvePanel))
+    resolved.commands.push(...collectResolved(plugin.pluginId, plugin.commands, resolveCommand))
+    resolved.settingsSections.push(...collectResolved(plugin.pluginId, plugin.settingsSections, resolveSettingsSection))
+    resolved.backgroundServices.push(...collectResolved(plugin.pluginId, plugin.backgroundServices, resolveBackgroundService))
   }
 
   return resolved

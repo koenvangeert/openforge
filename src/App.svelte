@@ -26,9 +26,8 @@
   import PluginSlot from './components/plugin/PluginSlot.svelte'
 
   import { resolveContributions } from './lib/plugin/contributionResolver'
-  import { enabledPluginIds, installedPlugins, loadEnabledForProject } from './lib/plugin/pluginStore'
+  import { enabledPluginIds, installedPlugins, loadEnabledForProject, runtimeContributionSources } from './lib/plugin/pluginStore'
   import { isPluginViewKey, makePluginViewKey } from './lib/plugin/types'
-  import type { PluginManifest } from './lib/plugin/types'
   import { activatePlugin, executePluginCommand, initializePluginRuntime } from './lib/plugin/pluginRegistry'
   import { useAppRouter } from './lib/router.svelte'
   import { getProjectColor } from './lib/projectColors'
@@ -70,10 +69,10 @@
       ($pendingTask?.id === $selectedTaskId ? $pendingTask : null)
   )
   let previousActiveProjectId: string | null = $state(null)
-  let enabledPluginManifests = $derived(
+  let enabledPluginContributionSources = $derived(
     Array.from($enabledPluginIds)
-      .map((id) => $installedPlugins.get(id)?.manifest)
-      .filter((manifest): manifest is PluginManifest => manifest !== undefined)
+      .map((id) => $runtimeContributionSources.get(id))
+      .filter((source) => source !== undefined)
   )
   let activeProject = $derived($projects.find(p => p.id === $activeProjectId) || null)
   const appData = useAppDataOrchestrator({
@@ -97,8 +96,8 @@
     triggerGithubSync: appData.triggerGithubSync,
   })
   const handleRunAction = taskActions.handleRunAction
-  let resolvedPluginContributions = $derived(resolveContributions(enabledPluginManifests))
-  let resolvedViews = $derived(getViews(enabledPluginManifests))
+  let resolvedPluginContributions = $derived(resolveContributions(enabledPluginContributionSources))
+  let resolvedViews = $derived(getViews(enabledPluginContributionSources))
   let pluginNavItems = $derived(
     [...resolvedPluginContributions.views]
       .filter((view) => view.showInRail)

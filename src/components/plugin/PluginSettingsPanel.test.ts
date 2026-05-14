@@ -39,7 +39,6 @@ const mockPlugin: PluginEntry = {
     apiVersion: 1,
     description: 'A test plugin',
     permissions: ['read:files'],
-    contributes: {},
     frontend: 'index.js',
     backend: null,
   },

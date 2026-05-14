@@ -1,4 +1,5 @@
 import { defineFrontendPlugin } from '@openforge/plugin-sdk/frontend'
+import type { FrontendOpenForgeAPI } from '@openforge/plugin-sdk/frontend'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { get } from 'svelte/store'
 
@@ -111,7 +112,7 @@ import {
   disablePluginForProject,
   reloadPluginForProject,
 } from './pluginRegistry'
-import { installedPlugins, enabledPluginIds } from './pluginStore'
+import { installedPlugins, enabledPluginIds, runtimeContributionSources } from './pluginStore'
 import type { PluginManifest } from './types'
 import type { NormalizedPluginRow } from '../ipc'
 import { clearComponentRegistry, getRegisteredComponent, getRegisteredRenderableComponent } from './componentRegistry'
@@ -124,7 +125,6 @@ function makeManifest(overrides: Partial<PluginManifest> = {}): PluginManifest {
     apiVersion: 1,
     description: 'A test plugin',
     permissions: [],
-    contributes: {},
     frontend: 'index.js',
     backend: null,
     ...overrides,
@@ -181,69 +181,18 @@ describe('pluginRegistry', () => {
     getBuiltinPluginModuleMock.mockReset()
     installedPlugins.set(new Map())
     enabledPluginIds.set(new Set())
+    runtimeContributionSources.set(new Map())
     clearComponentRegistry()
   })
 
-  it('installPluginFromManifest validates and installs', async () => {
-    installPluginMock.mockResolvedValue(undefined)
+  it('installPluginFromManifest rejects legacy manifest installs loudly', async () => {
     const manifest = makeManifest()
-    await installPluginFromManifest(manifest, '/plugins/test-plugin')
-    expect(installPluginMock).toHaveBeenCalledOnce()
-    const call = installPluginMock.mock.calls[0][0]
-    expect(call.id).toBe('test-plugin')
-    expect(call.frontendEntry).toBe('index.js')
-    const map = get(installedPlugins)
-    expect(map.has('test-plugin')).toBe(true)
-  })
 
-  it('installPluginFromManifest rejects unsupported apiVersion', async () => {
-    const manifest = makeManifest({ apiVersion: 999 })
-    await expect(installPluginFromManifest(manifest, '/plugins/test')).rejects.toThrow(
-      'Unsupported API version'
+    await expect(installPluginFromManifest(manifest, '/plugins/test-plugin')).rejects.toThrow(
+      'Legacy manifest.json plugin installation is no longer supported'
     )
     expect(installPluginMock).not.toHaveBeenCalled()
-  })
-
-  it('installPluginFromManifest allows backend-only command plugins', async () => {
-    installPluginMock.mockResolvedValue(undefined)
-    const manifest = makeManifest({
-      frontend: null,
-      backend: 'backend.js',
-      contributes: {
-        commands: [{ id: 'echo', title: 'Echo' }],
-      },
-    })
-
-    await installPluginFromManifest(manifest, '/plugins/test')
-
-    expect(installPluginMock).toHaveBeenCalledOnce()
-    const call = installPluginMock.mock.calls[0][0]
-    expect(call.frontendEntry).toBe('')
-    expect(call.backendEntry).toBe('backend.js')
-  })
-
-  it('installPluginFromManifest rejects plugins with no executable integration entry', async () => {
-    const manifest = makeManifest({ frontend: null, backend: null })
-
-    await expect(installPluginFromManifest(manifest, '/plugins/test')).rejects.toThrow(
-      'External plugins require a frontend or backend entry'
-    )
-    expect(installPluginMock).not.toHaveBeenCalled()
-  })
-
-  it('installPluginFromManifest rejects frontendless plugins with renderable contributions', async () => {
-    const manifest = makeManifest({
-      frontend: null,
-      backend: 'backend.js',
-      contributes: {
-        views: [{ id: 'main', title: 'Main', icon: 'plug' }],
-      },
-    })
-
-    await expect(installPluginFromManifest(manifest, '/plugins/test')).rejects.toThrow(
-      'Renderable plugin contributions require a frontend entry'
-    )
-    expect(installPluginMock).not.toHaveBeenCalled()
+    expect(get(installedPlugins).has('test-plugin')).toBe(false)
   })
 
   it('uninstallPlugin removes from store', async () => {
@@ -298,23 +247,17 @@ describe('pluginRegistry', () => {
     expect(set.has('pb')).toBe(true)
   })
 
-  it('activates backend-only command plugins with backend RPC handlers', async () => {
-    const manifest = makeManifest({
-      frontend: null,
-      backend: 'backend.js',
-      contributes: {
-        commands: [{ id: 'echo', title: 'Echo' }],
-      },
-    })
+  it('does not synthesize backend command handlers from legacy manifest contributions', async () => {
+    const manifest = makeManifest({ frontend: null, backend: 'backend.js' })
     installedPlugins.set(new Map([['backend-plugin', { manifest: { ...manifest, id: 'backend-plugin' }, state: 'installed', error: null }]]))
     enabledPluginIds.set(new Set(['backend-plugin']))
     pluginInvokeMock.mockResolvedValue({ echoed: true })
 
-    await expect(executePluginCommand('backend-plugin', 'echo', { message: 'hello' })).resolves.toBe(true)
+    await expect(executePluginCommand('backend-plugin', 'echo', { message: 'hello' })).resolves.toBe(false)
 
     expect(loadPluginFrontendMock).not.toHaveBeenCalled()
     expect(activatePluginLoaderMock).not.toHaveBeenCalled()
-    expect(pluginInvokeMock).toHaveBeenCalledWith('backend-plugin', 'echo', { message: 'hello' })
+    expect(pluginInvokeMock).not.toHaveBeenCalled()
     expect(get(installedPlugins).get('backend-plugin')?.state).toBe('active')
   })
 
@@ -322,15 +265,12 @@ describe('pluginRegistry', () => {
     const manifest = makeManifest({
       frontend: null,
       backend: 'backend.js',
-      contributes: {
-        commands: [{ id: 'echo', title: 'Echo' }],
-      },
     })
     installedPlugins.set(new Map([['backend-plugin', { manifest: { ...manifest, id: 'backend-plugin' }, state: 'installed', error: null }]]))
     enabledPluginIds.set(new Set(['backend-plugin']))
     pluginInvokeMock.mockResolvedValue({ echoed: true })
 
-    await expect(executePluginCommand('backend-plugin', 'echo', { message: 'hello' })).resolves.toBe(true)
+    await expect(activatePlugin('backend-plugin')).resolves.toBe(true)
     await deactivatePluginById('backend-plugin')
 
     expect(deactivatePluginLoaderMock).not.toHaveBeenCalled()
@@ -340,32 +280,22 @@ describe('pluginRegistry', () => {
     })
   })
 
-  it('activatePlugin loads frontend and activates', async () => {
+  it('activatePlugin rejects legacy frontend activate(context) modules loudly', async () => {
     const manifest = makeManifest()
+    const legacyModule = { activate: vi.fn() }
     installedPlugins.set(new Map([['test-plugin', { manifest, state: 'installed', error: null }]]))
-    loadPluginFrontendMock.mockResolvedValue({ pluginId: 'test-plugin', module: {}, activationResult: null })
-    activatePluginLoaderMock.mockResolvedValue({ contributions: {} })
-    pluginInvokeMock.mockResolvedValue('backend-result')
-    getPluginStorageMock.mockResolvedValue({ stored: true })
-    setPluginStorageMock.mockResolvedValue(undefined)
+    loadPluginFrontendMock.mockResolvedValue({ pluginId: 'test-plugin', module: legacyModule })
 
     const result = await activatePlugin('test-plugin')
 
-    expect(result).toBe(true)
+    expect(result).toBe(false)
     expect(loadPluginFrontendMock).toHaveBeenCalledWith('test-plugin', 'plugin://test-plugin/index.js')
-    expect(activatePluginLoaderMock).toHaveBeenCalledOnce()
-    const [calledId, calledCtx] = activatePluginLoaderMock.mock.calls[0]
-    expect(calledId).toBe('test-plugin')
-    expect(calledCtx).toBeDefined()
-
-    await expect(calledCtx.invokeBackend('ping', { ok: true })).resolves.toBe('backend-result')
-    expect(pluginInvokeMock).toHaveBeenCalledWith('test-plugin', 'ping', { ok: true })
-
-    await expect(calledCtx.storage.global.get('plugin-key')).resolves.toEqual({ stored: true })
-    expect(getPluginStorageMock).toHaveBeenCalledWith('test-plugin', 'global', null, 'plugin-key')
-
-    await calledCtx.storage.project('P-1').set('plugin-key', { plugin: 'value' })
-    expect(setPluginStorageMock).toHaveBeenCalledWith('test-plugin', 'project', 'P-1', 'plugin-key', { plugin: 'value' })
+    expect(activatePluginLoaderMock).not.toHaveBeenCalled()
+    expect(legacyModule.activate).not.toHaveBeenCalled()
+    expect(get(installedPlugins).get('test-plugin')).toMatchObject({
+      state: 'error',
+      error: 'Plugin test-plugin uses the legacy activate(context) API, which is no longer supported; export defineFrontendPlugin(...) and register contributions at runtime',
+    })
   })
 
   it('activates defineFrontendPlugin package entries through plugin:// assets and runtime registries', async () => {
@@ -400,7 +330,6 @@ describe('pluginRegistry', () => {
     const manifest = makeManifest({
       id: 'runtime-plugin',
       frontend: './dist/frontend.js',
-      contributes: {},
     })
 
     installedPlugins.set(new Map([['runtime-plugin', {
@@ -416,14 +345,14 @@ describe('pluginRegistry', () => {
       },
     }]]))
     enabledPluginIds.set(new Set(['runtime-plugin']))
-    loadPluginFrontendMock.mockResolvedValue({ pluginId: 'runtime-plugin', module: frontendPlugin, activationResult: null })
+    loadPluginFrontendMock.mockResolvedValue({ pluginId: 'runtime-plugin', module: frontendPlugin })
 
     await expect(activatePlugin('runtime-plugin')).resolves.toBe(true)
 
     expect(loadPluginFrontendMock).toHaveBeenCalledWith('runtime-plugin', 'plugin://runtime-plugin/dist/frontend.js')
     expect(activatePluginLoaderMock).not.toHaveBeenCalled()
     expect(activateFrontend).toHaveBeenCalledOnce()
-    expect(get(installedPlugins).get('runtime-plugin')?.manifest.contributes.views).toMatchObject([
+    expect(get(runtimeContributionSources).get('runtime-plugin')?.views).toMatchObject([
       { id: 'prs', title: 'Pull Requests', icon: 'git-pull-request', showInRail: true, railOrder: 25 },
     ])
     expect(getRegisteredComponent('plugin:runtime-plugin:prs')).toBeDefined()
@@ -464,7 +393,7 @@ describe('pluginRegistry', () => {
         }))
       },
     })
-    const manifest = makeManifest({ id: 'enable-runtime-plugin', frontend: './dist/frontend.js', contributes: {} })
+    const manifest = makeManifest({ id: 'enable-runtime-plugin', frontend: './dist/frontend.js' })
     installedPlugins.set(new Map([['enable-runtime-plugin', {
       manifest,
       state: 'installed',
@@ -477,13 +406,13 @@ describe('pluginRegistry', () => {
         frontend: './dist/frontend.js',
       },
     }]]))
-    loadPluginFrontendMock.mockResolvedValue({ pluginId: 'enable-runtime-plugin', module: frontendPlugin, activationResult: null })
+    loadPluginFrontendMock.mockResolvedValue({ pluginId: 'enable-runtime-plugin', module: frontendPlugin })
 
     await expect(enablePluginForProject('P-1', 'enable-runtime-plugin')).resolves.toBe(true)
 
     expect(get(enabledPluginIds)).toEqual(new Set(['enable-runtime-plugin']))
     expect(get(installedPlugins).get('enable-runtime-plugin')?.state).toBe('active')
-    expect(get(installedPlugins).get('enable-runtime-plugin')?.manifest.contributes.views).toMatchObject([
+    expect(get(runtimeContributionSources).get('enable-runtime-plugin')?.views).toMatchObject([
       { id: 'main', title: 'Main View' },
     ])
 
@@ -491,7 +420,7 @@ describe('pluginRegistry', () => {
 
     expect(get(enabledPluginIds)).toEqual(new Set())
     expect(get(installedPlugins).get('enable-runtime-plugin')?.state).toBe('installed')
-    expect(get(installedPlugins).get('enable-runtime-plugin')?.manifest.contributes).toEqual({})
+    expect(get(runtimeContributionSources).get('enable-runtime-plugin')).toBeUndefined()
   })
 
   it('activates builtin defineFrontendPlugin modules inside the host bundle instead of loading plugin:// frontend bundles', async () => {
@@ -505,7 +434,7 @@ describe('pluginRegistry', () => {
         component: Component,
       }))
     })
-    const manifest = makeManifest({ id: 'builtin-plugin', frontend: './dist/frontend.js', contributes: {} })
+    const manifest = makeManifest({ id: 'builtin-plugin', frontend: './dist/frontend.js' })
     installedPlugins.set(new Map([['builtin-plugin', { manifest, state: 'installed', error: null, isBuiltin: true }]]))
     enabledPluginIds.set(new Set(['builtin-plugin']))
     getBuiltinPluginModuleMock.mockReturnValue(defineFrontendPlugin({ activate: activateBuiltin }))
@@ -516,7 +445,7 @@ describe('pluginRegistry', () => {
     expect(loadPluginFrontendMock).not.toHaveBeenCalled()
     expect(activatePluginLoaderMock).not.toHaveBeenCalled()
     expect(activateBuiltin).toHaveBeenCalledOnce()
-    expect(get(installedPlugins).get('builtin-plugin')?.manifest.contributes.views).toMatchObject([
+    expect(get(runtimeContributionSources).get('builtin-plugin')?.views).toMatchObject([
       { id: 'main', title: 'Builtin Main', icon: 'plug', showInRail: true },
     ])
     expect(getRegisteredComponent('plugin:builtin-plugin:main')).toBe(Component)
@@ -529,115 +458,128 @@ describe('pluginRegistry', () => {
     expect(get(installedPlugins).get('builtin-plugin')?.state).toBe('installed')
   })
 
-  it('activates runtime implementations for every supported contribution type', async () => {
-    const tabComponent = {} as never
-    const sidebarComponent = {} as never
-    const settingsComponent = {} as never
+  it('activates runtime implementations for supported frontend contribution types', async () => {
+    const viewComponent = vi.fn() as never
+    const tabComponent = vi.fn() as never
+    const settingsComponent = vi.fn() as never
     const commandHandler = vi.fn(async () => undefined)
-    const startService = vi.fn(async () => undefined)
-    const stopService = vi.fn(async () => undefined)
-
-    installedPlugins.set(new Map([['test-plugin', { manifest: makeManifest(), state: 'installed', error: null }]]))
-    loadPluginFrontendMock.mockResolvedValue({ pluginId: 'test-plugin', module: {}, activationResult: null })
-    activatePluginLoaderMock.mockResolvedValue({
-      contributions: {
-        views: [{ id: 'main', component: {} as never }],
-        taskPaneTabs: [{ id: 'activity', component: tabComponent }],
-        sidebarPanels: [{ id: 'inspector', component: sidebarComponent }],
-        settingsSections: [{ id: 'preferences', component: settingsComponent }],
-        commands: [{ id: 'open-demo', execute: commandHandler }],
-        backgroundServices: [{ id: 'sync', start: startService, stop: stopService }],
+    const frontendPlugin = defineFrontendPlugin({
+      activate(openforge, context) {
+        context.subscriptions.add(openforge.views.register({ id: 'main', title: 'Main', icon: 'sparkles', placement: 'rail', component: viewComponent }))
+        context.subscriptions.add(openforge.taskPane.registerTab({ id: 'activity', title: 'Activity', component: tabComponent }))
+        context.subscriptions.add(openforge.settings.registerSection({ id: 'preferences', title: 'Preferences', component: settingsComponent }))
+        context.subscriptions.add(openforge.commands.register({ id: 'open-demo', title: 'Open demo', handler: commandHandler }))
       },
     })
 
+    installedPlugins.set(new Map([['test-plugin', { manifest: makeManifest(), state: 'installed', error: null }]]))
+    loadPluginFrontendMock.mockResolvedValue({ pluginId: 'test-plugin', module: frontendPlugin })
+
     await expect(activatePlugin('test-plugin')).resolves.toBe(true)
 
-    expect(getRegisteredComponent('plugin:test-plugin:main')).toBeDefined()
+    expect(get(runtimeContributionSources).get('test-plugin')).toMatchObject({
+      views: [{ id: 'main', title: 'Main' }],
+      taskPaneTabs: [{ id: 'activity', title: 'Activity' }],
+      settingsSections: [{ id: 'preferences', title: 'Preferences' }],
+      commands: [{ id: 'open-demo', title: 'Open demo' }],
+    })
+    expect(getRegisteredComponent('plugin:test-plugin:main')).toBe(viewComponent)
     expect(getRegisteredRenderableComponent('taskPaneTabs', 'test-plugin:activity')).toBe(tabComponent)
-    expect(getRegisteredRenderableComponent('sidebarPanels', 'test-plugin:inspector')).toBe(sidebarComponent)
     expect(getRegisteredRenderableComponent('settingsSections', 'test-plugin:preferences')).toBe(settingsComponent)
-    expect(startService).toHaveBeenCalledOnce()
 
     await expect(executePluginCommand('test-plugin', 'open-demo', { source: 'shortcut' })).resolves.toBe(true)
     expect(commandHandler).toHaveBeenCalledWith({ source: 'shortcut' })
 
     await deactivatePluginById('test-plugin')
 
-    expect(stopService).toHaveBeenCalledOnce()
+    expect(get(runtimeContributionSources).get('test-plugin')).toBeUndefined()
     expect(getRegisteredRenderableComponent('taskPaneTabs', 'test-plugin:activity')).toBeUndefined()
-    expect(getRegisteredRenderableComponent('sidebarPanels', 'test-plugin:inspector')).toBeUndefined()
     expect(getRegisteredRenderableComponent('settingsSections', 'test-plugin:preferences')).toBeUndefined()
   })
 
-  it('rolls back runtime state when background service startup fails', async () => {
-    const commandHandler = vi.fn(async () => undefined)
-    const startService = vi.fn(async () => {
-      throw new Error('service failed to start')
-    })
-
-    installedPlugins.set(new Map([['test-plugin', { manifest: makeManifest(), state: 'installed', error: null }]]))
-    loadPluginFrontendMock.mockResolvedValue({ pluginId: 'test-plugin', module: {}, activationResult: null })
-    deactivatePluginLoaderMock.mockResolvedValue(undefined)
-    activatePluginLoaderMock.mockResolvedValue({
-      contributions: {
-        views: [{ id: 'main', component: {} as never }],
-        commands: [{ id: 'open-demo', execute: commandHandler }],
-        backgroundServices: [{ id: 'sync', start: startService }],
+  it('rolls back runtime state when runtime registration validation fails', async () => {
+    const viewComponent = vi.fn() as never
+    const frontendPlugin = defineFrontendPlugin({
+      activate(openforge, context) {
+        context.subscriptions.add(openforge.views.register({ id: 'main', title: 'Main', icon: 'sparkles', placement: 'rail', component: viewComponent }))
+        context.subscriptions.add(openforge.commands.register({ id: 'open-demo', title: 'Open demo', handler: async () => undefined }))
+        openforge.commands.register({ id: 'open-demo', title: 'Duplicate', handler: async () => undefined })
       },
     })
 
+    installedPlugins.set(new Map([['test-plugin', { manifest: makeManifest(), state: 'installed', error: null }]]))
+    loadPluginFrontendMock.mockResolvedValue({ pluginId: 'test-plugin', module: frontendPlugin })
+
     await expect(activatePlugin('test-plugin')).resolves.toBe(false)
 
-    expect(deactivatePluginLoaderMock).toHaveBeenCalledWith('test-plugin')
+    expect(deactivatePluginLoaderMock).not.toHaveBeenCalled()
     expect(getRegisteredComponent('plugin:test-plugin:main')).toBeUndefined()
+    expect(get(runtimeContributionSources).get('test-plugin')).toBeUndefined()
     await expect(executePluginCommand('test-plugin', 'open-demo')).resolves.toBe(false)
     expect(get(installedPlugins).get('test-plugin')).toMatchObject({
       state: 'error',
-      error: 'service failed to start',
+      error: 'Duplicate runtime contribution id: test-plugin.open-demo',
     })
   })
 
-  it('activatePlugin exposes a host context command surface and real event subscription', async () => {
+  it('activatePlugin exposes runtime context, storage, and host event subscription APIs', async () => {
+    const handler = vi.fn()
+    let capturedApi: FrontendOpenForgeAPI | null = null
+    const frontendPlugin = defineFrontendPlugin({
+      activate(openforge, context) {
+        capturedApi = openforge
+        context.subscriptions.add(openforge.events.onGlobal('openforge.selection-changed', handler))
+      },
+    })
     const manifest = makeManifest()
     installedPlugins.set(new Map([['test-plugin', { manifest, state: 'installed', error: null }]]))
-    loadPluginFrontendMock.mockResolvedValue({ pluginId: 'test-plugin', module: {}, activationResult: null })
+    enabledPluginIds.set(new Set(['test-plugin']))
+    loadPluginFrontendMock.mockResolvedValue({ pluginId: 'test-plugin', module: frontendPlugin })
+    getPluginStorageMock.mockResolvedValue({ stored: true })
+    setPluginStorageMock.mockResolvedValue(undefined)
 
-    activatePluginLoaderMock.mockImplementation(async (_pluginId, _context) => {
-      return { contributions: {} }
-    })
+    await expect(activatePlugin('test-plugin')).resolves.toBe(true)
 
-    await activatePlugin('test-plugin')
-
-    const activationCall = activatePluginLoaderMock.mock.calls[0]
-    expect(activationCall).toBeDefined()
-    const context = activationCall?.[1]
-    if (context === undefined) {
-      throw new Error('Expected plugin context to be passed to activatePluginLoader')
+    const api = capturedApi as FrontendOpenForgeAPI | null
+    if (api === null) {
+      throw new Error('Expected runtime API to be passed to defineFrontendPlugin activate')
     }
 
-    await expect(context.invokeHost('getContext')).resolves.toEqual({
-      activeProjectId: null,
-      currentView: 'board',
-      selectedTaskId: null,
-    })
-    forceGithubSyncMock.mockResolvedValue({ ok: true })
-    await expect(context.invokeHost('forceGithubSync')).resolves.toEqual({ ok: true })
-    expect(forceGithubSyncMock).toHaveBeenCalledOnce()
+    expect(api.context.getSnapshot()).toEqual({ pluginId: 'test-plugin', projectId: null })
+    await expect(api.storage.global.get('plugin-key')).resolves.toEqual({ stored: true })
+    expect(getPluginStorageMock).toHaveBeenCalledWith('test-plugin', 'global', null, 'plugin-key')
 
-    const handler = vi.fn()
-    const unsubscribe = context.onEvent('selection-changed', handler)
+    await api.storage.project('P-1').set('plugin-key', { plugin: 'value' })
+    expect(setPluginStorageMock).toHaveBeenCalledWith('test-plugin', 'project', 'P-1', 'plugin-key', { plugin: 'value' })
+
     emitPluginHostEvent('selection-changed', { selectedTaskId: 'T-123' })
     expect(handler).toHaveBeenCalledWith({ selectedTaskId: 'T-123' })
 
-    unsubscribe?.()
+    await deactivatePluginById('test-plugin')
     emitPluginHostEvent('selection-changed', { selectedTaskId: 'T-456' })
     expect(handler).toHaveBeenCalledTimes(1)
   })
 
   it('waits for terminal event listeners to be attached before spawning shell PTYs', async () => {
+    let spawn: Promise<number> | null = null
+    const outputHandler = vi.fn()
+    const frontendPlugin = defineFrontendPlugin({
+      activate(openforge, context) {
+        context.subscriptions.add(openforge.events.onGlobal('openforge.pty-output-T-1-shell-0', outputHandler))
+        context.subscriptions.add(openforge.events.onGlobal('openforge.pty-exit-T-1-shell-0', vi.fn()))
+        spawn = openforge.shell.spawn({
+          taskId: 'T-1',
+          cwd: '/tmp/worktree',
+          cols: 80,
+          rows: 24,
+          terminalIndex: 0,
+        })
+      },
+    })
     const manifest = makeManifest()
     installedPlugins.set(new Map([['test-plugin', { manifest, state: 'installed', error: null }]]))
-    loadPluginFrontendMock.mockResolvedValue({ pluginId: 'test-plugin', module: {}, activationResult: null })
+    enabledPluginIds.set(new Set(['test-plugin']))
+    loadPluginFrontendMock.mockResolvedValue({ pluginId: 'test-plugin', module: frontendPlugin })
     spawnShellPtyMock.mockResolvedValue(42)
 
     let resolveOutputListen: ((unlisten: () => void) => void) | null = null
@@ -655,26 +597,10 @@ describe('pluginRegistry', () => {
       })
     })
 
-    activatePluginLoaderMock.mockResolvedValue({ contributions: {} })
     await activatePlugin('test-plugin')
-    const context = activatePluginLoaderMock.mock.calls[0]?.[1]
-    if (context === undefined) {
-      throw new Error('Expected plugin context to be passed to activatePluginLoader')
-    }
-
-    const outputHandler = vi.fn()
-    context.onEvent('pty-output-T-1-shell-0', outputHandler)
-    context.onEvent('pty-exit-T-1-shell-0', vi.fn())
-
-    const spawn = context.invokeHost('spawnShellPty', {
-      taskId: 'T-1',
-      cwd: '/tmp/worktree',
-      cols: 80,
-      rows: 24,
-      terminalIndex: 0,
-    })
     await Promise.resolve()
 
+    expect(spawn).not.toBeNull()
     expect(spawnShellPtyMock).not.toHaveBeenCalled()
 
     const outputResolver = resolveOutputListen as ((unlisten: () => void) => void) | null
@@ -693,26 +619,22 @@ describe('pluginRegistry', () => {
     expect(outputHandler).toHaveBeenCalledWith({ data: 'hello' })
   })
 
-  it('deactivatePluginById clears host event subscriptions and unregisters view components for the plugin', async () => {
+  it('deactivatePluginById clears runtime host event subscriptions and unregisters view components for the plugin', async () => {
     const manifest = makeManifest()
-    const Component = {} as never
-    installedPlugins.set(new Map([['test-plugin', { manifest, state: 'installed', error: null }]]))
-    loadPluginFrontendMock.mockResolvedValue({ pluginId: 'test-plugin', module: {}, activationResult: null })
-    deactivatePluginLoaderMock.mockResolvedValue(undefined)
-
-    activatePluginLoaderMock.mockImplementation(async (_pluginId, _context) => {
-      return { contributions: { views: [{ id: 'main', component: Component }] } }
+    const Component = vi.fn() as never
+    const handler = vi.fn()
+    const frontendPlugin = defineFrontendPlugin({
+      activate(openforge, context) {
+        context.subscriptions.add(openforge.views.register({ id: 'main', title: 'Main', icon: 'sparkles', placement: 'rail', component: Component }))
+        context.subscriptions.add(openforge.events.onGlobal('openforge.selection-changed', handler))
+      },
     })
+    installedPlugins.set(new Map([['test-plugin', { manifest, state: 'installed', error: null }]]))
+    enabledPluginIds.set(new Set(['test-plugin']))
+    loadPluginFrontendMock.mockResolvedValue({ pluginId: 'test-plugin', module: frontendPlugin })
 
     await activatePlugin('test-plugin')
 
-    const context = activatePluginLoaderMock.mock.calls[0]?.[1]
-    if (context === undefined) {
-      throw new Error('Expected plugin context to be passed to activatePluginLoader')
-    }
-
-    const handler = vi.fn()
-    context.onEvent('selection-changed', handler)
     emitPluginHostEvent('selection-changed', { selectedTaskId: 'T-123' })
     expect(handler).toHaveBeenCalledTimes(1)
     expect(getRegisteredComponent('plugin:test-plugin:main')).toBe(Component)
@@ -720,32 +642,26 @@ describe('pluginRegistry', () => {
     await deactivatePluginById('test-plugin')
     emitPluginHostEvent('selection-changed', { selectedTaskId: 'T-456' })
 
-    expect(deactivatePluginLoaderMock).toHaveBeenCalledWith('test-plugin')
+    expect(deactivatePluginLoaderMock).not.toHaveBeenCalled()
     expect(handler).toHaveBeenCalledTimes(1)
     expect(getRegisteredComponent('plugin:test-plugin:main')).toBeUndefined()
   })
 
-  it('uninstallPlugin clears host event subscriptions for loaded plugins', async () => {
+  it('uninstallPlugin clears host event subscriptions for active runtime plugins', async () => {
     const manifest = makeManifest()
-    installedPlugins.set(new Map([['test-plugin', { manifest, state: 'installed', error: null }]]))
-    loadPluginFrontendMock.mockResolvedValue({ pluginId: 'test-plugin', module: {}, activationResult: null })
-    deactivatePluginLoaderMock.mockResolvedValue(undefined)
-    uninstallPluginIpcMock.mockResolvedValue(undefined)
-    isPluginLoadedMock.mockReturnValueOnce(false).mockReturnValue(true)
-
-    activatePluginLoaderMock.mockImplementation(async (_pluginId, _context) => {
-      return { contributions: {} }
+    const handler = vi.fn()
+    const frontendPlugin = defineFrontendPlugin({
+      activate(openforge, context) {
+        context.subscriptions.add(openforge.events.onGlobal('openforge.selection-changed', handler))
+      },
     })
+    installedPlugins.set(new Map([['test-plugin', { manifest, state: 'installed', error: null }]]))
+    enabledPluginIds.set(new Set(['test-plugin']))
+    loadPluginFrontendMock.mockResolvedValue({ pluginId: 'test-plugin', module: frontendPlugin })
+    uninstallPluginIpcMock.mockResolvedValue(undefined)
 
     await activatePlugin('test-plugin')
 
-    const context = activatePluginLoaderMock.mock.calls[0]?.[1]
-    if (context === undefined) {
-      throw new Error('Expected plugin context to be passed to activatePluginLoader')
-    }
-
-    const handler = vi.fn()
-    context.onEvent('selection-changed', handler)
     emitPluginHostEvent('selection-changed', { selectedTaskId: 'T-123' })
     expect(handler).toHaveBeenCalledTimes(1)
 
@@ -755,27 +671,24 @@ describe('pluginRegistry', () => {
     expect(handler).toHaveBeenCalledTimes(1)
   })
 
-  it('uninstallPlugin tears down runtime contributions and background services', async () => {
-    const stopService = vi.fn(async () => undefined)
+  it('uninstallPlugin tears down runtime contributions', async () => {
     uninstallPluginIpcMock.mockResolvedValue(undefined)
-    isPluginLoadedMock.mockReturnValue(true)
-    deactivatePluginLoaderMock.mockResolvedValue(undefined)
-    installedPlugins.set(new Map([['test-plugin', { manifest: makeManifest(), state: 'installed', error: null }]]))
-    loadPluginFrontendMock.mockResolvedValue({ pluginId: 'test-plugin', module: {}, activationResult: null })
-    activatePluginLoaderMock.mockResolvedValue({
-      contributions: {
-        taskPaneTabs: [{ id: 'activity', component: {} as never }],
-        commands: [{ id: 'open-demo', execute: vi.fn(async () => undefined) }],
-        backgroundServices: [{ id: 'sync', start: async () => undefined, stop: stopService }],
+    const commandHandler = vi.fn(async () => undefined)
+    const frontendPlugin = defineFrontendPlugin({
+      activate(openforge, context) {
+        context.subscriptions.add(openforge.taskPane.registerTab({ id: 'activity', title: 'Activity', component: vi.fn() as never }))
+        context.subscriptions.add(openforge.commands.register({ id: 'open-demo', title: 'Open demo', handler: commandHandler }))
       },
     })
+    installedPlugins.set(new Map([['test-plugin', { manifest: makeManifest(), state: 'installed', error: null }]]))
+    enabledPluginIds.set(new Set(['test-plugin']))
+    loadPluginFrontendMock.mockResolvedValue({ pluginId: 'test-plugin', module: frontendPlugin })
 
     await expect(activatePlugin('test-plugin')).resolves.toBe(true)
     expect(getRegisteredRenderableComponent('taskPaneTabs', 'test-plugin:activity')).toBeDefined()
 
     await uninstallPlugin('test-plugin')
 
-    expect(stopService).toHaveBeenCalledOnce()
     expect(getRegisteredRenderableComponent('taskPaneTabs', 'test-plugin:activity')).toBeUndefined()
     await expect(executePluginCommand('test-plugin', 'open-demo')).resolves.toBe(false)
   })
@@ -802,9 +715,9 @@ describe('pluginRegistry', () => {
     expect(deactivateOrder).toBeLessThan(uninstallOrder)
   })
 
-  it('installPluginFromManifest with corrupt manifest rejects with validation error', async () => {
+  it('installPluginFromManifest rejects every legacy manifest before validation compatibility paths run', async () => {
     const highVersion = makeManifest({ apiVersion: 99 })
-    await expect(installPluginFromManifest(highVersion, '/tmp')).rejects.toThrow('Unsupported API version: 99')
+    await expect(installPluginFromManifest(highVersion, '/tmp')).rejects.toThrow('Legacy manifest.json plugin installation is no longer supported')
     expect(installPluginMock).not.toHaveBeenCalled()
   })
 
@@ -841,25 +754,16 @@ describe('pluginRegistry', () => {
       sourceSpec: '/plugins/reload-plugin',
     })
     getEnabledPluginsMock.mockResolvedValue([makeNormalized('reload-plugin'), makeNormalized('other-plugin')])
-    loadPluginFrontendMock.mockResolvedValue({ pluginId: 'reload-plugin', module: {}, activationResult: null })
+    const frontendPlugin = defineFrontendPlugin({ activate: vi.fn(() => undefined) })
+    loadPluginFrontendMock.mockResolvedValue({ pluginId: 'reload-plugin', module: frontendPlugin })
     deactivatePluginLoaderMock.mockResolvedValue(undefined)
-    activatePluginLoaderMock.mockImplementation(async (pluginId: string) => {
-      installedPlugins.update(map => {
-        const entry = map.get(pluginId)
-        if (!entry) return map
-        const next = new Map(map)
-        next.set(pluginId, { ...entry, state: 'active', error: null })
-        return next
-      })
-      return { contributions: {} }
-    })
 
     await expect(reloadPluginForProject('project-1', 'reload-plugin')).resolves.toBe(true)
 
     expect(deactivatePluginLoaderMock).toHaveBeenCalledWith('reload-plugin')
     expect(getPluginIpcMock).toHaveBeenCalledWith('reload-plugin')
     expect(getEnabledPluginsMock).toHaveBeenCalledWith('project-1')
-    expect(activatePluginLoaderMock).toHaveBeenCalledOnce()
+    expect(activatePluginLoaderMock).not.toHaveBeenCalled()
     expect(get(installedPlugins).get('reload-plugin')).toMatchObject({
       state: 'active',
       sourceKind: 'local',
@@ -874,40 +778,46 @@ describe('pluginRegistry', () => {
   it('activatePlugin dedupes concurrent activation for the same plugin', async () => {
     const manifest = makeManifest()
     installedPlugins.set(new Map([['test-plugin', { manifest, state: 'installed', error: null }]]))
-    loadPluginFrontendMock.mockResolvedValue({ pluginId: 'test-plugin', module: {}, activationResult: null })
-    let resolveActivation: (() => void) | undefined
-    activatePluginLoaderMock.mockImplementation(() => new Promise(resolve => {
-      resolveActivation = () => resolve({ contributions: {} })
+    enabledPluginIds.set(new Set(['test-plugin']))
+    const activateFrontend = vi.fn(() => undefined)
+    const frontendPlugin = defineFrontendPlugin({ activate: activateFrontend })
+    let resolveLoad: (() => void) | undefined
+    loadPluginFrontendMock.mockReturnValue(new Promise(resolve => {
+      resolveLoad = () => resolve({ pluginId: 'test-plugin', module: frontendPlugin })
     }))
 
     const first = activatePlugin('test-plugin')
     const second = activatePlugin('test-plugin')
     await Promise.resolve()
-    resolveActivation?.()
+    expect(loadPluginFrontendMock).toHaveBeenCalledTimes(1)
+    resolveLoad?.()
 
     await expect(first).resolves.toBe(true)
     await expect(second).resolves.toBe(true)
-    expect(activatePluginLoaderMock).toHaveBeenCalledTimes(1)
+    expect(activateFrontend).toHaveBeenCalledTimes(1)
+    expect(activatePluginLoaderMock).not.toHaveBeenCalled()
   })
 
   it('disabling a plugin reconciles active lifecycle state and unregisters its views', async () => {
     const manifest = makeManifest()
-    const Component = {} as never
+    const Component = vi.fn() as never
+    const frontendPlugin = defineFrontendPlugin({
+      activate(openforge, context) {
+        context.subscriptions.add(openforge.views.register({ id: 'main', title: 'Main', icon: 'sparkles', placement: 'rail', component: Component }))
+      },
+    })
     installedPlugins.set(new Map([['test-plugin', { manifest, state: 'installed', error: null }]]))
     enabledPluginIds.set(new Set(['test-plugin']))
-    loadPluginFrontendMock.mockResolvedValue({ pluginId: 'test-plugin', module: {}, activationResult: null })
-    activatePluginLoaderMock.mockResolvedValue({ contributions: { views: [{ id: 'main', component: Component }] } })
+    loadPluginFrontendMock.mockResolvedValue({ pluginId: 'test-plugin', module: frontendPlugin })
     deactivatePluginLoaderMock.mockResolvedValue(undefined)
 
     await expect(activatePlugin('test-plugin')).resolves.toBe(true)
     installedPlugins.set(new Map([['test-plugin', { manifest, state: 'active', error: null }]]))
     expect(getRegisteredComponent('plugin:test-plugin:main')).toBe(Component)
 
-    enabledPluginIds.set(new Set())
-    await Promise.resolve()
-    await Promise.resolve()
+    await disablePluginForProject('P-1', 'test-plugin')
 
-    expect(deactivatePluginLoaderMock).toHaveBeenCalledWith('test-plugin')
+    expect(deactivatePluginLoaderMock).not.toHaveBeenCalled()
     expect(getRegisteredComponent('plugin:test-plugin:main')).toBeUndefined()
   })
 

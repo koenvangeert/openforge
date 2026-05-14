@@ -2,8 +2,9 @@ import type { Component } from 'svelte'
 import SettingsView from '../components/settings/SettingsView.svelte'
 import PluginSlot from '../components/plugin/PluginSlot.svelte'
 import { resolveContributions } from './plugin/contributionResolver'
+import type { RuntimeContributionSource } from './plugin/contributionResolver'
 import { makePluginViewKey } from './plugin/types'
-import type { PluginManifest, PluginViewKey } from './plugin/types'
+import type { PluginViewKey } from './plugin/types'
 import type { AppView, CoreAppView } from './types'
 
 export interface ViewContext {
@@ -56,8 +57,8 @@ export const VIEWS: Record<StaticViewKey, ViewEntry> = {
   },
 }
 
-export function getPluginViewEntries(manifests: PluginManifest[]): PluginViewEntry[] {
-  const contributions = resolveContributions(manifests)
+export function getPluginViewEntries(contributionSources: RuntimeContributionSource[]): PluginViewEntry[] {
+  const contributions = resolveContributions(contributionSources)
 
   return contributions.views.map((view) => ({
     key: makePluginViewKey(view.pluginId, view.contributionId),
@@ -74,6 +75,6 @@ export function getPluginViewEntries(manifests: PluginManifest[]): PluginViewEnt
   }))
 }
 
-export function getViews(manifests: PluginManifest[]): ViewRegistry {
-  return Object.assign({}, VIEWS, Object.fromEntries(getPluginViewEntries(manifests).map(({ key, entry }) => [key, entry])))
+export function getViews(contributionSources: RuntimeContributionSource[]): ViewRegistry {
+  return Object.assign({}, VIEWS, Object.fromEntries(getPluginViewEntries(contributionSources).map(({ key, entry }) => [key, entry])))
 }

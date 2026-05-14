@@ -22,8 +22,7 @@
   import type { Action, WhisperModelStatus, WhisperModelSizeId } from '../../lib/types'
   import type { TaskState } from '../../lib/taskState'
   import { resolveContributions } from '../../lib/plugin/contributionResolver'
-  import { enabledPluginIds, installedPlugins } from '../../lib/plugin/pluginStore'
-  import type { PluginManifest } from '../../lib/plugin/types'
+  import { enabledPluginIds, installedPlugins, runtimeContributionSources } from '../../lib/plugin/pluginStore'
   import SettingsGeneralCard from './SettingsGeneralCard.svelte'
   import SettingsFocusFilterCard from './SettingsFocusFilterCard.svelte'
   import SettingsIntegrationsCard from './SettingsIntegrationsCard.svelte'
@@ -124,12 +123,12 @@
   // Derived state
   const hasProject = $derived(!!$activeProjectId)
   const activePage = $derived(mode === 'global' ? 'global' : mode === 'project' ? 'project' : (globalSections.includes(activeSection) ? 'global' : 'project'))
-  let enabledPluginManifests = $derived(
+  let enabledPluginContributionSources = $derived(
     Array.from($enabledPluginIds)
-      .map((id) => $installedPlugins.get(id)?.manifest)
-      .filter((manifest): manifest is PluginManifest => manifest !== undefined)
+      .map((id) => $runtimeContributionSources.get(id))
+      .filter((source) => source !== undefined)
   )
-  let pluginSettingsSections = $derived(resolveContributions(enabledPluginManifests).settingsSections)
+  let pluginSettingsSections = $derived(resolveContributions(enabledPluginContributionSources).settingsSections)
 
   // Sync project name/path from project list
   $effect(() => {

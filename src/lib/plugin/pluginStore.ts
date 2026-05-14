@@ -4,6 +4,7 @@ import type { OpenForgePackageMetadata } from '@openforge/plugin-sdk'
 import type { PluginEntry, PluginManifest } from './types'
 import * as ipc from '../ipc'
 import { resolveContributions } from './contributionResolver'
+import type { RuntimeContributionSource } from './contributionResolver'
 
 function getOptionalIpcMethod<T>(resolve: () => T): T | undefined {
   try {
@@ -15,6 +16,7 @@ function getOptionalIpcMethod<T>(resolve: () => T): T | undefined {
 
 export const installedPlugins = writable<Map<string, PluginEntry>>(new Map())
 export const enabledPluginIds = writable<Set<string>>(new Set())
+export const runtimeContributionSources = writable<Map<string, RuntimeContributionSource>>(new Map())
 export const loading = writable<boolean>(false)
 export const error = writable<string | null>(null)
 
@@ -37,14 +39,12 @@ export function manifestFromPluginRow(row: ipc.NormalizedPluginRow): { manifest:
     apiVersion: packageMetadata?.apiVersion ?? row.apiVersion,
     description: packageMetadata?.description ?? row.description,
     permissions: [],
-    contributes: {},
     frontend: (packageMetadata?.frontend ?? row.frontendEntry) || null,
     backend: packageMetadata?.backend ?? row.backendEntry,
   }
 
   if (!packageMetadata) {
     manifest.permissions = JSON.parse(row.permissions)
-    manifest.contributes = JSON.parse(row.contributes)
   }
 
   return { manifest, packageMetadata }
@@ -61,6 +61,7 @@ export async function loadInstalledPlugins(): Promise<void> {
     }
 
     const rows = await listPlugins()
+    runtimeContributionSources.set(new Map())
     installedPlugins.set(new Map(rows.map(row => {
       const { manifest, packageMetadata } = manifestFromPluginRow(row)
       return [
@@ -117,11 +118,28 @@ export function isPluginEnabled(pluginId: string): boolean {
   return get(enabledPluginIds).has(pluginId)
 }
 
+export function setRuntimeContributionSource(pluginId: string, contributions: Omit<RuntimeContributionSource, 'pluginId'>): void {
+  runtimeContributionSources.update(map => {
+    const next = new Map(map)
+    next.set(pluginId, { pluginId, ...contributions })
+    return next
+  })
+}
+
+export function clearRuntimeContributionSource(pluginId: string): void {
+  runtimeContributionSources.update(map => {
+    if (!map.has(pluginId)) return map
+    const next = new Map(map)
+    next.delete(pluginId)
+    return next
+  })
+}
+
 export function getContributions(contributionType: string): unknown[] {
-  const manifests = Array.from(get(enabledPluginIds))
-    .map(id => get(installedPlugins).get(id)?.manifest)
-    .filter((manifest): manifest is PluginEntry['manifest'] => manifest !== undefined)
-  const resolved = resolveContributions(manifests)
+  const contributions = Array.from(get(enabledPluginIds))
+    .map(id => get(runtimeContributionSources).get(id))
+    .filter((source): source is RuntimeContributionSource => source !== undefined)
+  const resolved = resolveContributions(contributions)
   const bucket = resolved[contributionType as keyof typeof resolved]
   return Array.isArray(bucket) ? bucket : []
 }

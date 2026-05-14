@@ -9,9 +9,6 @@ function createValidManifest(overrides: Record<string, unknown> = {}): Record<st
     apiVersion: 1,
     description: 'A demo plugin',
     permissions: ['db:read'],
-    contributes: {
-      views: [{ id: 'main', title: 'Demo', icon: 'plug' }],
-    },
     frontend: 'dist/index.js',
     backend: null,
     ...overrides,
@@ -19,82 +16,22 @@ function createValidManifest(overrides: Record<string, unknown> = {}): Record<st
 }
 
 describe('validatePluginManifest', () => {
-  it('accepts a valid manifest', () => {
+  it('accepts a valid manifest without contribution arrays', () => {
     const errors = validatePluginManifest(createValidManifest())
     expect(errors).toEqual([])
   })
 
-  it('accepts task pane tab and background service contributions', () => {
+  it('rejects legacy contribution arrays loudly', () => {
     const errors = validatePluginManifest(createValidManifest({
       contributes: {
-        taskPaneTabs: [{ id: 'terminal', title: 'Terminal', icon: 'terminal', order: 10 }],
-        backgroundServices: [{ id: 'pty-manager', name: 'PTY Process Manager' }],
+        views: [{ id: 'main', title: 'Demo', icon: 'plug' }],
       },
     }))
 
-    expect(errors).toEqual([])
-  })
-
-  it('accepts sidebar panel, command, and settings section contributions', () => {
-    const errors = validatePluginManifest(createValidManifest({
-      contributes: {
-        sidebarPanels: [{ id: 'inspector', title: 'Inspector', side: 'right', order: 20 }],
-        commands: [{ id: 'open-demo', title: 'Open Demo', shortcut: 'Cmd+Shift+O' }],
-        settingsSections: [{ id: 'demo-settings', title: 'Demo Settings' }],
-      },
-    }))
-
-    expect(errors).toEqual([])
-  })
-
-  it('rejects invalid task pane tab icon key', () => {
-    const errors = validatePluginManifest(createValidManifest({
-      contributes: {
-        taskPaneTabs: [{ id: 'terminal', title: 'Terminal', icon: 'bad-icon' }],
-      },
-    }))
-
-    expect(errors).toContainEqual(expect.objectContaining({ path: 'contributes.taskPaneTabs[0].icon' }))
-  })
-
-  it('rejects background services without a name', () => {
-    const errors = validatePluginManifest(createValidManifest({
-      contributes: {
-        backgroundServices: [{ id: 'pty-manager' }],
-      },
-    }))
-
-    expect(errors).toContainEqual(expect.objectContaining({ path: 'contributes.backgroundServices[0].name' }))
-  })
-
-  it('rejects sidebar panels with invalid side values', () => {
-    const errors = validatePluginManifest(createValidManifest({
-      contributes: {
-        sidebarPanels: [{ id: 'inspector', title: 'Inspector', side: 'center' }],
-      },
-    }))
-
-    expect(errors).toContainEqual(expect.objectContaining({ path: 'contributes.sidebarPanels[0].side' }))
-  })
-
-  it('rejects commands with invalid shortcut format', () => {
-    const errors = validatePluginManifest(createValidManifest({
-      contributes: {
-        commands: [{ id: 'open-demo', title: 'Open Demo', shortcut: 'BAD+FORMAT+!!!' }],
-      },
-    }))
-
-    expect(errors).toContainEqual(expect.objectContaining({ path: 'contributes.commands[0].shortcut' }))
-  })
-
-  it('rejects settings sections without a title', () => {
-    const errors = validatePluginManifest(createValidManifest({
-      contributes: {
-        settingsSections: [{ id: 'demo-settings' }],
-      },
-    }))
-
-    expect(errors).toContainEqual(expect.objectContaining({ path: 'contributes.settingsSections[0].title' }))
+    expect(errors).toContainEqual({
+      path: 'contributes',
+      message: 'Manifest contribution arrays are not supported; register contributions at runtime',
+    })
   })
 
   it('rejects manifest without id', () => {
@@ -112,20 +49,6 @@ describe('validatePluginManifest', () => {
   it('rejects manifest with apiVersion higher than host supports', () => {
     const errors = validatePluginManifest(createValidManifest({ apiVersion: 999 }))
     expect(errors).toContainEqual(expect.objectContaining({ path: 'apiVersion', message: expect.stringContaining('supported') }))
-  })
-
-  it('rejects manifest with invalid icon key', () => {
-    const errors = validatePluginManifest(createValidManifest({
-      contributes: { views: [{ id: 'main', title: 'Demo', icon: 'nonexistent-icon' }] },
-    }))
-    expect(errors).toContainEqual(expect.objectContaining({ path: 'contributes.views[0].icon', message: expect.stringContaining('icon') }))
-  })
-
-  it('rejects manifest with invalid shortcut format', () => {
-    const errors = validatePluginManifest(createValidManifest({
-      contributes: { views: [{ id: 'main', title: 'Demo', icon: 'plug', shortcut: 'BAD+FORMAT+!!!' }] },
-    }))
-    expect(errors).toContainEqual(expect.objectContaining({ path: 'contributes.views[0].shortcut' }))
   })
 
   it('accepts a null frontend entry for host-bundled built-in plugins', () => {
