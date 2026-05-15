@@ -61,7 +61,9 @@ describe('plugin SDK testing utilities', () => {
             await openforge.storage.project('P-1').set('lastRun', { ok: true })
             await openforge.events.emit('sync.started', { projectId: 'P-1' })
           },
-          stop: async () => seen.push('stopped'),
+          stop: async () => {
+            seen.push('stopped')
+          },
         }))
       },
     })
