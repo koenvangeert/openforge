@@ -11,6 +11,7 @@ import {
   electronBundlePath,
   expectedDarwinArchForTarget,
   packageElectronApp,
+  readBuiltinPluginCatalog,
   updatePlistBooleanValue,
   updatePlistStringValue,
 } from './electron-package.mjs'
@@ -36,14 +37,18 @@ async function writeElectronBuildOutputs(repoRoot) {
   await writeFile(join(repoRoot, 'dist-electron', 'plugin-host', 'index.js'), 'console.log("bundled backend plugin host")')
 }
 
-async function writeBuiltInPluginRuntimeArtifacts(repoRoot, directoryName) {
+async function writeBuiltinPluginCatalog(repoRoot, plugins) {
+  await writeFile(join(repoRoot, 'builtin-plugins.json'), `${JSON.stringify({ plugins }, null, 2)}\n`)
+}
+
+async function writeBuiltInPluginRuntimeArtifacts(repoRoot, directoryName, pluginId = `com.openforge.${directoryName}`) {
   const pluginRoot = join(repoRoot, 'plugins', directoryName)
   await mkdir(join(pluginRoot, 'dist'), { recursive: true })
   await writeFile(join(pluginRoot, 'package.json'), JSON.stringify({
     name: `@openforge/plugin-${directoryName}`,
     type: 'module',
     openforge: {
-      id: `com.openforge.${directoryName}`,
+      id: pluginId,
       frontend: './dist/frontend.js',
     },
   }))
@@ -126,6 +131,7 @@ describe('Electron macOS packaging helpers', () => {
     await writeExecutable(join(template, 'Contents/MacOS/Electron'))
     await writeFile(join(template, 'Contents/Info.plist'), '<plist><dict><key>CFBundleExecutable</key><string>Electron</string><key>CFBundleName</key><string>Electron</string><key>CFBundleDisplayName</key><string>Electron</string></dict></plist>')
     await writeElectronBuildOutputs(root)
+    await writeBuiltinPluginCatalog(root, [])
     await mkdir(join(root, 'src-tauri/target/release'), { recursive: true })
     await writeExecutable(join(root, 'src-tauri/target/release/openforge'), '#!/bin/sh\necho sidecar\n')
 
@@ -261,10 +267,19 @@ describe('Electron macOS packaging helpers', () => {
     await mkdir(join(root, 'src-tauri/src/openforge-cli'), { recursive: true })
     await writeFile(join(root, 'src-tauri/src/openforge-cli/cli.js'), '#!/usr/bin/env node\nconsole.log("openforge cli")\n')
     await writeFile(join(root, 'src-tauri/src/openforge-cli/openforge-skill.md'), 'openforge skill docs\n')
-    const builtInPluginDirectories = ['file-viewer', 'github-sync', 'skills-viewer', 'terminal']
-    for (const directoryName of builtInPluginDirectories) {
-      await writeBuiltInPluginRuntimeArtifacts(root, directoryName)
+    const builtInPluginCatalog = [
+      { id: 'com.openforge.file-viewer', directoryName: 'file-viewer' },
+      { id: 'com.openforge.github-sync', directoryName: 'github-sync' },
+      { id: 'com.openforge.skills-viewer', directoryName: 'skills-viewer' },
+      { id: 'com.openforge.terminal', directoryName: 'terminal' },
+      { id: 'com.openforge.catalog-only-test', directoryName: 'catalog-only-test' },
+    ]
+    await writeBuiltinPluginCatalog(root, builtInPluginCatalog)
+    for (const plugin of builtInPluginCatalog) {
+      await writeBuiltInPluginRuntimeArtifacts(root, plugin.directoryName, plugin.id)
     }
+
+    await expect(readBuiltinPluginCatalog(root)).resolves.toEqual(builtInPluginCatalog)
 
     await packageElectronApp({ repoRoot: root })
 
@@ -272,7 +287,7 @@ describe('Electron macOS packaging helpers', () => {
     await expect(stat(join(output, 'Contents/MacOS/openforge-sidecar'))).resolves.toBeTruthy()
     await expect(stat(join(output, 'Contents/Resources/app/dist/index.html'))).resolves.toBeTruthy()
     await expect(stat(join(output, 'Contents/Resources/app/dist-electron/main.js'))).resolves.toBeTruthy()
-    for (const directoryName of builtInPluginDirectories) {
+    for (const { directoryName } of builtInPluginCatalog) {
       const packagedPluginRoot = join(output, 'Contents/Resources/app/plugins', directoryName)
       await expect(readFile(join(packagedPluginRoot, 'package.json'), 'utf8').then(JSON.parse)).resolves.toMatchObject({
         openforge: { frontend: './dist/frontend.js' },

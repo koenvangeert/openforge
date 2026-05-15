@@ -81,6 +81,21 @@ async function assertExists(path, label) {
   }
 }
 
+export const BUILTIN_PLUGIN_CATALOG_FILE = 'builtin-plugins.json'
+
+function isBuiltinPluginCatalogEntry(value) {
+  return Boolean(value && typeof value.id === 'string' && typeof value.directoryName === 'string')
+}
+
+export async function readBuiltinPluginCatalog(repoRoot = repoRootFromScript()) {
+  const catalogPath = join(repoRoot, BUILTIN_PLUGIN_CATALOG_FILE)
+  const catalog = JSON.parse(await readFile(catalogPath, 'utf8'))
+  if (!catalog || !Array.isArray(catalog.plugins) || !catalog.plugins.every(isBuiltinPluginCatalogEntry)) {
+    throw new Error(`Built-in plugin catalog must contain a plugins array with id and directoryName entries at ${catalogPath}`)
+  }
+  return catalog.plugins
+}
+
 export function electronBundlePath(repoRoot = repoRootFromScript()) {
   const packageIdentity = electronPackageIdentityForRepoRoot(repoRoot)
   return resolveRustSidecarLayout({ repoRoot, appName: packageIdentity.appName }).electronAppPath
@@ -190,22 +205,17 @@ async function copyOpenForgeCliAssets(repoRoot, resourcesDir) {
   await cp(skillSourcePath, join(cliResourcesDir, 'openforge-skill.md'))
 }
 
-const BUILTIN_PLUGIN_DIRECTORIES = [
-  'file-viewer',
-  'github-sync',
-  'skills-viewer',
-  'terminal',
-]
-
 async function copyBuiltinPluginRuntimeArtifacts(repoRoot, appResourcesPath) {
-  for (const directoryName of BUILTIN_PLUGIN_DIRECTORIES) {
+  const builtinPlugins = await readBuiltinPluginCatalog(repoRoot)
+
+  for (const { id, directoryName } of builtinPlugins) {
     const pluginSourceDir = join(repoRoot, 'plugins', directoryName)
-    if (!(await pathExists(pluginSourceDir))) continue
+    await assertExists(pluginSourceDir, `Built-in plugin ${id} source directory`)
 
     const packageJsonPath = join(pluginSourceDir, 'package.json')
     const distDir = join(pluginSourceDir, 'dist')
-    await assertExists(packageJsonPath, `Built-in plugin ${directoryName} package.json`)
-    await assertExists(distDir, `Built-in plugin ${directoryName} dist artifacts`)
+    await assertExists(packageJsonPath, `Built-in plugin ${id} package.json`)
+    await assertExists(distDir, `Built-in plugin ${id} dist artifacts`)
 
     const pluginTargetDir = join(appResourcesPath, 'plugins', directoryName)
     await rm(pluginTargetDir, { recursive: true, force: true })

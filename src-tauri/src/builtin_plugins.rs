@@ -1,40 +1,41 @@
+use once_cell::sync::Lazy;
+use serde::Deserialize;
 use std::path::{Path, PathBuf};
 
 const BUILTIN_INSTALL_PREFIX: &str = "builtin:";
+const BUILTIN_PLUGIN_CATALOG_JSON: &str = include_str!("../../builtin-plugins.json");
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct BuiltinPluginCatalog {
+    plugins: Vec<BuiltinPlugin>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub(crate) struct BuiltinPlugin {
-    pub(crate) id: &'static str,
-    pub(crate) directory_name: &'static str,
+    pub(crate) id: String,
+    pub(crate) directory_name: String,
 }
 
 impl BuiltinPlugin {
     pub(crate) fn sentinel_install_path(&self) -> String {
-        sentinel_install_path(self.id)
+        sentinel_install_path(&self.id)
     }
 }
 
-const BUILTIN_PLUGINS: &[BuiltinPlugin] = &[
-    BuiltinPlugin {
-        id: "com.openforge.file-viewer",
-        directory_name: "file-viewer",
-    },
-    BuiltinPlugin {
-        id: "com.openforge.github-sync",
-        directory_name: "github-sync",
-    },
-    BuiltinPlugin {
-        id: "com.openforge.skills-viewer",
-        directory_name: "skills-viewer",
-    },
-    BuiltinPlugin {
-        id: "com.openforge.terminal",
-        directory_name: "terminal",
-    },
-];
+static BUILTIN_PLUGINS: Lazy<Vec<BuiltinPlugin>> = Lazy::new(|| {
+    let catalog: BuiltinPluginCatalog = serde_json::from_str(BUILTIN_PLUGIN_CATALOG_JSON)
+        .expect("shared builtin plugin catalog should be valid JSON");
+    catalog.plugins
+});
+
+pub(crate) fn catalog() -> &'static [BuiltinPlugin] {
+    &BUILTIN_PLUGINS
+}
 
 pub(crate) fn find(plugin_id: &str) -> Option<&'static BuiltinPlugin> {
-    BUILTIN_PLUGINS.iter().find(|plugin| plugin.id == plugin_id)
+    catalog().iter().find(|plugin| plugin.id == plugin_id)
 }
 
 pub(crate) fn sentinel_install_path(plugin_id: &str) -> String {
@@ -85,7 +86,7 @@ fn install_path_from_workspace_root_for_plugin(
     workspace_root: &Path,
     plugin: &BuiltinPlugin,
 ) -> PathBuf {
-    workspace_root.join("plugins").join(plugin.directory_name)
+    workspace_root.join("plugins").join(&plugin.directory_name)
 }
 
 fn packaged_app_plugin_path(current_exe: Option<&Path>, plugin: &BuiltinPlugin) -> Option<PathBuf> {
@@ -104,29 +105,45 @@ fn packaged_app_plugin_path(current_exe: Option<&Path>, plugin: &BuiltinPlugin) 
             .join("Resources")
             .join("app")
             .join("plugins")
-            .join(plugin.directory_name),
+            .join(&plugin.directory_name),
     )
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
-        find, has_sentinel_install_path, install_path_from_runtime,
+        catalog, find, has_sentinel_install_path, install_path_from_runtime,
         install_path_from_workspace_root,
     };
     use std::path::Path;
 
     #[test]
-    fn catalog_maps_builtin_ids_to_directory_names() {
-        let cases = [
-            ("com.openforge.file-viewer", "file-viewer"),
-            ("com.openforge.github-sync", "github-sync"),
-            ("com.openforge.skills-viewer", "skills-viewer"),
-            ("com.openforge.terminal", "terminal"),
-        ];
+    fn resolver_catalog_matches_shared_builtin_plugin_catalog() {
+        let shared_catalog: serde_json::Value =
+            serde_json::from_str(include_str!("../../builtin-plugins.json"))
+                .expect("shared builtin plugin catalog should parse");
+        let cases: Vec<(String, String)> = shared_catalog["plugins"]
+            .as_array()
+            .expect("shared builtin plugin catalog should contain plugins")
+            .iter()
+            .map(|plugin| {
+                (
+                    plugin["id"]
+                        .as_str()
+                        .expect("builtin plugin should have id")
+                        .to_string(),
+                    plugin["directoryName"]
+                        .as_str()
+                        .expect("builtin plugin should have directoryName")
+                        .to_string(),
+                )
+            })
+            .collect();
+
+        assert_eq!(catalog().len(), cases.len());
 
         for (id, directory_name) in cases {
-            let plugin = find(id).expect("builtin plugin should be in catalog");
+            let plugin = find(&id).expect("builtin plugin should be in catalog");
             assert_eq!(plugin.id, id);
             assert_eq!(plugin.directory_name, directory_name);
             assert_eq!(plugin.sentinel_install_path(), format!("builtin:{id}"));
