@@ -3,13 +3,13 @@
   import { tasks as allTasks, ticketPrs } from '../../lib/stores'
   import { addTaskLabel, removeTaskLabel } from '../../lib/ipc'
   import { getTaskLabels, hasLabelNamed } from '../../lib/taskLabels'
-  import { getDependentReadinessLabel, getTaskDependentSummaries, getTaskDependencySummaries, getWaitingDependencyCount } from '../../lib/taskDependencies'
-  import { getDependencyStatusPresentation } from '../../lib/dependencyStatusPresentation'
+  import { getTaskDependentSummaries, getTaskDependencySummaries, getWaitingDependencyCount } from '../../lib/taskDependencies'
   import CopyButton from '../shared/ui/CopyButton.svelte'
   import TaskPromptSummary from './TaskPromptSummary.svelte'
   import TaskPullRequestStatus from './TaskPullRequestStatus.svelte'
   import TaskMergeStatus from './TaskMergeStatus.svelte'
   import TaskLabelEditor from '../shared/tasks/TaskLabelEditor.svelte'
+  import TaskRelationshipDetailSection from '../shared/tasks/TaskRelationshipDetailSection.svelte'
 
   interface Props {
     task: Task
@@ -75,52 +75,18 @@
     onRemove={handleRemoveLabel}
   />
 
-  {#if dependencies.length > 0}
-    <section class="flex flex-col gap-2.5" aria-label="Dependencies" aria-live="polite">
-      <h3 class="text-[10px] font-bold text-primary font-mono tracking-[1.2px] m-0">// DEPENDS_ON</h3>
-      <div class="flex flex-wrap gap-2">
-        {#each dependencies as dependency (dependency.id)}
-          {@const statusPresentation = getDependencyStatusPresentation(dependency.status)}
-          <span class="badge badge-sm gap-1.5 border border-base-300 max-w-full min-w-0 {statusPresentation.badgeClass}" title={dependency.tooltipTitle}>
-            <span class="font-mono shrink-0">{dependency.id}</span>
-            <span class="opacity-80 shrink-0">{statusPresentation.label}</span>
-            {#if dependency.displayTitle}
-              <span class="truncate min-w-0">{dependency.displayTitle}</span>
-            {/if}
-          </span>
-        {/each}
-      </div>
-      <div class="text-[11px] text-base-content/50">
-        {#if waitingDependencyCount === 0}
-          All dependencies done
-        {:else}
-          Waiting on {waitingDependencyCount} {waitingDependencyCount === 1 ? 'dependency' : 'dependencies'}
-        {/if}
-      </div>
-    </section>
-  {/if}
+  <TaskRelationshipDetailSection
+    kind="dependencies"
+    items={dependencies}
+    {waitingDependencyCount}
+    density="full"
+  />
 
-  {#if dependents.length > 0}
-    <section class="flex flex-col gap-2.5" aria-label="Dependent tasks" aria-live="polite">
-      <h3 class="text-[10px] font-bold text-primary font-mono tracking-[1.2px] m-0">// DEPENDENTS</h3>
-      <div class="flex flex-wrap gap-2">
-        {#each dependents as dependent (dependent.id)}
-          {@const statusPresentation = getDependencyStatusPresentation(dependent.status)}
-          <span class="badge badge-sm gap-1.5 border border-base-300 max-w-full min-w-0 {statusPresentation.badgeClass}" title={dependent.tooltipTitle}>
-            <span class="font-mono shrink-0">{dependent.id}</span>
-            <span class="opacity-80 shrink-0">{statusPresentation.label}</span>
-            {#if dependent.displayTitle}
-              <span class="truncate min-w-0">{dependent.displayTitle}</span>
-            {/if}
-            <span class="opacity-80 shrink-0">· {getDependentReadinessLabel(dependent, true)}</span>
-          </span>
-        {/each}
-      </div>
-      <div class="text-[11px] text-base-content/50">
-        {dependents.length} {dependents.length === 1 ? 'task depends' : 'tasks depend'} on this one
-      </div>
-    </section>
-  {/if}
+  <TaskRelationshipDetailSection
+    kind="dependents"
+    items={dependents}
+    density="full"
+  />
 
   {#if workspacePath}
     <section class="flex flex-col gap-2.5">
