@@ -1,13 +1,13 @@
 <script lang="ts">
   import type { Task, PullRequestInfo, PrComment } from '../../lib/types'
   import { parseCheckRuns, splitCheckRuns } from '../../lib/types'
-  import { getDependentReadinessLabel, getTaskDependentSummaries, getTaskDependencySummaries, getWaitingDependencyCount } from '../../lib/taskDependencies'
-  import { getDependencyStatusPresentation } from '../../lib/dependencyStatusPresentation'
+  import { getTaskDependentSummaries, getTaskDependencySummaries, getWaitingDependencyCount } from '../../lib/taskDependencies'
   import { getPrComments, markCommentAddressed, openUrl } from '../../lib/ipc'
   import MarkdownContent from '../shared/content/MarkdownContent.svelte'
   import { getPrStatusChips } from '../../lib/prStatusPresentation'
   import { getGitHubMarkdownImageBaseUrl } from '../../lib/githubMarkdown'
   import PrStatusChip from '../shared/ui/PrStatusChip.svelte'
+  import TaskRelationshipDetailSection from '../shared/tasks/TaskRelationshipDetailSection.svelte'
 
   interface Props {
     task: Task | null
@@ -83,46 +83,18 @@
       {/if}
     </section>
 
-    {#if dependencies.length > 0}
-      <section class="flex flex-col gap-2" aria-label="Dependencies" aria-live="polite">
-        <span class="font-mono text-[10px] font-bold text-primary">// DEPENDS_ON</span>
-        <div class="flex flex-wrap gap-1.5">
-          {#each dependencies as dependency (dependency.id)}
-            {@const statusPresentation = getDependencyStatusPresentation(dependency.status)}
-            <span class="badge badge-xs gap-1 border border-base-300 {statusPresentation.badgeClass}" title={dependency.title}>
-              <span class="font-mono">{dependency.id}</span>
-              <span class="opacity-80">{statusPresentation.label}</span>
-            </span>
-          {/each}
-        </div>
-        <p class="text-xs text-base-content/40">
-          {#if waitingDependencyCount === 0}
-            All dependencies done
-          {:else}
-            Waiting on {waitingDependencyCount} {waitingDependencyCount === 1 ? 'dep' : 'deps'}
-          {/if}
-        </p>
-      </section>
-    {/if}
+    <TaskRelationshipDetailSection
+      kind="dependencies"
+      items={dependencies}
+      {waitingDependencyCount}
+      density="compact"
+    />
 
-    {#if dependents.length > 0}
-      <section class="flex flex-col gap-2" aria-label="Dependent tasks" aria-live="polite">
-        <span class="font-mono text-[10px] font-bold text-primary">// DEPENDENTS</span>
-        <div class="flex flex-wrap gap-1.5">
-          {#each dependents as dependent (dependent.id)}
-            {@const statusPresentation = getDependencyStatusPresentation(dependent.status)}
-            <span class="badge badge-xs gap-1 border border-base-300 {statusPresentation.badgeClass}" title={dependent.title}>
-              <span class="font-mono">{dependent.id}</span>
-              <span class="opacity-80">{statusPresentation.label}</span>
-              <span class="opacity-80">· {getDependentReadinessLabel(dependent)}</span>
-            </span>
-          {/each}
-        </div>
-        <p class="text-xs text-base-content/40">
-          {dependents.length} {dependents.length === 1 ? 'task depends' : 'tasks depend'} on this one
-        </p>
-      </section>
-    {/if}
+    <TaskRelationshipDetailSection
+      kind="dependents"
+      items={dependents}
+      density="compact"
+    />
 
     {#if pullRequests.length > 0}
       <section class="flex flex-col gap-2">
