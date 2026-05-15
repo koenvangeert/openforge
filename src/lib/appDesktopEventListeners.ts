@@ -72,6 +72,30 @@ function hydratePtyInstanceFromStatusMetadata(
   })
 }
 
+function setAgentNeedsPermissionNotification(taskId: string, session: AgentSession): boolean {
+  const message = 'Agent needs permission'
+  const existingNotification = get(checkpointNotification)
+  if (
+    existingNotification?.ticketId === taskId &&
+    existingNotification.sessionId === session.id &&
+    existingNotification.stage === session.stage &&
+    existingNotification.message === message
+  ) {
+    return false
+  }
+
+  const task = get(tasks).find(t => t.id === taskId)
+  checkpointNotification.set({
+    ticketId: taskId,
+    ticketKey: task?.id ?? null,
+    sessionId: session.id,
+    stage: session.stage,
+    message,
+    timestamp: Date.now(),
+  })
+  return true
+}
+
 async function getOrLoadActiveSession(taskId: string): Promise<AgentSession | null> {
   const existing = get(activeSessions).get(taskId)
   if (existing) return existing
@@ -286,17 +310,10 @@ export async function registerAppDesktopEventListeners(deps: AppDesktopEventDeps
         setActiveSession(taskId, { ...session, status: 'running', checkpoint_data: null })
         clearCheckpointForTask(taskId)
       } else if (status === 'paused') {
-        if (session.status === 'paused') return
-        setActiveSession(taskId, { ...session, status: 'paused' })
-        const task = get(tasks).find(t => t.id === taskId)
-        checkpointNotification.set({
-          ticketId: taskId,
-          ticketKey: task?.id ?? null,
-          sessionId: session.id,
-          stage: session.stage,
-          message: 'Agent needs permission',
-          timestamp: Date.now(),
-        })
+        if (session.status !== 'paused') {
+          setActiveSession(taskId, { ...session, status: 'paused' })
+        }
+        if (!setAgentNeedsPermissionNotification(taskId, session)) return
       } else if (status === 'interrupted') {
         if (session.status === 'interrupted') return
         setActiveSession(taskId, { ...session, status: 'interrupted' })

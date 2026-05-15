@@ -1,6 +1,6 @@
 import { listenDesktopEvent, type DesktopUnlistenFn } from './desktopIpc'
 
-export type AgentPanelStatus = 'idle' | 'running' | 'complete' | 'error'
+export type AgentPanelStatus = 'idle' | 'running' | 'paused' | 'complete' | 'error'
 export type AgentStatusChangedKind = 'started' | 'became_busy' | 'became_idle' | 'requested_permission' | 'failed' | 'ended'
 
 interface AgentStatusChangedPayload {
@@ -27,8 +27,9 @@ interface AgentStatusChangedHandlerOptions {
 export function getAgentPanelStatusFromSessionStatus(sessionStatus: string | null | undefined): AgentPanelStatus {
   switch (sessionStatus) {
     case 'running':
-    case 'paused':
       return 'running'
+    case 'paused':
+      return 'paused'
     case 'completed':
       return 'complete'
     case 'failed':
@@ -73,7 +74,7 @@ export function createAgentStatusChangedHandler({
     ) {
       onPtyInstanceId?.(event.payload.pty_instance_id)
     }
-    if (nextStatus === 'running') {
+    if (event.payload.status === 'running') {
       onRunning?.()
     }
   }

@@ -185,6 +185,28 @@ describe('AgentTerminalShell', () => {
     expect(screen.queryByText('No active agent session')).toBeNull()
   })
 
+  it('shows Claude permission requests as needing permission instead of still running', () => {
+    setActiveSession(createAgentSession({
+      provider: 'claude-code',
+      status: 'paused',
+      claude_session_id: 'claude-sess-abc123',
+    }))
+
+    render(AgentTerminalShell, {
+      props: {
+        taskId: 'T-1',
+        runningText: 'Claude agent running...',
+        logPrefix: 'AgentPanel:Claude',
+        sessionIdKey: 'claude_session_id',
+        stageLabels,
+      },
+    })
+
+    expect(screen.getByText('Agent needs permission')).toBeTruthy()
+    expect(screen.getByText('PAUSED')).toBeTruthy()
+    expect(screen.queryByText('Claude agent running...')).toBeNull()
+  })
+
   it('shows OpenCode checkpoint question text from the shared terminal shell', () => {
     setActiveSession(createAgentSession({
       provider: 'opencode',

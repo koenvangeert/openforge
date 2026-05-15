@@ -185,6 +185,63 @@ describe('registerAppDesktopEventListeners', () => {
     expect(get(activeSessions).get('task-1')?.status).toBe('running')
   })
 
+  it('raises a permission notification for provider-neutral paused permission events', async () => {
+    const { deps, handlers } = createHarness()
+    activeSessions.set(new Map([['task-1', createSession({ provider: 'claude-code', status: 'running' })]]))
+
+    await registerAppDesktopEventListeners(deps)
+    await handlers.get('agent-status-changed')?.({
+      payload: { task_id: 'task-1', status: 'paused', kind: 'requested_permission' },
+    })
+
+    expect(get(activeSessions).get('task-1')?.status).toBe('paused')
+    expect(get(checkpointNotification)).toMatchObject({
+      ticketId: 'task-1',
+      sessionId: 'session-1',
+      stage: 'running',
+      message: 'Agent needs permission',
+    })
+    expect(deps.loadProjectAttention).toHaveBeenCalledOnce()
+  })
+
+  it('raises a permission notification when fetching an already-paused latest session', async () => {
+    const { deps, handlers } = createHarness()
+    vi.mocked(getLatestSession).mockResolvedValue(createSession({ provider: 'claude-code', status: 'paused' }))
+
+    await registerAppDesktopEventListeners(deps)
+    await handlers.get('agent-status-changed')?.({
+      payload: { task_id: 'task-1', status: 'paused', kind: 'requested_permission' },
+    })
+
+    expect(get(activeSessions).get('task-1')?.status).toBe('paused')
+    expect(get(checkpointNotification)).toMatchObject({
+      ticketId: 'task-1',
+      sessionId: 'session-1',
+      message: 'Agent needs permission',
+    })
+    expect(deps.loadProjectAttention).toHaveBeenCalledOnce()
+  })
+
+  it('does not spam duplicate permission notifications for unchanged paused sessions', async () => {
+    const { deps, handlers } = createHarness()
+    activeSessions.set(new Map([['task-1', createSession({ provider: 'claude-code', status: 'paused' })]]))
+    checkpointNotification.set({
+      ticketId: 'task-1',
+      ticketKey: 'task-1',
+      sessionId: 'session-1',
+      stage: 'running',
+      message: 'Agent needs permission',
+      timestamp: 123,
+    })
+
+    await registerAppDesktopEventListeners(deps)
+    await handlers.get('agent-status-changed')?.({
+      payload: { task_id: 'task-1', status: 'paused', kind: 'requested_permission' },
+    })
+
+    expect(get(checkpointNotification)?.timestamp).toBe(123)
+  })
+
   it('does not reactivate an exited PTY from completed status metadata', async () => {
     const { deps, handlers } = createHarness()
     vi.mocked(getShellLifecycleState).mockReturnValue({

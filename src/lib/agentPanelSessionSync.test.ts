@@ -16,7 +16,7 @@ import { listenDesktopEvent } from './desktopIpc'
 describe('agent panel session status synchronization', () => {
   it.each([
     ['running', 'running'],
-    ['paused', 'running'],
+    ['paused', 'paused'],
     ['completed', 'complete'],
     ['failed', 'error'],
     ['interrupted', 'error'],
@@ -68,6 +68,21 @@ describe('agent panel session status synchronization', () => {
     handler({ payload: { task_id: 'T-1', status: 'completed' } })
 
     expect(setStatus).toHaveBeenCalledWith('complete')
+    expect(onRunning).not.toHaveBeenCalled()
+  })
+
+  it('surfaces paused permission requests without treating them as running', () => {
+    const setStatus = vi.fn()
+    const onRunning = vi.fn()
+    const handler = createAgentStatusChangedHandler({
+      taskId: 'T-1',
+      setStatus,
+      onRunning,
+    })
+
+    handler({ payload: { task_id: 'T-1', status: 'paused', kind: 'requested_permission' } })
+
+    expect(setStatus).toHaveBeenCalledWith('paused')
     expect(onRunning).not.toHaveBeenCalled()
   })
 

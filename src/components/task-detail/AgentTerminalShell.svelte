@@ -172,7 +172,7 @@
 <div class="flex flex-col gap-3 h-full" data-testid={rootTestId}>
   <div class="flex items-center justify-between px-5 py-3.5 bg-base-200 border border-base-300 rounded-md">
     <div class="flex items-start gap-2.5">
-      <span class="mt-1.5 shrink-0 {status === 'idle' ? 'status status-neutral' : status === 'running' ? 'status status-success' : status === 'complete' ? 'status status-primary' : 'status status-error'}"></span>
+      <span class="mt-1.5 shrink-0 {status === 'idle' ? 'status status-neutral' : status === 'running' ? 'status status-success' : status === 'paused' ? 'status status-warning' : status === 'complete' ? 'status status-primary' : 'status status-error'}"></span>
       <div class="flex flex-col gap-1.5">
         <span class="text-sm font-semibold text-base-content">{getStatusText()}</span>
         {#if session}

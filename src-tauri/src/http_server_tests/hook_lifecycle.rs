@@ -883,6 +883,81 @@ async fn agent_lifecycle_route_updates_claude_status_through_shared_seam() {
 }
 
 #[tokio::test]
+async fn agent_lifecycle_route_updates_claude_requested_permission_to_paused() {
+    let (state, path) = test_state("agent_lifecycle_route_claude_permission");
+    let mut events = state
+        .app_event_tx
+        .as_ref()
+        .expect("event sender")
+        .subscribe();
+    let task_id = {
+        let db = state.db.lock().expect("lock db");
+        let task = db
+            .create_task("Claude permission task", "doing", None, None, None)
+            .expect("create task");
+        db.create_agent_session(
+            "ses-claude-permission",
+            &task.id,
+            None,
+            "implementing",
+            "running",
+            "claude-code",
+        )
+        .expect("create claude session");
+        db.update_agent_session(
+            "ses-claude-permission",
+            "implementing",
+            "running",
+            Some(r#"{"pty_instance_id":91}"#),
+            None,
+        )
+        .expect("store pty instance");
+        task.id
+    };
+
+    let router = create_router(state.clone());
+    let response = router
+        .oneshot(
+            Request::builder()
+                .uri("/hooks/agent-lifecycle")
+                .method("POST")
+                .header("content-type", "application/json")
+                .body(Body::from(format!(
+                    r#"{{"provider":"claude-code","task_id":"{}","pty_instance_id":91,"provider_session_id":"claude-shared-91","kind":"requested_permission","raw_event_type":"notification-permission"}}"#,
+                    task_id
+                )))
+                .expect("build request"),
+        )
+        .await
+        .expect("request should succeed");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let session = state
+        .db
+        .lock()
+        .expect("lock db")
+        .get_agent_session("ses-claude-permission")
+        .expect("get session")
+        .expect("session exists");
+    assert_eq!(session.status, "paused");
+    assert_eq!(
+        session.claude_session_id,
+        Some("claude-shared-91".to_string())
+    );
+    let event = events.recv().await.expect("app event");
+    assert_eq!(event.event_name, "agent-status-changed");
+    assert_eq!(event.payload["task_id"], task_id);
+    assert_eq!(event.payload["status"], "paused");
+    assert_eq!(event.payload["provider"], "claude-code");
+    assert_eq!(event.payload["kind"], "requested_permission");
+    assert_eq!(event.payload["raw_event_type"], "notification-permission");
+    assert_eq!(event.payload["raw_status_type"], serde_json::Value::Null);
+    assert_eq!(event.payload["pty_instance_id"], 91);
+
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
 async fn opencode_hook_stores_session_id_and_completes_on_idle_event() {
     let (state, path) = test_state("opencode_hook_idle_complete");
     let task_id = {
