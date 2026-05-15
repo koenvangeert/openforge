@@ -93,6 +93,7 @@ export const mockWindowOnCloseRequested = vi.fn(async (callback: (event: MockClo
 export const mockWindowDestroy = vi.fn(async () => undefined)
 
 export const mockSelectedTaskIdStore = writable<string | null>(null)
+export const mockActiveProjectIdStore = writable<string | null>(null)
 export const mockMergingTaskIdsStore = writable<Set<string>>(new Set())
 export const mockCurrentViewStore = writable<'board' | 'files' | 'settings' | 'global_settings' | 'plugin:com.openforge.file-viewer:files' | 'plugin:com.openforge.github-sync:pr_review' | 'plugin:com.openforge.skills-viewer:skills'>('board')
 export const mockSelectedReviewPrStore = writable(null)
@@ -160,7 +161,7 @@ vi.mock('./lib/stores', () => ({
   isLoading: writable(false),
   error: writable<string | null>(null),
   projects: writable<Project[]>([]),
-  activeProjectId: writable<string | null>(null),
+  activeProjectId: mockActiveProjectIdStore,
   activeProjectColorId: writable<string | null>(null),
   projectAttention: writable<Map<string, ProjectAttention>>(new Map()),
   agentEvents: writable<Map<string, any>>(new Map()),
@@ -379,6 +380,10 @@ export function installAppTestLifecycle() {
     installedPluginRows.length = 0
     eventListeners.clear()
     closeRequestedHandler = null
+    mockActiveProjectIdStore.set(null)
+    mockCurrentViewStore.set('board')
+    mockSelectedTaskIdStore.set(null)
+    mockSelectedReviewPrStore.set(null)
     vi.clearAllMocks()
     vi.mocked(registerBuiltinPlugin).mockImplementation(async (plugin) => {
       persistInstalledPluginRow(plugin)
@@ -391,9 +396,7 @@ export function installAppTestLifecycle() {
     mockLoadEnabledForProject.mockImplementation(async () => {
       const { enabledPluginIds } = await import('./lib/plugin/pluginStore')
       const pluginIds = installedPluginRows.map((row) => row.id)
-      if (pluginIds.length > 0) {
-        enabledPluginIds.set(new Set(pluginIds))
-      }
+      enabledPluginIds.set(new Set(pluginIds))
       for (const pluginId of pluginIds) {
         await mockActivatePlugin(pluginId)
       }

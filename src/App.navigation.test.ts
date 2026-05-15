@@ -1,7 +1,7 @@
 import { fireEvent, render } from '@testing-library/svelte'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Task } from './lib/types'
-import { installAppTestLifecycle } from './App.test-harness'
+import { installAppTestLifecycle, mockLoadEnabledForProject } from './App.test-harness'
 
 describe('App navigation shortcuts', () => {
   installAppTestLifecycle()
@@ -54,6 +54,9 @@ describe('App navigation shortcuts', () => {
       stores.currentView.set('board')
       render(App)
       await vi.waitFor(() => {
+        expect(mockLoadEnabledForProject).toHaveBeenCalledWith('proj-1')
+      })
+      await vi.waitFor(() => {
         expect(get(pluginStore.installedPlugins).has(GITHUB_SYNC_PLUGIN_ID)).toBe(true)
       })
       pluginStore.enabledPluginIds.set(new Set([GITHUB_SYNC_PLUGIN_ID]))
@@ -81,6 +84,9 @@ describe('App navigation shortcuts', () => {
     stores.currentView.set('board')
     render(App)
     await vi.waitFor(() => {
+      expect(mockLoadEnabledForProject).toHaveBeenCalledWith('proj-1')
+    })
+    await vi.waitFor(() => {
       expect(get(pluginStore.installedPlugins).has(FILE_VIEWER_PLUGIN_ID)).toBe(true)
     })
     pluginStore.enabledPluginIds.set(new Set([FILE_VIEWER_PLUGIN_ID]))
@@ -107,6 +113,9 @@ describe('App navigation shortcuts', () => {
 
       stores.currentView.set('board')
       render(App)
+      await vi.waitFor(() => {
+        expect(mockLoadEnabledForProject).toHaveBeenCalledWith('proj-1')
+      })
       await vi.waitFor(() => {
         expect(get(pluginStore.installedPlugins).has(SKILLS_VIEWER_PLUGIN_ID)).toBe(true)
       })
