@@ -130,6 +130,10 @@ class RuntimeValidationError extends Error {
 class RuntimeSubscriptionSink implements SubscriptionSink {
   readonly subscriptions: Disposable[] = []
 
+  get size(): number {
+    return this.subscriptions.length
+  }
+
   add(subscription: Disposable | (() => void)): void {
     if (typeof subscription === 'function') {
       this.subscriptions.push({ dispose: subscription })
@@ -143,11 +147,29 @@ class RuntimeSubscriptionSink implements SubscriptionSink {
     this.subscriptions.push(subscription)
   }
 
+  async disposeFrom(index: number): Promise<void> {
+    const subscriptions = this.subscriptions.splice(index).reverse()
+    await disposeSubscriptions(subscriptions)
+  }
+
   async disposeAll(): Promise<void> {
     const subscriptions = this.subscriptions.splice(0).reverse()
-    for (const subscription of subscriptions) {
+    await disposeSubscriptions(subscriptions)
+  }
+}
+
+async function disposeSubscriptions(subscriptions: Disposable[]): Promise<void> {
+  let firstError: unknown = null
+  for (const subscription of subscriptions) {
+    try {
       await subscription.dispose()
+    } catch (error) {
+      firstError ??= error
     }
+  }
+
+  if (firstError) {
+    throw firstError
   }
 }
 
@@ -257,6 +279,10 @@ function createMemoryStorage(): PluginStorage {
 const globalCommands = new Map<string, RuntimeCommandContribution>()
 const globalEventHandlers = new Map<string, Set<RuntimeEventHandler>>()
 
+type ActivationTransaction = {
+  disposables: Disposable[]
+}
+
 function commandDescriptor(command: RuntimeCommandContribution): CommandDescriptor {
   return {
     id: command.id,
@@ -302,6 +328,7 @@ class RuntimeContributionRegistry {
   private readonly backendMethods = new Map<string, RuntimeBackendMethodContribution>()
   private readonly backgroundServices = new Map<string, RuntimeBackgroundServiceContribution>()
   private eventListenerSequence = 0
+  private activationTransaction: ActivationTransaction | null = null
 
   constructor(options: RuntimeOptions) {
     assertLocalId('backend', options.pluginId)
@@ -319,13 +346,17 @@ class RuntimeContributionRegistry {
   }
 
   async activateFrontend(plugin: FrontendPlugin): Promise<void> {
-    await plugin.activate(this.getFrontendApi(), this.createFrontendContext())
+    await this.runActivationTransaction(this.frontendSubscriptions, async () => {
+      await plugin.activate(this.getFrontendApi(), this.createFrontendContext())
+    })
   }
 
   async activateBackend(plugin: BackendPlugin): Promise<void> {
-    const before = new Set(this.backgroundServices.keys())
-    await plugin.activate(this.getBackendApi(), this.createBackendContext())
-    await this.startNewBackgroundServices(before)
+    await this.runActivationTransaction(this.backendSubscriptions, async () => {
+      const before = new Set(this.backgroundServices.keys())
+      await plugin.activate(this.getBackendApi(), this.createBackendContext())
+      await this.startNewBackgroundServices(before)
+    })
   }
 
   async deactivate(): Promise<void> {
@@ -422,6 +453,48 @@ class RuntimeContributionRegistry {
       apiVersion: 1,
       packageMetadata: this.packageMetadata,
       subscriptions: this.backendSubscriptions,
+    }
+  }
+
+  private async runActivationTransaction<T>(subscriptionSink: RuntimeSubscriptionSink, activate: () => Promise<T>): Promise<T> {
+    const previousTransaction = this.activationTransaction
+    const transaction: ActivationTransaction = { disposables: [] }
+    const subscriptionCheckpoint = subscriptionSink.size
+    this.activationTransaction = transaction
+
+    try {
+      const result = await activate()
+      this.activationTransaction = previousTransaction
+      if (previousTransaction) {
+        previousTransaction.disposables.push(...transaction.disposables)
+      }
+      return result
+    } catch (error) {
+      this.activationTransaction = previousTransaction
+      await this.rollbackActivationTransaction(transaction, subscriptionSink, subscriptionCheckpoint)
+      throw error
+    }
+  }
+
+  private trackActivationDisposable<TDisposable extends Disposable>(disposable: TDisposable): TDisposable {
+    this.activationTransaction?.disposables.push(disposable)
+    return disposable
+  }
+
+  private async rollbackActivationTransaction(transaction: ActivationTransaction, subscriptionSink: RuntimeSubscriptionSink, subscriptionCheckpoint: number): Promise<void> {
+    try {
+      await subscriptionSink.disposeFrom(subscriptionCheckpoint)
+    } catch {
+      // Preserve the activation failure as the reported error; rollback continues below.
+    }
+
+    const disposables = transaction.disposables.splice(0).reverse()
+    for (const disposable of disposables) {
+      try {
+        await disposable.dispose()
+      } catch {
+        // Preserve the activation failure as the reported error while continuing rollback.
+      }
     }
   }
 
@@ -529,11 +602,11 @@ class RuntimeContributionRegistry {
     this.commands.set(qualifiedId, contribution)
     globalCommands.set(qualifiedId, contribution)
 
-    return createDisposable(() => {
+    return this.trackActivationDisposable(createDisposable(() => {
       this.commands.delete(qualifiedId)
       globalCommands.delete(qualifiedId)
       this.release('commands', qualifiedId)
-    })
+    }))
   }
 
   private registerEventListener(event: string, handler: RuntimeEventHandler, global: boolean): Disposable {
@@ -545,7 +618,7 @@ class RuntimeContributionRegistry {
 
     if (global && qualifiedId.startsWith('openforge.') && this.host.onHostEvent) {
       const unsubscribe = this.host.onHostEvent(qualifiedId.slice('openforge.'.length), handler)
-      return createDisposable(() => unsubscribe())
+      return this.trackActivationDisposable(createDisposable(() => unsubscribe()))
     }
 
     const target = global ? globalEventHandlers : this.eventHandlers
@@ -566,7 +639,7 @@ class RuntimeContributionRegistry {
       this.eventListeners.set(listenerKey, contribution)
     }
 
-    return createDisposable(() => {
+    return this.trackActivationDisposable(createDisposable(() => {
       handlers.delete(handler)
       if (handlers.size === 0) {
         target.delete(qualifiedId)
@@ -574,7 +647,7 @@ class RuntimeContributionRegistry {
       if (!global) {
         this.eventListeners.delete(listenerKey)
       }
-    })
+    }))
   }
 
   private registerView(registration: PluginViewRegistration): Disposable {
@@ -593,10 +666,10 @@ class RuntimeContributionRegistry {
     }
     this.views.set(qualifiedId, contribution)
 
-    return createDisposable(() => {
+    return this.trackActivationDisposable(createDisposable(() => {
       this.views.delete(qualifiedId)
       this.release('views', qualifiedId)
-    })
+    }))
   }
 
   private registerTaskPaneTab(registration: PluginTaskPaneTabRegistration): Disposable {
@@ -615,10 +688,10 @@ class RuntimeContributionRegistry {
     }
     this.taskPaneTabs.set(qualifiedId, contribution)
 
-    return createDisposable(() => {
+    return this.trackActivationDisposable(createDisposable(() => {
       this.taskPaneTabs.delete(qualifiedId)
       this.release('taskPane', qualifiedId)
-    })
+    }))
   }
 
   private registerSettingsSection(registration: PluginSettingsSectionRegistration): Disposable {
@@ -637,10 +710,10 @@ class RuntimeContributionRegistry {
     }
     this.settingsSections.set(qualifiedId, contribution)
 
-    return createDisposable(() => {
+    return this.trackActivationDisposable(createDisposable(() => {
       this.settingsSections.delete(qualifiedId)
       this.release('settings', qualifiedId)
-    })
+    }))
   }
 
   private registerBackendMethod(method: string, registration: BackendMethodRegistration): Disposable {
@@ -657,10 +730,10 @@ class RuntimeContributionRegistry {
     }
     this.backendMethods.set(qualifiedId, contribution)
 
-    return createDisposable(() => {
+    return this.trackActivationDisposable(createDisposable(() => {
       this.backendMethods.delete(qualifiedId)
       this.release('backend', qualifiedId)
-    })
+    }))
   }
 
   private registerBackgroundService(registration: BackgroundServiceRegistration): Disposable {
@@ -681,14 +754,14 @@ class RuntimeContributionRegistry {
     }
     this.backgroundServices.set(qualifiedId, contribution)
 
-    return createDisposable(async () => {
+    return this.trackActivationDisposable(createDisposable(async () => {
       this.backgroundServices.delete(qualifiedId)
       this.release('background', qualifiedId)
       if (contribution.started) {
         await contribution.stop?.()
         contribution.started = false
       }
-    })
+    }))
   }
 
   private async startNewBackgroundServices(previousKeys: Set<string>): Promise<void> {

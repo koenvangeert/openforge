@@ -299,6 +299,85 @@ describe('runtime contribution registry', () => {
     expect(() => frontend.events.onGlobal('openforge.task.selected', vi.fn())).not.toThrow()
   })
 
+  it('rolls back all frontend registrations and duplicate claims when activation validation fails', async () => {
+    const registry = makeRegistry()
+    const handler = vi.fn(async () => 'ok')
+
+    await expect(registry.activateFrontend(defineFrontendPlugin({
+      activate(openforge, context) {
+        openforge.commands.register({
+          id: 'sync',
+          title: 'Sync Pull Requests',
+          handler,
+        })
+        context.subscriptions.add(openforge.views.register({
+          id: 'prs',
+          title: 'Pull Requests',
+          icon: 'git-pull-request',
+          placement: 'rail',
+          component: PluginView,
+        }))
+        openforge.taskPane.registerTab({ id: 'activity', title: '', component: TaskPaneTab })
+      },
+    }))).rejects.toThrow(/taskPane.*title/i)
+
+    expect(registry.getSnapshot()).toMatchObject({
+      views: [],
+      taskPaneTabs: [],
+      commands: [],
+    })
+    await expect(registry.getFrontendApi().commands.invoke('sync')).rejects.toThrow(/Unknown command: github\.sync/)
+    expect(() => registry.getFrontendApi().commands.register({
+      id: 'sync',
+      title: 'Sync Again',
+      handler,
+    })).not.toThrow()
+    await expect(registry.getFrontendApi().commands.invoke('sync')).resolves.toBe('ok')
+  })
+
+  it('rolls back backend registrations and stops started background services when startup fails', async () => {
+    const registry = makeRegistry()
+    const firstStart = vi.fn(async () => undefined)
+    const firstStop = vi.fn(async () => undefined)
+    const failingStart = vi.fn(async () => {
+      throw new Error('poller failed')
+    })
+    const secondStop = vi.fn(async () => undefined)
+
+    await expect(registry.activateBackend(defineBackendPlugin({
+      activate(openforge) {
+        openforge.backend.registerMethod('syncProject', {
+          handler: async () => ({ synced: true }),
+        })
+        openforge.background.register({
+          id: 'poller',
+          scope: 'project',
+          start: firstStart,
+          stop: firstStop,
+        })
+        openforge.background.register({
+          id: 'failing-poller',
+          scope: 'project',
+          start: failingStart,
+          stop: secondStop,
+        })
+      },
+    }))).rejects.toThrow('poller failed')
+
+    expect(firstStart).toHaveBeenCalledTimes(1)
+    expect(failingStart).toHaveBeenCalledTimes(1)
+    expect(firstStop).toHaveBeenCalledTimes(1)
+    expect(secondStop).not.toHaveBeenCalled()
+    expect(registry.getSnapshot()).toMatchObject({
+      backendMethods: [],
+      backgroundServices: [],
+    })
+    expect(() => registry.getBackendApi().backend.registerMethod('syncProject', {
+      handler: async () => ({ synced: true }),
+    })).not.toThrow()
+    await expect(registry.getFrontendApi().backend.invoke('syncProject')).resolves.toEqual({ synced: true })
+  })
+
   it('rejects duplicate ids within a plugin activation, including command ids shared across frontend and backend runtimes', async () => {
     const registry = makeRegistry()
 

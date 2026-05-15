@@ -60,12 +60,27 @@ export function clearPluginRuntimeContributions(pluginId: string): void {
   }
 }
 
+async function stopBackgroundServiceEntries(stopEntries: Array<[string, () => Promise<void>]>): Promise<void> {
+  let firstError: unknown = null
+  for (const [key, stop] of stopEntries.reverse()) {
+    try {
+      await stop()
+    } catch (error) {
+      firstError ??= error
+    } finally {
+      backgroundServiceStops.delete(key)
+    }
+  }
+
+  if (firstError) {
+    throw firstError
+  }
+}
+
 export async function stopPluginBackgroundServices(pluginId: string): Promise<void> {
   const stopEntries = Array.from(backgroundServiceStops.entries()).filter(([key]) => key.startsWith(`${pluginId}:`))
-  for (const [key, stop] of stopEntries) {
-    await stop()
-    backgroundServiceStops.delete(key)
-  }
+  if (stopEntries.length === 0) return
+  return stopBackgroundServiceEntries(stopEntries)
 }
 
 function registerRenderableContributions<T extends RuntimeTaskPaneTabContribution | RuntimeSettingsSectionContribution>(
@@ -84,35 +99,65 @@ function registerCommandContributions(pluginId: string, contributions: RuntimeCo
   }
 }
 
-async function startBackgroundServices(pluginId: string, contributions: RuntimeBackgroundServiceContribution[] | undefined): Promise<void> {
+async function startBackgroundServices(
+  pluginId: string,
+  contributions: RuntimeBackgroundServiceContribution[] | undefined,
+  registeredStopKeys: string[]
+): Promise<void> {
   for (const contribution of contributions ?? []) {
     if (!contribution.started) {
       await contribution.start()
       contribution.started = true
     }
+
+    const stopKey = toNamespacedContributionId(pluginId, contribution.id)
     backgroundServiceStops.set(
-      toNamespacedContributionId(pluginId, contribution.id),
+      stopKey,
       async () => {
         await contribution.stop?.()
         contribution.started = false
       }
     )
+    registeredStopKeys.push(stopKey)
+  }
+}
+
+async function rollbackAppliedRuntimeContributions(pluginId: string, registeredStopKeys: string[]): Promise<void> {
+  const stopEntries = registeredStopKeys
+    .map((key): [string, () => Promise<void>] | null => {
+      const stop = backgroundServiceStops.get(key)
+      return stop ? [key, stop] : null
+    })
+    .filter((entry): entry is [string, () => Promise<void>] => entry !== null)
+
+  try {
+    await stopBackgroundServiceEntries(stopEntries)
+  } finally {
+    clearPluginRuntimeContributions(pluginId)
   }
 }
 
 export async function applyRuntimeSnapshotContributions(pluginId: string, snapshot: RuntimeContributionSnapshot): Promise<void> {
+  await stopPluginBackgroundServices(pluginId)
   clearPluginRuntimeContributions(pluginId)
 
-  setRuntimeContributionSource(pluginId, runtimeSnapshotToContributionSource(snapshot))
+  const registeredStopKeys: string[] = []
 
-  for (const view of snapshot.views) {
-    registerViewComponent(makePluginViewKey(pluginId, view.id), view.component as never)
+  try {
+    setRuntimeContributionSource(pluginId, runtimeSnapshotToContributionSource(snapshot))
+
+    for (const view of snapshot.views) {
+      registerViewComponent(makePluginViewKey(pluginId, view.id), view.component as never)
+    }
+
+    registerRenderableContributions(pluginId, 'taskPaneTabs', snapshot.taskPaneTabs)
+    registerRenderableContributions(pluginId, 'settingsSections', snapshot.settingsSections)
+    registerCommandContributions(pluginId, snapshot.commands)
+    await startBackgroundServices(pluginId, snapshot.backgroundServices, registeredStopKeys)
+  } catch (error) {
+    await rollbackAppliedRuntimeContributions(pluginId, registeredStopKeys)
+    throw error
   }
-
-  registerRenderableContributions(pluginId, 'taskPaneTabs', snapshot.taskPaneTabs)
-  registerRenderableContributions(pluginId, 'settingsSections', snapshot.settingsSections)
-  registerCommandContributions(pluginId, snapshot.commands)
-  await startBackgroundServices(pluginId, snapshot.backgroundServices)
 }
 
 export function getPluginCommandHandler(pluginId: string, commandId: string): RuntimeCommandContribution['handler'] | undefined {
