@@ -284,6 +284,38 @@ describe('runtime contribution registry', () => {
     expect(host.setProjectConfig).toHaveBeenCalledWith('P-1', 'repo', 'openforge')
   })
 
+  it('exposes backend readiness and invocation through the configured host bridge', async () => {
+    let readyHandler: (() => void) | null = null
+    const host = {
+      getBackendState: vi.fn(() => 'starting' as const),
+      whenBackendReady: vi.fn(async () => undefined),
+      onBackendReady: vi.fn((handler: () => void) => {
+        readyHandler = handler
+        return () => { readyHandler = null }
+      }),
+      invokeBackendMethod: vi.fn(async (method: string, payload?: unknown) => ({ method, payload })),
+    }
+    const registry = createRuntimeContributionRegistry({ pluginId: 'github', projectId: 'P-1', host })
+    const api = registry.getFrontendApi()
+    const onReady = vi.fn()
+
+    expect(api.backend.state).toBe('starting')
+    await api.backend.whenReady()
+    const readySubscription = api.backend.onReady(onReady)
+    ;(readyHandler as (() => void) | null)?.()
+    await readySubscription.dispose()
+    await expect(api.backend.invoke('syncProject', { projectId: 'P-1' })).resolves.toEqual({
+      method: 'syncProject',
+      payload: { projectId: 'P-1' },
+    })
+
+    expect(host.whenBackendReady).toHaveBeenCalledOnce()
+    expect(host.onBackendReady).toHaveBeenCalledWith(onReady)
+    expect(onReady).toHaveBeenCalledOnce()
+    expect(readyHandler).toBeNull()
+    expect(host.invokeBackendMethod).toHaveBeenCalledWith('syncProject', { projectId: 'P-1' })
+  })
+
   it('rejects reserved openforge.* plugin-local registrations while allowing explicit global host listeners', () => {
     const registry = makeRegistry()
     const frontend = registry.getFrontendApi()

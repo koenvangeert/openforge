@@ -32,6 +32,7 @@ export {
 
 export type {
   AttentionAPI,
+  BackendReadyState,
   CommandDescriptor,
   CommandRegistry,
   CommandRegistration,
