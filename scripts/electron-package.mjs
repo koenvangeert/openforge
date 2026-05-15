@@ -190,6 +190,16 @@ async function copyOpenForgeCliAssets(repoRoot, resourcesDir) {
   await cp(skillSourcePath, join(cliResourcesDir, 'openforge-skill.md'))
 }
 
+async function copyBackendPluginHostRuntime(electronDist, macosDir) {
+  const bundledHostEntrypoint = join(electronDist, 'plugin-host', 'index.js')
+  await assertExists(bundledHostEntrypoint, 'Bundled backend plugin host runtime')
+
+  const pluginHostDir = join(macosDir, 'plugin-host')
+  await rm(pluginHostDir, { recursive: true, force: true })
+  await mkdir(pluginHostDir, { recursive: true })
+  await cp(bundledHostEntrypoint, join(pluginHostDir, 'index.js'))
+}
+
 async function updateInfoPlist(appPath, { appName = APP_NAME, bundleIdentifier = ELECTRON_BUNDLE_IDENTIFIER } = {}) {
   const plistPath = join(appPath, 'Contents', 'Info.plist')
   let plist = await readFile(plistPath, 'utf8')
@@ -235,6 +245,7 @@ export async function packageElectronApp({
   const sidecarTargetPath = join(macosDir, 'openforge-sidecar')
   await cp(sidecarBinaryPath, sidecarTargetPath)
   await chmod(sidecarTargetPath, 0o755)
+  await copyBackendPluginHostRuntime(electronDist, macosDir)
 
   await assertPackageArchitectureCompatibility({
     cargoBuildTarget,

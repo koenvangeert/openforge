@@ -28,6 +28,14 @@ async function writeExecutable(path, content = '#!/bin/sh\n') {
   await writeFile(path, content, { mode: 0o755 })
 }
 
+async function writeElectronBuildOutputs(repoRoot) {
+  await mkdir(join(repoRoot, 'dist'), { recursive: true })
+  await writeFile(join(repoRoot, 'dist/index.html'), '<!doctype html>')
+  await mkdir(join(repoRoot, 'dist-electron', 'plugin-host'), { recursive: true })
+  await writeFile(join(repoRoot, 'dist-electron/main.js'), 'console.log("main")')
+  await writeFile(join(repoRoot, 'dist-electron', 'plugin-host', 'index.js'), 'console.log("bundled backend plugin host")')
+}
+
 async function writeCurrentDataIdentityManifest(repoRoot) {
   const manifest = await readFile(join(import.meta.dirname, '..', 'openforge-data-identity.json'), 'utf8')
   await writeFile(join(repoRoot, 'openforge-data-identity.json'), manifest)
@@ -98,10 +106,7 @@ describe('Electron macOS packaging helpers', () => {
     await mkdir(join(template, 'Contents/Resources'), { recursive: true })
     await writeExecutable(join(template, 'Contents/MacOS/Electron'))
     await writeFile(join(template, 'Contents/Info.plist'), '<plist><dict><key>CFBundleExecutable</key><string>Electron</string><key>CFBundleName</key><string>Electron</string><key>CFBundleDisplayName</key><string>Electron</string></dict></plist>')
-    await mkdir(join(root, 'dist'), { recursive: true })
-    await writeFile(join(root, 'dist/index.html'), '<!doctype html>')
-    await mkdir(join(root, 'dist-electron'), { recursive: true })
-    await writeFile(join(root, 'dist-electron/main.js'), 'console.log("main")')
+    await writeElectronBuildOutputs(root)
     await mkdir(join(root, 'src-tauri/target/release'), { recursive: true })
     await writeExecutable(join(root, 'src-tauri/target/release/openforge'), '#!/bin/sh\necho sidecar\n')
 
@@ -231,10 +236,7 @@ describe('Electron macOS packaging helpers', () => {
     await writeFile(join(template, 'Contents/Frameworks/Electron Framework.framework/Versions/A/Resources/icudtl.dat'), 'icu')
     await writeExecutable(join(template, 'Contents/MacOS/Electron'))
     await writeFile(join(template, 'Contents/Info.plist'), '<plist><dict><key>CFBundleExecutable</key><string>Electron</string><key>CFBundleName</key><string>Electron</string><key>CFBundleDisplayName</key><string>Electron</string></dict></plist>')
-    await mkdir(join(root, 'dist'), { recursive: true })
-    await writeFile(join(root, 'dist/index.html'), '<!doctype html>')
-    await mkdir(join(root, 'dist-electron'), { recursive: true })
-    await writeFile(join(root, 'dist-electron/main.js'), 'console.log("main")')
+    await writeElectronBuildOutputs(root)
     await mkdir(join(root, 'src-tauri/target/release'), { recursive: true })
     await writeExecutable(join(root, 'src-tauri/target/release/openforge'), '#!/bin/sh\necho sidecar\n')
     await mkdir(join(root, 'src-tauri/src/openforge-cli'), { recursive: true })
@@ -247,6 +249,7 @@ describe('Electron macOS packaging helpers', () => {
     await expect(stat(join(output, 'Contents/MacOS/openforge-sidecar'))).resolves.toBeTruthy()
     await expect(stat(join(output, 'Contents/Resources/app/dist/index.html'))).resolves.toBeTruthy()
     await expect(stat(join(output, 'Contents/Resources/app/dist-electron/main.js'))).resolves.toBeTruthy()
+    await expect(readFile(join(output, 'Contents/MacOS/plugin-host/index.js'), 'utf8')).resolves.toContain('bundled backend plugin host')
     await expect(readFile(join(output, 'Contents/Resources/openforge-cli/cli.js'), 'utf8')).resolves.toContain('openforge cli')
     await expect(readFile(join(output, 'Contents/Resources/openforge-cli/openforge-skill.md'), 'utf8')).resolves.toContain('openforge skill docs')
     await expect(readlink(join(output, 'Contents/Frameworks/Electron Framework.framework/Versions/Current'))).resolves.toBe('A')
