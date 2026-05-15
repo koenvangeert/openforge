@@ -5,12 +5,10 @@
 // Pure search engine for the diff viewer. Uses the CSS Custom Highlight API
 // to apply non-intrusive visual highlights without touching the DOM structure.
 //
-// CSS Custom Highlight API requires `::highlight()` pseudo-element CSS rules
-// to be defined in the consuming stylesheet:
-//
-//   ::highlight(diff-search-match)    { background-color: ...; }  /* amber */
-//   ::highlight(diff-search-current)  { background-color: ...; }  /* bright amber */
-//   ::highlight(diff-occurrence-match) { background-color: ...; } /* blue */
+// CSS Custom Highlight API requires `::highlight()` pseudo-element CSS rules.
+// The selector syntax is valid, but Lightning CSS 1.32 warns on static
+// `::highlight()` selectors during Vite CSS minification, so the small ruleset
+// is installed at runtime when the Highlight API is available.
 
 /** All search matches (amber) */
 const SEARCH_MATCH_HIGHLIGHT = 'diff-search-match'
@@ -20,6 +18,25 @@ const SEARCH_CURRENT_HIGHLIGHT = 'diff-search-current'
 
 /** Double-click word occurrence matches (blue) — separate from search */
 const OCCURRENCE_MATCH_HIGHLIGHT = 'diff-occurrence-match'
+
+const DIFF_SEARCH_HIGHLIGHT_STYLES_ID = 'openforge-diff-search-highlight-styles'
+
+export const DIFF_SEARCH_HIGHLIGHT_STYLES = `
+::highlight(${SEARCH_MATCH_HIGHLIGHT}) {
+  background-color: color-mix(in oklch, var(--color-warning) 40%, transparent);
+  color: var(--color-base-content);
+}
+
+::highlight(${SEARCH_CURRENT_HIGHLIGHT}) {
+  background-color: var(--color-warning);
+  color: var(--color-warning-content);
+}
+
+::highlight(${OCCURRENCE_MATCH_HIGHLIGHT}) {
+  background-color: color-mix(in oklch, var(--color-info) 30%, transparent);
+  color: var(--color-base-content);
+}
+`.trim()
 
 // ============================================================================
 // Internal types
@@ -46,7 +63,17 @@ interface TextNodeEntry {
  * Returns true if the CSS Custom Highlight API is available in this browser.
  */
 function isHighlightSupported(): boolean {
-  return typeof CSS !== 'undefined' && 'highlights' in CSS
+  return typeof CSS !== 'undefined' && 'highlights' in CSS && typeof Highlight !== 'undefined'
+}
+
+function ensureDiffSearchHighlightStyles(): void {
+  if (typeof document === 'undefined') return
+  if (document.getElementById(DIFF_SEARCH_HIGHLIGHT_STYLES_ID) !== null) return
+
+  const style = document.createElement('style')
+  style.id = DIFF_SEARCH_HIGHLIGHT_STYLES_ID
+  style.textContent = DIFF_SEARCH_HIGHLIGHT_STYLES
+  document.head.appendChild(style)
 }
 
 /**
@@ -278,6 +305,7 @@ export function applySearchHighlights(matches: Range[], currentRange: Range | nu
     return
   }
 
+  ensureDiffSearchHighlightStyles()
   CSS.highlights.set(SEARCH_MATCH_HIGHLIGHT, new Highlight(...matches))
 
   if (currentRange !== null) {
@@ -304,6 +332,7 @@ export function applyOccurrenceHighlights(matches: Range[]): void {
     return
   }
 
+  ensureDiffSearchHighlightStyles()
   CSS.highlights.set(OCCURRENCE_MATCH_HIGHLIGHT, new Highlight(...matches))
 }
 
