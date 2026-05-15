@@ -19,7 +19,7 @@ import {
 	getCommitBatchFileContents,
 	getTaskBatchFileContents,
 	getPtyBuffer,
-	installPlugin,
+	registerBuiltinPlugin,
 	installPluginFromGit,
 	installPluginFromLocal,
 	installPluginFromNpm,
@@ -202,42 +202,42 @@ describe("ipc spawnShellPty", () => {
 		});
 	});
 
-	it("sends installPlugin metadata as a single command argument", async () => {
-		await installPlugin({
-			id: "com.example.plugin",
-			name: "Example Plugin",
+	it("sends registerBuiltinPlugin metadata as a single trusted builtin command argument", async () => {
+		await registerBuiltinPlugin({
+			id: "com.openforge.file-viewer",
+			name: "File Viewer",
 			version: "1.2.3",
 			apiVersion: 1,
-			description: "Adds examples",
+			description: "Built-in file viewer",
 			permissions: "[]",
 			contributes: "{}",
-			frontendEntry: "index.js",
+			frontendEntry: "./dist/frontend.js",
 			backendEntry: null,
-			installPath: "/plugins/example",
-			sourceKind: "npm",
-			sourceSpec: "npm:@example/plugin@1.2.3",
+			installPath: "builtin:com.openforge.file-viewer",
+			sourceKind: "builtin",
+			sourceSpec: "com.openforge.file-viewer",
 			packageMetadata: "{}",
 			installedAt: 1234,
-			isBuiltin: false,
+			isBuiltin: true,
 		});
 
-		expect(invokeMock).toHaveBeenCalledWith("install_plugin", {
+		expect(invokeMock).toHaveBeenCalledWith("register_builtin_plugin", {
 			plugin: {
-				id: "com.example.plugin",
-				name: "Example Plugin",
+				id: "com.openforge.file-viewer",
+				name: "File Viewer",
 				version: "1.2.3",
 				apiVersion: 1,
-				description: "Adds examples",
+				description: "Built-in file viewer",
 				permissions: "[]",
 				contributes: "{}",
-				frontendEntry: "index.js",
+				frontendEntry: "./dist/frontend.js",
 				backendEntry: null,
-				installPath: "/plugins/example",
-				sourceKind: "npm",
-				sourceSpec: "npm:@example/plugin@1.2.3",
+				installPath: "builtin:com.openforge.file-viewer",
+				sourceKind: "builtin",
+				sourceSpec: "com.openforge.file-viewer",
 				packageMetadata: "{}",
 				installedAt: 1234,
-				isBuiltin: false,
+				isBuiltin: true,
 			},
 		});
 	});

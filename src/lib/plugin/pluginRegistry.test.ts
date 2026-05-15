@@ -37,7 +37,7 @@ const {
 
 vi.mock('../ipc', () => ({
   forceGithubSync: forceGithubSyncMock,
-  installPlugin: installPluginMock,
+  registerBuiltinPlugin: installPluginMock,
   uninstallPlugin: uninstallPluginIpcMock,
   getEnabledPlugins: getEnabledPluginsMock,
   getPlugin: getPluginIpcMock,
