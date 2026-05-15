@@ -16,9 +16,11 @@ struct JsonRpcRequest {
 }
 
 #[derive(Debug, Deserialize)]
-struct JsonRpcResponse {
+struct JsonRpcMessage {
     jsonrpc: String,
     id: Option<u64>,
+    method: Option<String>,
+    params: Option<Value>,
     result: Option<Value>,
     error: Option<JsonRpcError>,
 }
@@ -43,6 +45,19 @@ pub struct ParsedResponse {
 }
 
 #[derive(Debug)]
+pub struct ParsedRequest {
+    pub id: u64,
+    pub method: String,
+    pub params: Value,
+}
+
+#[derive(Debug)]
+pub enum ParsedMessage {
+    Request(ParsedRequest),
+    Response(ParsedResponse),
+}
+
+#[derive(Debug)]
 pub struct RpcError(pub String);
 
 pub fn format_request(plugin_id: &str, method: &str, params: Value) -> (u64, String) {
@@ -60,44 +75,89 @@ pub fn format_request(plugin_id: &str, method: &str, params: Value) -> (u64, Str
     (id, raw)
 }
 
-pub fn parse_response_message(raw: &str) -> Result<ParsedResponse, RpcError> {
-    let response: JsonRpcResponse = serde_json::from_str(raw)
-        .map_err(|error| RpcError(format!("failed to parse JSON-RPC response: {error}")))?;
+pub fn parse_message(raw: &str) -> Result<ParsedMessage, RpcError> {
+    let message: JsonRpcMessage = serde_json::from_str(raw)
+        .map_err(|error| RpcError(format!("failed to parse JSON-RPC message: {error}")))?;
 
-    if response.jsonrpc != "2.0" {
+    if message.jsonrpc != "2.0" {
         return Err(RpcError(format!(
-            "invalid JSON-RPC version in response: {}",
-            response.jsonrpc
+            "invalid JSON-RPC version in message: {}",
+            message.jsonrpc
         )));
     }
 
-    let response_id = response
+    let message_id = message
         .id
-        .ok_or_else(|| RpcError("missing JSON-RPC response id".to_string()))?;
+        .ok_or_else(|| RpcError("missing JSON-RPC message id".to_string()))?;
 
-    if response.result.is_some() && response.error.is_some() {
+    if let Some(method) = message.method {
+        if message.result.is_some() || message.error.is_some() {
+            return Err(RpcError(format!(
+                "invalid JSON-RPC request {message_id}: request includes response fields"
+            )));
+        }
+        return Ok(ParsedMessage::Request(ParsedRequest {
+            id: message_id,
+            method,
+            params: message.params.unwrap_or(Value::Null),
+        }));
+    }
+
+    if message.result.is_some() && message.error.is_some() {
         return Err(RpcError(format!(
-            "invalid JSON-RPC response {response_id}: result and error are both present"
+            "invalid JSON-RPC response {message_id}: result and error are both present"
         )));
     }
 
-    if let Some(result) = response.result {
-        return Ok(ParsedResponse {
-            id: response_id,
+    if let Some(result) = message.result {
+        return Ok(ParsedMessage::Response(ParsedResponse {
+            id: message_id,
             result: RpcResult::Success(result),
-        });
+        }));
     }
 
-    if let Some(error) = response.error {
-        return Ok(ParsedResponse {
-            id: response_id,
+    if let Some(error) = message.error {
+        return Ok(ParsedMessage::Response(ParsedResponse {
+            id: message_id,
             result: RpcResult::Error(error.code, error.message),
-        });
+        }));
     }
 
     Err(RpcError(format!(
-        "invalid JSON-RPC response {response_id}: missing result or error"
+        "invalid JSON-RPC message {message_id}: missing method, result, or error"
     )))
+}
+
+#[cfg(test)]
+pub fn parse_response_message(raw: &str) -> Result<ParsedResponse, RpcError> {
+    match parse_message(raw)? {
+        ParsedMessage::Response(response) => Ok(response),
+        ParsedMessage::Request(request) => Err(RpcError(format!(
+            "expected JSON-RPC response but received request {}",
+            request.method
+        ))),
+    }
+}
+
+pub fn format_success_response(id: u64, result: Value) -> String {
+    serde_json::to_string(&serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": id,
+        "result": result,
+    }))
+    .expect("serializing JSON-RPC success response should not fail")
+}
+
+pub fn format_error_response(id: u64, code: i64, message: &str) -> String {
+    serde_json::to_string(&serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": id,
+        "error": {
+            "code": code,
+            "message": message,
+        },
+    }))
+    .expect("serializing JSON-RPC error response should not fail")
 }
 
 pub fn rpc_error_from_code(code: i64, message: &str) -> String {
@@ -163,6 +223,37 @@ mod tests {
                 panic!("Expected success, got error {}: {}", code, message)
             }
         }
+    }
+
+    #[test]
+    fn parse_message_request() {
+        let raw = r#"{"jsonrpc":"2.0","id":7,"method":"openforge.storage.get","params":{"pluginId":"p1"}}"#;
+        let parsed = parse_message(raw).expect("request should parse");
+        match parsed {
+            ParsedMessage::Request(request) => {
+                assert_eq!(request.id, 7);
+                assert_eq!(request.method, "openforge.storage.get");
+                assert_eq!(request.params["pluginId"], "p1");
+            }
+            ParsedMessage::Response(response) => {
+                panic!("Expected request, got response {response:?}")
+            }
+        }
+    }
+
+    #[test]
+    fn format_response_messages() {
+        let success: Value = serde_json::from_str(&format_success_response(9, json!({"ok": true})))
+            .expect("success response should parse");
+        assert_eq!(success["jsonrpc"], "2.0");
+        assert_eq!(success["id"], 9);
+        assert_eq!(success["result"]["ok"], true);
+
+        let error: Value = serde_json::from_str(&format_error_response(10, -32603, "boom"))
+            .expect("error response should parse");
+        assert_eq!(error["id"], 10);
+        assert_eq!(error["error"]["code"], -32603);
+        assert_eq!(error["error"]["message"], "boom");
     }
 
     #[test]

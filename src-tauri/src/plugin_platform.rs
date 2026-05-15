@@ -236,7 +236,10 @@ impl<'a> PluginPlatform<'a> {
     }
 }
 
-fn validate_plugin_storage_scope(scope: &str, scope_id: Option<&str>) -> Result<(), String> {
+pub(crate) fn validate_plugin_storage_scope(
+    scope: &str,
+    scope_id: Option<&str>,
+) -> Result<(), String> {
     match scope {
         "global" => Ok(()),
         "project" | "task" if scope_id.is_some_and(|value| !value.is_empty()) => Ok(()),

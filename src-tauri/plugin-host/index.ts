@@ -16,6 +16,7 @@ type JsonRpcRequest = {
     projectId?: string | null
     packageMetadata?: OpenForgePackageMetadata
     payload?: unknown
+    [key: string]: unknown
   }
 }
 
@@ -42,9 +43,17 @@ type BackendStateSnapshot = {
   crashLoopGuardTripped: boolean
 }
 
+type HostCallbackRequest = {
+  method: string
+  params: Record<string, unknown>
+}
+
+type HostCallbackHandler = (request: HostCallbackRequest) => Promise<unknown> | unknown
+
 type RuntimeOptions = {
   crashLoopLimit?: number
   crashLoopWindowMs?: number
+  hostCallbacks?: HostCallbackHandler
 }
 
 type ActivateBackendInput = {
@@ -258,6 +267,65 @@ function createMemoryStorage(): PluginStorage {
   }
 }
 
+function createHostStorageScope(pluginId: string, scope: 'global' | 'project' | 'task', scopeId: string | null, hostCallbacks: HostCallbackHandler) {
+  const params = (key: string, value?: unknown, includeValue = false): Record<string, unknown> => {
+    const payload: Record<string, unknown> = { pluginId, scope, scopeId, key }
+    if (includeValue) payload.value = value
+    return payload
+  }
+
+  return {
+    async get<T>(key: string): Promise<T | null> {
+      return await hostCallbacks({ method: 'openforge.storage.get', params: params(key) }) as T | null
+    },
+    async set<T>(key: string, value: T): Promise<void> {
+      await hostCallbacks({ method: 'openforge.storage.set', params: params(key, value, true) })
+    },
+    async delete(key: string): Promise<void> {
+      await hostCallbacks({ method: 'openforge.storage.delete', params: params(key) })
+    },
+  }
+}
+
+function createHostStorage(pluginId: string, hostCallbacks: HostCallbackHandler): PluginStorage {
+  return {
+    global: createHostStorageScope(pluginId, 'global', null, hostCallbacks),
+    project: (projectId: string) => createHostStorageScope(pluginId, 'project', projectId, hostCallbacks),
+    task: (taskId: string) => createHostStorageScope(pluginId, 'task', taskId, hostCallbacks),
+  }
+}
+
+class StdioHostCallbackBridge {
+  private nextId = 1
+  private readonly pending = new Map<number, { resolve: (value: unknown) => void; reject: (error: Error) => void }>()
+
+  request: HostCallbackHandler = ({ method, params }) => {
+    const id = this.nextId++
+    const message = { jsonrpc: '2.0', id, method, params }
+    process.stdout.write(`${JSON.stringify(message)}\n`)
+    return new Promise<unknown>((resolve, reject) => {
+      this.pending.set(id, { resolve, reject })
+    })
+  }
+
+  handleResponse(response: JsonRpcResponse): boolean {
+    if (typeof response.id !== 'number') return false
+    const pending = this.pending.get(response.id)
+    if (!pending) return false
+    this.pending.delete(response.id)
+    if (response.error) {
+      pending.reject(new Error(response.error.message))
+      return true
+    }
+    pending.resolve(response.result)
+    return true
+  }
+}
+
+function isJsonRpcResponse(value: JsonRpcRequest | JsonRpcResponse): value is JsonRpcResponse {
+  return 'result' in value || 'error' in value
+}
+
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0
 }
@@ -355,7 +423,7 @@ function createDefaultPackageMetadata(pluginId: string): OpenForgePackageMetadat
   }
 }
 
-function createInitialPluginState(pluginId: string): RuntimePluginState {
+function createInitialPluginState(pluginId: string, storage: PluginStorage): RuntimePluginState {
   return {
     pluginId,
     backendPath: null,
@@ -369,7 +437,7 @@ function createInitialPluginState(pluginId: string): RuntimePluginState {
     commands: new Map(),
     eventHandlers: new Map(),
     backgroundServices: new Map(),
-    storage: createMemoryStorage(),
+    storage,
     subscriptions: new RuntimeSubscriptionSink(pluginId),
     crashTimestamps: [],
     crashLoopGuardTripped: false,
@@ -392,10 +460,12 @@ export class PluginHostRuntime {
   private readonly plugins = new Map<string, RuntimePluginState>()
   private readonly crashLoopLimit: number
   private readonly crashLoopWindowMs: number
+  private readonly hostCallbacks: HostCallbackHandler | null
 
   constructor(options: RuntimeOptions = {}) {
     this.crashLoopLimit = options.crashLoopLimit ?? DEFAULT_CRASH_LOOP_LIMIT
     this.crashLoopWindowMs = options.crashLoopWindowMs ?? DEFAULT_CRASH_LOOP_WINDOW_MS
+    this.hostCallbacks = options.hostCallbacks ?? null
   }
 
   async activateBackend(input: ActivateBackendInput): Promise<BackendStateSnapshot> {
@@ -828,7 +898,8 @@ export class PluginHostRuntime {
   private getOrCreateState(pluginId: string): RuntimePluginState {
     let state = this.plugins.get(pluginId)
     if (!state) {
-      state = createInitialPluginState(pluginId)
+      const storage = this.hostCallbacks ? createHostStorage(pluginId, this.hostCallbacks) : createMemoryStorage()
+      state = createInitialPluginState(pluginId, storage)
       this.plugins.set(pluginId, state)
     }
     return state
@@ -902,7 +973,8 @@ export function createPluginHostRuntime(options?: RuntimeOptions): PluginHostRun
   return new PluginHostRuntime(options)
 }
 
-const defaultRuntime = createPluginHostRuntime()
+const defaultStdioHostCallbackBridge = new StdioHostCallbackBridge()
+const defaultRuntime = createPluginHostRuntime({ hostCallbacks: defaultStdioHostCallbackBridge.request })
 
 function respond(id: JsonRpcId, body: Omit<JsonRpcResponse, 'jsonrpc' | 'id'>): void {
   process.stdout.write(`${JSON.stringify({ jsonrpc: '2.0', id, ...body })}\n`)
@@ -930,18 +1002,22 @@ function startStdioServer(): void {
       return
     }
 
-    let request: JsonRpcRequest
+    let message: JsonRpcRequest | JsonRpcResponse
     try {
-      request = JSON.parse(line) as JsonRpcRequest
+      message = JSON.parse(line) as JsonRpcRequest | JsonRpcResponse
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       process.stdout.write(`${JSON.stringify({ jsonrpc: '2.0', id: null, error: { code: -32700, message } })}\n`)
       return
     }
 
+    if (isJsonRpcResponse(message) && defaultStdioHostCallbackBridge.handleResponse(message)) {
+      return
+    }
+
     requestQueue = requestQueue
       .catch(() => undefined)
-      .then(() => handleRequest(request))
+      .then(() => handleRequest(message as JsonRpcRequest))
       .catch((error) => {
         const message = error instanceof Error ? error.message : String(error)
         process.stderr.write(`[plugin_host] request handling error: ${message}\n`)

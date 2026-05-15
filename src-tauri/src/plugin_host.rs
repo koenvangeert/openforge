@@ -531,8 +531,8 @@ impl PluginHost {
                 continue;
             }
 
-            match crate::plugin_rpc::parse_response_message(&line) {
-                Ok(response) => {
+            match crate::plugin_rpc::parse_message(&line) {
+                Ok(crate::plugin_rpc::ParsedMessage::Response(response)) => {
                     let sender = match self.transport_lock() {
                         Ok(mut transport) => {
                             if transport.session_id != session_id
@@ -559,14 +559,125 @@ impl PluginHost {
                         let _ = sender.send(result);
                     }
                 }
+                Ok(crate::plugin_rpc::ParsedMessage::Request(request)) => {
+                    self.handle_sidecar_host_callback(request, session_id, process_token)
+                        .await;
+                }
                 Err(error) => {
-                    warn!(
-                        "[plugin_host] failed to parse sidecar response: {}",
-                        error.0
-                    );
+                    warn!("[plugin_host] failed to parse sidecar message: {}", error.0);
                 }
             }
         }
+    }
+
+    async fn handle_sidecar_host_callback(
+        &self,
+        request: crate::plugin_rpc::ParsedRequest,
+        session_id: u64,
+        process_token: u64,
+    ) {
+        let response = match self.handle_host_callback(&request.method, &request.params) {
+            Ok(result) => crate::plugin_rpc::format_success_response(request.id, result),
+            Err(error) => crate::plugin_rpc::format_error_response(request.id, -32603, &error),
+        };
+
+        let writer = match self.transport_lock() {
+            Ok(transport) => {
+                if transport.session_id != session_id || transport.process_token != process_token {
+                    None
+                } else {
+                    transport.writer.as_ref().cloned()
+                }
+            }
+            Err(error) => {
+                warn!(
+                    "[plugin_host] failed to lock transport for host callback: {}",
+                    error
+                );
+                None
+            }
+        };
+
+        let Some(writer) = writer else {
+            warn!(
+                "[plugin_host] cannot respond to sidecar host callback {}: transport unavailable",
+                request.method
+            );
+            return;
+        };
+
+        if let Err(error) = self.write_response(writer, request.id, &response).await {
+            warn!(
+                "[plugin_host] failed to write sidecar host callback response for {}: {}",
+                request.method, error
+            );
+        }
+    }
+
+    fn handle_host_callback(&self, method: &str, params: &Value) -> Result<Value, String> {
+        match method {
+            "openforge.storage.get" => self.get_plugin_storage_for_host(params),
+            "openforge.storage.set" => self.set_plugin_storage_for_host(params),
+            "openforge.storage.delete" => self.delete_plugin_storage_for_host(params),
+            _ => Err(format!("unsupported plugin host callback method: {method}")),
+        }
+    }
+
+    fn get_plugin_storage_for_host(&self, params: &Value) -> Result<Value, String> {
+        let plugin_id = required_param_string(params, "pluginId")?;
+        let scope = required_param_string(params, "scope")?;
+        let scope_id = optional_param_string(params, "scopeId")?;
+        let key = required_param_string(params, "key")?;
+        crate::plugin_platform::validate_plugin_storage_scope(&scope, scope_id.as_deref())?;
+
+        let db_state = self
+            .app_handle
+            .try_state::<Arc<Mutex<crate::db::Database>>>()
+            .ok_or_else(|| "plugin storage database state is not available".to_string())?;
+        let db = crate::db::acquire_db(db_state.inner().as_ref());
+        let raw = db
+            .get_plugin_storage(&plugin_id, &scope, scope_id.as_deref(), &key)
+            .map_err(|error| format!("failed to get plugin storage: {error}"))?;
+        Ok(raw
+            .map(|value| serde_json::from_str(&value).unwrap_or(Value::String(value)))
+            .unwrap_or(Value::Null))
+    }
+
+    fn set_plugin_storage_for_host(&self, params: &Value) -> Result<Value, String> {
+        let plugin_id = required_param_string(params, "pluginId")?;
+        let scope = required_param_string(params, "scope")?;
+        let scope_id = optional_param_string(params, "scopeId")?;
+        let key = required_param_string(params, "key")?;
+        let value = params.get("value").cloned().unwrap_or(Value::Null);
+        crate::plugin_platform::validate_plugin_storage_scope(&scope, scope_id.as_deref())?;
+        let serialized = serde_json::to_string(&value)
+            .map_err(|error| format!("failed to serialize plugin storage value: {error}"))?;
+
+        let db_state = self
+            .app_handle
+            .try_state::<Arc<Mutex<crate::db::Database>>>()
+            .ok_or_else(|| "plugin storage database state is not available".to_string())?;
+        let db = crate::db::acquire_db(db_state.inner().as_ref());
+        db.set_plugin_storage(&plugin_id, &scope, scope_id.as_deref(), &key, &serialized)
+            .map_err(|error| format!("failed to set plugin storage: {error}"))?;
+        Ok(Value::Null)
+    }
+
+    fn delete_plugin_storage_for_host(&self, params: &Value) -> Result<Value, String> {
+        let plugin_id = required_param_string(params, "pluginId")?;
+        let scope = required_param_string(params, "scope")?;
+        let scope_id = optional_param_string(params, "scopeId")?;
+        let key = required_param_string(params, "key")?;
+        crate::plugin_platform::validate_plugin_storage_scope(&scope, scope_id.as_deref())?;
+
+        let db_state = self
+            .app_handle
+            .try_state::<Arc<Mutex<crate::db::Database>>>()
+            .ok_or_else(|| "plugin storage database state is not available".to_string())?;
+        let db = crate::db::acquire_db(db_state.inner().as_ref());
+        db.delete_plugin_storage(&plugin_id, &scope, scope_id.as_deref(), &key)
+            .map_err(|error| format!("failed to delete plugin storage: {error}"))?;
+        Ok(Value::Null)
     }
 
     fn schedule_restart_or_emit_failure(
@@ -710,19 +821,40 @@ impl PluginHost {
         request_id: u64,
         request: &str,
     ) -> Result<(), String> {
+        self.write_framed_message(writer, request_id, request, "request")
+            .await
+    }
+
+    async fn write_response(
+        &self,
+        writer: Arc<tokio::sync::Mutex<tokio::process::ChildStdin>>,
+        response_id: u64,
+        response: &str,
+    ) -> Result<(), String> {
+        self.write_framed_message(writer, response_id, response, "response")
+            .await
+    }
+
+    async fn write_framed_message(
+        &self,
+        writer: Arc<tokio::sync::Mutex<tokio::process::ChildStdin>>,
+        message_id: u64,
+        message: &str,
+        kind: &str,
+    ) -> Result<(), String> {
         let mut writer = writer.lock().await;
         writer
-            .write_all(request.as_bytes())
+            .write_all(message.as_bytes())
             .await
-            .map_err(|error| format!("failed to write plugin request {request_id}: {error}"))?;
+            .map_err(|error| format!("failed to write plugin {kind} {message_id}: {error}"))?;
         writer
             .write_all(b"\n")
             .await
-            .map_err(|error| format!("failed to frame plugin request {request_id}: {error}"))?;
+            .map_err(|error| format!("failed to frame plugin {kind} {message_id}: {error}"))?;
         writer
             .flush()
             .await
-            .map_err(|error| format!("failed to flush plugin request {request_id}: {error}"))
+            .map_err(|error| format!("failed to flush plugin {kind} {message_id}: {error}"))
     }
 
     fn remove_pending_request(&self, request_id: u64) {
@@ -789,6 +921,25 @@ impl PluginHost {
             }
             Err(_) => None,
         }
+    }
+}
+
+fn required_param_string(params: &Value, key: &str) -> Result<String, String> {
+    params
+        .get(key)
+        .and_then(Value::as_str)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+        .ok_or_else(|| format!("plugin host callback missing string param: {key}"))
+}
+
+fn optional_param_string(params: &Value, key: &str) -> Result<Option<String>, String> {
+    match params.get(key) {
+        None | Some(Value::Null) => Ok(None),
+        Some(Value::String(value)) if !value.is_empty() => Ok(Some(value.clone())),
+        Some(_) => Err(format!(
+            "plugin host callback param must be a non-empty string or null: {key}"
+        )),
     }
 }
 
@@ -934,6 +1085,98 @@ mod tests {
 
     fn build_plugin_host() -> PluginHost {
         PluginHost::new(AppHandle::new())
+    }
+
+    #[test]
+    fn host_storage_callback_round_trips_through_plugin_storage_table() {
+        let (database, _path) =
+            crate::db::test_helpers::make_test_db("plugin_host_storage_callback");
+        for plugin_id in ["backend-plugin", "other-plugin"] {
+            database
+                .install_plugin(&crate::db::PluginRow {
+                    id: plugin_id.to_string(),
+                    name: plugin_id.to_string(),
+                    version: "1.0.0".to_string(),
+                    api_version: 1,
+                    description: String::new(),
+                    permissions: "[]".to_string(),
+                    contributes: "{}".to_string(),
+                    frontend_entry: "index.js".to_string(),
+                    backend_entry: None,
+                    install_path: "/tmp/plugin".to_string(),
+                    source_kind: "test".to_string(),
+                    source_spec: plugin_id.to_string(),
+                    package_metadata: "{}".to_string(),
+                    installed_at: 0,
+                    is_builtin: false,
+                })
+                .expect("install plugin fixture");
+        }
+        let app = AppHandle::new();
+        app.manage(Arc::new(Mutex::new(database)));
+        let host = PluginHost::new(app);
+
+        host.handle_host_callback(
+            "openforge.storage.set",
+            &json!({
+                "pluginId": "backend-plugin",
+                "scope": "project",
+                "scopeId": "P-1",
+                "key": "repo",
+                "value": { "owner": "acme" }
+            }),
+        )
+        .expect("set storage callback");
+
+        let value = host
+            .handle_host_callback(
+                "openforge.storage.get",
+                &json!({
+                    "pluginId": "backend-plugin",
+                    "scope": "project",
+                    "scopeId": "P-1",
+                    "key": "repo"
+                }),
+            )
+            .expect("get storage callback");
+        assert_eq!(value, json!({ "owner": "acme" }));
+
+        let isolated = host
+            .handle_host_callback(
+                "openforge.storage.get",
+                &json!({
+                    "pluginId": "other-plugin",
+                    "scope": "project",
+                    "scopeId": "P-1",
+                    "key": "repo"
+                }),
+            )
+            .expect("get isolated storage callback");
+        assert_eq!(isolated, Value::Null);
+
+        host.handle_host_callback(
+            "openforge.storage.delete",
+            &json!({
+                "pluginId": "backend-plugin",
+                "scope": "project",
+                "scopeId": "P-1",
+                "key": "repo"
+            }),
+        )
+        .expect("delete storage callback");
+
+        let deleted = host
+            .handle_host_callback(
+                "openforge.storage.get",
+                &json!({
+                    "pluginId": "backend-plugin",
+                    "scope": "project",
+                    "scopeId": "P-1",
+                    "key": "repo"
+                }),
+            )
+            .expect("get deleted storage callback");
+        assert_eq!(deleted, Value::Null);
     }
 
     #[test]
