@@ -70,10 +70,15 @@ var openforgePackageMetadataSchema_default = {
 };
 //#endregion
 //#region packages/plugin-sdk/src/types.ts
-var OPENFORGE_PLUGIN_API_VERSION = 1;
-var MIN_SUPPORTED_API_VERSION = 1;
-var MAX_SUPPORTED_API_VERSION = 1;
-var SUPPORTED_OPENFORGE_API_VERSIONS = [1];
+function readSupportedOpenForgeApiVersions() {
+	const versions = openforgePackageMetadataSchema_default.properties.apiVersion.enum;
+	if (!Array.isArray(versions) || versions.length === 0 || !versions.every((version) => typeof version === "number" && Number.isInteger(version))) throw new Error("openforgePackageMetadataSchema.json properties.apiVersion.enum must contain at least one integer");
+	return [...versions];
+}
+var SUPPORTED_OPENFORGE_API_VERSIONS = Object.freeze(readSupportedOpenForgeApiVersions());
+var OPENFORGE_PLUGIN_API_VERSION = SUPPORTED_OPENFORGE_API_VERSIONS[0];
+var MIN_SUPPORTED_API_VERSION = Math.min(...SUPPORTED_OPENFORGE_API_VERSIONS);
+var MAX_SUPPORTED_API_VERSION = Math.max(...SUPPORTED_OPENFORGE_API_VERSIONS);
 function makePluginViewKey(pluginId, viewId) {
 	return `plugin:${pluginId}:${viewId}`;
 }
@@ -90,26 +95,7 @@ function parsePluginViewKey(key) {
 //#endregion
 //#region packages/plugin-sdk/src/manifest.ts
 var OPENFORGE_PACKAGE_METADATA_SCHEMA = openforgePackageMetadataSchema_default;
-var OPENFORGE_PLUGIN_CAPABILITIES = [
-	"commands",
-	"events",
-	"views",
-	"taskPane",
-	"settings",
-	"background",
-	"backend",
-	"storage",
-	"context",
-	"tasks",
-	"projects",
-	"fs",
-	"shell",
-	"notifications",
-	"attention",
-	"system.openUrl",
-	"config",
-	"projectConfig"
-];
+var OPENFORGE_PLUGIN_CAPABILITIES = openforgePackageMetadataSchema_default.properties.requires.items.enum;
 var CAPABILITIES = new Set(OPENFORGE_PLUGIN_CAPABILITIES);
 function isString(value) {
 	return typeof value === "string";
