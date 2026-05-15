@@ -3,7 +3,7 @@
   import { getPluginContext } from '../../pluginContext'
   type UnlistenFn = () => void
   import { reviewPrs, selectedReviewPr, prFileDiffs, reviewRequestCount, reviewComments, pendingManualComments, prOverviewComments, agentReviewComments, agentReviewLoading, agentReviewError, authoredPrs, authoredPrCount, activeProjectId } from '../../lib/stores'
-  import { fetchReviewPrs, getReviewPrs, fetchAuthoredPrs, getAuthoredPrs, getPrFileDiffs, openUrl, getReviewComments, getFileContent, getFileAtRef, markReviewPrViewed, startAgentReview, getAgentReviewComments, abortAgentReview, getProjectConfig, setProjectConfig } from '../../lib/ipc'
+  import { fetchReviewPrs, getReviewPrs, fetchAuthoredPrs, getAuthoredPrs, getPrFileDiffs, openUrl, getReviewComments, getFileContent, getFileAtRef, markReviewPrViewed, getAgentReviewComments, getProjectConfig, setProjectConfig } from '../../lib/ipc'
   import { getHTMLElementAt, isInputFocused } from '../../lib/domUtils'
   import { useVimNavigation } from '../../lib/useVimNavigation.svelte'
   import { timeAgoFromSeconds } from '../../lib/timeAgo'
@@ -15,7 +15,6 @@
   import ProjectPageHeader from '../../project/ProjectPageHeader.svelte'
   import ReviewSubmitPanel from './ReviewSubmitPanel.svelte'
   import PrOverviewTab from './PrOverviewTab.svelte'
-  import AgentReviewOutputModal from './AgentReviewOutputModal.svelte'
   import { hasMergeConflicts } from '@openforge/plugin-sdk/domain'
   import type { ReviewPullRequest, AuthoredPullRequest, PrFileDiff } from '@openforge/plugin-sdk/domain'
   import type { FileContents } from '../../lib/diffAdapter'
@@ -39,8 +38,6 @@
   let diffViewer = $state<DiffViewer>()
   let fileTreeVisible = $state(true)
   let activeTab = $state<PrDetailTab>('overview')
-  let reviewSessionKey = $state<string | null>(null)
-  let showOutputModal = $state(false)
   let unlisteners: UnlistenFn[] = []
 
   // Repo filtering
@@ -319,8 +316,6 @@
     $agentReviewComments = []
     $agentReviewLoading = false
     $agentReviewError = null
-    reviewSessionKey = null
-    showOutputModal = false
     activeTab = 'overview'
   }
 
@@ -335,43 +330,6 @@
       openUrl($selectedReviewPr.html_url)
     }
   }
-
-  async function handleStartAgentReview() {
-    if (!$selectedReviewPr) return
-    $agentReviewLoading = true
-    $agentReviewError = null
-    try {
-      const result = await startAgentReview(
-        $selectedReviewPr.repo_owner,
-        $selectedReviewPr.repo_name,
-        $selectedReviewPr.number,
-        $selectedReviewPr.head_ref,
-        $selectedReviewPr.base_ref,
-        $selectedReviewPr.title,
-        $selectedReviewPr.body,
-        $selectedReviewPr.id
-      )
-      reviewSessionKey = result.review_session_key
-    } catch (e) {
-      console.error('[PrReviewView] Failed to start agent review:', e)
-      $agentReviewError = 'Failed to start AI review. Please try again.'
-      $agentReviewLoading = false
-    }
-  }
-
-  async function handleCancelReview() {
-    if (!reviewSessionKey) return
-    try {
-      await abortAgentReview(reviewSessionKey)
-    } catch (e) {
-      console.error('[PrReviewView] Failed to cancel agent review:', e)
-    } finally {
-      $agentReviewLoading = false
-      reviewSessionKey = null
-      showOutputModal = false
-    }
-  }
-
 
 
   async function fetchPrFileContents(file: PrFileDiff): Promise<FileContents> {
@@ -524,48 +482,7 @@
               onToggleFileTree={() => { fileTreeVisible = !fileTreeVisible }}
               fetchFileContents={fetchPrFileContents}
               agentComments={$agentReviewComments}
-            >
-              {#snippet toolbarExtra()}
-                <div class="w-px h-5 bg-base-300 mx-1 self-center"></div>
-                {#if $agentReviewLoading}
-                  <button class="btn btn-ghost btn-xs gap-1 text-base-content/50" disabled>
-                    <span class="loading loading-spinner loading-xs"></span>
-                    Reviewing...
-                  </button>
-                  <button
-                    class="btn btn-ghost btn-xs text-base-content/50"
-                    onclick={() => { showOutputModal = true }}
-                    title="View agent output"
-                  >View Output</button>
-                  <button
-                    class="btn btn-ghost btn-xs text-error"
-                    onclick={handleCancelReview}
-                    title="Cancel AI review"
-                  >Cancel</button>
-                {:else}
-                  <button
-                    class="btn btn-ghost btn-xs gap-1 text-base-content/50"
-                    onclick={handleStartAgentReview}
-                    title="Start AI review"
-                  >
-                    AI Review
-                    {#if $agentReviewComments.length > 0}
-                      <span class="badge badge-primary badge-xs">{$agentReviewComments.length}</span>
-                    {/if}
-                  </button>
-                  {#if reviewSessionKey}
-                    <button
-                      class="btn btn-ghost btn-xs text-base-content/50"
-                      onclick={() => { showOutputModal = true }}
-                      title="View last agent review output"
-                    >View Output</button>
-                  {/if}
-                {/if}
-                {#if $agentReviewError}
-                  <span class="text-xs text-error">{$agentReviewError}</span>
-                {/if}
-              {/snippet}
-            </DiffViewer>
+            />
           {/if}
         </div>
 
@@ -754,10 +671,3 @@
     </div>
   {/if}
 </div>
-
-{#if showOutputModal && reviewSessionKey}
-  <AgentReviewOutputModal
-    sessionKey={reviewSessionKey}
-    onClose={() => { showOutputModal = false }}
-  />
-{/if}

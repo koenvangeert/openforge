@@ -226,6 +226,22 @@ describe('PrReviewView', () => {
     expect(screen.getByText('Submit Review')).toBeTruthy()
   })
 
+  it('does not show the AI Review start button in PR file review', async () => {
+    vi.mocked(getReviewPrs).mockResolvedValue([basePr])
+    vi.mocked(getPrFileDiffs).mockResolvedValue([])
+    vi.mocked(getReviewComments).mockResolvedValue([])
+
+    render(PrReviewView)
+
+    selectedReviewPr.set(basePr)
+
+    await fireEvent.click(await screen.findByRole('button', { name: /Files changed/ }))
+
+    expect(screen.getByRole('region', { name: 'Diff scroll area' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /^AI Review/ })).toBeNull()
+    expect(screen.queryByTitle('Start AI review')).toBeNull()
+  })
+
   it('shows back button in detail view', async () => {
     vi.mocked(getReviewPrs).mockResolvedValue([basePr])
     vi.mocked(getPrFileDiffs).mockResolvedValue([])
