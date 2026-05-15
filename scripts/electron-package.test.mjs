@@ -36,6 +36,25 @@ async function writeElectronBuildOutputs(repoRoot) {
   await writeFile(join(repoRoot, 'dist-electron', 'plugin-host', 'index.js'), 'console.log("bundled backend plugin host")')
 }
 
+async function writeBuiltInPluginRuntimeArtifacts(repoRoot, directoryName) {
+  const pluginRoot = join(repoRoot, 'plugins', directoryName)
+  await mkdir(join(pluginRoot, 'dist'), { recursive: true })
+  await writeFile(join(pluginRoot, 'package.json'), JSON.stringify({
+    name: `@openforge/plugin-${directoryName}`,
+    type: 'module',
+    openforge: {
+      id: `com.openforge.${directoryName}`,
+      frontend: './dist/frontend.js',
+    },
+  }))
+  await writeFile(join(pluginRoot, 'dist', 'frontend.js'), 'export const packagedPlugin = true;\n')
+  await writeFile(join(pluginRoot, 'dist', 'style.css'), '.plugin {}\n')
+  await mkdir(join(pluginRoot, 'src'), { recursive: true })
+  await writeFile(join(pluginRoot, 'src', 'index.ts'), 'export const sourceOnly = true;\n')
+  await mkdir(join(pluginRoot, 'node_modules', 'left-pad'), { recursive: true })
+  await writeFile(join(pluginRoot, 'node_modules', 'left-pad', 'index.js'), 'module.exports = () => {};\n')
+}
+
 async function writeCurrentDataIdentityManifest(repoRoot) {
   const manifest = await readFile(join(import.meta.dirname, '..', 'openforge-data-identity.json'), 'utf8')
   await writeFile(join(repoRoot, 'openforge-data-identity.json'), manifest)
@@ -242,6 +261,10 @@ describe('Electron macOS packaging helpers', () => {
     await mkdir(join(root, 'src-tauri/src/openforge-cli'), { recursive: true })
     await writeFile(join(root, 'src-tauri/src/openforge-cli/cli.js'), '#!/usr/bin/env node\nconsole.log("openforge cli")\n')
     await writeFile(join(root, 'src-tauri/src/openforge-cli/openforge-skill.md'), 'openforge skill docs\n')
+    const builtInPluginDirectories = ['file-viewer', 'github-sync', 'skills-viewer', 'terminal']
+    for (const directoryName of builtInPluginDirectories) {
+      await writeBuiltInPluginRuntimeArtifacts(root, directoryName)
+    }
 
     await packageElectronApp({ repoRoot: root })
 
@@ -249,6 +272,16 @@ describe('Electron macOS packaging helpers', () => {
     await expect(stat(join(output, 'Contents/MacOS/openforge-sidecar'))).resolves.toBeTruthy()
     await expect(stat(join(output, 'Contents/Resources/app/dist/index.html'))).resolves.toBeTruthy()
     await expect(stat(join(output, 'Contents/Resources/app/dist-electron/main.js'))).resolves.toBeTruthy()
+    for (const directoryName of builtInPluginDirectories) {
+      const packagedPluginRoot = join(output, 'Contents/Resources/app/plugins', directoryName)
+      await expect(readFile(join(packagedPluginRoot, 'package.json'), 'utf8').then(JSON.parse)).resolves.toMatchObject({
+        openforge: { frontend: './dist/frontend.js' },
+      })
+      await expect(readFile(join(packagedPluginRoot, 'dist/frontend.js'), 'utf8')).resolves.toContain('packagedPlugin')
+      await expect(readFile(join(packagedPluginRoot, 'dist/style.css'), 'utf8')).resolves.toContain('.plugin')
+      await expect(stat(join(packagedPluginRoot, 'src/index.ts'))).rejects.toMatchObject({ code: 'ENOENT' })
+      await expect(stat(join(packagedPluginRoot, 'node_modules/left-pad/index.js'))).rejects.toMatchObject({ code: 'ENOENT' })
+    }
     await expect(readFile(join(output, 'Contents/MacOS/plugin-host/index.js'), 'utf8')).resolves.toContain('bundled backend plugin host')
     await expect(readFile(join(output, 'Contents/Resources/openforge-cli/cli.js'), 'utf8')).resolves.toContain('openforge cli')
     await expect(readFile(join(output, 'Contents/Resources/openforge-cli/openforge-skill.md'), 'utf8')).resolves.toContain('openforge skill docs')

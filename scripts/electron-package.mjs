@@ -190,6 +190,31 @@ async function copyOpenForgeCliAssets(repoRoot, resourcesDir) {
   await cp(skillSourcePath, join(cliResourcesDir, 'openforge-skill.md'))
 }
 
+const BUILTIN_PLUGIN_DIRECTORIES = [
+  'file-viewer',
+  'github-sync',
+  'skills-viewer',
+  'terminal',
+]
+
+async function copyBuiltinPluginRuntimeArtifacts(repoRoot, appResourcesPath) {
+  for (const directoryName of BUILTIN_PLUGIN_DIRECTORIES) {
+    const pluginSourceDir = join(repoRoot, 'plugins', directoryName)
+    if (!(await pathExists(pluginSourceDir))) continue
+
+    const packageJsonPath = join(pluginSourceDir, 'package.json')
+    const distDir = join(pluginSourceDir, 'dist')
+    await assertExists(packageJsonPath, `Built-in plugin ${directoryName} package.json`)
+    await assertExists(distDir, `Built-in plugin ${directoryName} dist artifacts`)
+
+    const pluginTargetDir = join(appResourcesPath, 'plugins', directoryName)
+    await rm(pluginTargetDir, { recursive: true, force: true })
+    await mkdir(pluginTargetDir, { recursive: true })
+    await cp(packageJsonPath, join(pluginTargetDir, 'package.json'))
+    await cp(distDir, join(pluginTargetDir, 'dist'), { recursive: true })
+  }
+}
+
 async function copyBackendPluginHostRuntime(electronDist, macosDir) {
   const bundledHostEntrypoint = join(electronDist, 'plugin-host', 'index.js')
   await assertExists(bundledHostEntrypoint, 'Bundled backend plugin host runtime')
@@ -259,6 +284,7 @@ export async function packageElectronApp({
   await mkdir(appResourcesPath, { recursive: true })
   await cp(rendererDist, join(appResourcesPath, 'dist'), { recursive: true })
   await cp(electronDist, join(appResourcesPath, 'dist-electron'), { recursive: true })
+  await copyBuiltinPluginRuntimeArtifacts(repoRoot, appResourcesPath)
 
   const rootPackage = JSON.parse(await readFile(join(repoRoot, 'package.json'), 'utf8').catch(() => '{"version":"0.0.1"}'))
   await writeFile(join(appResourcesPath, 'package.json'), `${JSON.stringify(createElectronAppPackageJson({
