@@ -116,6 +116,11 @@ import { installedPlugins, enabledPluginIds, runtimeContributionSources } from '
 import type { PluginManifest } from './types'
 import type { NormalizedPluginRow } from '../ipc'
 import { clearComponentRegistry, getRegisteredComponent, getRegisteredRenderableComponent } from './componentRegistry'
+import {
+  applyRuntimeSnapshotContributions,
+  getPluginCommandHandler,
+} from './pluginRuntimeContributions'
+import type { RuntimeContributionSnapshot } from './runtimeContributionRegistry'
 
 function makeManifest(overrides: Partial<PluginManifest> = {}): PluginManifest {
   return {
@@ -520,6 +525,84 @@ describe('pluginRegistry', () => {
       state: 'error',
       error: 'Duplicate runtime contribution id: test-plugin.open-demo',
     })
+  })
+
+  it('rolls back applied runtime contributions and stops started services when background startup fails', async () => {
+    const viewComponent = vi.fn() as never
+    const tabComponent = vi.fn() as never
+    const commandHandler = vi.fn(async () => undefined)
+    const firstStart = vi.fn(async () => undefined)
+    const firstStop = vi.fn(async () => undefined)
+    const failingStart = vi.fn(async () => {
+      throw new Error('service failed')
+    })
+    const secondStop = vi.fn(async () => undefined)
+    const snapshot = {
+      pluginId: 'test-plugin',
+      projectId: null,
+      views: [{
+        id: 'main',
+        qualifiedId: 'test-plugin.main',
+        pluginId: 'test-plugin',
+        projectId: null,
+        title: 'Main',
+        icon: 'sparkles',
+        placement: 'rail',
+        component: viewComponent,
+      }],
+      taskPaneTabs: [{
+        id: 'activity',
+        qualifiedId: 'test-plugin.activity',
+        pluginId: 'test-plugin',
+        projectId: null,
+        title: 'Activity',
+        component: tabComponent,
+      }],
+      settingsSections: [],
+      commands: [{
+        id: 'open-demo',
+        qualifiedId: 'test-plugin.open-demo',
+        pluginId: 'test-plugin',
+        projectId: null,
+        title: 'Open Demo',
+        handler: commandHandler,
+      }],
+      eventListeners: [],
+      backendMethods: [],
+      backgroundServices: [
+        {
+          id: 'poller',
+          qualifiedId: 'test-plugin.poller',
+          pluginId: 'test-plugin',
+          projectId: null,
+          scope: 'project',
+          start: firstStart,
+          stop: firstStop,
+          started: false,
+        },
+        {
+          id: 'failing-poller',
+          qualifiedId: 'test-plugin.failing-poller',
+          pluginId: 'test-plugin',
+          projectId: null,
+          scope: 'project',
+          start: failingStart,
+          stop: secondStop,
+          started: false,
+        },
+      ],
+    } satisfies RuntimeContributionSnapshot
+
+    await expect(applyRuntimeSnapshotContributions('test-plugin', snapshot)).rejects.toThrow('service failed')
+
+    expect(firstStart).toHaveBeenCalledTimes(1)
+    expect(failingStart).toHaveBeenCalledTimes(1)
+    expect(firstStop).toHaveBeenCalledTimes(1)
+    expect(secondStop).not.toHaveBeenCalled()
+    expect(get(runtimeContributionSources).get('test-plugin')).toBeUndefined()
+    expect(getRegisteredComponent('plugin:test-plugin:main')).toBeUndefined()
+    expect(getRegisteredRenderableComponent('taskPaneTabs', 'test-plugin:activity')).toBeUndefined()
+    expect(getPluginCommandHandler('test-plugin', 'open-demo')).toBeUndefined()
   })
 
   it('activatePlugin exposes runtime context, storage, and host event subscription APIs', async () => {
