@@ -572,7 +572,8 @@ export class PluginHostRuntime {
 
     try {
       const params = request.params ?? {}
-      switch (request.method) {
+      const method = request.method
+      switch (method) {
         case 'plugin.backend.activate':
           return { jsonrpc: '2.0', id: request.id, result: await this.activateBackend(this.requireActivationParams(params)) }
         case 'plugin.backend.deactivate':
@@ -582,9 +583,9 @@ export class PluginHostRuntime {
         case 'plugin.backend.whenReady':
           return { jsonrpc: '2.0', id: request.id, result: await this.whenBackendReady(this.requireReadyParams(params)) }
         case 'plugin.backend.invoke':
-          return { jsonrpc: '2.0', id: request.id, result: await this.invokeBackend(this.requireInvokeParams(params, request.method)) }
+          return { jsonrpc: '2.0', id: request.id, result: await this.invokeBackend(this.requireInvokeParams(params, method)) }
         default:
-          return { jsonrpc: '2.0', id: request.id, result: await this.invokeBackend(this.requireInvokeParams(params, request.method)) }
+          return { jsonrpc: '2.0', id: request.id, result: await this.invokeBackend(this.requireInvokeParams(params, method)) }
       }
     } catch (error) {
       const pluginError = toError(error)

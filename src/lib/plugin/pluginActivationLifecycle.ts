@@ -10,7 +10,7 @@ import type { RuntimeContributionRegistryInstance } from './runtimeContributionR
 import { createIpcPluginStorage } from './pluginStorage'
 import type { PluginManifest } from './types'
 import { getPackageMetadataForPlugin, setPluginRuntimeError, setPluginRuntimeState } from './pluginInstallState'
-import { createPluginRuntimeHost } from './pluginHostCommands'
+import { clearPluginRuntimeHostState, createPluginRuntimeHost } from './pluginHostCommands'
 import { clearPluginHostSubscriptions } from './pluginHostEvents'
 import {
   applyRuntimeSnapshotContributions,
@@ -50,6 +50,7 @@ async function activateFrontendRuntimePlugin(pluginId: string, manifest: PluginM
   } catch (error) {
     await runtimeRegistry.deactivate()
     activeRuntimeRegistries.delete(pluginId)
+    clearPluginRuntimeHostState(pluginId)
     clearPluginRuntimeContributions(pluginId)
     setPluginRuntimeError(pluginId, error)
     return false
@@ -113,12 +114,14 @@ async function deactivateLoadedPluginModule(pluginId: string): Promise<void> {
       await runtimeRegistry.deactivate()
     } finally {
       activeRuntimeRegistries.delete(pluginId)
+      clearPluginRuntimeHostState(pluginId)
     }
     setPluginRuntimeState(pluginId, 'installed', null)
     return
   }
 
   if (isBackendOnlyExternalPlugin(pluginId)) {
+    clearPluginRuntimeHostState(pluginId)
     setPluginRuntimeState(pluginId, 'installed', null)
     return
   }

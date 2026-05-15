@@ -214,6 +214,28 @@ impl<'a> PluginPlatform<'a> {
         command: &str,
         payload: Value,
     ) -> Result<Value, String> {
+        let backend_path = self.resolve_installed_backend_path(plugin_id)?;
+        let plugin_host = self
+            .plugin_host
+            .ok_or_else(|| "plugin host state is not available".to_string())?;
+
+        plugin_host
+            .invoke_backend(plugin_id, command, &backend_path, payload)
+            .await
+    }
+
+    pub(crate) async fn backend_when_ready(&self, plugin_id: &str) -> Result<Value, String> {
+        let backend_path = self.resolve_installed_backend_path(plugin_id)?;
+        let plugin_host = self
+            .plugin_host
+            .ok_or_else(|| "plugin host state is not available".to_string())?;
+
+        plugin_host
+            .when_backend_ready(plugin_id, &backend_path)
+            .await
+    }
+
+    fn resolve_installed_backend_path(&self, plugin_id: &str) -> Result<PathBuf, String> {
         let plugin = self
             .plugin(plugin_id)?
             .ok_or_else(|| format!("Unknown plugin: {plugin_id}"))?;
@@ -222,14 +244,7 @@ impl<'a> PluginPlatform<'a> {
             .clone()
             .ok_or_else(|| format!("Plugin backend not configured for {plugin_id}"))?;
         let install_root = resolve_plugin_install_root(&plugin)?;
-        let backend_path = resolve_backend_entry_path(&install_root, &backend_entry)?;
-        let plugin_host = self
-            .plugin_host
-            .ok_or_else(|| "plugin host state is not available".to_string())?;
-
-        plugin_host
-            .invoke_backend(plugin_id, command, &backend_path, payload)
-            .await
+        resolve_backend_entry_path(&install_root, &backend_entry)
     }
 
     pub(crate) async fn stop_sidecar(&self) -> Result<(), String> {

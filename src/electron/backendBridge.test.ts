@@ -309,6 +309,7 @@ describe('Electron backend bridge command forwarding', () => {
     expect(isSidecarBackedCommand('set_plugin_storage')).toBe(true)
     expect(isSidecarBackedCommand('delete_plugin_storage')).toBe(true)
     expect(isSidecarBackedCommand('plugin_invoke')).toBe(true)
+    expect(isSidecarBackedCommand('plugin_backend_when_ready')).toBe(true)
     expect(isSidecarBackedCommand('stop_plugin_sidecar')).toBe(true)
     expect(isSidecarBackedCommand('transcribe_audio')).toBe(true)
     expect(isSidecarBackedCommand('get_whisper_model_status')).toBe(true)

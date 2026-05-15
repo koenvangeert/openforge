@@ -151,6 +151,7 @@ export const ipcCommandContracts = [
   { functionName: 'setPluginStorage', ipcCommand: 'set_plugin_storage', payloadKeys: ['pluginId', 'scope', 'scopeId', 'key', 'value'], targetOwner: 'rust-sidecar', domain: 'plugins' },
   { functionName: 'deletePluginStorage', ipcCommand: 'delete_plugin_storage', payloadKeys: ['pluginId', 'scope', 'scopeId', 'key'], targetOwner: 'rust-sidecar', domain: 'plugins' },
   { functionName: 'pluginInvoke', ipcCommand: 'plugin_invoke', payloadKeys: ['pluginId', 'command', 'payload'], targetOwner: 'rust-sidecar', domain: 'plugins' },
+  { functionName: 'pluginBackendWhenReady', ipcCommand: 'plugin_backend_when_ready', payloadKeys: ['pluginId'], targetOwner: 'rust-sidecar', domain: 'plugins' },
   { functionName: 'stopPluginSidecar', ipcCommand: 'stop_plugin_sidecar', payloadKeys: [], targetOwner: 'rust-sidecar', domain: 'plugins' },
 ] as const satisfies readonly IpcCommandContract[]
 

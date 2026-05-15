@@ -1,4 +1,5 @@
 import { get } from 'svelte/store'
+import type { BackendReadyState } from '@openforge/plugin-sdk'
 import {
   abortAgentReview,
   fetchAuthoredPrs,
@@ -29,6 +30,8 @@ import {
   markReviewPrViewed,
   killPty,
   openUrl,
+  pluginBackendWhenReady,
+  pluginInvoke,
   resizePty,
   saveSkillContent,
   setConfig,
@@ -43,6 +46,7 @@ import {
 } from '../ipc'
 import { activeProjectId, currentView, selectedTaskId } from '../stores'
 import type { AppView } from '../types'
+import { installedPlugins } from './pluginStore'
 import { isPluginViewKey } from './types'
 import {
   emitPluginHostEvent,
@@ -53,12 +57,24 @@ import {
 } from './pluginHostEvents'
 
 const STATIC_APP_VIEWS = new Set<AppView>(['board', 'settings', 'global_settings', 'files'])
+const pluginBackendReadyStates = new Map<string, BackendReadyState>()
 
 function isAppView(value: unknown): value is AppView {
   return typeof value === 'string' && (STATIC_APP_VIEWS.has(value as AppView) || isPluginViewKey(value))
 }
 
+export function clearPluginRuntimeHostState(pluginId: string): void {
+  pluginBackendReadyStates.delete(pluginId)
+}
+
 export function createPluginRuntimeHost(pluginId: string) {
+  const entry = get(installedPlugins).get(pluginId)
+  if (entry?.manifest.backend && entry.state !== 'active') {
+    pluginBackendReadyStates.set(pluginId, 'starting')
+  } else if (!entry?.manifest.backend) {
+    pluginBackendReadyStates.delete(pluginId)
+  }
+
   return {
     listProjects: () => getProjects(),
     getProject: async (projectId: string) => (await getProjects()).find((project) => project.id === projectId) ?? null,
@@ -85,6 +101,54 @@ export function createPluginRuntimeHost(pluginId: string) {
     },
     getAttention: () => getProjectAttention(),
     openUrl: (url: string) => openUrl(url),
+    getBackendState: () => {
+      const entry = get(installedPlugins).get(pluginId)
+      if (!entry?.manifest.backend) return 'missing' as const
+      if (entry.state === 'error') return 'error' as const
+      return pluginBackendReadyStates.get(pluginId) ?? 'starting'
+    },
+    whenBackendReady: async () => {
+      const entry = get(installedPlugins).get(pluginId)
+      if (!entry?.manifest.backend) {
+        throw new Error(`Plugin backend is unavailable for ${pluginId}`)
+      }
+      if (pluginBackendReadyStates.get(pluginId) !== 'ready') {
+        pluginBackendReadyStates.set(pluginId, 'starting')
+      }
+      try {
+        await pluginBackendWhenReady(pluginId)
+        pluginBackendReadyStates.set(pluginId, 'ready')
+      } catch (error) {
+        pluginBackendReadyStates.set(pluginId, 'error')
+        throw error
+      }
+    },
+    onBackendReady: (handler: () => void) => {
+      const entry = get(installedPlugins).get(pluginId)
+      let disposed = false
+      if (entry?.manifest.backend) {
+        if (pluginBackendReadyStates.get(pluginId) !== 'ready') {
+          pluginBackendReadyStates.set(pluginId, 'starting')
+        }
+        pluginBackendWhenReady(pluginId).then(() => {
+          pluginBackendReadyStates.set(pluginId, 'ready')
+          if (!disposed) handler()
+        }).catch(() => {
+          pluginBackendReadyStates.set(pluginId, 'error')
+        })
+      }
+      return () => { disposed = true }
+    },
+    invokeBackendMethod: async (method: string, payload?: unknown) => {
+      try {
+        const result = await pluginInvoke(pluginId, method, payload ?? null)
+        pluginBackendReadyStates.set(pluginId, 'ready')
+        return result
+      } catch (error) {
+        pluginBackendReadyStates.set(pluginId, 'error')
+        throw error
+      }
+    },
     getConfig: (key: string) => getConfig(key),
     setConfig: (key: string, value: unknown) => setConfig(key, typeof value === 'string' ? value : JSON.stringify(value)),
     getProjectConfig: (projectId: string, key: string) => getProjectConfig(projectId, key),

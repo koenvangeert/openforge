@@ -17,6 +17,7 @@ import type {
 } from '@openforge/plugin-sdk/backend'
 import type {
   AgentSession,
+  BackendReadyState,
   BoardStatus,
   CommandDescriptor,
   CommandShortcutMetadata,
@@ -63,6 +64,10 @@ export type RuntimeHostBridge = {
   setConfig?(key: string, value: unknown): Promise<void>
   getProjectConfig?(projectId: string, key: string): Promise<unknown>
   setProjectConfig?(projectId: string, key: string, value: unknown): Promise<void>
+  getBackendState?(): BackendReadyState
+  whenBackendReady?(): Promise<void>
+  onBackendReady?(handler: () => void): Disposable | (() => void)
+  invokeBackendMethod?(method: string, payload?: unknown): Promise<unknown>
   invokeHostCommand?(command: string, payload?: unknown): Promise<unknown>
   onHostEvent?(event: string, handler: (payload: unknown) => void): () => void
 }
@@ -383,6 +388,7 @@ class RuntimeContributionRegistry {
       return this.frontendApi
     }
 
+    const registry = this
     this.frontendApi = {
       ...this.createCommonApi(),
       views: {
@@ -395,13 +401,20 @@ class RuntimeContributionRegistry {
         registerSection: (registration) => this.registerSettingsSection(registration),
       },
       backend: {
-        state: 'ready',
-        whenReady: async () => undefined,
+        get state() {
+          return registry.host.getBackendState ? registry.host.getBackendState() : 'ready'
+        },
+        whenReady: async () => this.host.whenBackendReady ? this.host.whenBackendReady() : undefined,
         onReady: (handler) => {
+          if (this.host.onBackendReady) {
+            const subscription = this.host.onBackendReady(handler)
+            return typeof subscription === 'function' ? createDisposable(subscription) : subscription
+          }
+
           handler()
           return createDisposable(() => undefined)
         },
-        invoke: async (method, payload) => this.invokeBackendMethod(method, payload),
+        invoke: async (method, payload) => this.host.invokeBackendMethod ? this.host.invokeBackendMethod(method, payload) as never : this.invokeBackendMethod(method, payload),
       },
     }
 

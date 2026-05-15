@@ -580,6 +580,10 @@ export async function pluginInvoke(pluginId: string, command: string, payload: u
   return invoke("plugin_invoke", { pluginId, command, payload: payload ?? null })
 }
 
+export async function pluginBackendWhenReady(pluginId: string): Promise<void> {
+  await invoke('plugin_backend_when_ready', { pluginId })
+}
+
 export async function stopPluginSidecar(): Promise<void> {
   return invoke('stop_plugin_sidecar', {})
 }

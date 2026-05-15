@@ -14,10 +14,19 @@ const {
   uninstallPluginIpcMock,
   getEnabledPluginsMock,
   pluginInvokeMock,
+  pluginBackendWhenReadyMock,
   getPluginStorageMock,
   setPluginStorageMock,
   deletePluginStorageMock,
   spawnShellPtyMock,
+  openUrlMock,
+  fsReadDirMock,
+  fsReadFileMock,
+  fsSearchFilesMock,
+  getConfigMock,
+  setConfigMock,
+  getProjectConfigMock,
+  setProjectConfigMock,
 } = vi.hoisted(() => ({
   forceGithubSyncMock: vi.fn(),
   installPluginMock: vi.fn(),
@@ -29,10 +38,19 @@ const {
   uninstallPluginIpcMock: vi.fn(),
   getEnabledPluginsMock: vi.fn(),
   pluginInvokeMock: vi.fn(),
+  pluginBackendWhenReadyMock: vi.fn(),
   getPluginStorageMock: vi.fn(),
   setPluginStorageMock: vi.fn(),
   deletePluginStorageMock: vi.fn(),
   spawnShellPtyMock: vi.fn(),
+  openUrlMock: vi.fn(),
+  fsReadDirMock: vi.fn(),
+  fsReadFileMock: vi.fn(),
+  fsSearchFilesMock: vi.fn(),
+  getConfigMock: vi.fn(),
+  setConfigMock: vi.fn(),
+  getProjectConfigMock: vi.fn(),
+  setProjectConfigMock: vi.fn(),
 }))
 
 vi.mock('../ipc', () => ({
@@ -47,10 +65,19 @@ vi.mock('../ipc', () => ({
   installPluginFromLocal: installPluginFromLocalIpcMock,
   installPluginFromNpm: installPluginFromNpmIpcMock,
   pluginInvoke: pluginInvokeMock,
+  pluginBackendWhenReady: pluginBackendWhenReadyMock,
   getPluginStorage: getPluginStorageMock,
   setPluginStorage: setPluginStorageMock,
   deletePluginStorage: deletePluginStorageMock,
   spawnShellPty: spawnShellPtyMock,
+  openUrl: openUrlMock,
+  fsReadDir: fsReadDirMock,
+  fsReadFile: fsReadFileMock,
+  fsSearchFiles: fsSearchFilesMock,
+  getConfig: getConfigMock,
+  setConfig: setConfigMock,
+  getProjectConfig: getProjectConfigMock,
+  setProjectConfig: setProjectConfigMock,
 }))
 
 const {
@@ -169,10 +196,22 @@ describe('pluginRegistry', () => {
     uninstallPluginIpcMock.mockReset()
     getEnabledPluginsMock.mockReset()
     pluginInvokeMock.mockReset()
+    pluginInvokeMock.mockResolvedValue(undefined)
+    pluginBackendWhenReadyMock.mockReset()
+    pluginBackendWhenReadyMock.mockResolvedValue(undefined)
     getPluginStorageMock.mockReset()
     setPluginStorageMock.mockReset()
     deletePluginStorageMock.mockReset()
     spawnShellPtyMock.mockReset()
+    openUrlMock.mockReset()
+    openUrlMock.mockResolvedValue(undefined)
+    fsReadDirMock.mockReset()
+    fsReadFileMock.mockReset()
+    fsSearchFilesMock.mockReset()
+    getConfigMock.mockReset()
+    setConfigMock.mockReset()
+    getProjectConfigMock.mockReset()
+    setProjectConfigMock.mockReset()
     listenDesktopEventMock.mockReset()
     desktopEventHandlers.clear()
     listenDesktopEventMock.mockImplementation(async (event: string, handler: (event: { payload: unknown }) => void) => {
@@ -306,7 +345,11 @@ describe('pluginRegistry', () => {
   it('activates defineFrontendPlugin package entries through plugin:// assets and runtime registries', async () => {
     const LazyView = vi.fn() as never
     const commandHandler = vi.fn(async () => ({ ok: true }))
+    const capturedApis: FrontendOpenForgeAPI[] = []
+    const backendStateDuringActivation: string[] = []
     const activateFrontend = vi.fn((openforge, context) => {
+      capturedApis.push(openforge)
+      backendStateDuringActivation.push(openforge.backend.state)
       context.subscriptions.add(openforge.views.register({
         id: 'prs',
         title: 'Pull Requests',
@@ -335,6 +378,7 @@ describe('pluginRegistry', () => {
     const manifest = makeManifest({
       id: 'runtime-plugin',
       frontend: './dist/frontend.js',
+      backend: './dist/backend.js',
     })
 
     installedPlugins.set(new Map([['runtime-plugin', {
@@ -378,6 +422,23 @@ describe('pluginRegistry', () => {
     getPluginStorageMock.mockResolvedValueOnce({ owner: 'acme', name: 'app' })
     await expect(firstProps.api.storage.project('P-1').get('repo')).resolves.toEqual({ owner: 'acme', name: 'app' })
     expect(getPluginStorageMock).toHaveBeenCalledWith('runtime-plugin', 'project', 'P-1', 'repo')
+
+    fsReadFileMock.mockResolvedValueOnce('readme')
+    await expect(firstProps.api.fs.readFile({ projectId: 'P-1', path: 'README.md' })).resolves.toBe('readme')
+    await firstProps.api.system.openUrl('https://example.com/plugin')
+    await firstProps.api.config.set('theme', { mode: 'dark' })
+    await firstProps.api.projectConfig.set('repo', { owner: 'acme', name: 'app' }, 'P-1')
+    await firstProps.api.backend.whenReady()
+    await expect(firstProps.api.backend.invoke('syncProject', { projectId: 'P-1' })).resolves.toBeUndefined()
+
+    expect(backendStateDuringActivation).toEqual(['starting'])
+    expect(capturedApis[0].backend.state).toBe('ready')
+    expect(fsReadFileMock).toHaveBeenCalledWith('P-1', 'README.md')
+    expect(openUrlMock).toHaveBeenCalledWith('https://example.com/plugin')
+    expect(setConfigMock).toHaveBeenCalledWith('theme', '{"mode":"dark"}')
+    expect(setProjectConfigMock).toHaveBeenCalledWith('P-1', 'repo', '{"owner":"acme","name":"app"}')
+    expect(pluginBackendWhenReadyMock).toHaveBeenCalledWith('runtime-plugin')
+    expect(pluginInvokeMock).toHaveBeenCalledWith('runtime-plugin', 'syncProject', { projectId: 'P-1' })
 
     const otherSlotProps = getPluginRenderProps('runtime-plugin', { projectId: 'P-2', taskId: 'T-99' })
     expect(firstProps.context).toEqual({ pluginId: 'runtime-plugin', projectId: 'P-1', taskId: 'T-1' })

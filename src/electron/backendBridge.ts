@@ -132,6 +132,7 @@ const SIDECAR_BACKED_COMMANDS = new Set([
   'set_plugin_storage',
   'delete_plugin_storage',
   'plugin_invoke',
+  'plugin_backend_when_ready',
   'stop_plugin_sidecar',
   'transcribe_audio',
   'get_whisper_model_status',
