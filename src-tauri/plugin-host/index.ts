@@ -585,12 +585,6 @@ export class PluginHostRuntime {
         case 'plugin.backend.invoke':
           return { jsonrpc: '2.0', id: request.id, result: await this.invokeBackend(this.requireInvokeParams(params, method)) }
         default:
-          if (method.endsWith('.backend.state')) {
-            return { jsonrpc: '2.0', id: request.id, result: await this.getBackendState(this.requirePluginId(params)) }
-          }
-          if (method.endsWith('.backend.whenReady')) {
-            return { jsonrpc: '2.0', id: request.id, result: await this.whenBackendReady(this.requireReadyParams(params)) }
-          }
           return { jsonrpc: '2.0', id: request.id, result: await this.invokeBackend(this.requireInvokeParams(params, method)) }
       }
     } catch (error) {

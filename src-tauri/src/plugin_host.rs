@@ -145,12 +145,6 @@ impl PluginHost {
         backend_path: &std::path::Path,
         payload: Value,
     ) -> Result<Value, String> {
-        if !self.is_sidecar_running() {
-            self.start_sidecar().await?;
-        }
-
-        self.wait_for_transport_ready().await?;
-
         let backend_path = backend_path.to_string_lossy().into_owned();
         let params = json!({
             "pluginId": plugin_id,
@@ -159,6 +153,48 @@ impl PluginHost {
             "payload": payload,
         });
         let (request_id, request) = crate::plugin_rpc::format_request(plugin_id, command, params);
+        self.send_request_and_wait(
+            request_id,
+            &request,
+            &format!("plugin backend response: {plugin_id}.{command}"),
+            &format!("invoking {plugin_id}.{command}"),
+        )
+        .await
+    }
+
+    pub async fn when_backend_ready(
+        &self,
+        plugin_id: &str,
+        backend_path: &std::path::Path,
+    ) -> Result<Value, String> {
+        let backend_path = backend_path.to_string_lossy().into_owned();
+        let params = json!({
+            "pluginId": plugin_id,
+            "backendPath": backend_path,
+        });
+        let (request_id, request) =
+            crate::plugin_rpc::format_request("plugin", "backend.whenReady", params);
+        self.send_request_and_wait(
+            request_id,
+            &request,
+            &format!("plugin backend readiness: {plugin_id}"),
+            &format!("waiting for plugin backend readiness: {plugin_id}"),
+        )
+        .await
+    }
+
+    async fn send_request_and_wait(
+        &self,
+        request_id: u64,
+        request: &str,
+        timeout_context: &str,
+        closed_context: &str,
+    ) -> Result<Value, String> {
+        if !self.is_sidecar_running() {
+            self.start_sidecar().await?;
+        }
+
+        self.wait_for_transport_ready().await?;
 
         let (response_tx, response_rx) = oneshot::channel();
         let writer = {
@@ -172,22 +208,18 @@ impl PluginHost {
             writer
         };
 
-        if let Err(error) = self.write_request(writer, request_id, &request).await {
+        if let Err(error) = self.write_request(writer, request_id, request).await {
             self.remove_pending_request(request_id);
             return Err(error);
         }
 
-        let response = timeout(crate::plugin_rpc::DEFAULT_TIMEOUT, response_rx)
+        timeout(crate::plugin_rpc::DEFAULT_TIMEOUT, response_rx)
             .await
             .map_err(|_| {
                 self.remove_pending_request(request_id);
-                format!("timed out waiting for plugin backend response: {plugin_id}.{command}")
+                format!("timed out waiting for {timeout_context}")
             })?
-            .map_err(|_| {
-                format!("plugin backend transport closed while invoking {plugin_id}.{command}")
-            })?;
-
-        response
+            .map_err(|_| format!("plugin backend transport closed while {closed_context}"))?
     }
 
     async fn wait_for_transport_ready(&self) -> Result<(), String> {

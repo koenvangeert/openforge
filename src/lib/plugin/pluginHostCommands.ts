@@ -30,6 +30,7 @@ import {
   markReviewPrViewed,
   killPty,
   openUrl,
+  pluginBackendWhenReady,
   pluginInvoke,
   resizePty,
   saveSkillContent,
@@ -60,10 +61,6 @@ const pluginBackendReadyStates = new Map<string, BackendReadyState>()
 
 function isAppView(value: unknown): value is AppView {
   return typeof value === 'string' && (STATIC_APP_VIEWS.has(value as AppView) || isPluginViewKey(value))
-}
-
-async function pluginBackendWhenReady(pluginId: string): Promise<void> {
-  await pluginInvoke(pluginId, 'backend.whenReady', null)
 }
 
 export function clearPluginRuntimeHostState(pluginId: string): void {

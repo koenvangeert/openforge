@@ -14,6 +14,7 @@ const {
   uninstallPluginIpcMock,
   getEnabledPluginsMock,
   pluginInvokeMock,
+  pluginBackendWhenReadyMock,
   getPluginStorageMock,
   setPluginStorageMock,
   deletePluginStorageMock,
@@ -37,6 +38,7 @@ const {
   uninstallPluginIpcMock: vi.fn(),
   getEnabledPluginsMock: vi.fn(),
   pluginInvokeMock: vi.fn(),
+  pluginBackendWhenReadyMock: vi.fn(),
   getPluginStorageMock: vi.fn(),
   setPluginStorageMock: vi.fn(),
   deletePluginStorageMock: vi.fn(),
@@ -63,6 +65,7 @@ vi.mock('../ipc', () => ({
   installPluginFromLocal: installPluginFromLocalIpcMock,
   installPluginFromNpm: installPluginFromNpmIpcMock,
   pluginInvoke: pluginInvokeMock,
+  pluginBackendWhenReady: pluginBackendWhenReadyMock,
   getPluginStorage: getPluginStorageMock,
   setPluginStorage: setPluginStorageMock,
   deletePluginStorage: deletePluginStorageMock,
@@ -189,6 +192,8 @@ describe('pluginRegistry', () => {
     getEnabledPluginsMock.mockReset()
     pluginInvokeMock.mockReset()
     pluginInvokeMock.mockResolvedValue(undefined)
+    pluginBackendWhenReadyMock.mockReset()
+    pluginBackendWhenReadyMock.mockResolvedValue(undefined)
     getPluginStorageMock.mockReset()
     setPluginStorageMock.mockReset()
     deletePluginStorageMock.mockReset()
@@ -427,7 +432,7 @@ describe('pluginRegistry', () => {
     expect(openUrlMock).toHaveBeenCalledWith('https://example.com/plugin')
     expect(setConfigMock).toHaveBeenCalledWith('theme', '{"mode":"dark"}')
     expect(setProjectConfigMock).toHaveBeenCalledWith('P-1', 'repo', '{"owner":"acme","name":"app"}')
-    expect(pluginInvokeMock).toHaveBeenCalledWith('runtime-plugin', 'backend.whenReady', null)
+    expect(pluginBackendWhenReadyMock).toHaveBeenCalledWith('runtime-plugin')
     expect(pluginInvokeMock).toHaveBeenCalledWith('runtime-plugin', 'syncProject', { projectId: 'P-1' })
 
     const otherSlotProps = getPluginRenderProps('runtime-plugin', { projectId: 'P-2', taskId: 'T-99' })
