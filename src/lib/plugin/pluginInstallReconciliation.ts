@@ -8,7 +8,7 @@ import {
   disablePlugin as disablePluginInStore,
   enablePlugin as enablePluginInStore,
   installedPlugins,
-  loadEnabledForProject as loadEnabledPluginIdsForProject,
+  loadEnabledPluginIdsForProject,
 } from './pluginStore'
 import { activatePlugin, deactivatePluginById } from './pluginActivationLifecycle'
 import { upsertInstalledPlugin } from './pluginInstallState'

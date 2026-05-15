@@ -23,7 +23,7 @@ import {
   disablePlugin,
   isPluginEnabled,
   getContributions,
-  loadEnabledForProject,
+  loadEnabledPluginIdsForProject,
   runtimeContributionSources,
 } from './pluginStore'
 import type { NormalizedPluginRow } from '../ipc'
@@ -170,15 +170,15 @@ describe('pluginStore', () => {
     expect(get(loading)).toBe(false)
   })
 
-  it('loadEnabledForProject populates enabled set', async () => {
+  it('loadEnabledPluginIdsForProject populates enabled set without activating plugins', async () => {
     getEnabledPluginsMock.mockResolvedValue([makePlugin('pa'), makePlugin('pb')])
-    await loadEnabledForProject('proj1')
+    await loadEnabledPluginIdsForProject('proj1')
     const set = get(enabledPluginIds)
     expect(set.has('pa')).toBe(true)
     expect(set.has('pb')).toBe(true)
   })
 
-  it('loadEnabledForProject respects per-project builtin plugin enablement without force-enabling builtins', async () => {
+  it('loadEnabledPluginIdsForProject respects per-project builtin plugin enablement without force-enabling builtins', async () => {
     installedPlugins.set(new Map([[
       'builtin-plugin',
       {
@@ -199,7 +199,7 @@ describe('pluginStore', () => {
     ]]))
     getEnabledPluginsMock.mockResolvedValue([makePlugin('project-plugin')])
 
-    await loadEnabledForProject('proj1')
+    await loadEnabledPluginIdsForProject('proj1')
 
     expect(get(enabledPluginIds)).toEqual(new Set(['project-plugin']))
   })

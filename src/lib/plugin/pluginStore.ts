@@ -144,7 +144,7 @@ export function getContributions(contributionType: string): unknown[] {
   return Array.isArray(bucket) ? bucket : []
 }
 
-export async function loadEnabledForProject(projectId: string): Promise<void> {
+export async function loadEnabledPluginIdsForProject(projectId: string): Promise<void> {
   const getEnabledPlugins = getOptionalIpcMethod(() => ipc.getEnabledPlugins)
   if (!getEnabledPlugins) {
     enabledPluginIds.set(new Set())
