@@ -94,18 +94,21 @@ export const mockWindowOnCloseRequested = vi.fn(async (callback: (event: MockClo
 export const mockWindowDestroy = vi.fn(async () => undefined)
 
 export const mockSelectedTaskIdStore = writable<string | null>(null)
+export const mockActiveProjectIdStore = writable<string | null>(null)
 export const mockMergingTaskIdsStore = writable<Set<string>>(new Set())
 export const mockCurrentViewStore = writable<'board' | 'files' | 'settings' | 'global_settings' | 'plugin:com.openforge.file-viewer:files' | 'plugin:com.openforge.github-sync:pr_review' | 'plugin:com.openforge.skills-viewer:skills'>('board')
 export const mockSelectedReviewPrStore = writable(null)
 const {
   mockActivatePlugin,
   mockExecutePluginCommand,
+  mockLoadEnabledForProject,
 } = vi.hoisted(() => ({
   mockActivatePlugin: vi.fn<(pluginId: string) => Promise<boolean>>(async () => true),
   mockExecutePluginCommand: vi.fn(async (_pluginId: string, _commandId: string) => true),
+  mockLoadEnabledForProject: vi.fn<(projectId: string) => Promise<void>>(async () => undefined),
 }))
 
-export { mockActivatePlugin, mockExecutePluginCommand }
+export { mockActivatePlugin, mockExecutePluginCommand, mockLoadEnabledForProject }
 
 vi.mock('./lib/desktopIpc', () => ({
   invokeDesktopCommand: vi.fn(),
@@ -130,6 +133,7 @@ vi.mock('./lib/plugin/pluginRegistry', async () => {
     ...actual,
     activatePlugin: mockActivatePlugin,
     executePluginCommand: mockExecutePluginCommand,
+    loadEnabledForProject: mockLoadEnabledForProject,
   }
 })
 
@@ -158,7 +162,7 @@ vi.mock('./lib/stores', () => ({
   isLoading: writable(false),
   error: writable<string | null>(null),
   projects: writable<Project[]>([]),
-  activeProjectId: writable<string | null>(null),
+  activeProjectId: mockActiveProjectIdStore,
   activeProjectColorId: writable<string | null>(null),
   projectAttention: writable<Map<string, ProjectAttention>>(new Map()),
   agentEvents: writable<Map<string, any>>(new Map()),
@@ -377,6 +381,10 @@ export function installAppTestLifecycle() {
     installedPluginRows.length = 0
     eventListeners.clear()
     closeRequestedHandler = null
+    mockActiveProjectIdStore.set(null)
+    mockCurrentViewStore.set('board')
+    mockSelectedTaskIdStore.set(null)
+    mockSelectedReviewPrStore.set(null)
     vi.clearAllMocks()
     vi.mocked(registerBuiltinPlugin).mockImplementation(async (plugin) => {
       persistInstalledPluginRow(plugin)
@@ -385,6 +393,14 @@ export function installAppTestLifecycle() {
       const { setRuntimeContributionSource } = await import('./lib/plugin/pluginStore')
       setRuntimeContributionSource(pluginId, builtinRuntimeContributionSourceForTest(pluginId))
       return true
+    })
+    mockLoadEnabledForProject.mockImplementation(async () => {
+      const { enabledPluginIds } = await import('./lib/plugin/pluginStore')
+      const pluginIds = installedPluginRows.map((row) => row.id)
+      enabledPluginIds.set(new Set(pluginIds))
+      for (const pluginId of pluginIds) {
+        await mockActivatePlugin(pluginId)
+      }
     })
     mockExecutePluginCommand.mockImplementation(async (pluginId, commandId) => {
       if (pluginId === 'com.openforge.github-sync' && commandId === 'refresh') {

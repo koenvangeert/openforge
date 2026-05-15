@@ -3,7 +3,7 @@ import { get } from 'svelte/store'
 import { describe, expect, it, vi } from 'vitest'
 import type { AuthoredPullRequest, Project, Task } from './lib/types'
 import { requireDefined } from './test-utils/dom'
-import { callOrder, eventListeners, installAppTestLifecycle } from './App.test-harness'
+import { callOrder, eventListeners, installAppTestLifecycle, mockActivatePlugin, mockLoadEnabledForProject, persistInstalledPluginRow } from './App.test-harness'
 
 async function withSuppressedExpectedConsoleError(run: () => Promise<void>) {
   const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
@@ -32,6 +32,31 @@ describe('App startup data loading', () => {
       })
     })
   })
+
+  it('activates project-enabled plugins during startup so persisted plugin UI contributions are registered', async () => {
+    persistInstalledPluginRow({
+      id: 'persisted-enabled-plugin',
+      name: 'Persisted Enabled Plugin',
+      version: '1.0.0',
+      apiVersion: 1,
+      description: 'Previously enabled plugin',
+      permissions: '[]',
+      contributes: '{}',
+      frontendEntry: './dist/frontend.js',
+      backendEntry: null,
+      installPath: '/plugins/persisted-enabled-plugin',
+      installedAt: 1,
+      isBuiltin: false,
+    })
+
+    const App = (await import('./App.svelte')).default
+    render(App)
+
+    await vi.waitFor(() => {
+      expect(mockLoadEnabledForProject).toHaveBeenCalledWith('proj-1')
+      expect(mockActivatePlugin).toHaveBeenCalledWith('persisted-enabled-plugin')
+    })
+  }, 15000)
 
   it('initializes reviewRequestCount from DB on startup', async () => {
     const { getReviewPrs } = await import('./lib/ipc')
