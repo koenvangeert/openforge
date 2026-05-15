@@ -2,6 +2,11 @@ import { defineConfig } from 'vitest/config'
 import { svelte } from '@sveltejs/vite-plugin-svelte'
 import { svelteTesting } from '@testing-library/svelte/vite'
 
+const pluginRuntimeAliases = {
+  '@openforge/plugin-runtime/commandValidation': new URL('./packages/plugin-runtime/src/commandValidation.ts', import.meta.url).pathname,
+  '@openforge/plugin-runtime': new URL('./packages/plugin-runtime/src/index.ts', import.meta.url).pathname,
+}
+
 const pluginSdkAliases = {
   '@openforge/plugin-sdk/frontend': new URL('./packages/plugin-sdk/src/frontend.ts', import.meta.url).pathname,
   '@openforge/plugin-sdk/backend': new URL('./packages/plugin-sdk/src/backend.ts', import.meta.url).pathname,
@@ -33,7 +38,10 @@ export default defineConfig({
             'src/**/*.test.ts',
             'plugins/file-viewer/src/**/*.test.ts',
           ],
-          alias: pluginSdkAliases,
+          alias: {
+            ...pluginRuntimeAliases,
+            ...pluginSdkAliases,
+          },
         },
       },
       {
@@ -46,6 +54,18 @@ export default defineConfig({
       },
       {
         test: {
+          name: 'plugin-runtime',
+          environment: 'node',
+          globals: true,
+          include: ['packages/plugin-runtime/src/**/*.test.ts'],
+          alias: {
+            ...pluginRuntimeAliases,
+            ...pluginSdkAliases,
+          },
+        },
+      },
+      {
+        test: {
           name: 'node',
           environment: 'node',
           globals: true,
@@ -54,6 +74,10 @@ export default defineConfig({
             'src-tauri/src/openforge-cli/**/*.test.js',
             'src-tauri/plugin-host/**/*.test.ts',
           ],
+          alias: {
+            ...pluginRuntimeAliases,
+            ...pluginSdkAliases,
+          },
         },
       },
     ],

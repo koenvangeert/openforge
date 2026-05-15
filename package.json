@@ -23,6 +23,7 @@
     "@fontsource/jetbrains-mono": "^5.2.8",
     "@git-diff-view/core": "0.0.39",
     "@git-diff-view/svelte": "^0.0.13",
+    "@openforge/plugin-runtime": "workspace:*",
     "@openforge/plugin-sdk": "workspace:*",
     "@openforge/terminal-shared": "workspace:*",
     "@tailwindcss/vite": "^4.2.2",
