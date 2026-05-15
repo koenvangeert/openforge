@@ -962,6 +962,15 @@ fn resolve_entrypoint(app_handle: &AppHandle) -> Result<PathBuf, String> {
         }
     }
 
+    let resource_entrypoint = app_handle
+        .path()
+        .resource_dir()
+        .map(|path| path.join("plugin-host").join("index.js"))
+        .map_err(|error| format!("failed to resolve plugin host resource directory: {error}"))?;
+    if resource_entrypoint.is_file() {
+        return Ok(resource_entrypoint);
+    }
+
     let repo_entrypoint = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("plugin-host")
         .join("index.ts");
@@ -969,11 +978,18 @@ fn resolve_entrypoint(app_handle: &AppHandle) -> Result<PathBuf, String> {
         return Ok(repo_entrypoint);
     }
 
-    app_handle
+    let app_data_dir = app_handle
         .path()
         .app_data_dir()
-        .map(|path| path.join("plugin-host").join("index.ts"))
-        .map_err(|error| format!("failed to resolve plugin host entrypoint: {error}"))
+        .map_err(|error| format!("failed to resolve plugin host entrypoint: {error}"))?;
+    for filename in ["index.js", "index.ts"] {
+        let app_data_entrypoint = app_data_dir.join("plugin-host").join(filename);
+        if app_data_entrypoint.is_file() {
+            return Ok(app_data_entrypoint);
+        }
+    }
+
+    Ok(app_data_dir.join("plugin-host").join("index.ts"))
 }
 
 #[cfg(unix)]
@@ -1065,6 +1081,12 @@ mod tests {
             std::env::set_var(key, value);
             Self { key, previous }
         }
+
+        fn remove(key: &'static str) -> Self {
+            let previous = std::env::var_os(key);
+            std::env::remove_var(key);
+            Self { key, previous }
+        }
     }
 
     impl Drop for EnvVarRestore {
@@ -1085,6 +1107,43 @@ mod tests {
 
     fn build_plugin_host() -> PluginHost {
         PluginHost::new(AppHandle::new())
+    }
+
+    #[tokio::test]
+    async fn resolve_entrypoint_prefers_packaged_resource_bundle_over_source_and_legacy_app_data() {
+        let temp = tempdir().expect("tempdir should create");
+        let resource_dir = temp.path().join("resources");
+        let app_data_dir = temp.path().join("app-data");
+        let bundled_entrypoint = resource_dir.join("plugin-host").join("index.js");
+        let legacy_app_data_entrypoint = app_data_dir.join("plugin-host").join("index.ts");
+        fs::create_dir_all(
+            bundled_entrypoint
+                .parent()
+                .expect("resource parent should exist"),
+        )
+        .expect("resource dir should create");
+        fs::create_dir_all(
+            legacy_app_data_entrypoint
+                .parent()
+                .expect("app data parent should exist"),
+        )
+        .expect("app data dir should create");
+        fs::write(&bundled_entrypoint, "console.log('bundled plugin host')")
+            .expect("bundled entrypoint should write");
+        fs::write(
+            &legacy_app_data_entrypoint,
+            "console.log('legacy plugin host')",
+        )
+        .expect("legacy entrypoint should write");
+
+        let _env_lock = lock_plugin_host_env().await;
+        let _entrypoint_env = EnvVarRestore::remove(ENTRYPOINT_ENV);
+        let app = AppHandle::with_app_paths(app_data_dir, resource_dir);
+
+        assert_eq!(
+            resolve_entrypoint(&app).expect("entrypoint should resolve"),
+            bundled_entrypoint
+        );
     }
 
     #[test]
