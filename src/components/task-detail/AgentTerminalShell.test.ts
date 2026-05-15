@@ -185,6 +185,51 @@ describe('AgentTerminalShell', () => {
     expect(screen.queryByText('No active agent session')).toBeNull()
   })
 
+  it('shows Claude permission requests as paused instead of still running', () => {
+    setActiveSession(createAgentSession({
+      provider: 'claude-code',
+      status: 'paused',
+      claude_session_id: 'claude-sess-abc123',
+    }))
+
+    render(AgentTerminalShell, {
+      props: {
+        taskId: 'T-1',
+        runningText: 'Claude agent running...',
+        logPrefix: 'AgentPanel:Claude',
+        sessionIdKey: 'claude_session_id',
+        stageLabels,
+      },
+    })
+
+    expect(screen.getByText('Agent paused')).toBeTruthy()
+    expect(screen.getByText('PAUSED')).toBeTruthy()
+    expect(screen.queryByText('Claude agent running...')).toBeNull()
+  })
+
+  it('shows OpenCode question pauses without permission-specific status text', () => {
+    setActiveSession(createAgentSession({
+      provider: 'opencode',
+      status: 'paused',
+      opencode_session_id: 'opencode-sess-abc123',
+      checkpoint_data: '{"type":"question.asked","properties":{"description":"Which branch should I use?"}}',
+    }))
+
+    render(AgentTerminalShell, {
+      props: {
+        taskId: 'T-1',
+        runningText: 'Agent running...',
+        logPrefix: 'AgentPanel:OpenCode',
+        sessionIdKey: 'opencode_session_id',
+        stageLabels,
+      },
+    })
+
+    expect(screen.getByText('Agent paused')).toBeTruthy()
+    expect(screen.getByText('Which branch should I use?')).toBeTruthy()
+    expect(screen.queryByText('Agent needs permission')).toBeNull()
+  })
+
   it('shows OpenCode checkpoint question text from the shared terminal shell', () => {
     setActiveSession(createAgentSession({
       provider: 'opencode',

@@ -22,6 +22,7 @@ export function getAgentStatusText(status: AgentPanelStatus, runningText: string
   switch (status) {
     case 'idle': return 'No active implementation'
     case 'running': return runningText
+    case 'paused': return 'Agent paused'
     case 'complete': return 'Implementation complete'
     case 'error': return 'Error occurred'
   }

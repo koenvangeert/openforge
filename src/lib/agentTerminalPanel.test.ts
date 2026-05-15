@@ -29,6 +29,7 @@ describe('agent terminal panel helpers', () => {
     expect(getAgentStatusText('running', 'Claude agent running...')).toBe('Claude agent running...')
     expect(getAgentStatusText('running', 'Pi agent running...')).toBe('Pi agent running...')
     expect(getAgentStatusText('running', 'Agent running...')).toBe('Agent running...')
+    expect(getAgentStatusText('paused', 'Claude agent running...')).toBe('Agent paused')
     expect(getAgentStatusText('complete', 'Agent running...')).toBe('Implementation complete')
     expect(getAgentStatusText('error', 'Agent running...')).toBe('Error occurred')
   })
@@ -68,6 +69,20 @@ describe('agent terminal panel helpers', () => {
     expect(setStatus).toHaveBeenCalledWith('running')
     expect(setTerminalActive).toHaveBeenCalledWith(true)
     expect(getShellLifecycleState).toHaveBeenCalledWith('T-1')
+  })
+
+  it('syncs paused sessions into the paused panel state', () => {
+    vi.mocked(getShellLifecycleState).mockReturnValue({ ptyActive: true, shellExited: false, currentPtyInstance: 7 })
+    const setStatus = vi.fn()
+
+    const nextStatus = syncAgentPanelStatusFromSession({
+      taskId: 'T-1',
+      sessionStatus: 'paused',
+      setStatus,
+    })
+
+    expect(nextStatus).toBe('paused')
+    expect(setStatus).toHaveBeenCalledWith('paused')
   })
 
   it('aborts through PTY kill, terminalPool lifecycle update, and implementation abort', async () => {
