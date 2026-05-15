@@ -26,9 +26,9 @@
   import PluginSlot from './components/plugin/PluginSlot.svelte'
 
   import { resolveContributions } from './lib/plugin/contributionResolver'
-  import { enabledPluginIds, loadEnabledForProject, runtimeContributionSources } from './lib/plugin/pluginStore'
+  import { enabledPluginIds, runtimeContributionSources } from './lib/plugin/pluginStore'
   import { isPluginViewKey, makePluginViewKey } from './lib/plugin/types'
-  import { activatePlugin, executePluginCommand, initializePluginRuntime } from './lib/plugin/pluginRegistry'
+  import { activatePlugin, executePluginCommand, initializePluginRuntime, loadEnabledForProject } from './lib/plugin/pluginRegistry'
   import { useAppRouter } from './lib/router.svelte'
   import { getProjectColor } from './lib/projectColors'
   import { themeMode } from './lib/theme'

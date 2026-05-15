@@ -99,12 +99,14 @@ export const mockSelectedReviewPrStore = writable(null)
 const {
   mockActivatePlugin,
   mockExecutePluginCommand,
+  mockLoadEnabledForProject,
 } = vi.hoisted(() => ({
   mockActivatePlugin: vi.fn<(pluginId: string) => Promise<boolean>>(async () => true),
   mockExecutePluginCommand: vi.fn(async (_pluginId: string, _commandId: string) => true),
+  mockLoadEnabledForProject: vi.fn<(projectId: string) => Promise<void>>(async () => undefined),
 }))
 
-export { mockActivatePlugin, mockExecutePluginCommand }
+export { mockActivatePlugin, mockExecutePluginCommand, mockLoadEnabledForProject }
 
 vi.mock('./lib/desktopIpc', () => ({
   invokeDesktopCommand: vi.fn(),
@@ -129,6 +131,7 @@ vi.mock('./lib/plugin/pluginRegistry', async () => {
     ...actual,
     activatePlugin: mockActivatePlugin,
     executePluginCommand: mockExecutePluginCommand,
+    loadEnabledForProject: mockLoadEnabledForProject,
   }
 })
 
@@ -384,6 +387,16 @@ export function installAppTestLifecycle() {
       const { setRuntimeContributionSource } = await import('./lib/plugin/pluginStore')
       setRuntimeContributionSource(pluginId, builtinRuntimeContributionSourceForTest(pluginId))
       return true
+    })
+    mockLoadEnabledForProject.mockImplementation(async () => {
+      const { enabledPluginIds } = await import('./lib/plugin/pluginStore')
+      const pluginIds = installedPluginRows.map((row) => row.id)
+      if (pluginIds.length > 0) {
+        enabledPluginIds.set(new Set(pluginIds))
+      }
+      for (const pluginId of pluginIds) {
+        await mockActivatePlugin(pluginId)
+      }
     })
     mockExecutePluginCommand.mockImplementation(async (pluginId, commandId) => {
       if (pluginId === 'com.openforge.github-sync' && commandId === 'refresh') {
