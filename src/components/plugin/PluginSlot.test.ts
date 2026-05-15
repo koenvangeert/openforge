@@ -43,7 +43,7 @@ function makeViewSource(pluginId: string = 'test-plugin'): RuntimeContributionSo
         id: 'main',
         title: 'Main',
         icon: 'plug',
-        showInRail: true,
+        placement: 'rail',
       },
     ],
   }
@@ -73,10 +73,10 @@ describe('PluginSlot', () => {
   })
 
   it('renders container with data attributes', () => {
-    const { container } = render(PluginSlot, { props: { slotType: 'sidebarPanels', slotId: 'panel-1' } })
+    const { container } = render(PluginSlot, { props: { slotType: 'settingsSections', slotId: 'section-1' } })
     const div = container.querySelector('div')
-    expect(div?.getAttribute('data-slot-type')).toBe('sidebarPanels')
-    expect(div?.getAttribute('data-slot-id')).toBe('panel-1')
+    expect(div?.getAttribute('data-slot-type')).toBe('settingsSections')
+    expect(div?.getAttribute('data-slot-id')).toBe('section-1')
   })
 
   it('marks task pane tab slots as fill-layout hosts', () => {
@@ -206,35 +206,23 @@ describe('PluginSlot', () => {
     })
   })
 
-  it('renders registered settings section and sidebar panel components', async () => {
+  it('renders a registered settings section contribution component', async () => {
     const manifest = makeManifest('plugin.settings')
     enablePlugin(
       { manifest, state: 'active', error: null },
       {
         pluginId: 'plugin.settings',
         settingsSections: [{ id: 'preferences', title: 'Preferences' }],
-        sidebarPanels: [{ id: 'inspector', title: 'Inspector', side: 'right' }],
       }
     )
     registerRenderableContributionComponent('settingsSections', 'plugin.settings:preferences', PluginSlotTestView)
-    registerRenderableContributionComponent('sidebarPanels', 'plugin.settings:inspector', PluginSlotTestView)
 
-    const { rerender } = render(PluginSlot, {
+    render(PluginSlot, {
       props: {
         slotType: 'settingsSections',
         slotId: 'plugin.settings:preferences',
         projectName: 'Project Delta',
       },
-    })
-
-    await waitFor(() => {
-      expect(screen.getByTestId('plugin-slot-view').textContent).toContain('Project Delta')
-    })
-
-    await rerender({
-      slotType: 'sidebarPanels',
-      slotId: 'plugin.settings:inspector',
-      projectName: 'Project Delta',
     })
 
     await waitFor(() => {

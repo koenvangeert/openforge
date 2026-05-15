@@ -10,16 +10,15 @@
   import { activatePlugin, getPluginRenderProps } from '../../lib/plugin/pluginRegistry'
 
   interface Props {
-    slotType: 'views' | 'taskPaneTabs' | 'sidebarPanels' | 'commands' | 'settingsSections' | 'backgroundServices'
+    slotType: 'views' | 'taskPaneTabs' | 'commands' | 'settingsSections' | 'backgroundServices'
     slotId?: string
     taskId?: string
     projectId?: string | null
     projectName?: string
     projectPath?: string
-    panelSide?: 'left' | 'right'
   }
 
-  let { slotType, slotId = '', taskId = '', projectId = null, projectName = '', projectPath = '', panelSide }: Props = $props()
+  let { slotType, slotId = '', taskId = '', projectId = null, projectName = '', projectPath = '' }: Props = $props()
 
   let renderedComponents = $state(new Map<string, Component<Record<string, unknown>>>())
   let renderErrors = $state(new Map<string, string>())
@@ -35,24 +34,17 @@
   )
 
   let allContributions = $derived(resolveContributions(enabledContributionSources))
-  let slotContributions = $derived.by(() => {
-    const baseContributions = slotId
-      ? resolveContributionsForSlot(allContributions, slotType, slotId)
-      : allContributions[slotType]
-
-    if (slotType === 'sidebarPanels' && panelSide) {
-      return baseContributions.filter((contribution) => contribution.side === panelSide)
-    }
-
-    return baseContributions
-  })
+  let slotContributions = $derived.by(() => slotId
+    ? resolveContributionsForSlot(allContributions, slotType, slotId)
+    : allContributions[slotType]
+  )
 
   function getContributionComponent(contrib: (typeof slotContributions)[number]): PluginComponentSource<Record<string, unknown>> | undefined {
     if (slotType === 'views') {
       return getRegisteredComponent(makePluginViewKey(contrib.pluginId, contrib.contributionId))
     }
 
-    if (slotType === 'taskPaneTabs' || slotType === 'sidebarPanels' || slotType === 'settingsSections') {
+    if (slotType === 'taskPaneTabs' || slotType === 'settingsSections') {
       return getRegisteredRenderableComponent(slotType, contrib.namespacedId)
     }
 
@@ -77,7 +69,7 @@
     renderedComponents = new Map()
     renderErrors = new Map()
 
-    if ((slotType !== 'views' && slotType !== 'taskPaneTabs' && slotType !== 'sidebarPanels' && slotType !== 'settingsSections') || slotContributions.length === 0) {
+    if ((slotType !== 'views' && slotType !== 'taskPaneTabs' && slotType !== 'settingsSections') || slotContributions.length === 0) {
       return
     }
 
