@@ -57,7 +57,7 @@ describe('github-sync plugin', () => {
     expect(subscriptions.add).toHaveBeenCalledWith(expect.objectContaining({ dispose: expect.any(Function) }))
 
     const refreshRegistration = vi.mocked(api.commands.register).mock.calls[0]?.[0]
-    await refreshRegistration?.handler()
+    await refreshRegistration?.handler(undefined)
     expect(invokeGlobal).toHaveBeenCalledWith('openforge.forceGithubSync', undefined)
     expect(invokeGlobal).toHaveBeenCalledWith('openforge.getNavigation', undefined)
     expect(onGlobal).toHaveBeenCalledWith('openforge.navigation-changed', expect.any(Function))
