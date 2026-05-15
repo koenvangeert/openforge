@@ -201,8 +201,18 @@ describe('runtime contribution registry', () => {
       handler: async (payload) => ({ synced: (payload as { projectId: string }).projectId.length }),
     })
 
+    frontend.commands.register({
+      id: 'batch',
+      title: 'Batch Pull Requests',
+      input: { type: 'array', items: { type: 'integer' } },
+      output: { type: 'array', items: { type: 'string' } },
+      handler: async (payload) => (payload as number[]).map(String),
+    })
+
     await expect(frontend.commands.invoke('sync', { projectId: 'P-1' })).resolves.toEqual({ synced: 3 })
     await expect(frontend.commands.invoke('sync', {})).rejects.toThrow(/github\.sync input.*projectId/i)
+    await expect(frontend.commands.invoke('batch', [1, 2])).resolves.toEqual(['1', '2'])
+    await expect(frontend.commands.invoke('batch', [1, '2'])).rejects.toThrow(/github\.batch input\[1\].*integer/i)
 
     await expect(frontend.commands.list()).resolves.toMatchObject([
       {
@@ -211,6 +221,12 @@ describe('runtime contribution registry', () => {
         pluginId: 'github',
         title: 'Sync Pull Requests',
         shortcut: { key: 'mod+shift+s', scope: 'project' },
+      },
+      {
+        id: 'batch',
+        qualifiedId: 'github.batch',
+        pluginId: 'github',
+        title: 'Batch Pull Requests',
       },
     ])
     expect((await frontend.commands.list())[0]).not.toHaveProperty('handler')

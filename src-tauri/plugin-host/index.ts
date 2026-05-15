@@ -1,6 +1,7 @@
 import { createInterface } from 'node:readline'
 import { pathToFileURL } from 'node:url'
-import type { CommandDescriptor, CommandRegistration, JsonSchema, OpenForgePackageMetadata, PluginStorage, SubscriptionSink } from '@openforge/plugin-sdk'
+import { validateSchemaValue } from '@openforge/plugin-runtime/commandValidation'
+import type { CommandDescriptor, CommandRegistration, OpenForgePackageMetadata, PluginStorage, SubscriptionSink } from '@openforge/plugin-sdk'
 import type { BackendMethodRegistration, BackendOpenForgeAPI, BackendPlugin, BackendPluginContext, BackgroundServiceRegistration, Disposable, OpenForgeContextSnapshot } from '@openforge/plugin-sdk/backend'
 
 type JsonRpcId = number | null | undefined
@@ -116,53 +117,6 @@ const DEFAULT_CRASH_LOOP_WINDOW_MS = 60_000
 
 const globalCommands = new Map<string, RuntimeBackendCommand>()
 const globalEventHandlers = new Map<string, Set<RuntimeEventHandler>>()
-
-function schemaTypeMatches(expected: string, value: unknown): boolean {
-  switch (expected) {
-    case 'string': return typeof value === 'string'
-    case 'number': return typeof value === 'number' && Number.isFinite(value)
-    case 'integer': return Number.isInteger(value)
-    case 'boolean': return typeof value === 'boolean'
-    case 'object': return value !== null && typeof value === 'object' && !Array.isArray(value)
-    case 'array': return Array.isArray(value)
-    case 'null': return value === null
-    default: return true
-  }
-}
-
-function validateSchemaValue(schema: JsonSchema | undefined, value: unknown, label: string): void {
-  if (!schema) return
-  const oneOf = Array.isArray(schema.oneOf) ? schema.oneOf : Array.isArray(schema.anyOf) ? schema.anyOf : null
-  if (oneOf) {
-    for (const candidate of oneOf) {
-      try {
-        validateSchemaValue(candidate as JsonSchema, value, label)
-        return
-      } catch {
-        // Try the next schema candidate.
-      }
-    }
-    throw new Error(`${label} does not match any allowed schema`)
-  }
-  if (typeof schema.type === 'string' && !schemaTypeMatches(schema.type, value)) {
-    throw new Error(`${label} expected ${schema.type}`)
-  }
-  if (schema.type === 'object' && value !== null && typeof value === 'object' && !Array.isArray(value)) {
-    const objectValue = value as Record<string, unknown>
-    const required = Array.isArray(schema.required) ? schema.required : []
-    for (const key of required) {
-      if (typeof key === 'string' && !(key in objectValue)) {
-        throw new Error(`${label} missing required property ${key}`)
-      }
-    }
-    const properties = schema.properties && typeof schema.properties === 'object' && !Array.isArray(schema.properties)
-      ? schema.properties as Record<string, JsonSchema>
-      : {}
-    for (const [key, propertySchema] of Object.entries(properties)) {
-      if (key in objectValue) validateSchemaValue(propertySchema, objectValue[key], `${label}.${key}`)
-    }
-  }
-}
 
 function commandDescriptor(command: RuntimeBackendCommand): CommandDescriptor {
   return {

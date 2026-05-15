@@ -50,6 +50,15 @@ describe('plugin-host backend runtime', () => {
               return { ok: true }
             }
           }))
+          context.subscriptions.add(openforge.commands.register({
+            id: 'batch',
+            title: 'Backend Batch',
+            input: { type: 'array', items: { type: 'integer' } },
+            output: { type: 'array', items: { type: 'string' } },
+            async handler(input) {
+              return input.map(String)
+            }
+          }))
           const events = []
           context.subscriptions.add(openforge.events.onGlobal('backend.sync.finished', event => events.push(event)))
           context.subscriptions.add(openforge.backend.registerMethod('events', { handler() { return events } }))
@@ -61,7 +70,12 @@ describe('plugin-host backend runtime', () => {
     await runtime.activateBackend({ pluginId: 'backend', backendPath })
     await expect(runtime.invokeCommand({ pluginId: 'backend', command: 'sync', payload: { projectId: 'P-1' } })).resolves.toEqual({ ok: true })
     await expect(runtime.invokeCommand({ pluginId: 'backend', command: 'sync', payload: {} })).rejects.toThrow(/backend\.sync input.*projectId/i)
-    await expect(runtime.listCommands()).resolves.toMatchObject([{ id: 'sync', qualifiedId: 'backend.sync', pluginId: 'backend', title: 'Backend Sync' }])
+    await expect(runtime.invokeCommand({ pluginId: 'backend', command: 'batch', payload: [1, 2] })).resolves.toEqual(['1', '2'])
+    await expect(runtime.invokeCommand({ pluginId: 'backend', command: 'batch', payload: [1, '2'] })).rejects.toThrow(/backend\.batch input\[1\].*integer/i)
+    await expect(runtime.listCommands()).resolves.toMatchObject([
+      { id: 'sync', qualifiedId: 'backend.sync', pluginId: 'backend', title: 'Backend Sync' },
+      { id: 'batch', qualifiedId: 'backend.batch', pluginId: 'backend', title: 'Backend Batch' },
+    ])
     expect(await runtime.invokeBackend({ pluginId: 'backend', command: 'events' })).toEqual([{ pluginId: 'backend', projectId: 'P-1' }])
   })
 
