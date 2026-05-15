@@ -7,10 +7,11 @@
   import { makePluginViewKey } from '../../lib/plugin/types'
   import { getRegisteredComponent, getRegisteredRenderableComponent, resolvePluginComponent } from '../../lib/plugin/componentRegistry'
   import type { PluginComponentSource } from '../../lib/plugin/componentRegistry'
+  import type { PluginSlotType } from '../../lib/plugin/renderableSlotTypes'
   import { activatePlugin, getPluginRenderProps } from '../../lib/plugin/pluginRegistry'
 
   interface Props {
-    slotType: 'views' | 'taskPaneTabs' | 'commands' | 'settingsSections' | 'backgroundServices'
+    slotType: PluginSlotType
     slotId?: string
     taskId?: string
     projectId?: string | null
@@ -69,7 +70,7 @@
     renderedComponents = new Map()
     renderErrors = new Map()
 
-    if ((slotType !== 'views' && slotType !== 'taskPaneTabs' && slotType !== 'settingsSections') || slotContributions.length === 0) {
+    if (slotContributions.length === 0) {
       return
     }
 

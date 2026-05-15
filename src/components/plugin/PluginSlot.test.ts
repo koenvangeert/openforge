@@ -1,6 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/svelte'
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import PluginSlot from './PluginSlot.svelte'
+import type { PluginSlotType } from '../../lib/plugin/renderableSlotTypes'
 import PluginSlotTestView from './PluginSlotTestView.svelte'
 import PluginSlotCrashingView from './PluginSlotCrashingView.svelte'
 import PluginSlotRuntimePropsView from './PluginSlotRuntimePropsView.svelte'
@@ -21,6 +22,16 @@ vi.mock('../../lib/plugin/pluginRegistry', () => ({
     context: { pluginId, projectId: options.projectId, taskId: options.taskId ?? null },
   }),
 }))
+
+function acceptsPluginSlotType(_slotType: PluginSlotType): void {}
+
+acceptsPluginSlotType('views')
+acceptsPluginSlotType('taskPaneTabs')
+acceptsPluginSlotType('settingsSections')
+// @ts-expect-error PluginSlot only renders runtime contribution slots, not commands.
+acceptsPluginSlotType('commands')
+// @ts-expect-error PluginSlot only renders runtime contribution slots, not background services.
+acceptsPluginSlotType('backgroundServices')
 
 function makeManifest(pluginId: string = 'test-plugin'): PluginManifest {
   return {
