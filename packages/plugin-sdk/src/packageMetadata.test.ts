@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, expectTypeOf, it, vi } from 'vitest'
 
 import {
   MAX_SUPPORTED_API_VERSION,
@@ -11,6 +11,7 @@ import {
   isSupportedOpenForgeApiVersion,
   validateOpenForgePackageMetadata,
 } from './index'
+import type { OpenForgePackageMetadata, SupportedOpenForgeApiVersion } from './index'
 
 function validMetadata(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
@@ -94,6 +95,13 @@ describe('package.json#openforge metadata contract', () => {
     expect(OPENFORGE_PACKAGE_METADATA_SCHEMA.properties).not.toHaveProperty('contributes')
     expect(OPENFORGE_PACKAGE_METADATA_SCHEMA.additionalProperties).toBe(false)
     expect(OPENFORGE_PACKAGE_METADATA_SCHEMA.properties.apiVersion).toEqual({ enum: [1] })
+  })
+
+  it('keeps public apiVersion types as literal supported version unions', () => {
+    expectTypeOf<SupportedOpenForgeApiVersion>().toEqualTypeOf<1>()
+    expectTypeOf<OpenForgePackageMetadata['apiVersion']>().toEqualTypeOf<1>()
+    expectTypeOf<typeof OPENFORGE_PLUGIN_API_VERSION>().toEqualTypeOf<1>()
+    expectTypeOf<typeof SUPPORTED_OPENFORGE_API_VERSIONS[number]>().toEqualTypeOf<1>()
   })
 
   it('derives TypeScript validator constants from schema enum values', async () => {

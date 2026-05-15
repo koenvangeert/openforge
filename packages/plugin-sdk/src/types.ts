@@ -11,22 +11,22 @@ import type {
   TaskWorkspaceInfo,
 } from './domain'
 
-function readSupportedOpenForgeApiVersions(): [number, ...number[]] {
+export type SupportedOpenForgeApiVersion = 1
+
+function readSupportedOpenForgeApiVersions(): [SupportedOpenForgeApiVersion, ...SupportedOpenForgeApiVersion[]] {
   const versions = packageMetadataSchemaData.properties.apiVersion.enum
 
   if (!Array.isArray(versions) || versions.length === 0 || !versions.every((version) => typeof version === 'number' && Number.isInteger(version))) {
     throw new Error('openforgePackageMetadataSchema.json properties.apiVersion.enum must contain at least one integer')
   }
 
-  return [...versions] as [number, ...number[]]
+  return [...versions] as [SupportedOpenForgeApiVersion, ...SupportedOpenForgeApiVersion[]]
 }
 
 export const SUPPORTED_OPENFORGE_API_VERSIONS = Object.freeze(readSupportedOpenForgeApiVersions())
-export const OPENFORGE_PLUGIN_API_VERSION = SUPPORTED_OPENFORGE_API_VERSIONS[0]
-export const MIN_SUPPORTED_API_VERSION = Math.min(...SUPPORTED_OPENFORGE_API_VERSIONS)
-export const MAX_SUPPORTED_API_VERSION = Math.max(...SUPPORTED_OPENFORGE_API_VERSIONS)
-
-export type SupportedOpenForgeApiVersion = typeof SUPPORTED_OPENFORGE_API_VERSIONS[number]
+export const OPENFORGE_PLUGIN_API_VERSION: SupportedOpenForgeApiVersion = SUPPORTED_OPENFORGE_API_VERSIONS[0]
+export const MIN_SUPPORTED_API_VERSION = Math.min(...SUPPORTED_OPENFORGE_API_VERSIONS) as SupportedOpenForgeApiVersion
+export const MAX_SUPPORTED_API_VERSION = Math.max(...SUPPORTED_OPENFORGE_API_VERSIONS) as SupportedOpenForgeApiVersion
 
 export type JsonPrimitive = string | number | boolean | null
 export type JsonValue = JsonPrimitive | JsonObject | JsonValue[]
