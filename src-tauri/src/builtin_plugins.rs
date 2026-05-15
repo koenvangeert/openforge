@@ -37,10 +37,6 @@ pub(crate) fn find(plugin_id: &str) -> Option<&'static BuiltinPlugin> {
     BUILTIN_PLUGINS.iter().find(|plugin| plugin.id == plugin_id)
 }
 
-pub(crate) fn is_known(plugin_id: &str) -> bool {
-    find(plugin_id).is_some()
-}
-
 pub(crate) fn sentinel_install_path(plugin_id: &str) -> String {
     format!("{BUILTIN_INSTALL_PREFIX}{plugin_id}")
 }
@@ -64,7 +60,7 @@ fn install_path_from_workspace_root(
 
 #[cfg(test)]
 mod tests {
-    use super::{find, has_sentinel_install_path, install_path_from_workspace_root, is_known};
+    use super::{find, has_sentinel_install_path, install_path_from_workspace_root};
     use std::path::Path;
 
     #[test]
@@ -86,7 +82,6 @@ mod tests {
 
     #[test]
     fn builtin_detection_requires_known_id_and_exact_sentinel() {
-        assert!(is_known("com.openforge.github-sync"));
         assert!(has_sentinel_install_path(
             "com.openforge.github-sync",
             "builtin:com.openforge.github-sync"

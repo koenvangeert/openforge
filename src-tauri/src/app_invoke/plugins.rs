@@ -2,7 +2,7 @@ use super::*;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct AppInstallPluginRequest {
+struct AppRegisterBuiltinPluginRequest {
     id: String,
     name: String,
     version: String,
@@ -32,12 +32,32 @@ fn empty_package_metadata() -> String {
     "{}".to_string()
 }
 
-impl AppInstallPluginRequest {
-    fn into_plugin_row(self) -> db::PluginRow {
-        let is_builtin = crate::builtin_plugins::is_known(&self.id)
-            && crate::builtin_plugins::has_sentinel_install_path(&self.id, &self.install_path);
+impl AppRegisterBuiltinPluginRequest {
+    fn into_builtin_plugin_row(self) -> Result<db::PluginRow, String> {
+        let is_builtin =
+            crate::builtin_plugins::has_sentinel_install_path(&self.id, &self.install_path);
+        if !is_builtin {
+            return Err(
+                "trusted built-in plugin registration requires a known built-in plugin id and matching builtin: install path"
+                    .to_string(),
+            );
+        }
 
-        db::PluginRow {
+        if self.source_kind != "builtin" {
+            return Err(
+                "trusted built-in plugin registration requires sourceKind builtin".to_string(),
+            );
+        }
+
+        if !self.source_spec.is_empty() && self.source_spec != self.id {
+            return Err(
+                "trusted built-in plugin registration requires sourceSpec to match the plugin id"
+                    .to_string(),
+            );
+        }
+
+        Ok(db::PluginRow {
+            source_spec: self.id.clone(),
             id: self.id,
             name: self.name,
             version: self.version,
@@ -48,12 +68,11 @@ impl AppInstallPluginRequest {
             frontend_entry: self.frontend_entry,
             backend_entry: self.backend_entry,
             install_path: self.install_path,
-            source_kind: self.source_kind,
-            source_spec: self.source_spec,
+            source_kind: "builtin".to_string(),
             package_metadata: self.package_metadata,
             installed_at: self.installed_at,
-            is_builtin,
-        }
+            is_builtin: true,
+        })
     }
 }
 
@@ -94,6 +113,11 @@ fn plugin_platform(
 fn plugin_platform_error_status(message: &str) -> StatusCode {
     if message.starts_with("Unknown plugin:") {
         StatusCode::NOT_FOUND
+    } else if message.contains("built-in plugin")
+        || message.contains("sourceKind builtin")
+        || message.contains("sourceSpec to match")
+    {
+        StatusCode::BAD_REQUEST
     } else if message.contains("backend not configured")
         || message.contains("backend entry")
         || message.contains("install root")
@@ -115,11 +139,13 @@ pub(super) async fn handle_app_plugin_command(
     request: &AppInvokeRequest,
 ) -> Result<Option<serde_json::Value>, (StatusCode, String)> {
     let value = match request.command.as_str() {
-        "install_plugin" => {
-            let plugin = payload_field::<AppInstallPluginRequest>(&request.payload, "plugin")?
-                .into_plugin_row();
+        "register_builtin_plugin" => {
+            let plugin =
+                payload_field::<AppRegisterBuiltinPluginRequest>(&request.payload, "plugin")?
+                    .into_builtin_plugin_row()
+                    .map_err(map_plugin_platform_error)?;
             plugin_platform(state, false)?
-                .install_plugin(&plugin)
+                .register_builtin_plugin(&plugin)
                 .map_err(map_plugin_platform_error)?;
             serde_json::Value::Null
         }

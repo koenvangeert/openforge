@@ -18,10 +18,10 @@ describe('App startup data loading', () => {
   installAppTestLifecycle()
   it('still loads projects when builtin plugin persistence fails', async () => {
     await withSuppressedExpectedConsoleError(async () => {
-      const { installPlugin, getProjects } = await import('./lib/ipc')
+      const { registerBuiltinPlugin, getProjects } = await import('./lib/ipc')
       const stores = await import('./lib/stores')
 
-      vi.mocked(installPlugin).mockRejectedValueOnce(new Error('Failed to install plugin: no such table: plugins'))
+      vi.mocked(registerBuiltinPlugin).mockRejectedValueOnce(new Error('Failed to register built-in plugin: no such table: plugins'))
 
       const App = (await import('./App.svelte')).default
       render(App)

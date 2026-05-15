@@ -481,7 +481,7 @@ function normalizePluginRow(raw: PluginRowSnake): NormalizedPluginRow {
   };
 }
 
-export async function installPlugin(plugin: {
+export async function registerBuiltinPlugin(plugin: {
   id: string;
   name: string;
   version: string;
@@ -498,7 +498,7 @@ export async function installPlugin(plugin: {
   installedAt: number;
   isBuiltin: boolean;
 }): Promise<void> {
-  return invoke("install_plugin", {
+  return invoke("register_builtin_plugin", {
     plugin: {
       id: plugin.id,
       name: plugin.name,

@@ -28,7 +28,7 @@ import {
   getTaskDetail,
   getTasksForProject,
   getTaskWorkspace,
-  installPlugin,
+  registerBuiltinPlugin,
   killPty,
   getLatestSession,
   listOpenCodeSkills,
@@ -733,7 +733,7 @@ export async function initializePluginRuntime(): Promise<void> {
 
   for (const manifest of BUILTIN_PLUGIN_MANIFESTS) {
     const packageMetadata = getPackageMetadataForPlugin(manifest.id, manifest)
-    await installPlugin({
+    await registerBuiltinPlugin({
       id: manifest.id,
       name: manifest.name,
       version: manifest.version,

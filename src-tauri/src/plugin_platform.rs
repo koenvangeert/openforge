@@ -31,10 +31,20 @@ impl<'a> PluginPlatform<'a> {
         }
     }
 
-    pub(crate) fn install_plugin(&self, plugin: &db::PluginRow) -> Result<(), String> {
+    pub(crate) fn register_builtin_plugin(&self, plugin: &db::PluginRow) -> Result<(), String> {
+        if !plugin.is_builtin
+            || plugin.source_kind != "builtin"
+            || !crate::builtin_plugins::has_sentinel_install_path(&plugin.id, &plugin.install_path)
+        {
+            return Err(
+                "trusted built-in plugin registration requires a known built-in plugin row"
+                    .to_string(),
+            );
+        }
+
         let db = db::acquire_db(self.db);
         db.install_plugin(plugin)
-            .map_err(|error| format!("Failed to install plugin: {error}"))
+            .map_err(|error| format!("Failed to register built-in plugin: {error}"))
     }
 
     pub(crate) fn install_local_plugin_bundle(

@@ -2,7 +2,7 @@ import { cleanup } from '@testing-library/svelte'
 import { vi, beforeEach, afterEach } from 'vitest'
 import { get, writable } from 'svelte/store'
 import type { Task, AgentSession, Project, ProjectAttention, PullRequestInfo, CheckpointNotification, CiFailureNotification, RateLimitNotification } from './lib/types'
-import { forceGithubSync, installPlugin } from './lib/ipc'
+import { forceGithubSync, registerBuiltinPlugin } from './lib/ipc'
 
 export const callOrder: string[] = []
 export const installedPluginRows: Array<{
@@ -180,7 +180,7 @@ vi.mock('./lib/stores', () => ({
 }))
 
 vi.mock('./lib/ipc', () => ({
-  installPlugin: vi.fn(async (plugin) => {
+  registerBuiltinPlugin: vi.fn(async (plugin) => {
     persistInstalledPluginRow(plugin)
   }),
   listPlugins: vi.fn(async () => installedPluginRows.map((row) => ({ ...row }))),
@@ -377,7 +377,7 @@ export function installAppTestLifecycle() {
     eventListeners.clear()
     closeRequestedHandler = null
     vi.clearAllMocks()
-    vi.mocked(installPlugin).mockImplementation(async (plugin) => {
+    vi.mocked(registerBuiltinPlugin).mockImplementation(async (plugin) => {
       persistInstalledPluginRow(plugin)
     })
     mockActivatePlugin.mockImplementation(async (pluginId: string) => {
