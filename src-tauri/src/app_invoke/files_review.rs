@@ -90,57 +90,90 @@ fn app_file_type_key(path: &std::path::Path) -> String {
         .to_ascii_lowercase()
 }
 
-fn app_detect_file_type(path: &std::path::Path) -> &'static str {
-    let key = app_file_type_key(path);
-    match key.as_str() {
-        "ts" | "tsx" | "js" | "jsx" | "rs" | "py" | "rb" | "go" | "json" | "yaml" | "yml"
-        | "md" | "txt" | "toml" | "css" | "html" | "svelte" | "vue" | "sh" | "bash" | "zsh"
-        | "sql" | "graphql" | "xml" | "csv" | "env" | "gitignore" | "prettierrc" | "eslintrc"
-        | "cfg" | "ini" | "conf" | "log" | "lock" => "text",
-        "png" | "jpg" | "jpeg" | "gif" | "svg" | "webp" | "ico" | "bmp" => "image",
-        "pdf" => "document",
-        _ => "binary",
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum FilePreviewType {
+    Text,
+    Image,
+    Document,
+    Binary,
+}
+
+impl FilePreviewType {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Text => "text",
+            Self::Image => "image",
+            Self::Document => "document",
+            Self::Binary => "binary",
+        }
     }
 }
 
-fn app_mime_type(path: &std::path::Path) -> Option<String> {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct FilePreviewMetadata {
+    preview_type: FilePreviewType,
+    mime_type: Option<&'static str>,
+}
+
+impl FilePreviewMetadata {
+    const fn new(preview_type: FilePreviewType, mime_type: &'static str) -> Self {
+        Self {
+            preview_type,
+            mime_type: Some(mime_type),
+        }
+    }
+
+    const fn binary() -> Self {
+        Self {
+            preview_type: FilePreviewType::Binary,
+            mime_type: None,
+        }
+    }
+
+    fn mime_type_string(self) -> Option<String> {
+        self.mime_type.map(str::to_string)
+    }
+}
+
+fn app_file_preview_metadata(path: &std::path::Path) -> FilePreviewMetadata {
     let key = app_file_type_key(path);
-    let mime = match key.as_str() {
-        "ts" | "tsx" => "text/typescript",
-        "js" | "jsx" => "application/javascript",
-        "rs" => "text/rust",
-        "py" => "text/python",
-        "rb" => "text/ruby",
-        "go" => "text/go",
-        "json" => "application/json",
-        "yaml" | "yml" => "application/yaml",
-        "md" => "text/markdown",
-        "txt" => "text/plain",
-        "toml" => "text/toml",
-        "css" => "text/css",
-        "html" => "text/html",
-        "svelte" => "text/svelte",
-        "vue" => "text/vue",
-        "sh" | "bash" | "zsh" => "text/shell",
-        "sql" => "text/sql",
-        "graphql" => "text/graphql",
-        "xml" => "application/xml",
-        "csv" => "text/csv",
-        "env" | "gitignore" | "prettierrc" | "eslintrc" => "text/plain",
-        "cfg" | "ini" | "conf" => "text/plain",
-        "log" => "text/plain",
-        "lock" => "text/plain",
-        "png" => "image/png",
-        "jpg" | "jpeg" => "image/jpeg",
-        "gif" => "image/gif",
-        "svg" => "image/svg+xml",
-        "webp" => "image/webp",
-        "ico" => "image/x-icon",
-        "bmp" => "image/bmp",
-        "pdf" => "application/pdf",
-        _ => return None,
-    };
-    Some(mime.to_string())
+    match key.as_str() {
+        "ts" | "tsx" => FilePreviewMetadata::new(FilePreviewType::Text, "text/typescript"),
+        "js" | "jsx" => FilePreviewMetadata::new(FilePreviewType::Text, "application/javascript"),
+        "rs" => FilePreviewMetadata::new(FilePreviewType::Text, "text/rust"),
+        "py" => FilePreviewMetadata::new(FilePreviewType::Text, "text/python"),
+        "rb" => FilePreviewMetadata::new(FilePreviewType::Text, "text/ruby"),
+        "go" => FilePreviewMetadata::new(FilePreviewType::Text, "text/go"),
+        "json" => FilePreviewMetadata::new(FilePreviewType::Text, "application/json"),
+        "yaml" | "yml" => FilePreviewMetadata::new(FilePreviewType::Text, "application/yaml"),
+        "md" => FilePreviewMetadata::new(FilePreviewType::Text, "text/markdown"),
+        "txt" => FilePreviewMetadata::new(FilePreviewType::Text, "text/plain"),
+        "toml" => FilePreviewMetadata::new(FilePreviewType::Text, "text/toml"),
+        "css" => FilePreviewMetadata::new(FilePreviewType::Text, "text/css"),
+        "html" => FilePreviewMetadata::new(FilePreviewType::Text, "text/html"),
+        "svelte" => FilePreviewMetadata::new(FilePreviewType::Text, "text/svelte"),
+        "vue" => FilePreviewMetadata::new(FilePreviewType::Text, "text/vue"),
+        "sh" | "bash" | "zsh" => FilePreviewMetadata::new(FilePreviewType::Text, "text/shell"),
+        "sql" => FilePreviewMetadata::new(FilePreviewType::Text, "text/sql"),
+        "graphql" => FilePreviewMetadata::new(FilePreviewType::Text, "text/graphql"),
+        "xml" => FilePreviewMetadata::new(FilePreviewType::Text, "application/xml"),
+        "csv" => FilePreviewMetadata::new(FilePreviewType::Text, "text/csv"),
+        "env" | "gitignore" | "prettierrc" | "eslintrc" => {
+            FilePreviewMetadata::new(FilePreviewType::Text, "text/plain")
+        }
+        "cfg" | "ini" | "conf" => FilePreviewMetadata::new(FilePreviewType::Text, "text/plain"),
+        "log" => FilePreviewMetadata::new(FilePreviewType::Text, "text/plain"),
+        "lock" => FilePreviewMetadata::new(FilePreviewType::Text, "text/plain"),
+        "png" => FilePreviewMetadata::new(FilePreviewType::Image, "image/png"),
+        "jpg" | "jpeg" => FilePreviewMetadata::new(FilePreviewType::Image, "image/jpeg"),
+        "gif" => FilePreviewMetadata::new(FilePreviewType::Image, "image/gif"),
+        "svg" => FilePreviewMetadata::new(FilePreviewType::Image, "image/svg+xml"),
+        "webp" => FilePreviewMetadata::new(FilePreviewType::Image, "image/webp"),
+        "ico" => FilePreviewMetadata::new(FilePreviewType::Image, "image/x-icon"),
+        "bmp" => FilePreviewMetadata::new(FilePreviewType::Image, "image/bmp"),
+        "pdf" => FilePreviewMetadata::new(FilePreviewType::Document, "application/pdf"),
+        _ => FilePreviewMetadata::binary(),
+    }
 }
 
 async fn app_read_file_preview(
@@ -160,9 +193,10 @@ async fn app_read_file_preview(
     }
 
     let size = metadata.len();
-    let mime_type = app_mime_type(full_path);
-    match app_detect_file_type(full_path) {
-        "text" => {
+    let preview_metadata = app_file_preview_metadata(full_path);
+    let mime_type = preview_metadata.mime_type_string();
+    match preview_metadata.preview_type {
+        FilePreviewType::Text => {
             const MAX_TEXT_SIZE: u64 = 1_048_576;
             if size > MAX_TEXT_SIZE {
                 return Ok(AppFileContent {
@@ -191,7 +225,7 @@ async fn app_read_file_preview(
                 size,
             })
         }
-        "image" => {
+        FilePreviewType::Image => {
             let bytes = tokio::fs::read(full_path).await.map_err(|e| {
                 (
                     StatusCode::INTERNAL_SERVER_ERROR,
@@ -207,7 +241,7 @@ async fn app_read_file_preview(
             })
         }
         file_type => Ok(AppFileContent {
-            r#type: file_type.to_string(),
+            r#type: file_type.as_str().to_string(),
             content: String::new(),
             mime_type,
             size,
@@ -532,4 +566,38 @@ pub(super) async fn handle_app_files_review_command(
     };
 
     Ok(Some(value))
+}
+
+#[cfg(test)]
+mod file_preview_metadata_tests {
+    use super::*;
+
+    #[test]
+    fn derives_preview_type_and_mime_from_shared_metadata() {
+        let cases = [
+            (
+                "component.svelte",
+                FilePreviewType::Text,
+                Some("text/svelte"),
+            ),
+            (".gitignore", FilePreviewType::Text, Some("text/plain")),
+            ("photo.jpeg", FilePreviewType::Image, Some("image/jpeg")),
+            (
+                "design.pdf",
+                FilePreviewType::Document,
+                Some("application/pdf"),
+            ),
+            ("archive.bin", FilePreviewType::Binary, None),
+            ("extensionless", FilePreviewType::Binary, None),
+        ];
+
+        for (path, expected_type, expected_mime) in cases {
+            let metadata = app_file_preview_metadata(std::path::Path::new(path));
+            assert_eq!(
+                metadata.preview_type, expected_type,
+                "preview type for {path}"
+            );
+            assert_eq!(metadata.mime_type, expected_mime, "MIME type for {path}");
+        }
+    }
 }
