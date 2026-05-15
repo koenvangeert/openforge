@@ -12,7 +12,6 @@ const NPM_PATH_ENV: &str = "OPENFORGE_NPM_PATH";
 const GIT_PATH_ENV: &str = "OPENFORGE_GIT_PATH";
 const OPENFORGE_PACKAGE_METADATA_SCHEMA_JSON: &str =
     include_str!("../../packages/plugin-sdk/src/openforgePackageMetadataSchema.json");
-const SUPPORTED_API_VERSION: i64 = 1;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum PackageSourceSpec {
@@ -117,6 +116,50 @@ struct OpenForgePackageMetadata {
 struct LoadedPluginPackage {
     package_json: PackageJsonFile,
     package_metadata_json: String,
+}
+
+#[derive(Debug)]
+struct PackageMetadataSchemaRules {
+    allowed_metadata_fields: Vec<String>,
+    required_metadata_fields: Vec<String>,
+    string_metadata_fields: Vec<String>,
+    supported_api_versions: Vec<i64>,
+    id_pattern: Regex,
+    allowed_capabilities: Vec<String>,
+}
+
+impl PackageMetadataSchemaRules {
+    fn allows_metadata_field(&self, field: &str) -> bool {
+        self.allowed_metadata_fields
+            .iter()
+            .any(|allowed_field| allowed_field == field)
+    }
+
+    fn requires_metadata_field(&self, field: &str) -> bool {
+        self.required_metadata_fields
+            .iter()
+            .any(|required_field| required_field == field)
+    }
+
+    fn supports_api_version(&self, api_version: i64) -> bool {
+        self.supported_api_versions
+            .iter()
+            .any(|supported_version| *supported_version == api_version)
+    }
+
+    fn supports_capability(&self, capability: &str) -> bool {
+        self.allowed_capabilities
+            .iter()
+            .any(|allowed_capability| allowed_capability == capability)
+    }
+
+    fn supported_api_versions_label(&self) -> String {
+        self.supported_api_versions
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
 }
 
 #[derive(Debug)]
@@ -414,37 +457,28 @@ fn validate_package_json_shape(value: &Value) -> Result<(), String> {
         return Err("package.json openforge.contributes is not supported; register contributions at runtime".to_string());
     }
 
+    let schema_rules = package_metadata_schema_rules()?;
+
     for key in openforge.keys() {
-        if !allowed_openforge_metadata_fields().contains(&key.as_str()) {
+        if !schema_rules.allows_metadata_field(key) {
             return Err(format!(
                 "package.json openforge.{key} is not supported by the OpenForge package metadata schema"
             ));
         }
     }
 
-    validate_non_empty_json_string(openforge, "id", "package.json openforge.id")?;
-    validate_non_empty_json_string(
-        openforge,
-        "displayName",
-        "package.json openforge.displayName",
-    )?;
-    validate_non_empty_json_string(
-        openforge,
-        "description",
-        "package.json openforge.description",
-    )?;
-
-    match openforge.get("apiVersion").and_then(Value::as_i64) {
-        Some(SUPPORTED_API_VERSION) => {}
-        Some(version) => {
+    for key in &schema_rules.required_metadata_fields {
+        if key == "apiVersion" {
+            continue;
+        }
+        if !openforge.contains_key(key) {
             return Err(format!(
-                "package.json openforge.apiVersion {version} is not supported (supported: {SUPPORTED_API_VERSION})"
+                "package.json openforge.{key} is required by the OpenForge package metadata schema"
             ));
         }
-        None => return Err("package.json openforge.apiVersion must be 1".to_string()),
     }
 
-    for key in ["icon", "frontend", "backend"] {
+    for key in &schema_rules.string_metadata_fields {
         if openforge.get(key).is_some() {
             validate_non_empty_json_string(
                 openforge,
@@ -452,6 +486,23 @@ fn validate_package_json_shape(value: &Value) -> Result<(), String> {
                 &format!("package.json openforge.{key}"),
             )?;
         }
+    }
+
+    match openforge.get("apiVersion").and_then(Value::as_i64) {
+        Some(version) if schema_rules.supports_api_version(version) => {}
+        Some(version) => {
+            return Err(format!(
+                "package.json openforge.apiVersion {version} is not supported (supported: {})",
+                schema_rules.supported_api_versions_label()
+            ));
+        }
+        None if schema_rules.requires_metadata_field("apiVersion") => {
+            return Err(format!(
+                "package.json openforge.apiVersion must be {}",
+                schema_rules.supported_api_versions_label()
+            ));
+        }
+        None => {}
     }
 
     if let Some(requires) = openforge.get("requires") {
@@ -462,7 +513,7 @@ fn validate_package_json_shape(value: &Value) -> Result<(), String> {
             let capability = capability.as_str().ok_or_else(|| {
                 format!("package.json openforge.requires[{index}] must be a string")
             })?;
-            if !allowed_capabilities().contains(&capability) {
+            if !schema_rules.supports_capability(capability) {
                 return Err(format!(
                     "package.json openforge.requires[{index}] has unknown capability \"{capability}\""
                 ));
@@ -474,17 +525,20 @@ fn validate_package_json_shape(value: &Value) -> Result<(), String> {
 }
 
 fn validate_package(package: &PackageJsonFile, dir: &Path) -> Result<(), String> {
-    if !plugin_id_pattern().is_match(&package.openforge.id) {
+    let schema_rules = package_metadata_schema_rules()?;
+
+    if !schema_rules.id_pattern.is_match(&package.openforge.id) {
         return Err(format!(
             "package.json openforge.id \"{}\" must match the OpenForge package metadata schema",
             package.openforge.id
         ));
     }
 
-    if package.openforge.api_version != SUPPORTED_API_VERSION {
+    if !schema_rules.supports_api_version(package.openforge.api_version) {
         return Err(format!(
-            "package.json openforge.apiVersion {} is not supported (supported: {SUPPORTED_API_VERSION})",
-            package.openforge.api_version
+            "package.json openforge.apiVersion {} is not supported (supported: {})",
+            package.openforge.api_version,
+            schema_rules.supported_api_versions_label()
         ));
     }
 
@@ -614,50 +668,143 @@ fn validate_non_empty_json_string(
     }
 }
 
-fn allowed_openforge_metadata_fields() -> &'static [&'static str] {
-    static FIELDS: [&str; 8] = [
-        "id",
-        "apiVersion",
-        "displayName",
-        "description",
-        "icon",
-        "frontend",
-        "backend",
-        "requires",
-    ];
-    &FIELDS
+fn package_metadata_schema_rules() -> Result<&'static PackageMetadataSchemaRules, String> {
+    static RULES: OnceLock<Result<PackageMetadataSchemaRules, String>> = OnceLock::new();
+    match RULES.get_or_init(parse_package_metadata_schema_rules) {
+        Ok(rules) => Ok(rules),
+        Err(error) => Err(error.clone()),
+    }
 }
 
-fn allowed_capabilities() -> &'static [&'static str] {
-    static CAPABILITIES: [&str; 18] = [
-        "commands",
-        "events",
-        "views",
-        "taskPane",
-        "settings",
-        "background",
-        "backend",
-        "storage",
-        "context",
-        "tasks",
-        "projects",
-        "fs",
-        "shell",
-        "notifications",
-        "attention",
-        "system.openUrl",
-        "config",
-        "projectConfig",
-    ];
-    &CAPABILITIES
-}
+fn parse_package_metadata_schema_rules() -> Result<PackageMetadataSchemaRules, String> {
+    let schema: Value = serde_json::from_str(OPENFORGE_PACKAGE_METADATA_SCHEMA_JSON)
+        .map_err(|error| format!("failed to parse OpenForge package metadata schema: {error}"))?;
+    let schema = schema
+        .as_object()
+        .ok_or_else(|| "OpenForge package metadata schema must be an object".to_string())?;
+    let properties = schema_object_field(
+        schema,
+        "properties",
+        "OpenForge package metadata schema.properties",
+    )?;
 
-fn plugin_id_pattern() -> &'static Regex {
-    static PATTERN: OnceLock<Regex> = OnceLock::new();
-    PATTERN.get_or_init(|| {
-        Regex::new(r"^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$")
-            .expect("OpenForge package id regex should compile")
+    let allowed_metadata_fields = properties.keys().cloned().collect::<Vec<_>>();
+    let required_metadata_fields = schema_string_array_field(
+        schema,
+        "required",
+        "OpenForge package metadata schema.required",
+    )?;
+    let string_metadata_fields = properties
+        .iter()
+        .filter_map(|(key, property)| {
+            if property.get("type").and_then(Value::as_str) == Some("string") {
+                Some(key.clone())
+            } else {
+                None
+            }
+        })
+        .collect::<Vec<_>>();
+
+    let id_schema = schema_property(properties, "id")?;
+    let id_pattern = id_schema
+        .get("pattern")
+        .and_then(Value::as_str)
+        .ok_or_else(|| {
+            "OpenForge package metadata schema.properties.id.pattern must be a string".to_string()
+        })?;
+    let id_pattern = Regex::new(id_pattern).map_err(|error| {
+        format!("failed to compile OpenForge package id schema pattern: {error}")
+    })?;
+
+    let api_version_schema = schema_property(properties, "apiVersion")?;
+    let supported_api_versions = schema_i64_array_field(
+        api_version_schema,
+        "enum",
+        "OpenForge package metadata schema.properties.apiVersion.enum",
+    )?;
+
+    let requires_schema = schema_property(properties, "requires")?;
+    let requires_items_schema = schema_object_field(
+        requires_schema,
+        "items",
+        "OpenForge package metadata schema.properties.requires.items",
+    )?;
+    let allowed_capabilities = schema_string_array_field(
+        requires_items_schema,
+        "enum",
+        "OpenForge package metadata schema.properties.requires.items.enum",
+    )?;
+
+    Ok(PackageMetadataSchemaRules {
+        allowed_metadata_fields,
+        required_metadata_fields,
+        string_metadata_fields,
+        supported_api_versions,
+        id_pattern,
+        allowed_capabilities,
     })
+}
+
+fn schema_property<'a>(
+    properties: &'a Map<String, Value>,
+    property_name: &str,
+) -> Result<&'a Map<String, Value>, String> {
+    properties
+        .get(property_name)
+        .and_then(Value::as_object)
+        .ok_or_else(|| {
+            format!(
+                "OpenForge package metadata schema.properties.{property_name} must be an object"
+            )
+        })
+}
+
+fn schema_object_field<'a>(
+    object: &'a Map<String, Value>,
+    field_name: &str,
+    label: &str,
+) -> Result<&'a Map<String, Value>, String> {
+    object
+        .get(field_name)
+        .and_then(Value::as_object)
+        .ok_or_else(|| format!("{label} must be an object"))
+}
+
+fn schema_string_array_field(
+    object: &Map<String, Value>,
+    field_name: &str,
+    label: &str,
+) -> Result<Vec<String>, String> {
+    object
+        .get(field_name)
+        .and_then(Value::as_array)
+        .ok_or_else(|| format!("{label} must be an array"))?
+        .iter()
+        .map(|value| {
+            value
+                .as_str()
+                .map(str::to_string)
+                .ok_or_else(|| format!("{label} entries must be strings"))
+        })
+        .collect()
+}
+
+fn schema_i64_array_field(
+    object: &Map<String, Value>,
+    field_name: &str,
+    label: &str,
+) -> Result<Vec<i64>, String> {
+    object
+        .get(field_name)
+        .and_then(Value::as_array)
+        .ok_or_else(|| format!("{label} must be an array"))?
+        .iter()
+        .map(|value| {
+            value
+                .as_i64()
+                .ok_or_else(|| format!("{label} entries must be integers"))
+        })
+        .collect()
 }
 
 fn replace_directory(source: &Path, destination: &Path) -> Result<(), String> {
@@ -853,6 +1000,148 @@ mod tests {
             permissions.set_mode(0o755);
             fs::set_permissions(path, permissions).expect("permissions should set");
         }
+    }
+
+    #[test]
+    fn package_metadata_schema_rules_match_embedded_schema() {
+        let rules = package_metadata_schema_rules().expect("schema rules should parse");
+        let schema: Value = serde_json::from_str(OPENFORGE_PACKAGE_METADATA_SCHEMA_JSON)
+            .expect("embedded schema should parse in test");
+        let properties = schema
+            .get("properties")
+            .and_then(Value::as_object)
+            .expect("schema properties should be an object");
+        let mut expected_fields: Vec<String> = properties.keys().cloned().collect();
+        expected_fields.sort();
+
+        let mut actual_fields = rules.allowed_metadata_fields.clone();
+        actual_fields.sort();
+        assert_eq!(actual_fields, expected_fields);
+
+        let expected_required: Vec<String> = schema
+            .get("required")
+            .and_then(Value::as_array)
+            .expect("schema required should be an array")
+            .iter()
+            .map(|field| {
+                field
+                    .as_str()
+                    .expect("required field should be a string")
+                    .to_string()
+            })
+            .collect();
+        assert_eq!(rules.required_metadata_fields, expected_required);
+
+        assert_eq!(
+            rules.id_pattern.as_str(),
+            properties
+                .get("id")
+                .and_then(|schema| schema.get("pattern"))
+                .and_then(Value::as_str)
+                .expect("id pattern should be in schema")
+        );
+        assert_eq!(
+            rules.supported_api_versions,
+            properties
+                .get("apiVersion")
+                .and_then(|schema| schema.get("enum"))
+                .and_then(Value::as_array)
+                .expect("apiVersion enum should be in schema")
+                .iter()
+                .map(|version| version.as_i64().expect("apiVersion enum must be integers"))
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(
+            rules.allowed_capabilities,
+            properties
+                .get("requires")
+                .and_then(|schema| schema.get("items"))
+                .and_then(|schema| schema.get("enum"))
+                .and_then(Value::as_array)
+                .expect("requires enum should be in schema")
+                .iter()
+                .map(|capability| {
+                    capability
+                        .as_str()
+                        .expect("requires enum values should be strings")
+                        .to_string()
+                })
+                .collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn install_package_source_accepts_schema_declared_capabilities() {
+        for (index, capability) in package_metadata_schema_rules()
+            .expect("schema rules should parse")
+            .allowed_capabilities
+            .iter()
+            .enumerate()
+        {
+            let source = tempdir().expect("source tempdir should create");
+            let managed = tempdir().expect("managed tempdir should create");
+            fs::create_dir_all(source.path().join("dist")).expect("dist dir should create");
+            fs::write(source.path().join("dist/frontend.js"), "export default {};")
+                .expect("frontend should write");
+            write_package_json(
+                source.path(),
+                &format!(
+                    r#"{{"id":"acme.capability.{index}","apiVersion":1,"displayName":"Capability","description":"Capability","frontend":"dist/frontend.js","requires":["{capability}"]}}"#
+                ),
+            );
+
+            install_plugin_package_from_source_spec(
+                &source.path().to_string_lossy(),
+                managed.path(),
+            )
+            .unwrap_or_else(|error| panic!("capability {capability} should install: {error}"));
+        }
+    }
+
+    #[test]
+    fn install_package_source_rejects_unknown_openforge_property() {
+        let source = tempdir().expect("source tempdir should create");
+        let managed = tempdir().expect("managed tempdir should create");
+        fs::create_dir_all(source.path().join("dist")).expect("dist dir should create");
+        fs::write(source.path().join("dist/frontend.js"), "export default {};")
+            .expect("frontend should write");
+        write_package_json(
+            source.path(),
+            r#"{"id":"acme.unknown","apiVersion":1,"displayName":"Unknown","description":"Unknown","frontend":"dist/frontend.js","unexpected":true}"#,
+        );
+
+        let result = install_plugin_package_from_source_spec(
+            &source.path().to_string_lossy(),
+            managed.path(),
+        );
+
+        assert!(result.is_err());
+        assert!(result
+            .expect_err("install should fail")
+            .contains("openforge.unexpected is not supported"));
+    }
+
+    #[test]
+    fn install_package_source_rejects_id_not_matching_schema_pattern() {
+        let source = tempdir().expect("source tempdir should create");
+        let managed = tempdir().expect("managed tempdir should create");
+        fs::create_dir_all(source.path().join("dist")).expect("dist dir should create");
+        fs::write(source.path().join("dist/frontend.js"), "export default {};")
+            .expect("frontend should write");
+        write_package_json(
+            source.path(),
+            r#"{"id":"Acme Invalid","apiVersion":1,"displayName":"Invalid","description":"Invalid","frontend":"dist/frontend.js"}"#,
+        );
+
+        let result = install_plugin_package_from_source_spec(
+            &source.path().to_string_lossy(),
+            managed.path(),
+        );
+
+        assert!(result.is_err());
+        assert!(result
+            .expect_err("install should fail")
+            .contains("must match the OpenForge package metadata schema"));
     }
 
     #[test]
