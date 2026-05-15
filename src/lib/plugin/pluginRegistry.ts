@@ -155,8 +155,8 @@ function runtimeSnapshotToContributionSource(snapshot: RuntimeContributionSnapsh
       title: view.title,
       icon: view.icon,
       shortcut: view.shortcut,
-      showInRail: view.placement === 'rail',
-      railOrder: view.order,
+      placement: view.placement,
+      order: view.order,
     })),
     taskPaneTabs: snapshot.taskPaneTabs.map((tab) => ({
       id: tab.id,
@@ -167,16 +167,16 @@ function runtimeSnapshotToContributionSource(snapshot: RuntimeContributionSnapsh
     settingsSections: snapshot.settingsSections.map((section) => ({
       id: section.id,
       title: section.title,
+      order: section.order,
     })),
     commands: snapshot.commands.map((command) => ({
       id: command.id,
       title: command.title,
-      icon: command.icon,
       shortcut: command.shortcut,
     })),
     backgroundServices: snapshot.backgroundServices.map((service) => ({
       id: service.id,
-      name: service.id,
+      scope: service.scope,
     })),
   }
 }

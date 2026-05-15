@@ -1,6 +1,18 @@
-import { ALLOWED_ICON_KEYS, normalizeShortcut } from './manifest'
 import { isPluginViewKey, parsePluginViewKey } from './types'
 import type { CommandShortcutMetadata } from '@openforge/plugin-sdk'
+import type {
+  RuntimeBackgroundServiceContribution,
+  RuntimeCommandContribution,
+  RuntimeSettingsSectionContribution,
+  RuntimeTaskPaneTabContribution,
+  RuntimeViewContribution,
+} from './runtimeContributionRegistry'
+
+type RuntimeViewSource = Pick<RuntimeViewContribution, 'id' | 'title' | 'icon' | 'shortcut'> & Partial<Pick<RuntimeViewContribution, 'placement' | 'order'>>
+type RuntimeTaskPaneTabSource = Pick<RuntimeTaskPaneTabContribution, 'id' | 'title' | 'icon' | 'order'>
+type RuntimeCommandSource = Pick<RuntimeCommandContribution, 'id' | 'title' | 'shortcut'>
+type RuntimeSettingsSectionSource = Pick<RuntimeSettingsSectionContribution, 'id' | 'title' | 'order'>
+type RuntimeBackgroundServiceSource = Pick<RuntimeBackgroundServiceContribution, 'id' | 'scope'>
 
 export interface ResolvedView {
   pluginId: string
@@ -22,15 +34,6 @@ export interface ResolvedTab {
   order: number
 }
 
-export interface ResolvedPanel {
-  pluginId: string
-  contributionId: string
-  namespacedId: string
-  title: string
-  side: 'left' | 'right'
-  order: number
-}
-
 export interface ResolvedCommand {
   pluginId: string
   contributionId: string
@@ -44,29 +47,28 @@ export interface ResolvedSettingsSection {
   contributionId: string
   namespacedId: string
   title: string
+  order: number
 }
 
 export interface ResolvedBackgroundService {
   pluginId: string
   contributionId: string
   namespacedId: string
-  name: string
+  scope: RuntimeBackgroundServiceSource['scope']
 }
 
 export interface RuntimeContributionSource {
   pluginId: string
-  views?: unknown[]
-  taskPaneTabs?: unknown[]
-  sidebarPanels?: unknown[]
-  commands?: unknown[]
-  settingsSections?: unknown[]
-  backgroundServices?: unknown[]
+  views?: RuntimeViewSource[]
+  taskPaneTabs?: RuntimeTaskPaneTabSource[]
+  commands?: RuntimeCommandSource[]
+  settingsSections?: RuntimeSettingsSectionSource[]
+  backgroundServices?: RuntimeBackgroundServiceSource[]
 }
 
 export interface ResolvedContributions {
   views: ResolvedView[]
   taskPaneTabs: ResolvedTab[]
-  sidebarPanels: ResolvedPanel[]
   commands: ResolvedCommand[]
   settingsSections: ResolvedSettingsSection[]
   backgroundServices: ResolvedBackgroundService[]
@@ -77,7 +79,6 @@ type ResolvedSlot = keyof ResolvedContributions
 type ResolvedSlotItems = {
   views: ResolvedView[]
   taskPaneTabs: ResolvedTab[]
-  sidebarPanels: ResolvedPanel[]
   commands: ResolvedCommand[]
   settingsSections: ResolvedSettingsSection[]
   backgroundServices: ResolvedBackgroundService[]
@@ -112,13 +113,28 @@ function matchesSlotId(item: { contributionId: string; namespacedId: string }, s
   return false
 }
 
+function normalizeShortcut(shortcut: string): string {
+  let result = ''
+  const parts = shortcut.split('+')
+  const key = parts[parts.length - 1]
+  const modifiers = parts.slice(0, -1)
+
+  if (modifiers.includes('Cmd')) result += '⌘'
+  if (modifiers.includes('Ctrl')) result += '⌃'
+  if (modifiers.includes('Alt')) result += '⌥'
+  if (modifiers.includes('Shift')) result += '⇧'
+
+  result += key.toLowerCase()
+  return result
+}
+
 function resolveView(pluginId: string, item: unknown): ResolvedView | null {
   if (!isRecord(item)) {
     return null
   }
 
-  const { id, title, icon, shortcut, showInRail, railOrder } = item
-  if (!isNonEmptyString(id) || !isNonEmptyString(title) || !isNonEmptyString(icon) || !ALLOWED_ICON_KEYS.has(icon)) {
+  const { id, title, icon, shortcut, placement, order } = item
+  if (!isNonEmptyString(id) || !isNonEmptyString(title) || !isNonEmptyString(icon)) {
     return null
   }
 
@@ -129,8 +145,8 @@ function resolveView(pluginId: string, item: unknown): ResolvedView | null {
     title,
     icon,
     shortcut: isNonEmptyString(shortcut) ? normalizeShortcut(shortcut) : null,
-    showInRail: typeof showInRail === 'boolean' ? showInRail : true,
-    railOrder: isNumber(railOrder) ? railOrder : 100,
+    showInRail: placement === undefined || placement === 'rail',
+    railOrder: isNumber(order) ? order : 100,
   }
 }
 
@@ -150,26 +166,6 @@ function resolveTab(pluginId: string, item: unknown): ResolvedTab | null {
     namespacedId: toNamespacedId(pluginId, id),
     title,
     icon: isNonEmptyString(icon) ? icon : null,
-    order: isNumber(order) ? order : 0,
-  }
-}
-
-function resolvePanel(pluginId: string, item: unknown): ResolvedPanel | null {
-  if (!isRecord(item)) {
-    return null
-  }
-
-  const { id, title, side, order } = item
-  if (!isNonEmptyString(id) || !isNonEmptyString(title) || (side !== 'left' && side !== 'right')) {
-    return null
-  }
-
-  return {
-    pluginId,
-    contributionId: id,
-    namespacedId: toNamespacedId(pluginId, id),
-    title,
-    side,
     order: isNumber(order) ? order : 0,
   }
 }
@@ -211,7 +207,7 @@ function resolveSettingsSection(pluginId: string, item: unknown): ResolvedSettin
     return null
   }
 
-  const { id, title } = item
+  const { id, title, order } = item
   if (!isNonEmptyString(id) || !isNonEmptyString(title)) {
     return null
   }
@@ -221,6 +217,7 @@ function resolveSettingsSection(pluginId: string, item: unknown): ResolvedSettin
     contributionId: id,
     namespacedId: toNamespacedId(pluginId, id),
     title,
+    order: isNumber(order) ? order : 0,
   }
 }
 
@@ -229,8 +226,8 @@ function resolveBackgroundService(pluginId: string, item: unknown): ResolvedBack
     return null
   }
 
-  const { id, name } = item
-  if (!isNonEmptyString(id) || !isNonEmptyString(name)) {
+  const { id, scope } = item
+  if (!isNonEmptyString(id) || (scope !== 'global' && scope !== 'project' && scope !== 'task')) {
     return null
   }
 
@@ -238,7 +235,7 @@ function resolveBackgroundService(pluginId: string, item: unknown): ResolvedBack
     pluginId,
     contributionId: id,
     namespacedId: toNamespacedId(pluginId, id),
-    name,
+    scope,
   }
 }
 
@@ -257,7 +254,6 @@ export function resolveContributions(enabledPlugins: RuntimeContributionSource[]
   const resolved: ResolvedContributions = {
     views: [],
     taskPaneTabs: [],
-    sidebarPanels: [],
     commands: [],
     settingsSections: [],
     backgroundServices: [],
@@ -270,7 +266,6 @@ export function resolveContributions(enabledPlugins: RuntimeContributionSource[]
 
     resolved.views.push(...collectResolved(plugin.pluginId, plugin.views, resolveView))
     resolved.taskPaneTabs.push(...collectResolved(plugin.pluginId, plugin.taskPaneTabs, resolveTab))
-    resolved.sidebarPanels.push(...collectResolved(plugin.pluginId, plugin.sidebarPanels, resolvePanel))
     resolved.commands.push(...collectResolved(plugin.pluginId, plugin.commands, resolveCommand))
     resolved.settingsSections.push(...collectResolved(plugin.pluginId, plugin.settingsSections, resolveSettingsSection))
     resolved.backgroundServices.push(...collectResolved(plugin.pluginId, plugin.backgroundServices, resolveBackgroundService))

@@ -2,14 +2,12 @@ import { describe, expect, it } from 'vitest'
 
 import { resolveContributions, resolveContributionsForSlot } from './contributionResolver'
 import type { RuntimeContributionSource } from './contributionResolver'
-import type {
-  PluginBackgroundService,
-  PluginCommandContribution,
-  PluginSettingsSection,
-  PluginSidebarPanelContribution,
-  PluginTaskPaneTabContribution,
-  PluginViewContribution,
-} from './types'
+
+type RuntimeViewSource = NonNullable<RuntimeContributionSource['views']>[number]
+type RuntimeTaskPaneTabSource = NonNullable<RuntimeContributionSource['taskPaneTabs']>[number]
+type RuntimeCommandSource = NonNullable<RuntimeContributionSource['commands']>[number]
+type RuntimeSettingsSectionSource = NonNullable<RuntimeContributionSource['settingsSections']>[number]
+type RuntimeBackgroundServiceSource = NonNullable<RuntimeContributionSource['backgroundServices']>[number]
 
 function makeSource(overrides: Partial<RuntimeContributionSource> = {}): RuntimeContributionSource {
   return {
@@ -18,16 +16,17 @@ function makeSource(overrides: Partial<RuntimeContributionSource> = {}): Runtime
   }
 }
 
-function makeView(overrides: Partial<PluginViewContribution> = {}): PluginViewContribution {
+function makeView(overrides: Partial<RuntimeViewSource> = {}): RuntimeViewSource {
   return {
     id: 'main',
     title: 'Main View',
     icon: 'plug',
+    placement: 'rail',
     ...overrides,
   }
 }
 
-function makeTab(overrides: Partial<PluginTaskPaneTabContribution> = {}): PluginTaskPaneTabContribution {
+function makeTab(overrides: Partial<RuntimeTaskPaneTabSource> = {}): RuntimeTaskPaneTabSource {
   return {
     id: 'details',
     title: 'Details',
@@ -35,16 +34,7 @@ function makeTab(overrides: Partial<PluginTaskPaneTabContribution> = {}): Plugin
   }
 }
 
-function makePanel(overrides: Partial<PluginSidebarPanelContribution> = {}): PluginSidebarPanelContribution {
-  return {
-    id: 'inspector',
-    title: 'Inspector',
-    side: 'right',
-    ...overrides,
-  }
-}
-
-function makeCommand(overrides: Partial<PluginCommandContribution> = {}): PluginCommandContribution {
+function makeCommand(overrides: Partial<RuntimeCommandSource> = {}): RuntimeCommandSource {
   return {
     id: 'open',
     title: 'Open',
@@ -52,7 +42,7 @@ function makeCommand(overrides: Partial<PluginCommandContribution> = {}): Plugin
   }
 }
 
-function makeSettingsSection(overrides: Partial<PluginSettingsSection> = {}): PluginSettingsSection {
+function makeSettingsSection(overrides: Partial<RuntimeSettingsSectionSource> = {}): RuntimeSettingsSectionSource {
   return {
     id: 'general',
     title: 'General',
@@ -60,10 +50,10 @@ function makeSettingsSection(overrides: Partial<PluginSettingsSection> = {}): Pl
   }
 }
 
-function makeBackgroundService(overrides: Partial<PluginBackgroundService> = {}): PluginBackgroundService {
+function makeBackgroundService(overrides: Partial<RuntimeBackgroundServiceSource> = {}): RuntimeBackgroundServiceSource {
   return {
     id: 'sync',
-    name: 'Sync Service',
+    scope: 'project',
     ...overrides,
   }
 }
@@ -139,7 +129,6 @@ describe('resolveContributions', () => {
     expect(result).toEqual({
       views: [],
       taskPaneTabs: [],
-      sidebarPanels: [],
       commands: [],
       settingsSections: [],
       backgroundServices: [],
@@ -161,15 +150,15 @@ describe('resolveContributions', () => {
     expect(result.views.map((view) => view.namespacedId)).toEqual(['plugin-a:main', 'plugin-b:main'])
   })
 
-  it('filters views with invalid icons', () => {
+  it('preserves runtime registration icons without applying the legacy manifest allowlist', () => {
     const source = makeSource({
-      views: [makeView({ id: 'bad', icon: 'nonexistent' }), makeView({ id: 'good', icon: 'plug' })],
+      views: [makeView({ id: 'custom', icon: 'custom-plugin-icon' })],
     })
 
     const result = resolveContributions([source])
 
     expect(result.views).toHaveLength(1)
-    expect(result.views[0]?.contributionId).toBe('good')
+    expect(result.views[0]?.icon).toBe('custom-plugin-icon')
   })
 
   it('normalizes view shortcuts', () => {
@@ -188,7 +177,7 @@ describe('resolveContributions', () => {
     expect(result.commands[0]?.shortcut).toBe('⌘k')
   })
 
-  it('defaults showInRail to true', () => {
+  it('defaults runtime rail placement to visible in the rail', () => {
     const source = makeSource({ views: [makeView()] })
 
     const result = resolveContributions([source])
@@ -196,7 +185,7 @@ describe('resolveContributions', () => {
     expect(result.views[0]?.showInRail).toBe(true)
   })
 
-  it('defaults railOrder to 100', () => {
+  it('defaults rail order to 100', () => {
     const source = makeSource({ views: [makeView()] })
 
     const result = resolveContributions([source])
@@ -205,10 +194,10 @@ describe('resolveContributions', () => {
   })
 
   it('skips malformed contributions missing required id', () => {
-    const malformedView = makeView({ title: 'Broken' })
+    const malformedView: Record<string, unknown> = makeView({ title: 'Broken' })
     Reflect.deleteProperty(malformedView, 'id')
 
-    const source = makeSource({ views: [malformedView, makeView({ id: 'valid', title: 'Valid' })] })
+    const source = makeSource({ views: [malformedView as RuntimeViewSource, makeView({ id: 'valid', title: 'Valid' })] })
 
     const result = resolveContributions([source])
 
@@ -216,14 +205,13 @@ describe('resolveContributions', () => {
     expect(result.views[0]?.contributionId).toBe('valid')
   })
 
-  it('resolves all contribution types in one call', () => {
+  it('resolves all runtime registration contribution types in one call', () => {
     const contributions: Partial<RuntimeContributionSource> = {
       views: [makeView({ id: 'view' })],
       taskPaneTabs: [makeTab({ id: 'tab' })],
-      sidebarPanels: [makePanel({ id: 'panel', side: 'left', order: 2 })],
       commands: [makeCommand({ id: 'command', shortcut: 'Cmd+K' })],
-      settingsSections: [makeSettingsSection({ id: 'settings' })],
-      backgroundServices: [makeBackgroundService({ id: 'service', name: 'Worker' })],
+      settingsSections: [makeSettingsSection({ id: 'settings', order: 2 })],
+      backgroundServices: [makeBackgroundService({ id: 'service', scope: 'global' })],
     }
     const source = makeSource({ pluginId: 'plugin.all', ...contributions })
 
@@ -231,11 +219,11 @@ describe('resolveContributions', () => {
 
     expect(result.views).toHaveLength(1)
     expect(result.taskPaneTabs).toHaveLength(1)
-    expect(result.sidebarPanels).toHaveLength(1)
     expect(result.commands).toHaveLength(1)
     expect(result.settingsSections).toHaveLength(1)
+    expect(result.settingsSections[0]?.order).toBe(2)
     expect(result.backgroundServices).toHaveLength(1)
-    expect(result.backgroundServices[0]?.namespacedId).toBe('plugin.all:service')
+    expect(result.backgroundServices[0]).toMatchObject({ namespacedId: 'plugin.all:service', scope: 'global' })
   })
 })
 

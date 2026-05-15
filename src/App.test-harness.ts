@@ -1,6 +1,7 @@
 import { cleanup } from '@testing-library/svelte'
 import { vi, beforeEach, afterEach } from 'vitest'
 import { get, writable } from 'svelte/store'
+import type { RuntimeContributionSource } from './lib/plugin/contributionResolver'
 import type { Task, AgentSession, Project, ProjectAttention, PullRequestInfo, CheckpointNotification, CiFailureNotification, RateLimitNotification } from './lib/types'
 import { forceGithubSync, registerBuiltinPlugin } from './lib/ipc'
 
@@ -20,20 +21,20 @@ export const installedPluginRows: Array<{
   isBuiltin: boolean
 }> = []
 
-function builtinRuntimeContributionSourceForTest(pluginId: string) {
+function builtinRuntimeContributionSourceForTest(pluginId: string): Omit<RuntimeContributionSource, 'pluginId'> {
   switch (pluginId) {
     case 'com.openforge.file-viewer':
-      return { views: [{ id: 'files', title: 'Files', icon: 'folder-open', showInRail: true, railOrder: 10, shortcut: 'Cmd+O' }] }
+      return { views: [{ id: 'files', title: 'Files', icon: 'folder-open', placement: 'rail', order: 10, shortcut: 'Cmd+O' }] }
     case 'com.openforge.github-sync':
       return {
-        views: [{ id: 'pr_review', title: 'Pull Requests', icon: 'git-pull-request', showInRail: true, railOrder: 20, shortcut: 'Cmd+G' }],
+        views: [{ id: 'pr_review', title: 'Pull Requests', icon: 'git-pull-request', placement: 'rail', order: 20, shortcut: 'Cmd+G' }],
         commands: [{ id: 'refresh', title: 'Refresh Pull Requests', shortcut: 'Cmd+Shift+R' }],
       }
     case 'com.openforge.skills-viewer':
-      return { views: [{ id: 'skills', title: 'Skills', icon: 'sparkles', showInRail: true, railOrder: 30, shortcut: 'Cmd+L' }] }
+      return { views: [{ id: 'skills', title: 'Skills', icon: 'sparkles', placement: 'rail', order: 30, shortcut: 'Cmd+L' }] }
     case 'com.openforge.terminal':
       return {
-        views: [{ id: 'terminal', title: 'Terminal', icon: 'terminal', showInRail: true, railOrder: 40, shortcut: 'Cmd+J' }],
+        views: [{ id: 'terminal', title: 'Terminal', icon: 'terminal', placement: 'rail', order: 40, shortcut: 'Cmd+J' }],
         taskPaneTabs: [{ id: 'terminal', title: 'Terminal', icon: 'terminal', order: 10 }],
       }
     default:

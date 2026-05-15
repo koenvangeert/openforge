@@ -59,7 +59,7 @@ describe('App navigation shortcuts', () => {
       pluginStore.enabledPluginIds.set(new Set([GITHUB_SYNC_PLUGIN_ID]))
       await pluginRegistry.activatePlugin(GITHUB_SYNC_PLUGIN_ID)
       pluginStore.setRuntimeContributionSource(GITHUB_SYNC_PLUGIN_ID, {
-        views: [{ id: 'pr_review', title: 'Pull Requests', icon: 'git-pull-request', showInRail: true, railOrder: 20, shortcut: 'Cmd+G' }],
+        views: [{ id: 'pr_review', title: 'Pull Requests', icon: 'git-pull-request', placement: 'rail', order: 20, shortcut: 'Cmd+G' }],
       })
       await tick()
 
@@ -86,7 +86,7 @@ describe('App navigation shortcuts', () => {
     pluginStore.enabledPluginIds.set(new Set([FILE_VIEWER_PLUGIN_ID]))
     await pluginRegistry.activatePlugin(FILE_VIEWER_PLUGIN_ID)
     pluginStore.setRuntimeContributionSource(FILE_VIEWER_PLUGIN_ID, {
-      views: [{ id: 'files', title: 'Files', icon: 'folder-open', showInRail: true, railOrder: 10, shortcut: 'Cmd+O' }],
+      views: [{ id: 'files', title: 'Files', icon: 'folder-open', placement: 'rail', order: 10, shortcut: 'Cmd+O' }],
     })
     await tick()
 
@@ -113,7 +113,7 @@ describe('App navigation shortcuts', () => {
       pluginStore.enabledPluginIds.set(new Set([SKILLS_VIEWER_PLUGIN_ID]))
       await pluginRegistry.activatePlugin(SKILLS_VIEWER_PLUGIN_ID)
       pluginStore.setRuntimeContributionSource(SKILLS_VIEWER_PLUGIN_ID, {
-        views: [{ id: 'skills', title: 'Skills', icon: 'sparkles', showInRail: true, railOrder: 30, shortcut: 'Cmd+L' }],
+        views: [{ id: 'skills', title: 'Skills', icon: 'sparkles', placement: 'rail', order: 30, shortcut: 'Cmd+L' }],
       })
       await tick()
 

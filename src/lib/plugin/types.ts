@@ -1,6 +1,7 @@
-import type { CommandShortcutMetadata, OpenForgePackageMetadata, PluginStorage } from '@openforge/plugin-sdk'
+import type { OpenForgePackageMetadata, PluginStorage } from '@openforge/plugin-sdk'
 
 export type { PluginStorage }
+export { MAX_SUPPORTED_API_VERSION } from '@openforge/plugin-sdk'
 
 export interface PluginManifest {
   id: string
@@ -11,45 +12,6 @@ export interface PluginManifest {
   permissions: string[]
   frontend: string | null
   backend: string | null
-}
-
-export interface PluginViewContribution {
-  id: string
-  title: string
-  icon: string
-  shortcut?: string
-  showInRail?: boolean
-  railOrder?: number
-}
-
-export interface PluginTaskPaneTabContribution {
-  id: string
-  title: string
-  icon?: string
-  order?: number
-}
-
-export interface PluginSidebarPanelContribution {
-  id: string
-  title: string
-  side: 'left' | 'right'
-  order?: number
-}
-
-export interface PluginCommandContribution {
-  id: string
-  title: string
-  shortcut?: CommandShortcutMetadata
-}
-
-export interface PluginSettingsSection {
-  id: string
-  title: string
-}
-
-export interface PluginBackgroundService {
-  id: string
-  name: string
 }
 
 export type PluginViewKey = `plugin:${string}:${string}`
@@ -101,4 +63,3 @@ export interface PluginEntry {
   installedAt?: number
 }
 
-export const MAX_SUPPORTED_API_VERSION = 1

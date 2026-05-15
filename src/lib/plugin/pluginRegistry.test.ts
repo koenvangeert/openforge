@@ -353,7 +353,7 @@ describe('pluginRegistry', () => {
     expect(activatePluginLoaderMock).not.toHaveBeenCalled()
     expect(activateFrontend).toHaveBeenCalledOnce()
     expect(get(runtimeContributionSources).get('runtime-plugin')?.views).toMatchObject([
-      { id: 'prs', title: 'Pull Requests', icon: 'git-pull-request', showInRail: true, railOrder: 25 },
+      { id: 'prs', title: 'Pull Requests', icon: 'git-pull-request', placement: 'rail', order: 25 },
     ])
     expect(getRegisteredComponent('plugin:runtime-plugin:prs')).toBeDefined()
     expect(getRegisteredRenderableComponent('taskPaneTabs', 'runtime-plugin:activity')).toBeDefined()
@@ -446,7 +446,7 @@ describe('pluginRegistry', () => {
     expect(activatePluginLoaderMock).not.toHaveBeenCalled()
     expect(activateBuiltin).toHaveBeenCalledOnce()
     expect(get(runtimeContributionSources).get('builtin-plugin')?.views).toMatchObject([
-      { id: 'main', title: 'Builtin Main', icon: 'plug', showInRail: true },
+      { id: 'main', title: 'Builtin Main', icon: 'plug', placement: 'rail' },
     ])
     expect(getRegisteredComponent('plugin:builtin-plugin:main')).toBe(Component)
     expect(get(installedPlugins).get('builtin-plugin')?.state).toBe('active')

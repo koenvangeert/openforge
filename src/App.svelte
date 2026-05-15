@@ -383,7 +383,6 @@
 
   <div class="flex flex-col flex-1 min-w-0 relative" style="background: linear-gradient(180deg, var(--project-bg-alt) 0%, var(--project-bg) 100%)">
     <main class="flex-1 overflow-hidden flex">
-      <PluginSlot slotType="sidebarPanels" panelSide="left" projectId={$activeProjectId} projectName={activeProject?.name ?? ''} />
       <div class="flex-1 overflow-hidden flex flex-col">
         {#if renderedActiveView !== null}
           <renderedActiveView.component {...(renderedActiveView?.props ?? {})} />
@@ -429,8 +428,6 @@
           <ProjectSetupDialog onClose={() => showProjectSetup = false} onProjectCreated={handleProjectCreated} />
         {/if}
       </div>
-      <PluginSlot slotType="sidebarPanels" panelSide="right" projectId={$activeProjectId} projectName={activeProject?.name ?? ''} />
-
     </main>
 
     {#if $activeProjectId && $currentView !== 'global_settings'}
