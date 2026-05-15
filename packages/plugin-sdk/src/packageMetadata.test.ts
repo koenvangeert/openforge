@@ -1,10 +1,11 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
   MAX_SUPPORTED_API_VERSION,
   MIN_SUPPORTED_API_VERSION,
   OPENFORGE_PACKAGE_METADATA_SCHEMA,
   OPENFORGE_PLUGIN_API_VERSION,
+  OPENFORGE_PLUGIN_CAPABILITIES,
   SUPPORTED_OPENFORGE_API_VERSIONS,
   isOpenForgePackageMetadata,
   isSupportedOpenForgeApiVersion,
@@ -26,6 +27,11 @@ function validMetadata(overrides: Record<string, unknown> = {}): Record<string, 
 }
 
 describe('package.json#openforge metadata contract', () => {
+  afterEach(() => {
+    vi.doUnmock('./openforgePackageMetadataSchema.json')
+    vi.resetModules()
+  })
+
   it('validates ADR package metadata without manifest contributions', () => {
     expect(validateOpenForgePackageMetadata(validMetadata())).toEqual([])
     expect(isOpenForgePackageMetadata(validMetadata())).toBe(true)
@@ -88,5 +94,29 @@ describe('package.json#openforge metadata contract', () => {
     expect(OPENFORGE_PACKAGE_METADATA_SCHEMA.properties).not.toHaveProperty('contributes')
     expect(OPENFORGE_PACKAGE_METADATA_SCHEMA.additionalProperties).toBe(false)
     expect(OPENFORGE_PACKAGE_METADATA_SCHEMA.properties.apiVersion).toEqual({ enum: [1] })
+  })
+
+  it('derives TypeScript validator constants from schema enum values', async () => {
+    expect(OPENFORGE_PLUGIN_CAPABILITIES).toEqual(OPENFORGE_PACKAGE_METADATA_SCHEMA.properties.requires.items.enum)
+    expect(SUPPORTED_OPENFORGE_API_VERSIONS).toEqual(OPENFORGE_PACKAGE_METADATA_SCHEMA.properties.apiVersion.enum)
+
+    const schemaWithNewEnums = structuredClone(OPENFORGE_PACKAGE_METADATA_SCHEMA)
+    schemaWithNewEnums.properties.apiVersion = { enum: [1, 2] }
+    schemaWithNewEnums.properties.requires.items.enum = [
+      ...OPENFORGE_PACKAGE_METADATA_SCHEMA.properties.requires.items.enum,
+      'schemaOnlyCapability',
+    ]
+
+    vi.resetModules()
+    vi.doMock('./openforgePackageMetadataSchema.json', () => ({ default: schemaWithNewEnums }))
+
+    const manifest = await import('./manifest')
+
+    expect(manifest.OPENFORGE_PLUGIN_CAPABILITIES).toEqual(schemaWithNewEnums.properties.requires.items.enum)
+    expect(manifest.isSupportedOpenForgeApiVersion(2)).toBe(true)
+    expect(manifest.validateOpenForgePackageMetadata(validMetadata({
+      apiVersion: 2,
+      requires: ['schemaOnlyCapability'],
+    }))).toEqual([])
   })
 })

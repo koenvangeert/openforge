@@ -4,26 +4,7 @@ import { SUPPORTED_OPENFORGE_API_VERSIONS } from './types'
 
 export const OPENFORGE_PACKAGE_METADATA_SCHEMA = packageMetadataSchemaData
 
-export const OPENFORGE_PLUGIN_CAPABILITIES = [
-  'commands',
-  'events',
-  'views',
-  'taskPane',
-  'settings',
-  'background',
-  'backend',
-  'storage',
-  'context',
-  'tasks',
-  'projects',
-  'fs',
-  'shell',
-  'notifications',
-  'attention',
-  'system.openUrl',
-  'config',
-  'projectConfig',
-] as const satisfies readonly OpenForgePluginCapability[]
+export const OPENFORGE_PLUGIN_CAPABILITIES = packageMetadataSchemaData.properties.requires.items.enum as readonly OpenForgePluginCapability[]
 
 const CAPABILITIES = new Set<string>(OPENFORGE_PLUGIN_CAPABILITIES)
 

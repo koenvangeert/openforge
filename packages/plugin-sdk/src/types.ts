@@ -1,3 +1,5 @@
+import packageMetadataSchemaData from './openforgePackageMetadataSchema.json'
+
 import type { Component } from 'svelte'
 import type {
   AgentSession,
@@ -9,10 +11,20 @@ import type {
   TaskWorkspaceInfo,
 } from './domain'
 
-export const OPENFORGE_PLUGIN_API_VERSION = 1
-export const MIN_SUPPORTED_API_VERSION = 1
-export const MAX_SUPPORTED_API_VERSION = 1
-export const SUPPORTED_OPENFORGE_API_VERSIONS = [OPENFORGE_PLUGIN_API_VERSION] as const
+function readSupportedOpenForgeApiVersions(): [number, ...number[]] {
+  const versions = packageMetadataSchemaData.properties.apiVersion.enum
+
+  if (!Array.isArray(versions) || versions.length === 0 || !versions.every((version) => typeof version === 'number' && Number.isInteger(version))) {
+    throw new Error('openforgePackageMetadataSchema.json properties.apiVersion.enum must contain at least one integer')
+  }
+
+  return [...versions] as [number, ...number[]]
+}
+
+export const SUPPORTED_OPENFORGE_API_VERSIONS = Object.freeze(readSupportedOpenForgeApiVersions())
+export const OPENFORGE_PLUGIN_API_VERSION = SUPPORTED_OPENFORGE_API_VERSIONS[0]
+export const MIN_SUPPORTED_API_VERSION = Math.min(...SUPPORTED_OPENFORGE_API_VERSIONS)
+export const MAX_SUPPORTED_API_VERSION = Math.max(...SUPPORTED_OPENFORGE_API_VERSIONS)
 
 export type SupportedOpenForgeApiVersion = typeof SUPPORTED_OPENFORGE_API_VERSIONS[number]
 
