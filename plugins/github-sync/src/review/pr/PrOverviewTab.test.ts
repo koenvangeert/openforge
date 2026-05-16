@@ -41,7 +41,7 @@ const basePr: ReviewPullRequest = {
 }
 
 const api = {
-  commands: { invokeGlobal: vi.fn() },
+  commands: { invokeGlobal: vi.fn().mockResolvedValue([]) },
   system: { openUrl: vi.fn() },
 } as unknown as FrontendOpenForgeAPI
 

@@ -37,6 +37,8 @@ export default defineConfig({
           include: [
             'src/**/*.test.ts',
             'plugins/file-viewer/src/**/*.test.ts',
+            'plugins/github-sync/src/**/*.test.ts',
+            'plugins/skills-viewer/src/**/*.test.ts',
           ],
           alias: {
             ...pluginRuntimeAliases,
