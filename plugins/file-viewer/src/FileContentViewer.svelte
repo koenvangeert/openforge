@@ -1,10 +1,12 @@
 <script lang="ts">
   import MarkdownContent from '@openforge/plugin-sdk/ui/MarkdownContent.svelte'
+  import type { FrontendOpenForgeAPI } from '@openforge/plugin-sdk/frontend'
   import type { FileContent } from '@openforge/plugin-sdk/domain'
   import { getLanguageForFile, highlightCode } from './lib/fileHighlighter'
   import { openUrl } from './lib/ipc'
 
   interface Props {
+    api: FrontendOpenForgeAPI
     content: FileContent | null
     fileName: string
     error: string | null
@@ -13,7 +15,7 @@
     onScrollTopChange?: (scrollTop: number) => void
   }
 
-  let { content, fileName, error, modifiedAt = null, scrollTop = 0, onScrollTopChange }: Props = $props()
+  let { api, content, fileName, error, modifiedAt = null, scrollTop = 0, onScrollTopChange }: Props = $props()
 
   let scrollRegion = $state<HTMLDivElement | null>(null)
   let appliedScrollKey = $state<string | null>(null)
@@ -98,7 +100,7 @@
             bind:this={scrollRegion}
             onscroll={handleScroll}
           >
-            <MarkdownContent content={content.content} onOpenUrl={openUrl} />
+            <MarkdownContent content={content.content} onOpenUrl={(url) => openUrl(api, url)} />
           </div>
         {:else}
           <div

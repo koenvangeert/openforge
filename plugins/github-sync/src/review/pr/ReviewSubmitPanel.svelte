@@ -1,15 +1,17 @@
 <script lang="ts">
+  import type { FrontendOpenForgeAPI } from '@openforge/plugin-sdk/frontend'
   import { pendingManualComments } from '../../lib/stores'
   import { submitPrReview } from '../../lib/ipc'
 
   interface Props {
+    api: FrontendOpenForgeAPI
     repoOwner: string
     repoName: string
     prNumber: number
     commitId: string
   }
 
-  let { repoOwner, repoName, prNumber, commitId }: Props = $props()
+  let { api, repoOwner, repoName, prNumber, commitId }: Props = $props()
 
   let summary = $state('')
   let isSubmitting = $state(false)
@@ -30,6 +32,7 @@
 
     try {
       await submitPrReview(
+        api,
         repoOwner,
         repoName,
         prNumber,

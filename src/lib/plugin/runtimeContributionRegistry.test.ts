@@ -258,7 +258,7 @@ describe('runtime contribution registry', () => {
     const host = {
       listProjects: vi.fn(async () => [{ id: 'P-1', name: 'OpenForge', path: '/repo', created_at: 1, updated_at: 2 }]),
       listTasks: vi.fn(async () => [{ id: 'T-1', initial_prompt: 'Prompt', prompt: null, summary: null, status: 'doing' as const, agent: null, permission_mode: null, depends_on: [], project_id: 'P-1', created_at: 1, updated_at: 2 }]),
-      readFile: vi.fn(async () => ({ content: 'hello' })),
+      readFile: vi.fn(async () => ({ type: 'text' as const, content: 'hello', mimeType: null, size: 5 })),
       openUrl: vi.fn(async () => undefined),
       getConfig: vi.fn(async () => 'dark'),
       setProjectConfig: vi.fn(async () => undefined),
@@ -271,7 +271,7 @@ describe('runtime contribution registry', () => {
 
     await expect(api.projects.list()).resolves.toHaveLength(1)
     await expect(api.tasks.list({ projectId: 'P-1' })).resolves.toHaveLength(1)
-    await expect(api.fs.readFile({ projectId: 'P-1', path: 'README.md' })).resolves.toBe('hello')
+    await expect(api.fs.readFile({ projectId: 'P-1', path: 'README.md' })).resolves.toEqual({ type: 'text', content: 'hello', mimeType: null, size: 5 })
     await expect(api.shell.spawn({ taskId: 'T-1', cwd: '/repo', cols: 80, rows: 24, terminalIndex: 1 })).resolves.toBe(42)
     await api.system.openUrl('https://example.com')
     await expect(api.config.get('theme')).resolves.toBe('dark')

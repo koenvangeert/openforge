@@ -1,16 +1,18 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte'
-  import { getPluginContext } from '../../pluginContext'
-  type UnlistenFn = () => void
+  import type { FrontendOpenForgeAPI, OpenForgeContextSnapshot } from '@openforge/plugin-sdk/frontend'
   import type { AgentEvent } from '@openforge/plugin-sdk/domain'
+  type UnlistenFn = () => void
   import Modal from '../../shared/ui/Modal.svelte'
 
   interface Props {
+    api: FrontendOpenForgeAPI
+    context: OpenForgeContextSnapshot
     sessionKey: string
     onClose: () => void
   }
 
-  let { sessionKey, onClose }: Props = $props()
+  let { api, context: _context, sessionKey, onClose }: Props = $props()
 
   let output = $state('')
   let status = $state<'running' | 'completed' | 'error'>('running')
@@ -25,7 +27,7 @@
 
   onMount(async () => {
     console.log('[AgentReviewOutput] Mounted, listening for sessionKey:', sessionKey)
-    unlisten = getPluginContext().onEvent('agent-event', (payload) => {
+    const subscription = api.events.onGlobal('openforge.agent-event', (payload) => {
       const { task_id, event_type, data } = payload as AgentEvent
       if (task_id !== sessionKey) return
 
@@ -66,6 +68,7 @@
         console.log('[AgentReviewOutput] Unhandled event type:', event_type)
       }
     })
+    unlisten = () => { void subscription.dispose() }
   })
 
   onDestroy(() => {

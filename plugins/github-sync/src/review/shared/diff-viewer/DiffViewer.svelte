@@ -2,6 +2,7 @@
   import { DiffView, DiffModeEnum, SplitSide } from '@git-diff-view/svelte'
   import '@git-diff-view/svelte/styles/diff-view-pure.css'
   import './DiffViewerTheme.css'
+  import type { FrontendOpenForgeAPI } from '@openforge/plugin-sdk/frontend'
   import type { PrFileDiff, ReviewComment, ReviewSubmissionComment, AgentReviewComment } from '@openforge/plugin-sdk/domain'
   import { pendingManualComments, agentReviewComments } from '../../../lib/stores'
   import { updateAgentReviewCommentStatus } from '../../../lib/ipc'
@@ -21,6 +22,7 @@
   import { themeMode, getDiffTheme } from '../../../lib/theme'
   import type { Snippet } from 'svelte'
   interface Props {
+    api: FrontendOpenForgeAPI
     files?: PrFileDiff[]
     existingComments?: ReviewComment[]
     repoOwner?: string
@@ -33,7 +35,7 @@
     includeUncommitted?: boolean
     agentComments?: AgentReviewComment[]
   }
-  let { files = [], existingComments = [], repoOwner: _repoOwner = '', repoName: _repoName = '', fileTreeVisible = true, onToggleFileTree, fetchFileContents, batchFetchFileContents, toolbarExtra, includeUncommitted = false, agentComments = [] }: Props = $props()
+  let { api, files = [], existingComments = [], repoOwner: _repoOwner = '', repoName: _repoName = '', fileTreeVisible = true, onToggleFileTree, fetchFileContents, batchFetchFileContents, toolbarExtra, includeUncommitted = false, agentComments = [] }: Props = $props()
   let diffViewMode = $state<DiffModeEnum>(DiffModeEnum.Split)
   let diffViewWrap = $state(false)
   let commentText = $state('')
@@ -360,7 +362,7 @@
                                       onclick={async () => {
                                         if (comment.commentId === undefined) return
                                         try {
-                                           await updateAgentReviewCommentStatus(comment.commentId, 'approved')
+                                           await updateAgentReviewCommentStatus(api, comment.commentId, 'approved')
                                            $pendingManualComments = [...$pendingManualComments, {
                                              path: comment.filePath || file.filename,
                                             line: comment.lineNumber || 0,
@@ -382,7 +384,7 @@
                                     onclick={async () => {
                                       if (comment.commentId === undefined) return
                                       try {
-                                        await updateAgentReviewCommentStatus(comment.commentId, 'dismissed')
+                                        await updateAgentReviewCommentStatus(api, comment.commentId, 'dismissed')
                                         $agentReviewComments = $agentReviewComments.map(c =>
                                           c.id === comment.commentId ? { ...c, status: 'dismissed' } : c
                                         )
@@ -405,7 +407,7 @@
                               {/if}
                             </div>
                             <div class="text-base-content leading-relaxed text-[0.8rem] [&_p]:m-0 [&_p+p]:mt-1.5 [&_pre]:text-[0.75rem] [&_code]:text-[0.75rem] [&_pre]:bg-base-200 [&_pre]:rounded [&_pre]:p-2 [&_pre]:my-1.5 [&_code]:bg-base-200 [&_code]:px-1 [&_code]:rounded [&_ul]:my-1 [&_ol]:my-1 [&_li]:ml-4 [&_blockquote]:border-l-2 [&_blockquote]:border-base-300 [&_blockquote]:pl-3 [&_blockquote]:text-base-content/70 [&_a]:text-primary [&_a]:underline">
-                              <MarkdownContent content={comment.body} onOpenUrl={openUrl} />
+                              <MarkdownContent content={comment.body} onOpenUrl={(url) => openUrl(api, url)} />
                             </div>
                           </div>
                         {/each}

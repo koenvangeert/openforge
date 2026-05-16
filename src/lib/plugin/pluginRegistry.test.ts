@@ -423,8 +423,9 @@ describe('pluginRegistry', () => {
     await expect(firstProps.api.storage.project('P-1').get('repo')).resolves.toEqual({ owner: 'acme', name: 'app' })
     expect(getPluginStorageMock).toHaveBeenCalledWith('runtime-plugin', 'project', 'P-1', 'repo')
 
-    fsReadFileMock.mockResolvedValueOnce('readme')
-    await expect(firstProps.api.fs.readFile({ projectId: 'P-1', path: 'README.md' })).resolves.toBe('readme')
+    const readmeContent = { type: 'text' as const, content: 'readme', mimeType: null, size: 6 }
+    fsReadFileMock.mockResolvedValueOnce(readmeContent)
+    await expect(firstProps.api.fs.readFile({ projectId: 'P-1', path: 'README.md' })).resolves.toEqual(readmeContent)
     await firstProps.api.system.openUrl('https://example.com/plugin')
     await firstProps.api.config.set('theme', { mode: 'dark' })
     await firstProps.api.projectConfig.set('repo', { owner: 'acme', name: 'app' }, 'P-1')

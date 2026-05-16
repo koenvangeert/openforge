@@ -1,14 +1,17 @@
 <script lang="ts">
+  import type { FrontendOpenForgeAPI, OpenForgeContextSnapshot } from '@openforge/plugin-sdk/frontend'
   import { skills, selectedSkillIdentity, activeProjectId } from './lib/stores'
   import { listOpenCodeSkills, openUrl, saveSkillContent } from './lib/ipc'
-  import { getPluginContext } from './pluginContext'
   import { getHTMLElementAt, isInputFocused } from './lib/domUtils'
 
   interface Props {
+    api: FrontendOpenForgeAPI
+    context: OpenForgeContextSnapshot
     projectName: string
+    projectId?: string | null
   }
 
-  let { projectName, projectId = null }: Props & { projectId?: string | null } = $props()
+  let { api, context: _context, projectName, projectId = null }: Props = $props()
   import { useVimNavigation } from './lib/useVimNavigation.svelte'
   import ProjectPageHeader from './ProjectPageHeader.svelte'
   import MarkdownContent from '@openforge/plugin-sdk/ui/MarkdownContent.svelte'
@@ -78,7 +81,7 @@
     isLoading = true
     error = null
     try {
-      const result = await listOpenCodeSkills($activeProjectId)
+      const result = await listOpenCodeSkills(api, $activeProjectId)
       $skills = result
       // Auto-select first skill if none selected
       if (!$selectedSkillIdentity && result.length > 0) {
@@ -93,7 +96,7 @@
   }
 
   function selectSkill(skill: SkillInfo) {
-    void getPluginContext().invokeHost('navigate', { currentView: 'plugin:com.openforge.skills-viewer:skills' })
+    void api.commands.invokeGlobal('openforge.navigate', { currentView: 'plugin:com.openforge.skills-viewer:skills' })
     $selectedSkillIdentity = getSkillIdentity(skill)
     editMode = false
     saveError = null
@@ -117,6 +120,7 @@
     saveError = null
     try {
       await saveSkillContent(
+        api,
         $activeProjectId,
         selectedSkill.name,
         selectedSkill.level,
@@ -366,7 +370,7 @@
           <!-- Read mode: rendered markdown -->
           <div class="flex-1 overflow-y-auto px-6 py-4">
             {#if selectedSkill.template}
-              <MarkdownContent content={selectedSkill.template} onOpenUrl={openUrl} />
+              <MarkdownContent content={selectedSkill.template} onOpenUrl={(url) => openUrl(api, url)} />
             {:else}
               <div class="flex flex-col items-center justify-center h-full gap-3 text-base-content/50 text-center">
                 <span class="text-3xl">📄</span>

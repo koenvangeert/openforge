@@ -1,12 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { FrontendOpenForgeAPI, OpenForgeContextSnapshot } from '@openforge/plugin-sdk/frontend'
 import type { FileContent, FileEntry } from '@openforge/plugin-sdk/domain'
-
-vi.mock('./lib/ipc', () => ({
-  fsReadDir: vi.fn(),
-  fsReadFile: vi.fn(),
-  openUrl: vi.fn(),
-}))
 
 vi.mock('lucide-svelte', () => ({
   FileText: vi.fn(() => ({})),
@@ -17,7 +12,22 @@ vi.mock('lucide-svelte', () => ({
 import FilesView from './FilesView.svelte'
 import { get } from 'svelte/store'
 import { activeProjectId, fileBrowserStates, pendingFileReveal } from './lib/stores'
-import { fsReadDir, fsReadFile } from './lib/ipc'
+
+const fsReadDir = vi.fn()
+const fsReadFile = vi.fn()
+const openUrl = vi.fn()
+
+function makeApi(): FrontendOpenForgeAPI {
+  return {
+    fs: { readDir: fsReadDir, readFile: fsReadFile },
+    system: { openUrl },
+  } as unknown as FrontendOpenForgeAPI
+}
+
+const runtimeContext: OpenForgeContextSnapshot = {
+  pluginId: 'com.openforge.file-viewer',
+  projectId: 'test-project-id',
+}
 
 function makeFileEntry(overrides: Partial<FileEntry> = {}): FileEntry {
   return {
@@ -42,9 +52,11 @@ const sampleFileContent: FileContent = {
   size: 11,
 }
 
-function renderFilesView(props: { projectName?: string; projectId?: string | null } = {}) {
+function renderFilesView(props: { projectName?: string; projectId?: string | null; api?: FrontendOpenForgeAPI } = {}) {
   return render(FilesView, {
     props: {
+      api: props.api ?? makeApi(),
+      context: runtimeContext,
       projectName: props.projectName ?? 'My Project',
       projectId: props.projectId === undefined ? 'test-project-id' : props.projectId,
     },
@@ -68,7 +80,7 @@ describe('plugin FilesView', () => {
     renderFilesView()
 
     await waitFor(() => {
-      expect(fsReadDir).toHaveBeenCalledWith('test-project-id', null)
+      expect(fsReadDir).toHaveBeenCalledWith({ projectId: 'test-project-id', path: null })
     })
   })
 
@@ -92,7 +104,7 @@ describe('plugin FilesView', () => {
     await fireEvent.click(screen.getByRole('button', { name: /src\// }))
 
     await waitFor(() => {
-      expect(fsReadDir).toHaveBeenCalledWith('test-project-id', 'src')
+      expect(fsReadDir).toHaveBeenCalledWith({ projectId: 'test-project-id', path: 'src' })
     })
   })
 
@@ -108,7 +120,7 @@ describe('plugin FilesView', () => {
     await fireEvent.click(screen.getByRole('button', { name: /README.md/ }))
 
     await waitFor(() => {
-      expect(fsReadFile).toHaveBeenCalledWith('test-project-id', 'README.md')
+      expect(fsReadFile).toHaveBeenCalledWith({ projectId: 'test-project-id', path: 'README.md' })
     })
   })
 
@@ -171,7 +183,7 @@ describe('plugin FilesView', () => {
     await rerender({ projectName: 'Project B', projectId: 'project-b' })
 
     await waitFor(() => {
-      expect(fsReadDir).toHaveBeenCalledWith('project-b', null)
+      expect(fsReadDir).toHaveBeenCalledWith({ projectId: 'project-b', path: null })
       expect(screen.getByText('b.ts')).toBeTruthy()
     })
     expect(screen.queryByText('a.ts')).toBeNull()
@@ -251,7 +263,7 @@ describe('plugin FilesView', () => {
     })
     await fireEvent.click(screen.getByRole('button', { name: /README.md/ }))
     await waitFor(() => {
-      expect(fsReadFile).toHaveBeenCalledWith('project-a', 'README.md')
+      expect(fsReadFile).toHaveBeenCalledWith({ projectId: 'project-a', path: 'README.md' })
     })
 
     await rerender({ projectName: 'Project B', projectId: 'project-b' })
@@ -274,15 +286,15 @@ describe('plugin FilesView', () => {
     renderFilesView()
 
     await waitFor(() => {
-      expect(fsReadDir).toHaveBeenCalledWith('test-project-id', null)
+      expect(fsReadDir).toHaveBeenCalledWith({ projectId: 'test-project-id', path: null })
     })
 
     pendingFileReveal.set('src/components/Button.ts')
 
     await waitFor(() => {
-      expect(fsReadDir).toHaveBeenCalledWith('test-project-id', 'src')
-      expect(fsReadDir).toHaveBeenCalledWith('test-project-id', 'src/components')
-      expect(fsReadFile).toHaveBeenCalledWith('test-project-id', 'src/components/Button.ts')
+      expect(fsReadDir).toHaveBeenCalledWith({ projectId: 'test-project-id', path: 'src' })
+      expect(fsReadDir).toHaveBeenCalledWith({ projectId: 'test-project-id', path: 'src/components' })
+      expect(fsReadFile).toHaveBeenCalledWith({ projectId: 'test-project-id', path: 'src/components/Button.ts' })
     })
   })
 
@@ -309,7 +321,7 @@ describe('plugin FilesView', () => {
 
     await waitFor(() => {
       expect(fsReadDir).not.toHaveBeenCalled()
-      expect(fsReadFile).toHaveBeenCalledWith('test-project-id', 'src/utils.ts')
+      expect(fsReadFile).toHaveBeenCalledWith({ projectId: 'test-project-id', path: 'src/utils.ts' })
     })
   })
 
@@ -326,7 +338,7 @@ describe('plugin FilesView', () => {
     pendingFileReveal.set('README.md')
 
     await waitFor(() => {
-      expect(fsReadFile).toHaveBeenCalledWith('test-project-id', 'README.md')
+      expect(fsReadFile).toHaveBeenCalledWith({ projectId: 'test-project-id', path: 'README.md' })
     })
 
     await waitFor(() => {
@@ -348,7 +360,7 @@ describe('plugin FilesView', () => {
     pendingFileReveal.set('src/secret.ts')
 
     await waitFor(() => {
-      expect(fsReadDir).toHaveBeenCalledWith('test-project-id', 'src')
+      expect(fsReadDir).toHaveBeenCalledWith({ projectId: 'test-project-id', path: 'src' })
     })
 
     await new Promise((resolve) => setTimeout(resolve, 20))

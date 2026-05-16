@@ -324,7 +324,7 @@ export class TestingOpenForgeRegistryFake {
       },
       fs: {
         readDir: async () => [],
-        readFile: async () => '',
+        readFile: async () => ({ type: 'text', content: '', mimeType: null, size: 0 }),
         writeFile: async (request) => {
           this.calls.fsWrites.push(request)
         },
