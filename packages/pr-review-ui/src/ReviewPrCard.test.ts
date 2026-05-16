@@ -1,7 +1,7 @@
 import { render, screen, fireEvent } from '@testing-library/svelte'
 import { describe, it, expect } from 'vitest'
 import ReviewPrCard from './ReviewPrCard.svelte'
-import type { ReviewPullRequest } from '../../../lib/types'
+import type { ReviewPullRequest } from '@openforge/plugin-sdk/domain'
 
 const basePr: ReviewPullRequest = {
   id: 12345,
