@@ -29,6 +29,7 @@ const projectSkill: SkillInfo = {
   template: '# Git Master\n\nUse this skill for git operations.',
   level: 'project',
   source_dir: '.agents',
+  file_name: null,
 }
 
 const userSkill: SkillInfo = {
@@ -38,6 +39,7 @@ const userSkill: SkillInfo = {
   template: '# Creating Skills\n\nHow to create SKILL.md files.',
   level: 'user',
   source_dir: '.agents',
+  file_name: null,
 }
 
 const userSkill2: SkillInfo = {
@@ -47,6 +49,37 @@ const userSkill2: SkillInfo = {
   template: '# TypeScript Advanced\n\nAdvanced type patterns.',
   level: 'user',
   source_dir: '.agents',
+  file_name: null,
+}
+
+const piProjectSkill: SkillInfo = {
+  name: 'pi-review',
+  description: 'Pi review workflow',
+  agent: null,
+  template: '# Pi Review\n\nUse this skill from Pi.',
+  level: 'project',
+  source_dir: '.pi',
+  file_name: null,
+}
+
+const piRootMarkdownSkill: SkillInfo = {
+  name: 'root-pi-review',
+  description: 'Pi root markdown workflow',
+  agent: null,
+  template: '---\nname: root-pi-review\ndescription: Pi root markdown workflow\n---\n# Root Pi Review',
+  level: 'project',
+  source_dir: '.pi',
+  file_name: 'root-pi-review.md',
+}
+
+const piUserSkill: SkillInfo = {
+  name: 'pi-user-review',
+  description: 'Personal Pi review workflow',
+  agent: null,
+  template: '# Pi User Review\n\nUse this personal Pi skill.',
+  level: 'user',
+  source_dir: '.pi',
+  file_name: null,
 }
 
 const duplicateProjectSkill: SkillInfo = {
@@ -56,6 +89,7 @@ const duplicateProjectSkill: SkillInfo = {
   template: '# Repository Shared Skill\n\nRepository instructions.',
   level: 'project',
   source_dir: '.agents',
+  file_name: null,
 }
 
 const duplicateUserSkill: SkillInfo = {
@@ -65,6 +99,7 @@ const duplicateUserSkill: SkillInfo = {
   template: '# Personal Shared Skill\n\nPersonal instructions.',
   level: 'user',
   source_dir: '.opencode',
+  file_name: null,
 }
 
 describe('SkillsView', () => {
@@ -169,11 +204,12 @@ describe('SkillsView', () => {
     })
   })
 
-  it('renders generic and legacy skill source paths during migration', async () => {
+  it('renders generic, provider-specific, and legacy skill source paths during migration', async () => {
     vi.mocked(listOpenCodeSkills).mockResolvedValue([
       projectSkill,
       { ...projectSkill, name: 'legacy-claude', source_dir: '.claude' },
       { ...projectSkill, name: 'legacy-opencode', source_dir: '.opencode' },
+      piProjectSkill,
     ])
     render(SkillsView)
 
@@ -181,6 +217,17 @@ describe('SkillsView', () => {
       expect(screen.getAllByText('.agents/skills').length).toBeGreaterThanOrEqual(1)
       expect(screen.getAllByText('.claude/skills').length).toBeGreaterThanOrEqual(1)
       expect(screen.getAllByText('.opencode/skills').length).toBeGreaterThanOrEqual(1)
+      expect(screen.getAllByText('.pi/skills').length).toBeGreaterThanOrEqual(1)
+    })
+  })
+
+  it('renders personal Pi skills from the Pi agent skill source path', async () => {
+    vi.mocked(listOpenCodeSkills).mockResolvedValue([piUserSkill])
+    render(SkillsView)
+
+    await waitFor(() => {
+      expect(screen.getAllByText('~/.pi/agent/skills').length).toBeGreaterThanOrEqual(1)
+      expect(screen.getByText('Pi User Review')).toBeTruthy()
     })
   })
 
@@ -263,6 +310,57 @@ describe('SkillsView', () => {
         'user',
         '.opencode',
         '# Updated Personal Shared Skill',
+        null,
+      )
+    })
+  })
+
+  it('saves edits to Pi skills with the Pi source directory', async () => {
+    vi.mocked(listOpenCodeSkills).mockResolvedValue([piProjectSkill])
+    render(SkillsView)
+
+    await waitFor(() => {
+      expect(screen.getByText('Pi Review')).toBeTruthy()
+    })
+
+    await fireEvent.click(screen.getByText('Manually Edit'))
+    const editTextboxes = screen.getAllByRole('textbox')
+    await fireEvent.input(requireElement(editTextboxes[1], HTMLTextAreaElement), { target: { value: '# Updated Pi Review' } })
+    await fireEvent.click(screen.getByText('Save'))
+
+    await waitFor(() => {
+      expect(saveSkillContent).toHaveBeenCalledWith(
+        'proj-1',
+        'pi-review',
+        'project',
+        '.pi',
+        '# Updated Pi Review',
+        null,
+      )
+    })
+  })
+
+  it('saves edits to root markdown Pi skills using their source file name', async () => {
+    vi.mocked(listOpenCodeSkills).mockResolvedValue([piRootMarkdownSkill])
+    render(SkillsView)
+
+    await waitFor(() => {
+      expect(screen.getByText('Root Pi Review')).toBeTruthy()
+    })
+
+    await fireEvent.click(screen.getByText('Manually Edit'))
+    const editTextboxes = screen.getAllByRole('textbox')
+    await fireEvent.input(requireElement(editTextboxes[1], HTMLTextAreaElement), { target: { value: '# Updated Root Pi Review' } })
+    await fireEvent.click(screen.getByText('Save'))
+
+    await waitFor(() => {
+      expect(saveSkillContent).toHaveBeenCalledWith(
+        'proj-1',
+        'root-pi-review',
+        'project',
+        '.pi',
+        '# Updated Root Pi Review',
+        'root-pi-review.md',
       )
     })
   })

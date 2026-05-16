@@ -192,12 +192,14 @@ export interface SkillInfo {
   template: string | null;
   level: "project" | "user";
   source_dir: string;
+  file_name: string | null;
 }
 
 export interface SkillIdentity {
   name: string;
   level: SkillInfo['level'];
   source_dir: string;
+  file_name: string | null;
 }
 
 export function getSkillIdentity(skill: SkillInfo): SkillIdentity {
@@ -205,6 +207,7 @@ export function getSkillIdentity(skill: SkillInfo): SkillIdentity {
     name: skill.name,
     level: skill.level,
     source_dir: skill.source_dir,
+    file_name: skill.file_name,
   };
 }
 
@@ -212,7 +215,8 @@ export function isSameSkillIdentity(skill: SkillInfo, identity: SkillIdentity | 
   return identity !== null &&
     skill.name === identity.name &&
     skill.level === identity.level &&
-    skill.source_dir === identity.source_dir;
+    skill.source_dir === identity.source_dir &&
+    skill.file_name === identity.file_name;
 }
 
 /** Extended agent info from OpenCode GET /agent endpoint — used for @ autocomplete */

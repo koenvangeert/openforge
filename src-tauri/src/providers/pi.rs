@@ -115,7 +115,8 @@ impl PiProvider {
         project_path: Option<&str>,
     ) -> Vec<crate::opencode_client::CommandInfo> {
         use crate::command_discovery::{
-            builtin_pi_commands, scan_prompt_templates_directory, scan_skills_directory,
+            builtin_pi_commands, scan_pi_skills_directory, scan_prompt_templates_directory,
+            scan_skills_directory,
         };
         use std::collections::HashMap;
 
@@ -133,21 +134,32 @@ impl PiProvider {
                 commands_map.insert(cmd.name.clone(), cmd);
             }
 
-            for (dir, source) in &[
-                (home.join(".pi").join("agent").join("skills"), ".pi"),
-                (home.join(".agents").join("skills"), ".agents"),
-            ] {
-                for skill in scan_skills_directory(dir, "user", source) {
-                    commands_map
-                        .entry(format!("skill:{}", skill.name))
-                        .or_insert(crate::opencode_client::CommandInfo {
-                            name: format!("skill:{}", skill.name),
-                            description: skill.description,
-                            source: Some("skill".to_string()),
-                            agent: skill.agent,
-                            extra: serde_json::Map::new(),
-                        });
-                }
+            for skill in
+                scan_pi_skills_directory(&home.join(".pi").join("agent").join("skills"), "user")
+            {
+                commands_map
+                    .entry(format!("skill:{}", skill.name))
+                    .or_insert(crate::opencode_client::CommandInfo {
+                        name: format!("skill:{}", skill.name),
+                        description: skill.description,
+                        source: Some("skill".to_string()),
+                        agent: skill.agent,
+                        extra: serde_json::Map::new(),
+                    });
+            }
+
+            for skill in
+                scan_skills_directory(&home.join(".agents").join("skills"), "user", ".agents")
+            {
+                commands_map
+                    .entry(format!("skill:{}", skill.name))
+                    .or_insert(crate::opencode_client::CommandInfo {
+                        name: format!("skill:{}", skill.name),
+                        description: skill.description,
+                        source: Some("skill".to_string()),
+                        agent: skill.agent,
+                        extra: serde_json::Map::new(),
+                    });
             }
         }
 
@@ -158,22 +170,32 @@ impl PiProvider {
                 commands_map.insert(cmd.name.clone(), cmd);
             }
 
-            for (dir, source) in &[
-                (proj.join(".pi").join("skills"), ".pi"),
-                (proj.join(".agents").join("skills"), ".agents"),
-            ] {
-                for skill in scan_skills_directory(dir, "project", source) {
-                    commands_map.insert(
-                        format!("skill:{}", skill.name),
-                        crate::opencode_client::CommandInfo {
-                            name: format!("skill:{}", skill.name),
-                            description: skill.description,
-                            source: Some("skill".to_string()),
-                            agent: skill.agent,
-                            extra: serde_json::Map::new(),
-                        },
-                    );
-                }
+            for skill in scan_pi_skills_directory(&proj.join(".pi").join("skills"), "project") {
+                commands_map.insert(
+                    format!("skill:{}", skill.name),
+                    crate::opencode_client::CommandInfo {
+                        name: format!("skill:{}", skill.name),
+                        description: skill.description,
+                        source: Some("skill".to_string()),
+                        agent: skill.agent,
+                        extra: serde_json::Map::new(),
+                    },
+                );
+            }
+
+            for skill in
+                scan_skills_directory(&proj.join(".agents").join("skills"), "project", ".agents")
+            {
+                commands_map.insert(
+                    format!("skill:{}", skill.name),
+                    crate::opencode_client::CommandInfo {
+                        name: format!("skill:{}", skill.name),
+                        description: skill.description,
+                        source: Some("skill".to_string()),
+                        agent: skill.agent,
+                        extra: serde_json::Map::new(),
+                    },
+                );
             }
         }
 
@@ -263,6 +285,11 @@ mod tests {
             "---\nname: release-notes\ndescription: Draft release notes\n---\n# Release notes",
         )
         .unwrap();
+        std::fs::write(
+            project.join(".pi").join("skills").join("root-review.md"),
+            "---\nname: root-review\ndescription: Root markdown review skill\n---\n# Root Review",
+        )
+        .unwrap();
 
         let provider = PiProvider::new(PtyManager::new());
         let commands = provider.list_commands(project.to_str());
@@ -275,6 +302,11 @@ mod tests {
         assert!(commands.iter().any(|cmd| {
             cmd.name == "skill:release-notes"
                 && cmd.description.as_deref() == Some("Draft release notes")
+                && cmd.source.as_deref() == Some("skill")
+        }));
+        assert!(commands.iter().any(|cmd| {
+            cmd.name == "skill:root-review"
+                && cmd.description.as_deref() == Some("Root markdown review skill")
                 && cmd.source.as_deref() == Some("skill")
         }));
     }

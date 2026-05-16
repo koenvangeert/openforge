@@ -69,11 +69,12 @@ describe('public plugin utilities', () => {
       template: null,
       level: 'project',
       source_dir: '.agents',
+      file_name: null,
     }
 
     const identity = getSkillIdentity(skill)
 
-    expect(identity).toEqual({ name: 'review', level: 'project', source_dir: '.agents' })
+    expect(identity).toEqual({ name: 'review', level: 'project', source_dir: '.agents', file_name: null })
     expect(isSameSkillIdentity(skill, identity)).toBe(true)
   })
 

@@ -335,21 +335,35 @@ async fn live_agent_review_commands_are_not_files_review_contracts() {
         .await
         .expect_err("removed live review command should be unmatched");
     assert_eq!(err.0, StatusCode::NOT_IMPLEMENTED);
-    assert!(err.1.contains("is not implemented for Electron sidecar slice"));
+    assert!(err
+        .1
+        .contains("is not implemented for Electron sidecar slice"));
     assert!(!err.1.contains("requires provider runtime state"));
 
-    let err = invoke(&state, "abort_agent_review", json!({ "reviewSessionKey": "review-88" }))
-        .await
-        .expect_err("removed live review abort command should be unmatched");
+    let err = invoke(
+        &state,
+        "abort_agent_review",
+        json!({ "reviewSessionKey": "review-88" }),
+    )
+    .await
+    .expect_err("removed live review abort command should be unmatched");
     assert_eq!(err.0, StatusCode::NOT_IMPLEMENTED);
-    assert!(err.1.contains("is not implemented for Electron sidecar slice"));
+    assert!(err
+        .1
+        .contains("is not implemented for Electron sidecar slice"));
     assert!(!err.1.contains("requires provider runtime state"));
 
-    let err = invoke(&state, "dismiss_all_agent_review_comments", json!({ "reviewPrId": 88 }))
-        .await
-        .expect_err("removed bulk dismiss command should be unmatched");
+    let err = invoke(
+        &state,
+        "dismiss_all_agent_review_comments",
+        json!({ "reviewPrId": 88 }),
+    )
+    .await
+    .expect_err("removed bulk dismiss command should be unmatched");
     assert_eq!(err.0, StatusCode::NOT_IMPLEMENTED);
-    assert!(err.1.contains("is not implemented for Electron sidecar slice"));
+    assert!(err
+        .1
+        .contains("is not implemented for Electron sidecar slice"));
 
     let _ = std::fs::remove_file(path);
 }

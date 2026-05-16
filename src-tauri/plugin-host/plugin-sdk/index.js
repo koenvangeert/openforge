@@ -790,11 +790,12 @@ function getSkillIdentity(skill) {
 	return {
 		name: skill.name,
 		level: skill.level,
-		source_dir: skill.source_dir
+		source_dir: skill.source_dir,
+		file_name: skill.file_name
 	};
 }
 function isSameSkillIdentity(skill, identity) {
-	return identity !== null && skill.name === identity.name && skill.level === identity.level && skill.source_dir === identity.source_dir;
+	return identity !== null && skill.name === identity.name && skill.level === identity.level && skill.source_dir === identity.source_dir && skill.file_name === identity.file_name;
 }
 function parseCheckRuns(json) {
 	if (!json) return [];
