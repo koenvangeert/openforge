@@ -202,6 +202,38 @@ export interface SkillIdentity {
   file_name: string | null;
 }
 
+export const SKILL_SOURCE_DIRS = ['.agents', '.claude', '.opencode', '.pi'] as const;
+
+export type SkillSourceDir = typeof SKILL_SOURCE_DIRS[number];
+
+export interface SkillSourceGroup {
+  source: string;
+  skills: SkillInfo[];
+}
+
+export function getSkillSourcePath(source: string, level: SkillInfo['level']): string {
+  if (source === '.pi' && level === 'user') return '.pi/agent/skills';
+  return `${source}/skills`;
+}
+
+export function groupSkillsBySource(skills: SkillInfo[]): SkillSourceGroup[] {
+  const groups: SkillSourceGroup[] = [];
+  for (const source of SKILL_SOURCE_DIRS) {
+    const matching = skills.filter((skill) => skill.source_dir === source);
+    if (matching.length > 0) {
+      groups.push({ source, skills: matching });
+    }
+  }
+
+  const known = new Set<string>(SKILL_SOURCE_DIRS);
+  const other = skills.filter((skill) => !known.has(skill.source_dir));
+  if (other.length > 0) {
+    groups.push({ source: 'other', skills: other });
+  }
+
+  return groups;
+}
+
 export function getSkillIdentity(skill: SkillInfo): SkillIdentity {
   return {
     name: skill.name,

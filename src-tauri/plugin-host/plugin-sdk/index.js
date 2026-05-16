@@ -786,6 +786,33 @@ function preservePullRequestState(oldPr, newPr) {
 	}
 	return result;
 }
+var SKILL_SOURCE_DIRS = [
+	".agents",
+	".claude",
+	".opencode",
+	".pi"
+];
+function getSkillSourcePath(source, level) {
+	if (source === ".pi" && level === "user") return ".pi/agent/skills";
+	return `${source}/skills`;
+}
+function groupSkillsBySource(skills) {
+	const groups = [];
+	for (const source of SKILL_SOURCE_DIRS) {
+		const matching = skills.filter((skill) => skill.source_dir === source);
+		if (matching.length > 0) groups.push({
+			source,
+			skills: matching
+		});
+	}
+	const known = new Set(SKILL_SOURCE_DIRS);
+	const other = skills.filter((skill) => !known.has(skill.source_dir));
+	if (other.length > 0) groups.push({
+		source: "other",
+		skills: other
+	});
+	return groups;
+}
 function getSkillIdentity(skill) {
 	return {
 		name: skill.name,
@@ -817,4 +844,4 @@ function splitCheckRuns(checks) {
 	};
 }
 //#endregion
-export { MAX_SUPPORTED_API_VERSION, MIN_SUPPORTED_API_VERSION, OPENFORGE_PACKAGE_METADATA_SCHEMA, OPENFORGE_PLUGIN_API_VERSION, OPENFORGE_PLUGIN_CAPABILITIES, SUPPORTED_OPENFORGE_API_VERSIONS, TestingOpenForgeRegistryFake, TestingSubscriptionSink, createMemoryPluginStorage, createMockBackendOpenForgeApi, createMockFrontendOpenForgeApi, createMockOpenForgeApi, createMockPluginContext, createOpenForgeRegistryFake, createTestingCalls, getSkillIdentity, hasMergeConflicts, isOpenForgePackageMetadata, isPluginPackageMetadata, isPluginViewKey, isQueuedForMerge, isReadyToMerge, isSameSkillIdentity, isSupportedOpenForgeApiVersion, makePluginViewKey, parseCheckRuns, parsePluginViewKey, parseStrictFiniteNumber, preservePullRequestState, splitCheckRuns, validateOpenForgePackageMetadata, validatePluginPackageMetadata };
+export { MAX_SUPPORTED_API_VERSION, MIN_SUPPORTED_API_VERSION, OPENFORGE_PACKAGE_METADATA_SCHEMA, OPENFORGE_PLUGIN_API_VERSION, OPENFORGE_PLUGIN_CAPABILITIES, SKILL_SOURCE_DIRS, SUPPORTED_OPENFORGE_API_VERSIONS, TestingOpenForgeRegistryFake, TestingSubscriptionSink, createMemoryPluginStorage, createMockBackendOpenForgeApi, createMockFrontendOpenForgeApi, createMockOpenForgeApi, createMockPluginContext, createOpenForgeRegistryFake, createTestingCalls, getSkillIdentity, getSkillSourcePath, groupSkillsBySource, hasMergeConflicts, isOpenForgePackageMetadata, isPluginPackageMetadata, isPluginViewKey, isQueuedForMerge, isReadyToMerge, isSameSkillIdentity, isSupportedOpenForgeApiVersion, makePluginViewKey, parseCheckRuns, parsePluginViewKey, parseStrictFiniteNumber, preservePullRequestState, splitCheckRuns, validateOpenForgePackageMetadata, validatePluginPackageMetadata };

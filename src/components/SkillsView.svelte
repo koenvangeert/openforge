@@ -13,7 +13,7 @@
   import { useVimNavigation } from '../lib/useVimNavigation.svelte'
   import ProjectPageHeader from './project/ProjectPageHeader.svelte'
   import MarkdownContent from './shared/content/MarkdownContent.svelte'
-  import { getSkillIdentity, isSameSkillIdentity, type SkillInfo } from '../lib/types'
+  import { getSkillIdentity, getSkillSourcePath, groupSkillsBySource, isSameSkillIdentity, type SkillInfo } from '../lib/types'
 
   const router = useAppRouter()
 
@@ -39,33 +39,8 @@
   let projectSkills = $derived(filteredSkills.filter(s => s.level === 'project'))
   let userSkills = $derived(filteredSkills.filter(s => s.level === 'user'))
 
-  // Group skills by source_dir within each level
-  const SOURCE_DIRS = ['.agents', '.claude', '.opencode', '.pi'] as const
-
-  function skillSourcePath(source: string, level: SkillInfo['level']): string {
-    if (source === '.pi' && level === 'user') return '.pi/agent/skills'
-    return `${source}/skills`
-  }
-
-  function groupBySource(skills: SkillInfo[]): { source: string; skills: SkillInfo[] }[] {
-    const groups: { source: string; skills: SkillInfo[] }[] = []
-    for (const src of SOURCE_DIRS) {
-      const matching = skills.filter(s => s.source_dir === src)
-      if (matching.length > 0) {
-        groups.push({ source: src, skills: matching })
-      }
-    }
-    // Catch any skills with unknown source_dir
-    const known = new Set<string>(SOURCE_DIRS)
-    const other = skills.filter(s => !known.has(s.source_dir))
-    if (other.length > 0) {
-      groups.push({ source: 'other', skills: other })
-    }
-    return groups
-  }
-
-  let projectGroups = $derived(groupBySource(projectSkills))
-  let userGroups = $derived(groupBySource(userSkills))
+  let projectGroups = $derived(groupSkillsBySource(projectSkills))
+  let userGroups = $derived(groupSkillsBySource(userSkills))
 
   // Collapsible state: track collapsed sections by key like "project" / "user" / "project:.agents"
   let collapsed = $state(new Map<string, boolean>())
@@ -247,7 +222,7 @@
                   onclick={() => { collapsed = new Map(collapsed).set(groupKey, !groupCollapsed) }}
                 >
                   <span class="text-xs text-base-content/40 transition-transform {groupCollapsed ? '' : 'rotate-90'}">&rsaquo;</span>
-                  <span class="text-xs font-medium text-base-content/40">{skillSourcePath(group.source, 'project')}</span>
+                  <span class="text-xs font-medium text-base-content/40">{getSkillSourcePath(group.source, 'project')}</span>
                   <span class="text-xs text-base-content/30 ml-auto">{group.skills.length}</span>
                 </button>
                 {#if !groupCollapsed}
@@ -288,7 +263,7 @@
                   onclick={() => { collapsed = new Map(collapsed).set(groupKey, !groupCollapsed) }}
                 >
                   <span class="text-xs text-base-content/40 transition-transform {groupCollapsed ? '' : 'rotate-90'}">&rsaquo;</span>
-                  <span class="text-xs font-medium text-base-content/40">~/{skillSourcePath(group.source, 'user')}</span>
+                  <span class="text-xs font-medium text-base-content/40">~/{getSkillSourcePath(group.source, 'user')}</span>
                   <span class="text-xs text-base-content/30 ml-auto">{group.skills.length}</span>
                 </button>
                 {#if !groupCollapsed}
@@ -321,7 +296,7 @@
           <div class="flex items-center gap-3 min-w-0">
             <h3 class="text-base font-semibold text-base-content m-0 truncate">{selectedSkill.name}</h3>
             <span class="badge badge-sm {selectedSkill.level === 'project' ? 'badge-primary' : 'badge-secondary'} shrink-0">{selectedSkill.level === 'project' ? 'repository' : 'personal'}</span>
-            <span class="text-xs text-base-content/40 shrink-0">{skillSourcePath(selectedSkill.source_dir, selectedSkill.level)}</span>
+            <span class="text-xs text-base-content/40 shrink-0">{getSkillSourcePath(selectedSkill.source_dir, selectedSkill.level)}</span>
           </div>
           <div class="flex items-center gap-2 shrink-0">
             {#if editMode}
