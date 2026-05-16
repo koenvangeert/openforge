@@ -19,8 +19,8 @@ describe('parseCheckpointQuestion', () => {
     expect(parseCheckpointQuestion('{"unknown":"data"}')).toBe('Agent is waiting for input')
   })
 
-  it('ignores PTY instance metadata used for provider-owned terminal tracking', () => {
-    expect(parseCheckpointQuestion('{"pty_instance_id":42}')).toBeNull()
+  it('treats unknown JSON as checkpoint content parsing rather than PTY metadata filtering', () => {
+    expect(parseCheckpointQuestion('{"pty_instance_id":42}')).toBe('Agent is waiting for input')
   })
 
   it('extracts properties.description', () => {

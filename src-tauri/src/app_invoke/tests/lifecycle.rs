@@ -48,14 +48,8 @@ async fn handles_agent_lifecycle_followups() {
             "claude-code",
         )
         .expect("create claude session");
-        db.update_agent_session(
-            "session-claude",
-            "implementing",
-            "running",
-            Some(r#"{"pty_instance_id":7}"#),
-            None,
-        )
-        .expect("store claude pty instance");
+        db.set_agent_session_pty_instance_id("session-claude", 7)
+            .expect("store claude pty instance");
         (pi_task.id, claude_task.id)
     };
 
@@ -144,14 +138,8 @@ async fn finalize_agent_session_completes_successful_opencode_pty_run() {
             "opencode",
         )
         .expect("create session");
-        db.update_agent_session(
-            "session-opencode",
-            "implementing",
-            "running",
-            Some(r#"{"pty_instance_id":9}"#),
-            None,
-        )
-        .expect("store pty instance");
+        db.set_agent_session_pty_instance_id("session-opencode", 9)
+            .expect("store pty instance");
         task.id
     };
 
@@ -191,14 +179,8 @@ async fn finalize_agent_session_ignores_missing_pty_exit_instance() {
             "opencode",
         )
         .expect("create session");
-        db.update_agent_session(
-            "session-opencode-missing-instance",
-            "implementing",
-            "running",
-            Some(r#"{"pty_instance_id":42}"#),
-            None,
-        )
-        .expect("store pty instance");
+        db.set_agent_session_pty_instance_id("session-opencode-missing-instance", 42)
+            .expect("store pty instance");
         task.id
     };
 
@@ -238,14 +220,8 @@ async fn finalize_agent_session_ignores_stale_pty_exit_instance() {
             "opencode",
         )
         .expect("create session");
-        db.update_agent_session(
-            "session-opencode-current",
-            "implementing",
-            "running",
-            Some(r#"{"pty_instance_id":42}"#),
-            None,
-        )
-        .expect("store pty instance");
+        db.set_agent_session_pty_instance_id("session-opencode-current", 42)
+            .expect("store pty instance");
         task.id
     };
 

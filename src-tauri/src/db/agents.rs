@@ -1,6 +1,8 @@
 use rusqlite::Result;
 use serde::Serialize;
 
+const AGENT_SESSION_SELECT_COLUMNS: &str = "id, ticket_id, opencode_session_id, stage, status, checkpoint_data, pty_instance_id, error_message, created_at, updated_at, provider, claude_session_id, pi_session_id";
+
 /// Agent session row from database
 #[derive(Debug, Clone, Serialize)]
 pub struct AgentSessionRow {
@@ -10,12 +12,33 @@ pub struct AgentSessionRow {
     pub stage: String,
     pub status: String,
     pub checkpoint_data: Option<String>,
+    pub pty_instance_id: Option<u64>,
     pub error_message: Option<String>,
     pub created_at: i64,
     pub updated_at: i64,
     pub provider: String,
     pub claude_session_id: Option<String>,
     pub pi_session_id: Option<String>,
+}
+
+fn agent_session_from_row(row: &rusqlite::Row<'_>) -> Result<AgentSessionRow> {
+    Ok(AgentSessionRow {
+        id: row.get(0)?,
+        ticket_id: row.get(1)?,
+        opencode_session_id: row.get(2)?,
+        stage: row.get(3)?,
+        status: row.get(4)?,
+        checkpoint_data: row.get(5)?,
+        pty_instance_id: row
+            .get::<_, Option<i64>>(6)?
+            .and_then(|value| u64::try_from(value).ok()),
+        error_message: row.get(7)?,
+        created_at: row.get(8)?,
+        updated_at: row.get(9)?,
+        provider: row.get(10)?,
+        claude_session_id: row.get(11)?,
+        pi_session_id: row.get(12)?,
+    })
 }
 
 impl super::Database {
@@ -99,6 +122,17 @@ impl super::Database {
         Ok(())
     }
 
+    pub fn set_agent_session_pty_instance_id(&self, id: &str, pty_instance_id: u64) -> Result<()> {
+        let pty_instance_id = i64::try_from(pty_instance_id)
+            .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))?;
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE agent_sessions SET pty_instance_id = ?1 WHERE id = ?2",
+            rusqlite::params![pty_instance_id, id],
+        )?;
+        Ok(())
+    }
+
     pub fn set_agent_session_provider_id(
         &self,
         id: &str,
@@ -115,26 +149,12 @@ impl super::Database {
 
     pub fn get_agent_session(&self, id: &str) -> Result<Option<AgentSessionRow>> {
         let conn = self.conn.lock().unwrap();
-        let mut stmt = conn.prepare(
-            "SELECT id, ticket_id, opencode_session_id, stage, status, checkpoint_data, error_message, created_at, updated_at, provider, claude_session_id, pi_session_id
-              FROM agent_sessions WHERE id = ?1",
-        )?;
+        let mut stmt = conn.prepare(&format!(
+            "SELECT {AGENT_SESSION_SELECT_COLUMNS} FROM agent_sessions WHERE id = ?1"
+        ))?;
         let mut rows = stmt.query([id])?;
         if let Some(row) = rows.next()? {
-            Ok(Some(AgentSessionRow {
-                id: row.get(0)?,
-                ticket_id: row.get(1)?,
-                opencode_session_id: row.get(2)?,
-                stage: row.get(3)?,
-                status: row.get(4)?,
-                checkpoint_data: row.get(5)?,
-                error_message: row.get(6)?,
-                created_at: row.get(7)?,
-                updated_at: row.get(8)?,
-                provider: row.get(9)?,
-                claude_session_id: row.get(10)?,
-                pi_session_id: row.get(11)?,
-            }))
+            Ok(Some(agent_session_from_row(row)?))
         } else {
             Ok(None)
         }
@@ -145,26 +165,12 @@ impl super::Database {
         ticket_id: &str,
     ) -> Result<Option<AgentSessionRow>> {
         let conn = self.conn.lock().unwrap();
-        let mut stmt = conn.prepare(
-            "SELECT id, ticket_id, opencode_session_id, stage, status, checkpoint_data, error_message, created_at, updated_at, provider, claude_session_id, pi_session_id
-              FROM agent_sessions WHERE ticket_id = ?1 ORDER BY created_at DESC, rowid DESC LIMIT 1",
-        )?;
+        let mut stmt = conn.prepare(&format!(
+            "SELECT {AGENT_SESSION_SELECT_COLUMNS} FROM agent_sessions WHERE ticket_id = ?1 ORDER BY created_at DESC, rowid DESC LIMIT 1"
+        ))?;
         let mut rows = stmt.query([ticket_id])?;
         if let Some(row) = rows.next()? {
-            Ok(Some(AgentSessionRow {
-                id: row.get(0)?,
-                ticket_id: row.get(1)?,
-                opencode_session_id: row.get(2)?,
-                stage: row.get(3)?,
-                status: row.get(4)?,
-                checkpoint_data: row.get(5)?,
-                error_message: row.get(6)?,
-                created_at: row.get(7)?,
-                updated_at: row.get(8)?,
-                provider: row.get(9)?,
-                claude_session_id: row.get(10)?,
-                pi_session_id: row.get(11)?,
-            }))
+            Ok(Some(agent_session_from_row(row)?))
         } else {
             Ok(None)
         }
@@ -183,8 +189,13 @@ impl super::Database {
             .enumerate()
             .map(|(i, _)| format!("?{}", i + 1))
             .collect();
+        let select_columns = AGENT_SESSION_SELECT_COLUMNS
+            .split(", ")
+            .map(|column| format!("s.{column}"))
+            .collect::<Vec<_>>()
+            .join(", ");
         let sql = format!(
-            "SELECT s.id, s.ticket_id, s.opencode_session_id, s.stage, s.status, s.checkpoint_data, s.error_message, s.created_at, s.updated_at, s.provider, s.claude_session_id, s.pi_session_id
+            "SELECT {select_columns}
               FROM agent_sessions s
              WHERE s.ticket_id IN ({})
                AND s.rowid = (
@@ -201,22 +212,7 @@ impl super::Database {
             .iter()
             .map(|id| id as &dyn rusqlite::types::ToSql)
             .collect();
-        let rows = stmt.query_map(params.as_slice(), |row| {
-            Ok(AgentSessionRow {
-                id: row.get(0)?,
-                ticket_id: row.get(1)?,
-                opencode_session_id: row.get(2)?,
-                stage: row.get(3)?,
-                status: row.get(4)?,
-                checkpoint_data: row.get(5)?,
-                error_message: row.get(6)?,
-                created_at: row.get(7)?,
-                updated_at: row.get(8)?,
-                provider: row.get(9)?,
-                claude_session_id: row.get(10)?,
-                pi_session_id: row.get(11)?,
-            })
-        })?;
+        let rows = stmt.query_map(params.as_slice(), agent_session_from_row)?;
         let mut result = Vec::new();
         for row in rows {
             result.push(row?);
@@ -226,26 +222,10 @@ impl super::Database {
 
     pub fn get_sessions_by_provider(&self, provider: &str) -> Result<Vec<AgentSessionRow>> {
         let conn = self.conn.lock().unwrap();
-        let mut stmt = conn.prepare(
-            "SELECT id, ticket_id, opencode_session_id, stage, status, checkpoint_data, error_message, created_at, updated_at, provider, claude_session_id, pi_session_id
-              FROM agent_sessions WHERE provider = ?1 ORDER BY created_at DESC",
-        )?;
-        let rows = stmt.query_map([provider], |row| {
-            Ok(AgentSessionRow {
-                id: row.get(0)?,
-                ticket_id: row.get(1)?,
-                opencode_session_id: row.get(2)?,
-                stage: row.get(3)?,
-                status: row.get(4)?,
-                checkpoint_data: row.get(5)?,
-                error_message: row.get(6)?,
-                created_at: row.get(7)?,
-                updated_at: row.get(8)?,
-                provider: row.get(9)?,
-                claude_session_id: row.get(10)?,
-                pi_session_id: row.get(11)?,
-            })
-        })?;
+        let mut stmt = conn.prepare(&format!(
+            "SELECT {AGENT_SESSION_SELECT_COLUMNS} FROM agent_sessions WHERE provider = ?1 ORDER BY created_at DESC"
+        ))?;
+        let rows = stmt.query_map([provider], agent_session_from_row)?;
         let mut result = Vec::new();
         for row in rows {
             result.push(row?);
@@ -255,26 +235,10 @@ impl super::Database {
 
     pub fn get_running_claude_sessions(&self) -> Result<Vec<AgentSessionRow>> {
         let conn = self.conn.lock().unwrap();
-        let mut stmt = conn.prepare(
-            "SELECT id, ticket_id, opencode_session_id, stage, status, checkpoint_data, error_message, created_at, updated_at, provider, claude_session_id, pi_session_id
-              FROM agent_sessions WHERE provider = 'claude-code' AND status = 'running' ORDER BY created_at DESC",
-        )?;
-        let rows = stmt.query_map([], |row| {
-            Ok(AgentSessionRow {
-                id: row.get(0)?,
-                ticket_id: row.get(1)?,
-                opencode_session_id: row.get(2)?,
-                stage: row.get(3)?,
-                status: row.get(4)?,
-                checkpoint_data: row.get(5)?,
-                error_message: row.get(6)?,
-                created_at: row.get(7)?,
-                updated_at: row.get(8)?,
-                provider: row.get(9)?,
-                claude_session_id: row.get(10)?,
-                pi_session_id: row.get(11)?,
-            })
-        })?;
+        let mut stmt = conn.prepare(&format!(
+            "SELECT {AGENT_SESSION_SELECT_COLUMNS} FROM agent_sessions WHERE provider = 'claude-code' AND status = 'running' ORDER BY created_at DESC"
+        ))?;
+        let rows = stmt.query_map([], agent_session_from_row)?;
         let mut result = Vec::new();
         for row in rows {
             result.push(row?);

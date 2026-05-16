@@ -15,14 +15,8 @@ async fn test_pi_agent_status_changes_publish_to_app_event_stream() {
             .expect("create task");
         db.create_agent_session("ses-pi", &task.id, None, "implement", "completed", "pi")
             .expect("create session");
-        db.update_agent_session(
-            "ses-pi",
-            "implement",
-            "completed",
-            Some(r#"{"pty_instance_id":7}"#),
-            None,
-        )
-        .expect("set checkpoint");
+        db.set_agent_session_pty_instance_id("ses-pi", 7)
+            .expect("set checkpoint");
         task.id
     };
 
@@ -70,14 +64,8 @@ async fn test_pi_agent_end_hook_marks_running_pi_session_completed() {
             "pi",
         )
         .expect("create pi session");
-        db.update_agent_session(
-            "ses-pi-running",
-            "implementing",
-            "running",
-            Some(r#"{"pty_instance_id":42}"#),
-            None,
-        )
-        .expect("store pty instance");
+        db.set_agent_session_pty_instance_id("ses-pi-running", 42)
+            .expect("store pty instance");
         task.id
     };
 
@@ -106,10 +94,8 @@ async fn test_pi_agent_end_hook_marks_running_pi_session_completed() {
         .expect("get session")
         .expect("session exists");
     assert_eq!(session.status, "completed");
-    assert_eq!(
-        session.checkpoint_data,
-        Some(r#"{"pty_instance_id":42}"#.to_string())
-    );
+    assert_eq!(session.pty_instance_id, Some(42));
+    assert_eq!(session.checkpoint_data, None);
     assert!(session.error_message.is_none());
 
     let _ = std::fs::remove_file(path);
@@ -135,14 +121,8 @@ async fn test_pi_agent_start_hook_marks_completed_pi_session_running() {
             "pi",
         )
         .expect("create pi session");
-        db.update_agent_session(
-            "ses-pi-completed",
-            "implementing",
-            "completed",
-            Some(r#"{"pty_instance_id":42}"#),
-            None,
-        )
-        .expect("store pty instance");
+        db.set_agent_session_pty_instance_id("ses-pi-completed", 42)
+            .expect("store pty instance");
         task.id
     };
 
@@ -171,10 +151,8 @@ async fn test_pi_agent_start_hook_marks_completed_pi_session_running() {
         .expect("get session")
         .expect("session exists");
     assert_eq!(session.status, "running");
-    assert_eq!(
-        session.checkpoint_data,
-        Some(r#"{"pty_instance_id":42}"#.to_string())
-    );
+    assert_eq!(session.pty_instance_id, Some(42));
+    assert_eq!(session.checkpoint_data, None);
     assert!(session.error_message.is_none());
 
     let _ = std::fs::remove_file(path);
@@ -200,14 +178,8 @@ fn test_pi_status_update_emits_when_matching_session_already_has_target_status()
             "pi",
         )
         .expect("create pi session");
-        db.update_agent_session(
-            "ses-pi-running",
-            "implementing",
-            "running",
-            Some(r#"{"pty_instance_id":42}"#),
-            None,
-        )
-        .expect("store pty instance");
+        db.set_agent_session_pty_instance_id("ses-pi-running", 42)
+            .expect("store pty instance");
         task.id
     };
 
@@ -260,14 +232,8 @@ async fn test_pi_agent_start_hook_ignores_stale_pty_instance() {
             "pi",
         )
         .expect("create pi session");
-        db.update_agent_session(
-            "ses-pi-completed",
-            "implementing",
-            "completed",
-            Some(r#"{"pty_instance_id":99}"#),
-            None,
-        )
-        .expect("store pty instance");
+        db.set_agent_session_pty_instance_id("ses-pi-completed", 99)
+            .expect("store pty instance");
         task.id
     };
 
@@ -320,14 +286,8 @@ async fn test_pi_agent_end_hook_ignores_stale_pty_instance() {
             "pi",
         )
         .expect("create pi session");
-        db.update_agent_session(
-            "ses-pi-running",
-            "implementing",
-            "running",
-            Some(r#"{"pty_instance_id":99}"#),
-            None,
-        )
-        .expect("store pty instance");
+        db.set_agent_session_pty_instance_id("ses-pi-running", 99)
+            .expect("store pty instance");
         task.id
     };
 
@@ -679,14 +639,8 @@ async fn agent_lifecycle_route_updates_opencode_status_through_shared_seam() {
             "opencode",
         )
         .expect("create opencode session");
-        db.update_agent_session(
-            "ses-opencode-completed-shared",
-            "implementing",
-            "completed",
-            Some(r#"{"pty_instance_id":88}"#),
-            None,
-        )
-        .expect("store pty instance");
+        db.set_agent_session_pty_instance_id("ses-opencode-completed-shared", 88)
+            .expect("store pty instance");
         task.id
     };
 
@@ -719,10 +673,8 @@ async fn agent_lifecycle_route_updates_opencode_status_through_shared_seam() {
         session.opencode_session_id,
         Some("ses_shared88".to_string())
     );
-    assert_eq!(
-        session.checkpoint_data,
-        Some(r#"{"pty_instance_id":88}"#.to_string())
-    );
+    assert_eq!(session.pty_instance_id, Some(88));
+    assert_eq!(session.checkpoint_data, None);
     let event = events.recv().await.expect("app event");
     assert_eq!(event.event_name, "agent-status-changed");
     assert_eq!(event.payload["task_id"], task_id);
@@ -758,14 +710,8 @@ async fn agent_lifecycle_route_updates_pi_status_through_shared_seam() {
             "pi",
         )
         .expect("create pi session");
-        db.update_agent_session(
-            "ses-pi-shared",
-            "implementing",
-            "completed",
-            Some(r#"{"pty_instance_id":89}"#),
-            None,
-        )
-        .expect("store pty instance");
+        db.set_agent_session_pty_instance_id("ses-pi-shared", 89)
+            .expect("store pty instance");
         task.id
     };
 
@@ -829,14 +775,8 @@ async fn agent_lifecycle_route_updates_claude_status_through_shared_seam() {
             "claude-code",
         )
         .expect("create claude session");
-        db.update_agent_session(
-            "ses-claude-shared",
-            "implementing",
-            "completed",
-            Some(r#"{"pty_instance_id":90}"#),
-            None,
-        )
-        .expect("store pty instance");
+        db.set_agent_session_pty_instance_id("ses-claude-shared", 90)
+            .expect("store pty instance");
         task.id
     };
 
@@ -904,14 +844,8 @@ async fn agent_lifecycle_route_updates_claude_requested_permission_to_paused() {
             "claude-code",
         )
         .expect("create claude session");
-        db.update_agent_session(
-            "ses-claude-permission",
-            "implementing",
-            "running",
-            Some(r#"{"pty_instance_id":91}"#),
-            None,
-        )
-        .expect("store pty instance");
+        db.set_agent_session_pty_instance_id("ses-claude-permission", 91)
+            .expect("store pty instance");
         task.id
     };
 
@@ -974,14 +908,8 @@ async fn opencode_hook_stores_session_id_and_completes_on_idle_event() {
             "opencode",
         )
         .expect("create opencode session");
-        db.update_agent_session(
-            "ses-opencode-running",
-            "implementing",
-            "running",
-            Some(r#"{"pty_instance_id":77}"#),
-            None,
-        )
-        .expect("store pty instance");
+        db.set_agent_session_pty_instance_id("ses-opencode-running", 77)
+            .expect("store pty instance");
         task.id
     };
 
@@ -1031,14 +959,8 @@ async fn opencode_hook_preserves_checkpoint_when_start_event_runs_session() {
             "opencode",
         )
         .expect("create opencode session");
-        db.update_agent_session(
-            "ses-opencode-completed",
-            "implementing",
-            "completed",
-            Some(r#"{"pty_instance_id":77}"#),
-            None,
-        )
-        .expect("store pty instance");
+        db.set_agent_session_pty_instance_id("ses-opencode-completed", 77)
+            .expect("store pty instance");
         task.id
     };
 
@@ -1063,10 +985,8 @@ async fn opencode_hook_preserves_checkpoint_when_start_event_runs_session() {
         .expect("get session")
         .expect("session exists");
     assert_eq!(session.status, "running");
-    assert_eq!(
-        session.checkpoint_data,
-        Some(r#"{"pty_instance_id":77}"#.to_string())
-    );
+    assert_eq!(session.pty_instance_id, Some(77));
+    assert_eq!(session.checkpoint_data, None);
     assert_eq!(
         session.opencode_session_id,
         Some("ses_session77".to_string())
@@ -1092,14 +1012,8 @@ async fn opencode_hook_ignores_error_status_events() {
             "opencode",
         )
         .expect("create opencode session");
-        db.update_agent_session(
-            "ses-opencode-error",
-            "implementing",
-            "running",
-            Some(r#"{"pty_instance_id":78}"#),
-            None,
-        )
-        .expect("store pty instance");
+        db.set_agent_session_pty_instance_id("ses-opencode-error", 78)
+            .expect("store pty instance");
         task.id
     };
 

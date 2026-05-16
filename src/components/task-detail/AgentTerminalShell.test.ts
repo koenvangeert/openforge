@@ -271,14 +271,11 @@ describe('AgentTerminalShell', () => {
     expect(screen.getByText('Agent is waiting for input')).toBeTruthy()
   })
 
-  it.each([
-    '{"pty_instance_id":42}',
-    '{"ptyInstanceId":42}',
-  ])('does not show a checkpoint banner for OpenCode PTY metadata payload %s', (checkpointData) => {
+  it('shows the generic checkpoint fallback for unknown PTY-shaped checkpoint payloads', () => {
     setActiveSession(createAgentSession({
       provider: 'opencode',
       status: 'paused',
-      checkpoint_data: checkpointData,
+      checkpoint_data: '{"pty_instance_id":42}',
     }))
 
     render(AgentTerminalShell, {
@@ -291,7 +288,7 @@ describe('AgentTerminalShell', () => {
       },
     })
 
-    expect(screen.queryByText('Agent is waiting for input')).toBeNull()
+    expect(screen.getByText('Agent is waiting for input')).toBeTruthy()
   })
 
   it('does not show a checkpoint banner for OpenCode sessions unless they are paused', () => {
@@ -346,7 +343,8 @@ describe('AgentTerminalShell', () => {
     setActiveSession(createAgentSession({
       provider: 'opencode',
       status: 'paused',
-      checkpoint_data: '{"ptyInstanceId":42}',
+      checkpoint_data: null,
+      pty_instance_id: 42,
     }))
 
     await vi.waitFor(() => {

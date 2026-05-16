@@ -44,12 +44,7 @@ pub struct AgentLifecycleStatusChange {
 }
 
 pub fn session_matches_pty_instance(session: &AgentSessionRow, pty_instance_id: u64) -> bool {
-    session
-        .checkpoint_data
-        .as_deref()
-        .and_then(|data| serde_json::from_str::<serde_json::Value>(data).ok())
-        .and_then(|value| value.get("pty_instance_id").and_then(|id| id.as_u64()))
-        == Some(pty_instance_id)
+    session.pty_instance_id == Some(pty_instance_id)
 }
 
 pub(crate) fn lifecycle_status_transition(
@@ -235,19 +230,9 @@ pub(crate) fn create_and_record_session(
     }
 
     if let Some(pty_instance_id) = provider_session.pty_instance_id {
-        let checkpoint_data = serde_json::json!({
-            "pty_instance_id": pty_instance_id,
-        })
-        .to_string();
         db.lock()
             .unwrap()
-            .update_agent_session(
-                &agent_session_id,
-                "implementing",
-                "running",
-                Some(&checkpoint_data),
-                None,
-            )
+            .set_agent_session_pty_instance_id(&agent_session_id, pty_instance_id)
             .map_err(|e| format!("Failed to store PTY instance ID: {}", e))?;
     }
 
@@ -360,14 +345,8 @@ mod tests {
             "opencode",
         )
         .expect("create opencode session");
-        db.update_agent_session(
-            "session-row",
-            "implementing",
-            "running",
-            Some(r#"{"pty_instance_id":42}"#),
-            None,
-        )
-        .expect("store pty instance");
+        db.set_agent_session_pty_instance_id("session-row", 42)
+            .expect("store pty instance");
 
         apply_agent_lifecycle_notification(
             &db,
@@ -406,14 +385,8 @@ mod tests {
             "opencode",
         )
         .expect("create opencode session");
-        db.update_agent_session(
-            "session-row",
-            "implementing",
-            "running",
-            Some(r#"{"pty_instance_id":42}"#),
-            None,
-        )
-        .expect("store pty instance");
+        db.set_agent_session_pty_instance_id("session-row", 42)
+            .expect("store pty instance");
 
         apply_agent_lifecycle_notification(
             &db,
@@ -539,10 +512,8 @@ mod tests {
             .get_agent_session(&session_id)
             .expect("get session")
             .expect("session exists");
-        assert_eq!(
-            session.checkpoint_data,
-            Some(r#"{"pty_instance_id":42}"#.to_string())
-        );
+        assert_eq!(session.pty_instance_id, Some(42));
+        assert_eq!(session.checkpoint_data, None);
 
         drop(db_arc);
         let _ = std::fs::remove_file(&path);
@@ -564,14 +535,8 @@ mod tests {
             "opencode",
         )
         .expect("create session");
-        db.update_agent_session(
-            "ses-normalized",
-            "implementing",
-            "completed",
-            Some(r#"{"pty_instance_id":5}"#),
-            None,
-        )
-        .expect("store pty instance");
+        db.set_agent_session_pty_instance_id("ses-normalized", 5)
+            .expect("store pty instance");
 
         let change = apply_agent_lifecycle_notification(
             &db,
@@ -625,14 +590,8 @@ mod tests {
             "claude-code",
         )
         .expect("create session");
-        db.update_agent_session(
-            "ses-claude-pty",
-            "implementing",
-            "completed",
-            Some(r#"{"pty_instance_id":41}"#),
-            None,
-        )
-        .expect("store pty instance");
+        db.set_agent_session_pty_instance_id("ses-claude-pty", 41)
+            .expect("store pty instance");
 
         let stale = apply_agent_lifecycle_notification(
             &db,

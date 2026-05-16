@@ -72,6 +72,7 @@ function makeSession(taskId: string, status: string): AgentSession {
     stage: 'implementation',
     status,
     checkpoint_data: null,
+    pty_instance_id: null,
     error_message: null,
     created_at: 1000,
     updated_at: 1000,

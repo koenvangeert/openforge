@@ -202,6 +202,7 @@ mod tests {
             stage: "implementing".to_string(),
             status: "running".to_string(),
             checkpoint_data: None,
+            pty_instance_id: None,
             error_message: None,
             created_at: 0,
             updated_at: 0,
