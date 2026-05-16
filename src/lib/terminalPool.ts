@@ -243,24 +243,26 @@ function loadWebglAddon(entry: PoolEntry): void {
 
   try {
     webglAddon = new WebglAddon()
-    entry.terminal.loadAddon(webglAddon)
     entry.webglAddon = webglAddon
     entry.webglContextLossDisposable = webglAddon.onContextLoss(() => {
       recoverFromWebglContextLoss(entry)
     })
+    entry.terminal.loadAddon(webglAddon)
   } catch (error) {
-    if (entry.webglAddon) {
-      disposeWebglAddon(entry)
-    } else {
-      try {
-        webglAddon?.dispose()
-      } catch (disposeError) {
-        console.warn('[terminalPool] Failed to dispose unavailable WebGL renderer addon:', disposeError)
+    if (!entry.webglUnavailable) {
+      if (entry.webglAddon) {
+        disposeWebglAddon(entry)
+      } else {
+        try {
+          webglAddon?.dispose()
+        } catch (disposeError) {
+          console.warn('[terminalPool] Failed to dispose unavailable WebGL renderer addon:', disposeError)
+        }
       }
+      entry.webglAddon = null
+      entry.webglContextLossDisposable = null
+      entry.webglUnavailable = true
     }
-    entry.webglAddon = null
-    entry.webglContextLossDisposable = null
-    entry.webglUnavailable = true
     console.warn('[terminalPool] WebGL renderer unavailable; falling back to the default renderer:', error)
   }
 }
