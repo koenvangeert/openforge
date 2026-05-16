@@ -1,6 +1,6 @@
 use crate::command_discovery::{
     is_supported_skill_source_dir, scan_skill_directories_for_root, search_project_files,
-    skill_source_dir,
+    skill_source_dir_for_level,
 };
 use crate::db;
 use crate::opencode_client::{AgentInfo, CommandInfo, ProviderModelInfo, SkillInfo};
@@ -176,7 +176,7 @@ pub(crate) fn save_skill_content(
         dirs::home_dir().ok_or_else(|| "Cannot determine home directory".to_string())?
     };
 
-    let skill_dir = skill_source_dir(&skill_root, source_dir).join(skill_name);
+    let skill_dir = skill_source_dir_for_level(&skill_root, source_dir, level).join(skill_name);
     std::fs::create_dir_all(&skill_dir)
         .map_err(|e| format!("Failed to create skill directory: {e}"))?;
     std::fs::write(skill_dir.join("SKILL.md"), content)
@@ -343,6 +343,58 @@ mod tests {
                 update_task_workspace_status: false,
                 ignore_unknown_provider: false,
             }
+        );
+    }
+
+    #[tokio::test]
+    async fn list_runtime_skills_includes_project_pi_skills() {
+        let dir = tempfile::tempdir().unwrap();
+        let skill_dir = dir.path().join(".pi").join("skills").join("pi-project");
+        std::fs::create_dir_all(&skill_dir).unwrap();
+        std::fs::write(skill_dir.join("SKILL.md"), "# Pi Project").unwrap();
+
+        let context = ProjectRuntimeContext {
+            provider: "pi".to_string(),
+            project_path: Some(dir.path().to_string_lossy().into_owned()),
+        };
+
+        let skills = list_runtime_skills("project-1", &context).await.unwrap();
+
+        assert!(skills.iter().any(|skill| {
+            skill.name == "pi-project" && skill.level == "project" && skill.source_dir == ".pi"
+        }));
+    }
+
+    #[test]
+    fn save_skill_content_accepts_project_pi_skills() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = crate::db::Database::new(dir.path().join("openforge.sqlite")).unwrap();
+        let project_root = dir.path().join("project");
+        std::fs::create_dir_all(&project_root).unwrap();
+        let project = db
+            .create_project("Pi Skills Project", &project_root.to_string_lossy())
+            .unwrap();
+
+        save_skill_content(
+            &db,
+            &project.id,
+            "pi-review",
+            "project",
+            ".pi",
+            "# Pi Review",
+        )
+        .unwrap();
+
+        assert_eq!(
+            std::fs::read_to_string(
+                project_root
+                    .join(".pi")
+                    .join("skills")
+                    .join("pi-review")
+                    .join("SKILL.md")
+            )
+            .unwrap(),
+            "# Pi Review"
         );
     }
 

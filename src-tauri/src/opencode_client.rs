@@ -57,7 +57,7 @@ pub struct SkillInfo {
     pub agent: Option<String>,
     pub template: Option<String>,
     pub level: String,      // "project" or "user"
-    pub source_dir: String, // ".agents", ".claude", or ".opencode"
+    pub source_dir: String, // ".agents", ".claude", ".opencode", or ".pi"
 }
 
 #[cfg(test)]
