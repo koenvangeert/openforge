@@ -10,13 +10,13 @@
   import AuthoredPrCard from '@openforge/pr-review-ui/AuthoredPrCard.svelte'
   import FileTree from '@openforge/pr-review-ui/FileTree.svelte'
   import ResizablePanel from '@openforge/plugin-sdk/ui/ResizablePanel.svelte'
-  import DiffViewer from '../shared/diff-viewer/DiffViewer.svelte'
+  import DiffViewer from '@openforge/pr-review-ui/DiffViewer.svelte'
   import ProjectPageHeader from '../../project/ProjectPageHeader.svelte'
   import ReviewSubmitPanel from '@openforge/pr-review-ui/ReviewSubmitPanel.svelte'
   import PrOverviewTab from '@openforge/pr-review-ui/PrOverviewTab.svelte'
   import { hasMergeConflicts } from '@openforge/plugin-sdk/domain'
   import type { AgentReviewComment, ReviewComment, ReviewPullRequest, AuthoredPullRequest, PrFileDiff, PrOverviewComment, ReviewSubmissionComment } from '@openforge/plugin-sdk/domain'
-  import type { FileContents } from '../../lib/diffAdapter'
+  import type { FileContents } from '@openforge/pr-review-ui/diffAdapter'
 
   type PrDetailTab = 'overview' | 'files'
 
@@ -491,7 +491,6 @@
             {/if}
             <DiffViewer
               bind:this={diffViewer}
-              {api}
               files={$prFileDiffs}
               existingComments={$reviewComments}
               repoOwner={$selectedReviewPr.repo_owner}
@@ -500,6 +499,11 @@
               onToggleFileTree={() => { fileTreeVisible = !fileTreeVisible }}
               fetchFileContents={fetchPrFileContents}
               agentComments={$agentReviewComments}
+              pendingComments={$pendingManualComments}
+              onPendingCommentsChange={(comments) => { $pendingManualComments = comments }}
+              onAgentCommentsChange={(comments) => { $agentReviewComments = comments }}
+              onUpdateAgentCommentStatus={(commentId, status) => api.commands.invokeGlobal('openforge.updateAgentReviewCommentStatus', { commentId, status })}
+              onOpenUrl={(url) => api.system.openUrl(url)}
             />
           {/if}
         </div>

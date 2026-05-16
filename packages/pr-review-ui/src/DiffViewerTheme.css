@@ -1,0 +1,43 @@
+::highlight(diff-search-match) {
+  background-color: color-mix(in oklch, var(--color-warning) 40%, transparent);
+  color: var(--color-base-content);
+}
+
+::highlight(diff-search-current) {
+  background-color: var(--color-warning);
+  color: var(--color-warning-content);
+}
+
+::highlight(diff-occurrence-match) {
+  background-color: color-mix(in oklch, var(--color-info) 30%, transparent);
+  color: var(--color-base-content);
+}
+
+/* Flash highlight when scrolling to a comment via sidebar click */
+@keyframes diff-comment-flash {
+  0% { background-color: color-mix(in oklch, var(--color-info) 40%, transparent); }
+  100% { background-color: transparent; }
+}
+
+.diff-comment-highlight,
+.diff-comment-highlight td {
+  animation: diff-comment-flash 2s ease-out;
+}
+
+/* @git-diff-view resets widget-line descendants to `color: initial`, which
+   strips daisyUI semantic button/input colors from the inline comment form. */
+.diff-line-widget-wrapper .review-inline-comment-form .textarea {
+  color: var(--color-base-content);
+}
+
+.diff-line-widget-wrapper .review-inline-comment-form .textarea::placeholder {
+  color: color-mix(in oklch, var(--color-base-content) 50%, transparent);
+}
+
+.diff-line-widget-wrapper .review-inline-comment-form .btn:not(.btn-primary) {
+  color: var(--color-base-content);
+}
+
+.diff-line-widget-wrapper .review-inline-comment-form .btn-primary {
+  color: var(--color-primary-content);
+}
