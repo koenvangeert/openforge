@@ -74,6 +74,43 @@ fn git_command() -> Command {
     command
 }
 
+async fn git_ref_exists(repo_path: &Path, git_ref: &str) -> Result<bool, GitWorktreeError> {
+    let refspec = format!("{}^{{commit}}", git_ref);
+    let output = git_command()
+        .arg("-C")
+        .arg(repo_path)
+        .arg("rev-parse")
+        .arg("--verify")
+        .arg("--quiet")
+        .arg(refspec)
+        .output()
+        .await?;
+
+    Ok(output.status.success())
+}
+
+async fn resolve_worktree_base_ref(
+    repo_path: &Path,
+    preferred_base_ref: &str,
+) -> Result<String, GitWorktreeError> {
+    if git_ref_exists(repo_path, preferred_base_ref).await? {
+        return Ok(preferred_base_ref.to_string());
+    }
+
+    if git_ref_exists(repo_path, "HEAD").await? {
+        warn!(
+            "Preferred worktree base ref '{}' is unavailable; falling back to HEAD",
+            preferred_base_ref
+        );
+        return Ok("HEAD".to_string());
+    }
+
+    Err(GitWorktreeError::WorktreeAddFailed(format!(
+        "base ref '{}' is unavailable and HEAD is not a valid commit",
+        preferred_base_ref
+    )))
+}
+
 // ============================================================================
 // Worktree Operations
 // ============================================================================
@@ -129,7 +166,9 @@ pub async fn create_worktree(
         return Ok(());
     }
 
-    let result = try_create_worktree_inner(repo_path, worktree_path, branch_name, base_ref).await;
+    let resolved_base_ref = resolve_worktree_base_ref(repo_path, base_ref).await?;
+    let result =
+        try_create_worktree_inner(repo_path, worktree_path, branch_name, &resolved_base_ref).await;
 
     if result.is_err() {
         info!("Worktree creation failed, attempting cleanup and retry...");
@@ -152,7 +191,13 @@ pub async fn create_worktree(
             .output()
             .await;
 
-        return try_create_worktree_inner(repo_path, worktree_path, branch_name, base_ref).await;
+        return try_create_worktree_inner(
+            repo_path,
+            worktree_path,
+            branch_name,
+            &resolved_base_ref,
+        )
+        .await;
     }
 
     result
@@ -336,6 +381,106 @@ pub fn slugify_branch_name(task_id: &str, title: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::process::{Command as StdCommand, Output};
+
+    fn git(repo_path: &Path, args: &[&str]) -> Output {
+        StdCommand::new("git")
+            .arg("-C")
+            .arg(repo_path)
+            .args(args)
+            .output()
+            .expect("git command should run")
+    }
+
+    fn assert_git_success(repo_path: &Path, args: &[&str]) {
+        let output = git(repo_path, args);
+        assert!(
+            output.status.success(),
+            "git {:?} failed: {}",
+            args,
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    fn init_committed_repo(repo_path: &Path) {
+        std::fs::create_dir_all(repo_path).expect("repo directory should be created");
+        assert_git_success(repo_path, &["init", "-b", "main"]);
+        assert_git_success(repo_path, &["config", "user.email", "test@example.com"]);
+        assert_git_success(repo_path, &["config", "user.name", "Test User"]);
+        std::fs::write(repo_path.join("README.md"), "local repo\n")
+            .expect("fixture file should be written");
+        assert_git_success(repo_path, &["add", "README.md"]);
+        assert_git_success(repo_path, &["commit", "-m", "initial"]);
+    }
+
+    #[tokio::test]
+    async fn create_worktree_falls_back_to_head_when_origin_main_is_missing() {
+        let temp = tempfile::tempdir().expect("tempdir should be created");
+        let repo_path = temp.path().join("repo");
+        init_committed_repo(&repo_path);
+        let worktree_path = temp.path().join("worktree");
+
+        let result = create_worktree(
+            &repo_path,
+            &worktree_path,
+            "T-1269/local-repo",
+            "origin/main",
+        )
+        .await;
+
+        assert!(
+            result.is_ok(),
+            "local repositories without origin/main should create worktrees: {:?}",
+            result.err()
+        );
+        assert!(worktree_path.join("README.md").exists());
+
+        let branch_output = git(&worktree_path, &["rev-parse", "--abbrev-ref", "HEAD"]);
+        assert!(branch_output.status.success());
+        assert_eq!(
+            String::from_utf8_lossy(&branch_output.stdout).trim(),
+            "T-1269/local-repo"
+        );
+
+        let upstream_output = git(
+            &worktree_path,
+            &["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"],
+        );
+        assert!(
+            !upstream_output.status.success(),
+            "created task worktree branches should not require an upstream"
+        );
+    }
+
+    #[tokio::test]
+    async fn resolve_worktree_base_ref_prefers_origin_main_when_available() {
+        let temp = tempfile::tempdir().expect("tempdir should be created");
+        let repo_path = temp.path().join("repo");
+        init_committed_repo(&repo_path);
+        assert_git_success(
+            &repo_path,
+            &["update-ref", "refs/remotes/origin/main", "HEAD"],
+        );
+
+        let base_ref = resolve_worktree_base_ref(&repo_path, "origin/main")
+            .await
+            .expect("origin/main should resolve when present");
+
+        assert_eq!(base_ref, "origin/main");
+    }
+
+    #[tokio::test]
+    async fn resolve_worktree_base_ref_falls_back_to_head_without_origin_main() {
+        let temp = tempfile::tempdir().expect("tempdir should be created");
+        let repo_path = temp.path().join("repo");
+        init_committed_repo(&repo_path);
+
+        let base_ref = resolve_worktree_base_ref(&repo_path, "origin/main")
+            .await
+            .expect("HEAD fallback should resolve for local repositories");
+
+        assert_eq!(base_ref, "HEAD");
+    }
 
     #[test]
     fn test_slugify_branch_name_basic() {
