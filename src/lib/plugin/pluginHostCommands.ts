@@ -1,7 +1,6 @@
 import { get } from 'svelte/store'
 import type { BackendReadyState } from '@openforge/plugin-sdk'
 import {
-  abortAgentReview,
   fetchAuthoredPrs,
   fetchReviewPrs,
   forceGithubSync,
@@ -37,7 +36,6 @@ import {
   setConfig,
   setProjectConfig,
   spawnShellPty,
-  startAgentReview,
   submitPrReview,
   updateAgentReviewCommentStatus,
   updateTaskStatus,
@@ -242,14 +240,10 @@ export async function invokePluginHostCommand(command: string, payload: unknown)
       return getPrOverviewComments(String(commandPayload?.owner ?? ''), String(commandPayload?.repo ?? ''), Number(commandPayload?.prNumber))
     case 'submitPrReview':
       return submitPrReview(String(commandPayload?.owner ?? ''), String(commandPayload?.repo ?? ''), Number(commandPayload?.prNumber), String(commandPayload?.event ?? ''), String(commandPayload?.body ?? ''), Array.isArray(commandPayload?.comments) ? commandPayload.comments as never : [], String(commandPayload?.commitId ?? ''))
-    case 'startAgentReview':
-      return startAgentReview(String(commandPayload?.repoOwner ?? ''), String(commandPayload?.repoName ?? ''), Number(commandPayload?.prNumber), String(commandPayload?.headRef ?? ''), String(commandPayload?.baseRef ?? ''), String(commandPayload?.prTitle ?? ''), typeof commandPayload?.prBody === 'string' ? commandPayload.prBody : null, Number(commandPayload?.reviewPrId))
     case 'getAgentReviewComments':
       return getAgentReviewComments(Number(commandPayload?.reviewPrId))
     case 'updateAgentReviewCommentStatus':
       return updateAgentReviewCommentStatus(Number(commandPayload?.commentId), String(commandPayload?.status ?? ''))
-    case 'abortAgentReview':
-      return abortAgentReview(String(commandPayload?.reviewSessionKey ?? ''))
     case 'getProjectConfig':
       return getProjectConfig(String(commandPayload?.projectId ?? ''), String(commandPayload?.key ?? ''))
     case 'setProjectConfig':

@@ -249,15 +249,6 @@ async fn app_read_file_preview(
     }
 }
 
-pub(super) fn app_agent_review_live_blocker(
-    command: &str,
-) -> Result<Option<serde_json::Value>, (StatusCode, String)> {
-    Err((
-        StatusCode::NOT_IMPLEMENTED,
-        format!("app IPC command requires provider runtime state before Electron sidecar support: {command}"),
-    ))
-}
-
 pub(super) async fn handle_app_files_review_command(
     state: &AppState,
     request: &AppInvokeRequest,
@@ -438,18 +429,6 @@ pub(super) async fn handle_app_files_review_command(
                 })?;
             serde_json::Value::Null
         }
-        "dismiss_all_agent_review_comments" => {
-            let review_pr_id = payload_i64(&request.payload, "reviewPrId")?;
-            let db = crate::db::acquire_db(&state.db);
-            db.delete_agent_review_comments_for_pr(review_pr_id)
-                .map_err(|e| {
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        format!("Failed to dismiss all agent review comments: {e}"),
-                    )
-                })?;
-            serde_json::Value::Null
-        }
         "get_task_diff" => {
             let task_id = payload_string(&request.payload, "taskId")?;
             let include_uncommitted = payload_bool(&request.payload, "includeUncommitted")?;
@@ -558,9 +537,6 @@ pub(super) async fn handle_app_files_review_command(
                 .await
                 .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?,
             )?
-        }
-        "start_agent_review" | "abort_agent_review" => {
-            return app_agent_review_live_blocker(&request.command)
         }
         _ => return Ok(None),
     };

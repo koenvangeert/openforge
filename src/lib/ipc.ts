@@ -309,24 +309,12 @@ export async function getCommitBatchFileContents(taskId: string, commitSha: stri
   return invoke<[string, string][]>("get_commit_batch_file_contents", { taskId, commitSha, files: files.map(f => ({ path: f.path, old_path: f.oldPath, status: f.status })) });
 }
 
-export async function startAgentReview(repoOwner: string, repoName: string, prNumber: number, headRef: string, baseRef: string, prTitle: string, prBody: string | null, reviewPrId: number): Promise<{ review_session_key: string }> {
-  return invoke<{ review_session_key: string }>("start_agent_review", { repoOwner, repoName, prNumber, headRef, baseRef, prTitle, prBody, reviewPrId });
-}
-
 export async function getAgentReviewComments(reviewPrId: number): Promise<AgentReviewComment[]> {
   return invoke<AgentReviewComment[]>("get_agent_review_comments", { reviewPrId });
 }
 
 export async function updateAgentReviewCommentStatus(commentId: number, status: string): Promise<void> {
   return invoke<void>("update_agent_review_comment_status", { commentId, status });
-}
-
-export async function dismissAllAgentReviewComments(reviewPrId: number): Promise<void> {
-  return invoke<void>("dismiss_all_agent_review_comments", { reviewPrId });
-}
-
-export async function abortAgentReview(reviewSessionKey: string): Promise<void> {
-  return invoke<void>("abort_agent_review", { reviewSessionKey });
 }
 
 export async function listOpenCodeCommands(projectId: string): Promise<CommandInfo[]> {

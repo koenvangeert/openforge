@@ -50,8 +50,6 @@ export const pendingManualComments = writable<ReviewSubmissionComment[]>([]);
 export const prOverviewComments = writable<PrOverviewComment[]>([]);
 
 export const agentReviewComments = writable<AgentReviewComment[]>([]);
-export const agentReviewLoading = writable(false);
-export const agentReviewError = writable<string | null>(null);
 
 export const skills = writable<SkillInfo[]>([]);
 export const selectedSkillIdentity = writable<SkillIdentity | null>(null);
