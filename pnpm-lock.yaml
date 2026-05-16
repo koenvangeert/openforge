@@ -145,9 +145,21 @@ importers:
 
   packages/pr-review-ui:
     dependencies:
+      '@git-diff-view/core':
+        specifier: 0.0.39
+        version: 0.0.39
+      '@git-diff-view/lowlight':
+        specifier: ^0.0.39
+        version: 0.0.39
+      '@git-diff-view/svelte':
+        specifier: ^0.0.13
+        version: 0.0.13(patch_hash=b9f2ff64426fc738c0d2a125cbc38561a37a141c68e7d1d9b076e09cf837dc2b)(svelte@5.55.5)
       '@openforge/plugin-sdk':
         specifier: workspace:*
         version: link:../plugin-sdk
+      '@tanstack/virtual-core':
+        specifier: ^3.13.21
+        version: 3.14.0
       lucide-svelte:
         specifier: ^0.577.0
         version: 0.577.0(svelte@5.55.5)

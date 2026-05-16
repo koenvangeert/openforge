@@ -22,7 +22,7 @@ vi.mock("../../lib/useDiffWorker.svelte", () => ({
 	}),
 }));
 
-vi.mock("../../lib/useVirtualizer.svelte", () => ({
+vi.mock("../../../packages/pr-review-ui/src/useVirtualizer.svelte", () => ({
 	createVirtualizer: vi.fn((opts: { getCount: () => number }) => ({
 		get virtualItems() {
 			const count = opts.getCount();
@@ -76,7 +76,7 @@ import {
 	setSelfReviewDiffFiles,
 	setSelfReviewGeneralComments,
 } from "../../lib/taskScopedSelfReviewState";
-import { createVirtualizer } from "../../lib/useVirtualizer.svelte";
+import { createVirtualizer } from "../../../packages/pr-review-ui/src/useVirtualizer.svelte";
 import { clearTaskReviewPaneState, getTaskReviewPaneState } from "../../lib/taskReviewPaneState";
 
 const baseTask: Task = {

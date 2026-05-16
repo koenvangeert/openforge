@@ -8,13 +8,19 @@
     "./FileTree.svelte": "./src/FileTree.svelte",
     "./ReviewSubmitPanel.svelte": "./src/ReviewSubmitPanel.svelte",
     "./PrOverviewTab.svelte": "./src/PrOverviewTab.svelte",
+    "./DiffViewer.svelte": "./src/DiffViewer.svelte",
+    "./diffAdapter": "./src/diffAdapter.ts",
     "./fileStatus": "./src/fileStatus.ts",
     "./githubMarkdown": "./src/githubMarkdown.ts",
     "./prStatusPresentation": "./src/prStatusPresentation.ts",
     "./timeAgo": "./src/timeAgo.ts"
   },
   "dependencies": {
+    "@git-diff-view/core": "0.0.39",
+    "@git-diff-view/lowlight": "^0.0.39",
+    "@git-diff-view/svelte": "^0.0.13",
     "@openforge/plugin-sdk": "workspace:*",
+    "@tanstack/virtual-core": "^3.13.21",
     "lucide-svelte": "^0.577.0"
   },
   "peerDependencies": {

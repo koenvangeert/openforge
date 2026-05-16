@@ -2,25 +2,21 @@
   import { DiffView, DiffModeEnum, SplitSide } from '@git-diff-view/svelte'
   import '@git-diff-view/svelte/styles/diff-view-pure.css'
   import './DiffViewerTheme.css'
-  import type { FrontendOpenForgeAPI } from '@openforge/plugin-sdk/frontend'
   import type { PrFileDiff, ReviewComment, ReviewSubmissionComment, AgentReviewComment } from '@openforge/plugin-sdk/domain'
-  import { pendingManualComments, agentReviewComments } from '../../../lib/stores'
-  import { isTruncated, getTruncationStats, type FileContents } from '../../../lib/diffAdapter'
-  import { buildExtendData, type CommentDisplayData } from '../../../lib/diffComments'
-  import { timeAgo } from '../../../lib/timeAgo'
+  import { isTruncated, getTruncationStats, isImageFileDiff, getImagePreviewDataUrl, type FileContents } from './diffAdapter'
+  import { buildExtendData, type CommentDisplayData } from './diffComments'
+  import { timeAgo } from './timeAgo'
   import MarkdownContent from '@openforge/plugin-sdk/ui/MarkdownContent.svelte'
-  import { diffHighlighter } from '../../../lib/diffHighlighter'
-  import { createDiffSearch } from '../../../lib/useDiffSearch.svelte'
-  import { createDiffWorker } from '../../../lib/useDiffWorker.svelte'
-  import { createFileContentsFetcher } from '../../../lib/useFileContentsFetcher.svelte'
-  import { createVirtualizer } from '../../../lib/useVirtualizer.svelte'
-  import { tick } from 'svelte'
-  import { sortFilesAsTree } from '../../../lib/fileSort'
-  import { getFileStatusIcon, getFileStatusColor, getFileStatusLabel } from '../../../lib/fileStatus'
-  import { themeMode, getDiffTheme } from '../../../lib/theme'
+  import { diffHighlighter } from './diffHighlighter'
+  import { createDiffSearch } from './useDiffSearch.svelte'
+  import { createDiffWorker } from './useDiffWorker.svelte'
+  import { createFileContentsFetcher } from './useFileContentsFetcher.svelte'
+  import { createVirtualizer } from './useVirtualizer.svelte'
+  import { onDestroy, tick } from 'svelte'
+  import { sortFilesAsTree } from './fileSort'
+  import { getFileStatusIcon, getFileStatusColor, getFileStatusLabel } from './fileStatus'
   import type { Snippet } from 'svelte'
-  interface Props {
-    api: FrontendOpenForgeAPI
+  interface BaseProps {
     files?: PrFileDiff[]
     existingComments?: ReviewComment[]
     repoOwner?: string
@@ -32,13 +28,40 @@
     toolbarExtra?: Snippet
     includeUncommitted?: boolean
     agentComments?: AgentReviewComment[]
+    pendingComments?: ReviewSubmissionComment[]
+    onPendingCommentsChange?: (comments: ReviewSubmissionComment[]) => void
+    onAgentCommentsChange?: (comments: AgentReviewComment[]) => void
+    onUpdateAgentCommentStatus?: (commentId: number, status: 'approved' | 'dismissed') => Promise<void> | void
+    onOpenUrl?: (url: string) => void | Promise<void>
+    onScrollTopChange?: (scrollTop: number) => void
+    initialScrollTop?: number
+    inlineDraftScopeId?: string
+    getInlineDraft?: (scopeId: string, filename: string, lineNumber: number, side: ReviewSubmissionComment['side']) => string
+    setInlineDraft?: (scopeId: string, filename: string, lineNumber: number, side: ReviewSubmissionComment['side'], text: string) => void
+    clearInlineDraft?: (scopeId: string, filename: string, lineNumber: number, side: ReviewSubmissionComment['side']) => void
+    diffTheme?: 'light' | 'dark'
   }
-  let { api, files = [], existingComments = [], repoOwner: _repoOwner = '', repoName: _repoName = '', fileTreeVisible = true, onToggleFileTree, fetchFileContents, batchFetchFileContents, toolbarExtra, includeUncommitted = false, agentComments = [] }: Props = $props()
+  type Props = BaseProps
+  let { files = [], existingComments = [], repoOwner: _repoOwner = '', repoName: _repoName = '', fileTreeVisible = true, onToggleFileTree, fetchFileContents, batchFetchFileContents, toolbarExtra, includeUncommitted = false, agentComments = [], pendingComments, onPendingCommentsChange, onAgentCommentsChange, onUpdateAgentCommentStatus, onOpenUrl, onScrollTopChange, initialScrollTop = 0, inlineDraftScopeId, getInlineDraft, setInlineDraft, clearInlineDraft, diffTheme }: Props = $props()
+  let internalPendingComments = $state<ReviewSubmissionComment[]>([])
   let diffViewMode = $state<DiffModeEnum>(DiffModeEnum.Split)
   let diffViewWrap = $state(false)
   let commentText = $state('')
+  type InlineCommentDraftSide = ReviewSubmissionComment['side']
+  type InlineCommentDraftKey = {
+    filename: string
+    lineNumber: number
+    side: InlineCommentDraftSide
+  }
+  let activeInlineCommentDraftKey = $state<InlineCommentDraftKey | null>(null)
   let collapsedFiles = $state(new Set<string>())
   let scrollContainerEl = $state<HTMLElement | null>(null)
+  let pendingScrollTop: number | null = null
+  let scrollRestoreTimer: ReturnType<typeof setTimeout> | null = null
+  let scrollRestoreAttempts = 0
+  let hasRestoredInitialScroll = false
+  const maxScrollRestoreAttempts = 40
+  const scrollRestoreRetryMs = 25
   let hasAutoCollapsed = false
   const fileContentsFetcher = createFileContentsFetcher({
     getFiles: () => files,
@@ -46,9 +69,20 @@
     getFetchFileContents: () => fetchFileContents,
     getBatchFetchFileContents: () => batchFetchFileContents,
   })
+  function resolveDiffTheme(): 'light' | 'dark' {
+    if (diffTheme) return diffTheme
+    if (typeof document !== 'undefined') {
+      const themeName = document.documentElement.getAttribute('data-theme') ?? ''
+      if (themeName.includes('dark')) return 'dark'
+    }
+    if (typeof window !== 'undefined' && window.matchMedia?.('(prefers-color-scheme: dark)').matches) return 'dark'
+    return 'light'
+  }
+
   const diffWorker = createDiffWorker({
     getFiles: () => files,
     getFileContentsMap: () => fileContentsFetcher.fileContentsMap,
+    getDiffTheme: resolveDiffTheme,
   })
   function toggleCollapse(filename: string) {
     const next = new Set(collapsedFiles)
@@ -86,6 +120,64 @@
       virtualizer.scrollToIndex(index, { align: 'start', behavior: 'smooth' })
     }
   }
+
+  export function getScrollTop() {
+    return scrollContainerEl?.scrollTop ?? 0
+  }
+
+  function clearScrollRestoreTimer() {
+    if (scrollRestoreTimer === null) return
+    clearTimeout(scrollRestoreTimer)
+    scrollRestoreTimer = null
+  }
+
+  function canReachScrollTop(scrollTop: number) {
+    if (!scrollContainerEl) return false
+    return scrollTop <= Math.max(0, scrollContainerEl.scrollHeight - scrollContainerEl.clientHeight)
+  }
+
+  function applyPendingScrollTop() {
+    clearScrollRestoreTimer()
+    if (!scrollContainerEl || pendingScrollTop === null) return
+
+    const targetScrollTop = pendingScrollTop
+    scrollContainerEl.scrollTop = targetScrollTop
+
+    if (
+      targetScrollTop <= 0 ||
+      scrollContainerEl.scrollTop === targetScrollTop ||
+      canReachScrollTop(targetScrollTop) ||
+      scrollRestoreAttempts >= maxScrollRestoreAttempts
+    ) {
+      pendingScrollTop = null
+      scrollRestoreAttempts = 0
+      return
+    }
+
+    scrollRestoreAttempts += 1
+    scrollRestoreTimer = setTimeout(applyPendingScrollTop, scrollRestoreRetryMs)
+  }
+
+  export function setScrollTop(scrollTop: number) {
+    pendingScrollTop = scrollTop
+    scrollRestoreAttempts = 0
+    applyPendingScrollTop()
+  }
+
+  $effect(() => {
+    if (!scrollContainerEl) return
+    if (!hasRestoredInitialScroll) {
+      hasRestoredInitialScroll = true
+      if (initialScrollTop > 0) {
+        setScrollTop(initialScrollTop)
+      }
+    }
+    applyPendingScrollTop()
+  })
+
+  onDestroy(() => {
+    clearScrollRestoreTimer()
+  })
 
   export async function scrollToComment(filename: string, lineNumber: number) {
     const index = sortedFiles.findIndex(f => f.filename === filename)
@@ -130,17 +222,81 @@
     node.focus()
   }
 
+  const visiblePendingComments = $derived(pendingComments ?? internalPendingComments)
+
+  function setVisiblePendingComments(comments: ReviewSubmissionComment[]) {
+    if (onPendingCommentsChange) {
+      onPendingCommentsChange(comments)
+    } else {
+      internalPendingComments = comments
+    }
+  }
+
+  function setVisibleAgentComments(comments: AgentReviewComment[]) {
+    onAgentCommentsChange?.(comments)
+  }
+
+  function inlineCommentDraftSide(side: SplitSide): InlineCommentDraftSide {
+    return side === SplitSide.old ? 'LEFT' : 'RIGHT'
+  }
+
+  function isActiveInlineCommentDraft(filename: string, lineNumber: number, side: InlineCommentDraftSide) {
+    return activeInlineCommentDraftKey?.filename === filename &&
+      activeInlineCommentDraftKey.lineNumber === lineNumber &&
+      activeInlineCommentDraftKey.side === side
+  }
+
+  function getInlineCommentText(filename: string, lineNumber: number, side: SplitSide) {
+    const reviewSide = inlineCommentDraftSide(side)
+    if (isActiveInlineCommentDraft(filename, lineNumber, reviewSide)) {
+      return commentText
+    }
+    if (inlineDraftScopeId) {
+      return getInlineDraft?.(inlineDraftScopeId, filename, lineNumber, reviewSide) ?? ''
+    }
+    return ''
+  }
+
+  function openInlineCommentWidget(filename: string, lineNumber: number, side: SplitSide) {
+    const reviewSide = inlineCommentDraftSide(side)
+    activeInlineCommentDraftKey = { filename, lineNumber, side: reviewSide }
+    commentText = inlineDraftScopeId
+      ? getInlineDraft?.(inlineDraftScopeId, filename, lineNumber, reviewSide) ?? ''
+      : ''
+  }
+
+  function setInlineCommentText(filename: string, lineNumber: number, side: SplitSide, text: string) {
+    const reviewSide = inlineCommentDraftSide(side)
+    activeInlineCommentDraftKey = { filename, lineNumber, side: reviewSide }
+    commentText = text
+    if (inlineDraftScopeId) {
+      setInlineDraft?.(inlineDraftScopeId, filename, lineNumber, reviewSide, text)
+    }
+  }
+
+  function clearInlineCommentText(filename: string, lineNumber: number, side: SplitSide) {
+    const reviewSide = inlineCommentDraftSide(side)
+    if (inlineDraftScopeId) {
+      clearInlineDraft?.(inlineDraftScopeId, filename, lineNumber, reviewSide)
+    }
+    if (isActiveInlineCommentDraft(filename, lineNumber, reviewSide)) {
+      commentText = ''
+      activeInlineCommentDraftKey = null
+    }
+  }
+
   function submitInlineComment(filename: string, lineNumber: number, side: SplitSide, onClose: () => void) {
-    if (!commentText.trim()) return
+    const text = getInlineCommentText(filename, lineNumber, side)
+    if (!text.trim()) return
     const newComment: ReviewSubmissionComment = {
       path: filename,
       line: lineNumber,
-      side: side === SplitSide.old ? 'LEFT' : 'RIGHT',
-      body: commentText.trim()
+      side: inlineCommentDraftSide(side),
+      body: text.trim()
     }
-    $pendingManualComments = [...$pendingManualComments, newComment]
+    setVisiblePendingComments([...visiblePendingComments, newComment])
+    clearInlineCommentText(filename, lineNumber, side)
     onClose()
-    commentText = ''
   }
 
   // Large diff warning banner calculations
@@ -157,10 +313,12 @@
       const file = sortedFiles[index]
       if (!file) return 300
       if (collapsedFiles.has(file.filename)) return 60
+      if (isImageFileDiff(file)) return 360
       const lineCount = file.patch_line_count ?? (file.additions + file.deletions) * 2
       return 62 + Math.min(lineCount, 200) * 20
     },
     getOverscan: () => 2,
+    getEnabled: () => (scrollContainerEl?.clientHeight ?? 0) > 0,
   })
   const search = createDiffSearch({
     isSplitMode: () => diffViewMode === DiffModeEnum.Split,
@@ -268,7 +426,15 @@
   </div>
 
   <!-- svelte-ignore a11y_click_events_have_key_events -->
-  <div role="region" aria-label="Diff scroll area" class="flex-1 min-h-0 overflow-y-auto overflow-x-hidden bg-base-100" bind:this={scrollContainerEl} ondblclick={search.handleDoubleClick} onclick={search.handleContainerClick}>
+  <div
+    role="region"
+    aria-label="Diff scroll area"
+    class="flex-1 min-h-0 overflow-y-auto overflow-x-hidden bg-base-100"
+    bind:this={scrollContainerEl}
+    ondblclick={search.handleDoubleClick}
+    onclick={search.handleContainerClick}
+    onscroll={(e) => onScrollTopChange?.(e.currentTarget.scrollTop)}
+  >
     {#if files.length === 0}
       <div class="flex items-center justify-center h-full text-base-content/50 text-sm">No files to display</div>
     {:else}
@@ -315,20 +481,55 @@
                     </span>
                   </div>
                 {/if}
+                {#if isImageFileDiff(file)}
+                  {@const imageContents = fileContentsFetcher.fileContentsMap.get(file.filename)}
+                  {@const oldImageSrc = imageContents ? getImagePreviewDataUrl(file.previous_filename || file.filename, imageContents.oldContent) : null}
+                  {@const newImageSrc = imageContents ? getImagePreviewDataUrl(file.filename, imageContents.newContent) : null}
+                  <div class="grid gap-4 p-4 md:grid-cols-2 bg-base-100">
+                    {#if file.status !== 'added'}
+                      <div class="rounded border border-base-300 bg-base-200/40 p-3 min-h-48 flex flex-col">
+                        <div class="mb-2 text-xs font-semibold uppercase tracking-wide text-base-content/60">Before</div>
+                        <div class="flex flex-1 items-center justify-center overflow-auto">
+                          {#if oldImageSrc}
+                            <img src={oldImageSrc} alt={`${file.previous_filename || file.filename} old preview`} class="max-h-96 max-w-full object-contain" />
+                          {:else if imageContents === undefined && (fetchFileContents || batchFetchFileContents)}
+                            <span class="loading loading-spinner loading-sm text-primary" aria-label="Loading old image preview"></span>
+                          {:else}
+                            <span class="text-sm text-base-content/50">No previous image preview</span>
+                          {/if}
+                        </div>
+                      </div>
+                    {/if}
+                    {#if file.status !== 'removed' && file.status !== 'deleted'}
+                      <div class="rounded border border-base-300 bg-base-200/40 p-3 min-h-48 flex flex-col">
+                        <div class="mb-2 text-xs font-semibold uppercase tracking-wide text-base-content/60">After</div>
+                        <div class="flex flex-1 items-center justify-center overflow-auto">
+                          {#if newImageSrc}
+                            <img src={newImageSrc} alt={`${file.filename} new preview`} class="max-h-96 max-w-full object-contain" />
+                          {:else if imageContents === undefined && (fetchFileContents || batchFetchFileContents)}
+                            <span class="loading loading-spinner loading-sm text-primary" aria-label="Loading new image preview"></span>
+                          {:else}
+                            <span class="text-sm text-base-content/50">No image preview</span>
+                          {/if}
+                        </div>
+                      </div>
+                    {/if}
+                  </div>
+                {:else}
                 {@const workerDiffFile = diffWorker.getDiffFile(file.filename)}
                 {#if workerDiffFile}
                 <DiffView
                   diffFile={workerDiffFile}
-                  extendData={buildExtendData(file.filename, existingComments, $pendingManualComments, agentComments)}
+                  extendData={buildExtendData(file.filename, existingComments, visiblePendingComments, agentComments)}
                   diffViewMode={diffViewMode}
                   diffViewWrap={diffViewWrap}
-                  diffViewTheme={getDiffTheme($themeMode)}
+                  diffViewTheme={resolveDiffTheme()}
                   diffViewHighlight={true}
                   diffViewAddWidget={true}
                   diffViewFontSize={12}
                   registerHighlighter={diffHighlighter}
-                  onAddWidgetClick={(_lineNumber, _side) => {
-                    commentText = ''
+                  onAddWidgetClick={(lineNumber, side) => {
+                    openInlineCommentWidget(file.filename, lineNumber, side)
                   }}
                 >
                     {#snippet renderExtendLine({ lineNumber: _ln, side: _side, data, diffFile: _df, onUpdate: _ou }: { lineNumber: number; side: SplitSide; data: CommentDisplayData; diffFile: import('@git-diff-view/core').DiffFile; onUpdate: () => void })}
@@ -360,19 +561,16 @@
                                       onclick={async () => {
                                         if (comment.commentId === undefined) return
                                         try {
-                                           await api.commands.invokeGlobal('openforge.updateAgentReviewCommentStatus', {
-                                             commentId: comment.commentId,
-                                             status: 'approved',
-                                           })
-                                           $pendingManualComments = [...$pendingManualComments, {
-                                             path: comment.filePath || file.filename,
+                                          await onUpdateAgentCommentStatus?.(comment.commentId, 'approved')
+                                          setVisiblePendingComments([...visiblePendingComments, {
+                                            path: comment.filePath || file.filename,
                                             line: comment.lineNumber || 0,
                                             side: comment.commentSide || 'RIGHT',
                                             body: comment.body
-                                          }]
-                                          $agentReviewComments = $agentReviewComments.map(c =>
+                                          }])
+                                          setVisibleAgentComments(agentComments.map(c =>
                                             c.id === comment.commentId ? { ...c, status: 'approved' } : c
-                                          )
+                                          ))
                                         } catch (e) {
                                           console.error('[DiffViewer] Failed to approve comment:', e)
                                         }
@@ -385,13 +583,10 @@
                                     onclick={async () => {
                                       if (comment.commentId === undefined) return
                                       try {
-                                        await api.commands.invokeGlobal('openforge.updateAgentReviewCommentStatus', {
-                                          commentId: comment.commentId,
-                                          status: 'dismissed',
-                                        })
-                                        $agentReviewComments = $agentReviewComments.map(c =>
+                                        await onUpdateAgentCommentStatus?.(comment.commentId, 'dismissed')
+                                        setVisibleAgentComments(agentComments.map(c =>
                                           c.id === comment.commentId ? { ...c, status: 'dismissed' } : c
-                                        )
+                                        ))
                                       } catch (e) {
                                         console.error('[DiffViewer] Failed to dismiss comment:', e)
                                       }
@@ -403,28 +598,32 @@
                                 <button
                                   class="btn btn-ghost btn-xs text-base-content/50 hover:text-error ml-auto"
                                   onclick={() => {
-                                    $pendingManualComments = $pendingManualComments.filter(
+                                    setVisiblePendingComments(visiblePendingComments.filter(
                                       (_, i) => i !== comment.index
-                                    )
+                                    ))
                                   }}
                                 >✕</button>
                               {/if}
                             </div>
                             <div class="text-base-content leading-relaxed text-[0.8rem] [&_p]:m-0 [&_p+p]:mt-1.5 [&_pre]:text-[0.75rem] [&_code]:text-[0.75rem] [&_pre]:bg-base-200 [&_pre]:rounded [&_pre]:p-2 [&_pre]:my-1.5 [&_code]:bg-base-200 [&_code]:px-1 [&_code]:rounded [&_ul]:my-1 [&_ol]:my-1 [&_li]:ml-4 [&_blockquote]:border-l-2 [&_blockquote]:border-base-300 [&_blockquote]:pl-3 [&_blockquote]:text-base-content/70 [&_a]:text-primary [&_a]:underline">
-                              <MarkdownContent content={comment.body} onOpenUrl={(url) => api.system.openUrl(url)} />
+                              <MarkdownContent content={comment.body} {onOpenUrl} />
                             </div>
                           </div>
                         {/each}
                       </div>
                     {/snippet}
                     {#snippet renderWidgetLine({ lineNumber, side, diffFile, onClose }: { lineNumber: number; side: SplitSide; diffFile: import('@git-diff-view/core').DiffFile; onClose: () => void })}
-                      <div class="p-3 mx-4 my-2 bg-base-100 border border-base-300 rounded-md">
+                      <div class="review-inline-comment-form p-3 mx-4 my-2 bg-base-100 border border-base-300 rounded-md">
                         <textarea
-                          class="textarea textarea-bordered w-full min-h-[60px] text-[0.8rem] resize-y"
+                          class="textarea textarea-bordered w-full min-h-[60px] text-[0.8rem] leading-relaxed resize-y"
                           placeholder="Leave a comment… (⇧Enter to submit)"
                           rows="3"
-                          bind:value={commentText}
+                          value={getInlineCommentText(file.filename, lineNumber, side)}
                           use:autofocus
+                          oninput={(e: Event) => {
+                            if (!(e.currentTarget instanceof HTMLTextAreaElement)) return
+                            setInlineCommentText(file.filename, lineNumber, side, e.currentTarget.value)
+                          }}
                           onkeydown={(e: KeyboardEvent) => {
                             if (e.key === 'Enter' && (e.metaKey || e.ctrlKey || e.shiftKey)) {
                               e.preventDefault()
@@ -432,16 +631,19 @@
                             }
                           }}
                         ></textarea>
-                        <div class="flex justify-end gap-2 mt-2">
+                        <div class="flex justify-end gap-2.5 mt-2">
                           <button
-                            class="btn btn-ghost btn-xs border border-base-300"
+                            type="button"
+                            class="btn btn-sm border border-base-300 hover:border-primary hover:text-primary"
                             onclick={() => {
+                              clearInlineCommentText(file.filename, lineNumber, side)
                               onClose()
                             }}
                           >Cancel</button>
-                           <button
-                             class="btn btn-primary btn-xs"
-                             onclick={() => submitInlineComment(file.filename, lineNumber, side, onClose)}
+                          <button
+                            type="button"
+                            class="btn btn-primary btn-sm"
+                            onclick={() => submitInlineComment(file.filename, lineNumber, side, onClose)}
                           >Add Comment</button>
                         </div>
                       </div>
@@ -452,6 +654,7 @@
                     <span class="loading loading-spinner loading-sm mr-2"></span>
                     <span class="text-xs">Processing diff…</span>
                   </div>
+                {/if}
                 {/if}
               {/if}
             </div>
