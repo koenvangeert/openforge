@@ -2,11 +2,9 @@
   import { onMount } from 'svelte'
   import type { FrontendOpenForgeAPI, OpenForgeContextSnapshot } from '@openforge/plugin-sdk/frontend'
   import { prOverviewComments } from '../../lib/stores'
-  import { getPrOverviewComments } from '../../lib/ipc'
   import { timeAgo, timeAgoFromSeconds } from '../../lib/timeAgo'
   import type { ReviewPullRequest, PrOverviewComment } from '@openforge/plugin-sdk/domain'
   import MarkdownContent from '@openforge/plugin-sdk/ui/MarkdownContent.svelte'
-  import { openUrl } from '../../lib/ipc'
 
   interface Props {
     api: FrontendOpenForgeAPI
@@ -25,7 +23,11 @@
     isLoading = true
     error = null
     try {
-      const comments = await getPrOverviewComments(api, pr.repo_owner, pr.repo_name, pr.number)
+      const comments = await api.commands.invokeGlobal<PrOverviewComment[]>('openforge.getPrOverviewComments', {
+        owner: pr.repo_owner,
+        repo: pr.repo_name,
+        prNumber: pr.number,
+      })
       $prOverviewComments = comments
     } catch (e) {
       console.error('Failed to load PR overview comments:', e)
@@ -78,7 +80,7 @@
       </div>
       <div class="px-5 py-4">
         {#if pr.body}
-          <MarkdownContent content={pr.body} imageBaseUrl={markdownImageBaseUrl} onOpenUrl={(url) => openUrl(api, url)} />
+          <MarkdownContent content={pr.body} imageBaseUrl={markdownImageBaseUrl} onOpenUrl={(url) => api.system.openUrl(url)} />
         {:else}
           <p class="text-sm text-base-content/50 italic m-0">No description provided.</p>
         {/if}
@@ -133,7 +135,7 @@
               </div>
             {/if}
             <div class="px-5 py-4">
-              <MarkdownContent content={comment.body} imageBaseUrl={markdownImageBaseUrl} onOpenUrl={(url) => openUrl(api, url)} />
+              <MarkdownContent content={comment.body} imageBaseUrl={markdownImageBaseUrl} onOpenUrl={(url) => api.system.openUrl(url)} />
             </div>
           </div>
         {/each}

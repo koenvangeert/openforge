@@ -66,21 +66,10 @@ describe('skills-viewer plugin', () => {
     expect(subscriptions.add).toHaveBeenCalledWith(expect.objectContaining({ dispose: expect.any(Function) }))
   })
 
-  it('forwards skill list and save through explicit openforge.* runtime commands', async () => {
-    const { listOpenCodeSkills, saveSkillContent } = await import('./lib/ipc')
-    const { api, invokeGlobal } = makeRuntimeHarness()
-    const skills = [{ name: 'reviewer', level: 'project' as const, source_dir: '/skills', description: 'Reviews code' }]
-    invokeGlobal.mockResolvedValueOnce(skills).mockResolvedValueOnce(undefined)
+  it('does not keep plugin-local runtime adapter modules or imports', () => {
+    const skillsViewSource = readFileSync(join(pluginSrcDir, 'SkillsView.svelte'), 'utf8')
 
-    await expect(listOpenCodeSkills(api, 'P-1')).resolves.toEqual(skills)
-    await expect(saveSkillContent(api, 'P-1', 'reviewer', 'project', '/skills', 'content')).resolves.toBeUndefined()
-    expect(invokeGlobal).toHaveBeenNthCalledWith(1, 'openforge.listOpenCodeSkills', { projectId: 'P-1' })
-    expect(invokeGlobal).toHaveBeenNthCalledWith(2, 'openforge.saveSkillContent', {
-      projectId: 'P-1',
-      name: 'reviewer',
-      level: 'project',
-      sourceDir: '/skills',
-      content: 'content',
-    })
+    expect(existsSync(join(pluginSrcDir, 'lib/ipc.ts'))).toBe(false)
+    expect(skillsViewSource).not.toContain('./lib/ipc')
   })
 })

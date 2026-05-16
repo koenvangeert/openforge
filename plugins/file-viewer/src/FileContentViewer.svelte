@@ -3,7 +3,6 @@
   import type { FrontendOpenForgeAPI } from '@openforge/plugin-sdk/frontend'
   import type { FileContent } from '@openforge/plugin-sdk/domain'
   import { getLanguageForFile, highlightCode } from './lib/fileHighlighter'
-  import { openUrl } from './lib/ipc'
 
   interface Props {
     api: FrontendOpenForgeAPI
@@ -100,7 +99,7 @@
             bind:this={scrollRegion}
             onscroll={handleScroll}
           >
-            <MarkdownContent content={content.content} onOpenUrl={(url) => openUrl(api, url)} />
+            <MarkdownContent content={content.content} onOpenUrl={(url) => api.system.openUrl(url)} />
           </div>
         {:else}
           <div

@@ -1,7 +1,6 @@
 <script lang="ts">
   import type { FrontendOpenForgeAPI, OpenForgeContextSnapshot } from '@openforge/plugin-sdk/frontend'
   import { skills, selectedSkillIdentity, activeProjectId } from './lib/stores'
-  import { listOpenCodeSkills, openUrl, saveSkillContent } from './lib/ipc'
   import { getHTMLElementAt, isInputFocused } from './lib/domUtils'
 
   interface Props {
@@ -81,7 +80,7 @@
     isLoading = true
     error = null
     try {
-      const result = await listOpenCodeSkills(api, $activeProjectId)
+      const result = await api.commands.invokeGlobal<SkillInfo[]>('openforge.listOpenCodeSkills', { projectId: $activeProjectId })
       $skills = result
       // Auto-select first skill if none selected
       if (!$selectedSkillIdentity && result.length > 0) {
@@ -119,14 +118,13 @@
     isSaving = true
     saveError = null
     try {
-      await saveSkillContent(
-        api,
-        $activeProjectId,
-        selectedSkill.name,
-        selectedSkill.level,
-        selectedSkill.source_dir,
-        editContent,
-      )
+      await api.commands.invokeGlobal('openforge.saveSkillContent', {
+        projectId: $activeProjectId,
+        name: selectedSkill.name,
+        level: selectedSkill.level,
+        sourceDir: selectedSkill.source_dir,
+        content: editContent,
+      })
       // Update the local skill data with new content
       $skills = $skills.map(s =>
         s.name === selectedSkill!.name && s.level === selectedSkill!.level && s.source_dir === selectedSkill!.source_dir
@@ -370,7 +368,7 @@
           <!-- Read mode: rendered markdown -->
           <div class="flex-1 overflow-y-auto px-6 py-4">
             {#if selectedSkill.template}
-              <MarkdownContent content={selectedSkill.template} onOpenUrl={(url) => openUrl(api, url)} />
+              <MarkdownContent content={selectedSkill.template} onOpenUrl={(url) => api.system.openUrl(url)} />
             {:else}
               <div class="flex flex-col items-center justify-center h-full gap-3 text-base-content/50 text-center">
                 <span class="text-3xl">📄</span>
