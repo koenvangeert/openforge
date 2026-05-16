@@ -1,17 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/svelte'
-import { describe, expect, it, vi, beforeEach } from 'vitest'
-import { writable } from 'svelte/store'
-import type { ReviewPullRequest } from '../../../lib/types'
+import { describe, expect, it, vi } from 'vitest'
+import type { PrOverviewComment, ReviewPullRequest } from '@openforge/plugin-sdk/domain'
 import PrOverviewTab from './PrOverviewTab.svelte'
-
-vi.mock('../../../lib/stores', () => ({
-  prOverviewComments: writable([]),
-}))
-
-vi.mock('../../../lib/ipc', () => ({
-  getPrOverviewComments: vi.fn().mockResolvedValue([]),
-  openUrl: vi.fn(),
-}))
 
 const basePr: ReviewPullRequest = {
   id: 12345,
@@ -40,12 +30,15 @@ const basePr: ReviewPullRequest = {
 }
 
 describe('PrOverviewTab', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-  })
-
   it('renders PR body relative markdown images from the pull request head commit', async () => {
-    render(PrOverviewTab, { props: { pr: basePr } })
+    render(PrOverviewTab, {
+      props: {
+        pr: basePr,
+        comments: [],
+        onCommentsChange: vi.fn(),
+        loadComments: vi.fn().mockResolvedValue([]),
+      },
+    })
 
     await waitFor(() => {
       expect(screen.getByRole('img', { name: 'Architecture' })).toBeTruthy()
@@ -53,5 +46,35 @@ describe('PrOverviewTab', () => {
 
     const image = screen.getByRole('img', { name: 'Architecture' })
     expect(image.getAttribute('src')).toBe('https://raw.githubusercontent.com/acme/repo/abc123def456/docs/architecture.png')
+  })
+
+  it('loads overview comments and renders their source labels', async () => {
+    const comments: PrOverviewComment[] = [{
+      id: 1,
+      author: 'reviewer',
+      avatar_url: null,
+      body: 'Looks good overall',
+      file_path: null,
+      line_number: null,
+      created_at: '2024-01-01T00:00:00Z',
+      comment_type: 'review_body',
+    }]
+    const onCommentsChange = vi.fn()
+
+    render(PrOverviewTab, {
+      props: {
+        pr: basePr,
+        comments,
+        onCommentsChange,
+        loadComments: vi.fn().mockResolvedValue(comments),
+      },
+    })
+
+    await waitFor(() => {
+      expect(onCommentsChange).toHaveBeenCalledWith(comments)
+    })
+
+    expect(screen.getByText('submitted a review')).toBeTruthy()
+    expect(screen.getByText('Looks good overall')).toBeTruthy()
   })
 })

@@ -1,7 +1,7 @@
 import { render, screen, fireEvent } from '@testing-library/svelte'
 import { describe, it, expect } from 'vitest'
 import AuthoredPrCard from './AuthoredPrCard.svelte'
-import type { AuthoredPullRequest } from '../../../lib/types'
+import type { AuthoredPullRequest } from '@openforge/plugin-sdk/domain'
 
 const basePr: AuthoredPullRequest = {
   id: 12345,

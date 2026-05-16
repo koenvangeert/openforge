@@ -39,6 +39,7 @@ export default defineConfig({
             'plugins/file-viewer/src/**/*.test.ts',
             'plugins/github-sync/src/**/*.test.ts',
             'plugins/skills-viewer/src/**/*.test.ts',
+            'packages/pr-review-ui/src/**/*.test.ts',
           ],
           alias: {
             ...pluginRuntimeAliases,

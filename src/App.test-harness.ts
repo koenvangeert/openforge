@@ -290,7 +290,6 @@ vi.mock('./lib/ipc', () => ({
 
 vi.mock('./components/focus-board/FocusBoard.svelte', () => ({ default: vi.fn() }))
 vi.mock('./components/task-detail/TaskDetailView.svelte', () => ({ default: vi.fn() }))
-vi.mock('./components/review/pr/PrReviewView.svelte', () => ({ default: vi.fn() }))
 vi.mock('./components/SkillsView.svelte', () => ({ default: vi.fn() }))
 vi.mock('./components/settings/SettingsView.svelte', () => ({ default: vi.fn() }))
 vi.mock('./components/prompt/PromptInput.svelte', () => ({ default: vi.fn() }))

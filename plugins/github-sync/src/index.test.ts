@@ -17,6 +17,7 @@ vi.mock('./review/pr/PrReviewView.svelte', () => ({
 import packageJson from '../package.json'
 
 const pluginSrcDir = dirname(fileURLToPath(import.meta.url))
+const repoRoot = join(pluginSrcDir, '../../..')
 
 function makeRuntimeHarness() {
   const subscriptions = { add: vi.fn() }
@@ -60,6 +61,10 @@ describe('github-sync plugin', () => {
     expect(existsSync(join(pluginSrcDir, 'review/pr/ReviewPrCard.svelte'))).toBe(false)
     expect(existsSync(join(pluginSrcDir, 'review/pr/AuthoredPrCard.svelte'))).toBe(false)
     expect(existsSync(join(pluginSrcDir, 'review/shared/FileTree.svelte'))).toBe(false)
+  })
+
+  it('does not keep a legacy host-app PR review UI copy alongside the GitHub Sync plugin view', () => {
+    expect(existsSync(join(repoRoot, 'src/components/review/pr'))).toBe(false)
   })
 
   it('registers PR view and refresh command at runtime through defineFrontendPlugin', async () => {
