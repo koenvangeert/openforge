@@ -93,7 +93,10 @@ export type {
 
 export { parseStrictFiniteNumber } from './numberParsing'
 export {
+  SKILL_SOURCE_DIRS,
   getSkillIdentity,
+  getSkillSourcePath,
+  groupSkillsBySource,
   hasMergeConflicts,
   isQueuedForMerge,
   isReadyToMerge,
