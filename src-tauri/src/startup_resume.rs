@@ -169,6 +169,7 @@ pub(crate) async fn resume_task_sessions(
                     stage: "implementing".to_string(),
                     status: "running".to_string(),
                     checkpoint_data: None,
+                    pty_instance_id: None,
                     error_message: None,
                     created_at: 0,
                     updated_at: 0,
@@ -379,17 +380,19 @@ pub(crate) fn restore_resumed_session_state(
     }
 
     if let Some(session) = latest_session {
-        let pty_checkpoint_data = pty_instance_id.map(|id| {
-            serde_json::json!({
-                "pty_instance_id": id,
-            })
-            .to_string()
-        });
+        if let Some(pty_instance_id) = pty_instance_id {
+            if let Err(e) = db.set_agent_session_pty_instance_id(&session.id, pty_instance_id) {
+                warn!(
+                    "[startup] Failed to restore PTY instance ID for session {} on task {}: {}",
+                    session.id, target.task_id, e
+                );
+            }
+        }
 
         let persisted_status = if matches!(session.status.as_str(), "interrupted" | "running") {
             Some("running")
         } else if matches!(provider_name, "pi" | "opencode")
-            && pty_checkpoint_data.is_some()
+            && pty_instance_id.is_some()
             && matches!(session.status.as_str(), "completed" | "paused")
         {
             Some(session.status.as_str())
@@ -398,14 +401,11 @@ pub(crate) fn restore_resumed_session_state(
         };
 
         if let Some(status) = persisted_status {
-            let checkpoint_data =
-                if status == "running" || matches!(provider_name, "pi" | "opencode") {
-                    pty_checkpoint_data
-                        .as_deref()
-                        .or(session.checkpoint_data.as_deref())
-                } else {
-                    None
-                };
+            let checkpoint_data = if status == "running" {
+                None
+            } else {
+                session.checkpoint_data.as_deref()
+            };
 
             if let Err(e) =
                 db.update_agent_session(&session.id, &session.stage, status, checkpoint_data, None)
@@ -626,10 +626,8 @@ mod tests {
             .expect("get restored opencode session failed")
             .expect("missing restored opencode session");
         assert_eq!(restored.status, "running");
-        assert_eq!(
-            restored.checkpoint_data,
-            Some(r#"{"pty_instance_id":42}"#.to_string())
-        );
+        assert_eq!(restored.pty_instance_id, Some(42));
+        assert_eq!(restored.checkpoint_data, None);
         assert_eq!(restored.error_message, None);
 
         drop(db);
@@ -669,14 +667,8 @@ mod tests {
             "opencode",
         )
         .expect("create opencode session failed");
-        db.update_agent_session(
-            "ses-oc-202",
-            "implement",
-            "completed",
-            Some(r#"{"pty_instance_id":41}"#),
-            None,
-        )
-        .expect("seed old checkpoint failed");
+        db.set_agent_session_pty_instance_id("ses-oc-202", 41)
+            .expect("seed old pty instance failed");
 
         let session = db
             .get_latest_session_for_ticket(&task.id)
@@ -698,10 +690,8 @@ mod tests {
             .expect("get restored opencode session failed")
             .expect("missing restored opencode session");
         assert_eq!(restored.status, "completed");
-        assert_eq!(
-            restored.checkpoint_data,
-            Some(r#"{"pty_instance_id":42}"#.to_string())
-        );
+        assert_eq!(restored.pty_instance_id, Some(42));
+        assert_eq!(restored.checkpoint_data, None);
 
         drop(db);
         let _ = fs::remove_file(path);
@@ -735,14 +725,8 @@ mod tests {
             .expect("create pi session failed");
         db.set_agent_session_pi_id("ses-pi-200", "pi-ses-200")
             .expect("set pi session id failed");
-        db.update_agent_session(
-            "ses-pi-200",
-            "implement",
-            "completed",
-            Some(r#"{"pty_instance_id":41}"#),
-            None,
-        )
-        .expect("seed old checkpoint failed");
+        db.set_agent_session_pty_instance_id("ses-pi-200", 41)
+            .expect("seed old pty instance failed");
 
         let session = db
             .get_latest_session_for_ticket(&task.id)
@@ -764,10 +748,8 @@ mod tests {
             .expect("get restored pi session failed")
             .expect("missing restored pi session");
         assert_eq!(restored.status, "completed");
-        assert_eq!(
-            restored.checkpoint_data,
-            Some(r#"{"pty_instance_id":42}"#.to_string())
-        );
+        assert_eq!(restored.pty_instance_id, Some(42));
+        assert_eq!(restored.checkpoint_data, None);
 
         drop(db);
         let _ = fs::remove_file(path);

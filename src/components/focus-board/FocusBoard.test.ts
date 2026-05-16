@@ -50,6 +50,7 @@ const makeSession = (taskId: string, status: string, checkpoint_data: string | n
   stage: 'implement',
   status,
   checkpoint_data,
+  pty_instance_id: null,
   error_message: null,
   created_at: 1000,
   updated_at: 3000,

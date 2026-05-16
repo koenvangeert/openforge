@@ -52,6 +52,7 @@ CREATE TABLE IF NOT EXISTS agent_sessions (
     stage TEXT NOT NULL,
     status TEXT NOT NULL,
     checkpoint_data TEXT,
+    pty_instance_id INTEGER,
     error_message TEXT,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL,
@@ -913,6 +914,86 @@ DROP TABLE plugin_storage_legacy;
 
         Ok(())
     }),
+    M::up_with_hook("SELECT 1;", |tx| {
+        let table_exists: bool = tx
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='agent_sessions'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(false);
+        if !table_exists {
+            return Ok(());
+        }
+
+        let has_pty_instance_id: bool = tx
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM pragma_table_info('agent_sessions') WHERE name = 'pty_instance_id'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(false);
+
+        if !has_pty_instance_id {
+            tx.execute(
+                "ALTER TABLE agent_sessions ADD COLUMN pty_instance_id INTEGER",
+                [],
+            )
+            .map_err(rusqlite_migration::HookError::RusqliteError)?;
+        }
+
+        let legacy_checkpoint_rows = {
+            let mut stmt = tx
+                .prepare("SELECT id, checkpoint_data FROM agent_sessions WHERE checkpoint_data IS NOT NULL")
+                .map_err(rusqlite_migration::HookError::RusqliteError)?;
+            let rows = stmt
+                .query_map([], |row| {
+                    Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+                })
+                .map_err(rusqlite_migration::HookError::RusqliteError)?;
+            let mut legacy_checkpoint_rows = Vec::new();
+            for row in rows {
+                legacy_checkpoint_rows
+                    .push(row.map_err(rusqlite_migration::HookError::RusqliteError)?);
+            }
+            legacy_checkpoint_rows
+        };
+
+        for (session_id, checkpoint_data) in legacy_checkpoint_rows {
+            let Ok(value) = serde_json::from_str::<serde_json::Value>(&checkpoint_data) else {
+                continue;
+            };
+            let Some(object) = value.as_object() else {
+                continue;
+            };
+            let pty_instance_id = object
+                .get("pty_instance_id")
+                .or_else(|| object.get("ptyInstanceId"))
+                .and_then(|value| value.as_u64())
+                .and_then(|value| i64::try_from(value).ok());
+            let Some(pty_instance_id) = pty_instance_id else {
+                continue;
+            };
+            let metadata_only = object
+                .keys()
+                .all(|key| key == "pty_instance_id" || key == "ptyInstanceId");
+
+            if metadata_only {
+                tx.execute(
+                    "UPDATE agent_sessions SET pty_instance_id = COALESCE(pty_instance_id, ?1), checkpoint_data = NULL WHERE id = ?2",
+                    rusqlite::params![pty_instance_id, session_id],
+                )
+            } else {
+                tx.execute(
+                    "UPDATE agent_sessions SET pty_instance_id = COALESCE(pty_instance_id, ?1) WHERE id = ?2",
+                    rusqlite::params![pty_instance_id, session_id],
+                )
+            }
+            .map_err(rusqlite_migration::HookError::RusqliteError)?;
+        }
+
+        Ok(())
+    }),
 );
 
 /// Detects existing databases (created before the migration system) and sets
@@ -1169,6 +1250,70 @@ mod tests {
     }
 
     #[test]
+    fn test_agent_sessions_pty_instance_migration_backfills_metadata_only_checkpoint() {
+        let path = std::env::temp_dir().join(format!(
+            "test_agent_session_pty_instance_backfill_{}.db",
+            std::process::id()
+        ));
+        let _ = fs::remove_file(&path);
+
+        {
+            let conn = rusqlite::Connection::open(&path).expect("open raw db");
+            let previous_version = LATEST_USER_VERSION - 1;
+            conn.execute(&format!("PRAGMA user_version = {previous_version}"), [])
+                .expect("set user_version");
+            conn.execute(
+                "CREATE TABLE agent_sessions (
+                    id TEXT PRIMARY KEY,
+                    checkpoint_data TEXT
+                )",
+                [],
+            )
+            .expect("create legacy agent_sessions table");
+            conn.execute(
+                "INSERT INTO agent_sessions (id, checkpoint_data) VALUES ('metadata-only', ?1)",
+                [r#"{"pty_instance_id":42}"#],
+            )
+            .expect("insert metadata-only row");
+            conn.execute(
+                "INSERT INTO agent_sessions (id, checkpoint_data) VALUES ('prompt-payload', ?1)",
+                [r#"{"pty_instance_id":43,"message":"Approve?"}"#],
+            )
+            .expect("insert prompt row");
+        }
+
+        let db = Database::new(path.clone()).expect("Database::new");
+        let conn = db.connection();
+        let conn = conn.lock().unwrap();
+
+        let metadata_only: (Option<i64>, Option<String>) = conn
+            .query_row(
+                "SELECT pty_instance_id, checkpoint_data FROM agent_sessions WHERE id = 'metadata-only'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .expect("metadata-only row migrated");
+        assert_eq!(metadata_only, (Some(42), None));
+
+        let prompt_payload: (Option<i64>, Option<String>) = conn
+            .query_row(
+                "SELECT pty_instance_id, checkpoint_data FROM agent_sessions WHERE id = 'prompt-payload'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .expect("prompt row migrated");
+        assert_eq!(prompt_payload.0, Some(43));
+        assert_eq!(
+            prompt_payload.1.as_deref(),
+            Some(r#"{"pty_instance_id":43,"message":"Approve?"}"#)
+        );
+
+        drop(conn);
+        drop(db);
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
     fn test_plugin_storage_migration_preserves_legacy_strings_that_look_like_json() {
         let path = std::env::temp_dir().join(format!(
             "test_plugin_storage_legacy_json_literal_strings_{}.db",
@@ -1178,7 +1323,7 @@ mod tests {
 
         {
             let conn = rusqlite::Connection::open(&path).expect("open raw db");
-            let previous_version = LATEST_USER_VERSION - 1;
+            let previous_version = LATEST_USER_VERSION - 2;
             conn.execute(&format!("PRAGMA user_version = {previous_version}"), [])
                 .expect("set user_version");
             conn.execute("CREATE TABLE plugins (id TEXT PRIMARY KEY)", [])
@@ -1357,7 +1502,7 @@ mod tests {
 
         {
             let conn = rusqlite::Connection::open(&path).expect("open raw db");
-            let previous_version = LATEST_USER_VERSION - 2;
+            let previous_version = LATEST_USER_VERSION - 3;
             conn.execute(&format!("PRAGMA user_version = {previous_version}"), [])
                 .expect("set user_version");
             conn.execute_batch(
@@ -2210,7 +2355,7 @@ mod tests {
         {
             let conn = rusqlite::Connection::open(&path).expect("open raw db");
             conn.execute(
-                &format!("PRAGMA user_version = {}", LATEST_USER_VERSION - 5),
+                &format!("PRAGMA user_version = {}", LATEST_USER_VERSION - 6),
                 [],
             )
             .expect("set pre-upgrade user_version");
@@ -2256,7 +2401,7 @@ mod tests {
         {
             let conn = rusqlite::Connection::open(&path).expect("open raw db");
             conn.execute(
-                &format!("PRAGMA user_version = {}", LATEST_USER_VERSION - 5),
+                &format!("PRAGMA user_version = {}", LATEST_USER_VERSION - 6),
                 [],
             )
             .expect("set pre-upgrade user_version");

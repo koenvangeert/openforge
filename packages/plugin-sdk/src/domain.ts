@@ -24,6 +24,7 @@ export interface AgentSession {
   stage: string;
   status: string;
   checkpoint_data: string | null;
+  pty_instance_id: number | null;
   error_message: string | null;
   created_at: number;
   updated_at: number;

@@ -23,6 +23,7 @@ const makeSession = (ticketId: string, status: string, checkpointData: string | 
   stage: 'implement',
   status,
   checkpoint_data: checkpointData,
+  pty_instance_id: null,
   error_message: null,
   created_at: 1000,
   updated_at: 2000,

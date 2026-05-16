@@ -46,6 +46,7 @@ function createSession(overrides: Partial<AgentSession> = {}): AgentSession {
     created_at: 1,
     updated_at: 1,
     ...overrides,
+    pty_instance_id: overrides.pty_instance_id ?? null,
   }
 }
 

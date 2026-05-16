@@ -262,6 +262,7 @@ const baseSession: AgentSession = {
   stage: 'implement',
   status: 'running',
   checkpoint_data: null,
+  pty_instance_id: null,
   error_message: null,
   created_at: 1000,
   updated_at: 2000,
