@@ -8,6 +8,20 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 APP_NAME="Open Forge"
 INSTALL_DIR="/Applications"
 
+report_failure() {
+  local phase="$1"
+  local severity="$2"
+  local decision="$3"
+  local user_message="$4"
+  local remediation="$5"
+  local cause="$6"
+
+  echo "[electron:failure] ${severity} ${phase}: ${user_message}" >&2
+  echo "Cause: ${cause}" >&2
+  echo "Remediation: ${remediation}" >&2
+  echo "Decision: ${decision}" >&2
+}
+
 stop_running_app() {
   if pgrep -xq "${APP_NAME}"; then
     echo "Closing running instance..."
@@ -17,6 +31,13 @@ stop_running_app() {
   fi
 
   if pgrep -fq 'Open Forge.app/Contents/MacOS/openforge-sidecar'; then
+    report_failure \
+      "install:stale-sidecar-cleanup" \
+      "warning" \
+      "continue" \
+      "A stale OpenForge sidecar is still running during install." \
+      "The installer will try to stop the stale sidecar before replacing the app bundle." \
+      "pgrep matched Open Forge.app/Contents/MacOS/openforge-sidecar"
     echo "Stopping stale Electron sidecar..."
     pkill -f 'Open Forge.app/Contents/MacOS/openforge-sidecar' 2>/dev/null || true
   fi

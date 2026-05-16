@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { OPENFORGE_APP_EVENTS_RECONNECTED_EVENT, OPENFORGE_EVENT_CHANNEL } from './preloadApi'
 import { createAppEventForwarder, parseSseMessages } from './eventForwarder'
+import { RecordingFailureReporterAdapter } from './failureReporting'
 import type { SidecarLaunchConfig } from './sidecar'
 
 function sidecarConfig(): SidecarLaunchConfig {
@@ -249,8 +250,9 @@ describe('Electron app event forwarding', () => {
     })
   })
 
-  it('reconnects after a post-ready stream error and forwards later PTY events', async () => {
+  it('reconnects after a post-ready stream error, reports the failure, and forwards later PTY events', async () => {
     const send = vi.fn()
+    const failureReporter = new RecordingFailureReporterAdapter()
     let forwarder: ReturnType<typeof createAppEventForwarder>
     const sleep = vi.fn(async () => {
       if (sleep.mock.calls.length >= 2) forwarder.stop()
@@ -276,10 +278,16 @@ describe('Electron app event forwarding', () => {
       windows: () => [{ webContents: { send } }],
       sleep,
       reconnectDelayMs: 0,
+      failureReporter,
     })
 
     await forwarder.start()
 
+    expect(failureReporter.reports).toContainEqual(expect.objectContaining({
+      phase: 'runtime:event-stream',
+      severity: 'warning',
+      decision: 'retry',
+    }))
     expect(fetch).toHaveBeenCalledTimes(2)
     expect(send).toHaveBeenCalledWith(OPENFORGE_EVENT_CHANNEL, {
       eventName: 'pty-output-T-2',

@@ -28,6 +28,33 @@ function logStep(message) {
   console.log(`[electron-dev] ${message}`)
 }
 
+function createScriptFailureReport({ phase, severity, cause, userMessage, remediation, decision }) {
+  const causeMessage = cause instanceof Error ? cause.message : String(cause)
+  return {
+    phase,
+    severity,
+    cause: { message: causeMessage },
+    userMessage,
+    remediation,
+    decision,
+    occurredAt: new Date().toISOString(),
+  }
+}
+
+async function reportScriptFailure(failureReporter, input) {
+  const report = createScriptFailureReport(input)
+  if (failureReporter?.reportFailure) {
+    await failureReporter.reportFailure(report)
+  } else {
+    const writer = report.severity === 'warning' ? console.warn : console.error
+    writer(`[electron:failure] ${report.severity} ${report.phase}: ${report.userMessage}`)
+    writer(`Cause: ${report.cause.message}`)
+    writer(`Remediation: ${report.remediation}`)
+    writer(`Decision: ${report.decision}`)
+  }
+  return report.decision
+}
+
 function repoRoot() {
   return resolve(dirname(fileURLToPath(import.meta.url)), '..')
 }
@@ -272,20 +299,47 @@ export async function assertVitePortAvailable(portOrDeps = VITE_PORT, deps = { i
   const port = typeof portOrDeps === 'number' ? portOrDeps : VITE_PORT
   const portDeps = typeof portOrDeps === 'number' ? deps : portOrDeps
   if (await portDeps.isPortOpen(VITE_HOST, port)) {
-    throw new Error(`Port ${port} is already in use. Stop the existing dev server before running pnpm electron:dev so Electron does not attach to an untrusted renderer.`)
+    const message = `Port ${port} is already in use. Stop the existing dev server before running pnpm electron:dev so Electron does not attach to an untrusted renderer.`
+    await reportScriptFailure(portDeps.failureReporter, {
+      phase: 'dev:port-check',
+      severity: 'error',
+      cause: message,
+      userMessage: 'A required development port is already in use.',
+      remediation: 'Stop the conflicting process or choose a free port before launching Electron dev mode.',
+      decision: 'quit',
+    })
+    throw new Error(message)
   }
 }
 
 export async function assertBackendPortAvailable(port = Number(process.env.OPENFORGE_BACKEND_PORT ?? DEFAULT_DEV_BACKEND_PORT), deps = { isPortOpen }) {
   if (await deps.isPortOpen(VITE_HOST, port)) {
-    throw new Error(`Port ${port} is already in use. Stop the existing OpenForge sidecar/Electron process before running pnpm electron:dev, or set OPENFORGE_BACKEND_PORT to a free port.`)
+    const message = `Port ${port} is already in use. Stop the existing OpenForge sidecar/Electron process before running pnpm electron:dev, or set OPENFORGE_BACKEND_PORT to a free port.`
+    await reportScriptFailure(deps.failureReporter, {
+      phase: 'dev:port-check',
+      severity: 'error',
+      cause: message,
+      userMessage: 'A required development port is already in use.',
+      remediation: 'Stop the conflicting OpenForge sidecar/Electron process or set OPENFORGE_BACKEND_PORT to a free port.',
+      decision: 'quit',
+    })
+    throw new Error(message)
   }
 }
 
 export async function assertElectronDebugPortAvailable(port, deps = { isPortOpen }) {
   if (port === null) return
   if (await deps.isPortOpen(VITE_HOST, port)) {
-    throw new Error(`Electron debug port ${port} is already in use. Stop the existing debugger target or set OPENFORGE_ELECTRON_DEBUG_PORT to a free port.`)
+    const message = `Electron debug port ${port} is already in use. Stop the existing debugger target or set OPENFORGE_ELECTRON_DEBUG_PORT to a free port.`
+    await reportScriptFailure(deps.failureReporter, {
+      phase: 'dev:port-check',
+      severity: 'error',
+      cause: message,
+      userMessage: 'A required development port is already in use.',
+      remediation: 'Stop the existing debugger target or set OPENFORGE_ELECTRON_DEBUG_PORT to a free port.',
+      decision: 'quit',
+    })
+    throw new Error(message)
   }
 }
 

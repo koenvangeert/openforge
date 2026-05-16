@@ -1,5 +1,6 @@
 import { EventEmitter } from 'node:events'
 import { describe, expect, it, vi } from 'vitest'
+import { RecordingFailureReporterAdapter } from './failureReporting'
 import { createSidecarLaunchConfig, startSidecar, startSidecarReadiness, stopSidecar, waitForSidecarHealth } from './sidecar'
 import type { ChildProcessLike, SidecarEventEnvelopeLike, SidecarEventStreamAdapter } from './sidecar'
 
@@ -75,11 +76,12 @@ describe('Electron Rust sidecar supervision', () => {
     expect(sleep).toHaveBeenCalledWith(5)
   })
 
-  it('cleans up a spawned sidecar when health readiness fails', async () => {
+  it('reports and cleans up a spawned sidecar when health readiness times out', async () => {
     const child = new FakeChild()
     const spawn = vi.fn(() => child)
     const fetch = vi.fn().mockRejectedValue(new Error('not ready'))
     const sleep = vi.fn(async () => undefined)
+    const failureReporter = new RecordingFailureReporterAdapter()
 
     await expect(startSidecar(createSidecarLaunchConfig({ token: 'token-123', port: 17642 }), {
       spawn,
@@ -87,8 +89,14 @@ describe('Electron Rust sidecar supervision', () => {
       sleep,
       healthTimeoutMs: 1,
       healthIntervalMs: 1,
+      failureReporter,
     })).rejects.toThrow('sidecar did not become ready')
 
+    expect(failureReporter.reports).toContainEqual(expect.objectContaining({
+      phase: 'boot:sidecar-health',
+      severity: 'fatal',
+      decision: 'quit',
+    }))
     expect(child.killCalls).toContain('SIGTERM')
   })
 
@@ -291,6 +299,37 @@ describe('Electron Rust sidecar supervision', () => {
       createEventStream: vi.fn(() => new ScriptedEventStream()),
     })).rejects.toThrow('sidecar did not become ready: sidecar readiness check failed: missing backend token')
 
+    expect(child.killCalls).toContain('SIGTERM')
+  })
+
+  it('reports initial app event stream failure before cleaning up sidecar readiness', async () => {
+    class FailingEventStream extends ScriptedEventStream {
+      ready = vi.fn(async () => { throw new Error('event stream refused') })
+    }
+    const child = new FakeChild()
+    const eventStream = new FailingEventStream()
+    const failureReporter = new RecordingFailureReporterAdapter()
+    const spawn = vi.fn(() => child)
+    const fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ status: 'ok', events: { available: true }, startupResume: { phase: 'pending' } }),
+    })
+    const sleep = vi.fn(async () => undefined)
+
+    await expect(startSidecarReadiness(createSidecarLaunchConfig({ token: 'token-123', port: 17642 }), {
+      spawn,
+      fetch,
+      sleep,
+      createEventStream: vi.fn(() => eventStream),
+      failureReporter,
+    })).rejects.toThrow('event stream refused')
+
+    expect(failureReporter.reports).toContainEqual(expect.objectContaining({
+      phase: 'boot:event-stream',
+      severity: 'fatal',
+      decision: 'quit',
+    }))
+    expect(eventStream.stop).toHaveBeenCalled()
     expect(child.killCalls).toContain('SIGTERM')
   })
 

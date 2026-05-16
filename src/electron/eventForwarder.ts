@@ -1,4 +1,6 @@
+import { createFailureReport, reportFailure } from './failureReporting.js'
 import { OPENFORGE_APP_EVENTS_RECONNECTED_EVENT, OPENFORGE_EVENT_CHANNEL } from './preloadApi.js'
+import type { ElectronFailureReporter } from './failureReporting.js'
 import type { SidecarLaunchConfig } from './sidecar.js'
 
 export interface OpenForgeEventEnvelope {
@@ -30,6 +32,7 @@ export interface AppEventForwarderDeps {
   sleep?: (ms: number) => Promise<void>
   reconnectDelayMs?: number
   onEvent?: (envelope: OpenForgeEventEnvelope) => void
+  failureReporter?: ElectronFailureReporter | null
 }
 
 export interface AppEventForwarder {
@@ -211,7 +214,14 @@ export function createAppEventForwarder(deps: AppEventForwarderDeps): AppEventFo
           throw error
         }
 
-        console.error('[electron] Rust app event stream disconnected; reconnecting:', error)
+        await reportFailure(deps.failureReporter, createFailureReport({
+          phase: 'runtime:event-stream',
+          severity: 'warning',
+          cause: error,
+          userMessage: 'OpenForge event stream disconnected.',
+          remediation: 'The desktop app will retry the event stream connection automatically.',
+          decision: 'retry',
+        }))
       }
 
       if (!abortController.signal.aborted) {

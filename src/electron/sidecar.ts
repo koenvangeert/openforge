@@ -1,5 +1,7 @@
 import { randomBytes } from 'node:crypto'
+import { createFailureReport, reportFailure } from './failureReporting.js'
 import type { ChildProcess, SpawnOptions } from 'node:child_process'
+import type { ElectronFailureReporter } from './failureReporting.js'
 
 export interface SidecarOutputStreamLike {
   on(event: 'data', listener: (chunk: unknown) => void): unknown
@@ -176,6 +178,7 @@ export interface StartSidecarDeps {
   healthIntervalMs?: number
   logSidecarOutput?: boolean
   logger?: SidecarLogSink
+  failureReporter?: ElectronFailureReporter | null
 }
 
 export interface StopSidecarOptions {
@@ -439,6 +442,14 @@ export async function startSidecar(config: SidecarLaunchConfig, deps: StartSidec
       intervalMs: deps.healthIntervalMs ?? DEFAULT_HEALTH_INTERVAL_MS,
     })
   } catch (error) {
+    await reportFailure(deps.failureReporter, createFailureReport({
+      phase: 'boot:sidecar-health',
+      severity: 'fatal',
+      cause: error,
+      userMessage: 'OpenForge backend did not become ready.',
+      remediation: 'Stop stale OpenForge sidecar processes and launch again.',
+      decision: 'quit',
+    }))
     await stopSidecar(child, { graceMs: DEFAULT_STOP_GRACE_MS, sleep: deps.sleep })
     throw error
   }
@@ -547,6 +558,18 @@ export async function startSidecarReadiness(
       if (snapshot) markDegraded(snapshot, 'events', error instanceof Error ? error.message : String(error))
     })
   } catch (error) {
+    await reportFailure(deps.failureReporter, createFailureReport({
+      phase: eventStream ? 'boot:event-stream' : 'boot:sidecar-health',
+      severity: 'fatal',
+      cause: error,
+      userMessage: eventStream
+        ? 'OpenForge event stream did not connect during startup.'
+        : 'OpenForge backend readiness did not complete.',
+      remediation: eventStream
+        ? 'Restart OpenForge so the renderer can receive sidecar lifecycle events.'
+        : 'Stop stale OpenForge sidecar processes and launch again.',
+      decision: 'quit',
+    }))
     eventStream?.stop()
     await stopSidecar(child, { graceMs: DEFAULT_STOP_GRACE_MS, sleep: deps.sleep })
     throw error

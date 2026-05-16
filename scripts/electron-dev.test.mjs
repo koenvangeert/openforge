@@ -58,6 +58,17 @@ function createCleanupTimerDeps() {
   }
 }
 
+function createRecordingFailureReporter() {
+  const reports = []
+  return {
+    reports,
+    async reportFailure(report) {
+      reports.push(report)
+      return report.decision
+    },
+  }
+}
+
 describe('electron dev script environment', () => {
   it('starts Electron against the Vite dev server and disables sidecar warning when no sidecar path is configured', () => {
     const env = buildElectronDevEnv({ PATH: '/usr/bin' })
@@ -481,8 +492,19 @@ describe('electron dev script environment', () => {
     await expect(assertElectronDebugPortAvailable(null, { isPortOpen: async () => true })).resolves.toBeUndefined()
   })
 
-  it('fails before launch when a stale backend sidecar already owns an explicit backend port', async () => {
-    await expect(assertBackendPortAvailable(18000, { isPortOpen: async (_host, port) => port === 18000 })).rejects.toThrow('Port 18000 is already in use')
+  it('reports a structured port conflict before launch when a stale backend sidecar owns the port', async () => {
+    const failureReporter = createRecordingFailureReporter()
+
+    await expect(assertBackendPortAvailable(18000, {
+      isPortOpen: async (_host, port) => port === 18000,
+      failureReporter,
+    })).rejects.toThrow('Port 18000 is already in use')
+
+    expect(failureReporter.reports).toContainEqual(expect.objectContaining({
+      phase: 'dev:port-check',
+      severity: 'error',
+      decision: 'quit',
+    }))
   })
 
   it('selects the next free backend port when the default dev backend port is occupied', async () => {

@@ -1,5 +1,7 @@
+import { createFailureReport, reportFailure } from './failureReporting.js'
 import type { AppEventForwarder } from './eventForwarder.js'
 import { stopSidecar } from './sidecar.js'
+import type { ElectronFailureReporter } from './failureReporting.js'
 import type { ChildProcessLike, SidecarHandle, StopSidecarOptions } from './sidecar.js'
 
 export type ShutdownStatus = 'ok' | 'timeout' | 'failed'
@@ -46,6 +48,7 @@ export interface ShutdownCoordinatorOptions {
   sleep?: ShutdownSleep
   now?: () => number
   dateNow?: () => Date
+  failureReporter?: ElectronFailureReporter | null
 }
 
 function defaultSleep(ms: number): Promise<void> {
@@ -84,6 +87,7 @@ export class ShutdownCoordinator {
   private readonly sleep: ShutdownSleep
   private readonly now: () => number
   private readonly dateNow: () => Date
+  private readonly failureReporter: ElectronFailureReporter | null | undefined
   private shutdownPromise: Promise<ShutdownReport> | null = null
   private completedReport: ShutdownReport | null = null
 
@@ -93,6 +97,7 @@ export class ShutdownCoordinator {
     this.sleep = options.sleep ?? defaultSleep
     this.now = options.now ?? (() => Date.now())
     this.dateNow = options.dateNow ?? (() => new Date())
+    this.failureReporter = options.failureReporter
   }
 
   shutdown(): Promise<ShutdownReport> {
@@ -135,6 +140,7 @@ export class ShutdownCoordinator {
             error: `timed out after ${deadlineMs}ms`,
           })
           this.logger?.error?.(`[electron] Shutdown adapter ${adapter.name} timed out after ${deadlineMs}ms`)
+          await this.reportShutdownFailure(adapter.name, `timed out after ${deadlineMs}ms`)
           continue
         }
 
@@ -150,6 +156,7 @@ export class ShutdownCoordinator {
         })
         if (adapterStatus) {
           this.logger?.error?.(`[electron] Shutdown adapter ${adapter.name} reported ${adapterStatus.status}: ${adapterStatus.error}`)
+          await this.reportShutdownFailure(adapter.name, adapterStatus.error ?? `reported ${adapterStatus.status}`)
         } else {
           this.logger?.info?.(`[electron] Shutdown adapter ${adapter.name} completed`)
         }
@@ -164,6 +171,7 @@ export class ShutdownCoordinator {
           error: message,
         })
         this.logger?.error?.(`[electron] Shutdown adapter ${adapter.name} failed: ${message}`)
+        await this.reportShutdownFailure(adapter.name, message)
       }
     }
 
@@ -182,6 +190,17 @@ export class ShutdownCoordinator {
     }
 
     return report
+  }
+
+  private async reportShutdownFailure(adapterName: string, cause: string): Promise<void> {
+    await reportFailure(this.failureReporter, createFailureReport({
+      phase: 'shutdown:cleanup',
+      severity: 'error',
+      cause,
+      userMessage: `Shutdown cleanup failed for ${adapterName}.`,
+      remediation: 'OpenForge will continue exiting; check logs for sidecar or process cleanup details.',
+      decision: 'quit',
+    }))
   }
 }
 

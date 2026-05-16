@@ -45,6 +45,14 @@ ${body}
 }
 
 describe('macOS installer CLI helpers', () => {
+  it('keeps Electron installer stale sidecar cleanup on the structured failure reporting seam', async () => {
+    const installScript = await readFile(join(import.meta.dirname, 'install-electron-mac.sh'), 'utf8')
+
+    expect(installScript).toContain('report_failure')
+    expect(installScript).toContain('install:stale-sidecar-cleanup')
+    expect(installScript).toContain('Decision: ${decision}')
+  })
+
   it('keeps the release installer embedded helper in sync with the shared helper', async () => {
     const [installScript, sharedHelper] = await Promise.all([
       readFile(join(import.meta.dirname, 'install.sh'), 'utf8'),
