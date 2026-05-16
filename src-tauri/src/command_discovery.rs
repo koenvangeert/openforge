@@ -122,11 +122,12 @@ pub fn scan_skill_directories_for_root(
 ) -> Vec<crate::opencode_client::SkillInfo> {
     let mut skills = Vec::new();
     for source_dir in SKILL_SOURCE_DIRS {
-        skills.extend(scan_skills_directory(
-            &skill_source_dir_for_level(root, source_dir, level),
-            level,
-            source_dir,
-        ));
+        let dir = skill_source_dir_for_level(root, source_dir, level);
+        if source_dir == PI_SKILLS_SOURCE_DIR {
+            skills.extend(scan_pi_skills_directory(&dir, level));
+        } else {
+            skills.extend(scan_skills_directory(&dir, level, source_dir));
+        }
     }
     skills
 }
@@ -169,8 +170,53 @@ pub fn scan_skills_directory(
             template: Some(content),
             level: level.to_string(),
             source_dir: source_dir.to_string(),
+            file_name: None,
         });
     }
+    skills
+}
+
+/// Scan a Pi skills directory. Pi supports both Agent Skills directories containing
+/// `SKILL.md` and direct root `.md` skill files in `.pi/skills` and
+/// `~/.pi/agent/skills`.
+pub fn scan_pi_skills_directory(dir: &Path, level: &str) -> Vec<crate::opencode_client::SkillInfo> {
+    let mut skills = scan_skills_directory(dir, level, PI_SKILLS_SOURCE_DIR);
+    let entries = match std::fs::read_dir(dir) {
+        Ok(e) => e,
+        Err(_) => return skills,
+    };
+
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_file() || path.extension().and_then(|e| e.to_str()) != Some("md") {
+            continue;
+        }
+
+        let content = match std::fs::read_to_string(&path) {
+            Ok(c) => c,
+            Err(_) => continue,
+        };
+        let file_name = match path.file_name().and_then(|n| n.to_str()) {
+            Some(n) => n.to_string(),
+            None => continue,
+        };
+        let file_stem = match path.file_stem().and_then(|n| n.to_str()) {
+            Some(n) => n.to_string(),
+            None => continue,
+        };
+        let (fm_name, fm_desc) = parse_skill_frontmatter(&content);
+        let name = fm_name.unwrap_or(file_stem);
+        skills.push(crate::opencode_client::SkillInfo {
+            name,
+            description: fm_desc,
+            agent: None,
+            template: Some(content),
+            level: level.to_string(),
+            source_dir: PI_SKILLS_SOURCE_DIR.to_string(),
+            file_name: Some(file_name),
+        });
+    }
+
     skills
 }
 
@@ -831,24 +877,43 @@ mod tests {
         std::fs::create_dir_all(&claude_dir).unwrap();
         std::fs::write(claude_dir.join("SKILL.md"), "# Legacy Claude").unwrap();
 
+        let agents_root_file = root.join(".agents").join("skills").join("agents-root.md");
+        std::fs::write(
+            agents_root_file,
+            "---\nname: agents-root\ndescription: Agents root file\n---\n# Agents Root",
+        )
+        .unwrap();
+
         let pi_dir = root.join(".pi").join("skills").join("pi-project");
         std::fs::create_dir_all(&pi_dir).unwrap();
         std::fs::write(pi_dir.join("SKILL.md"), "# Pi Project").unwrap();
+        std::fs::write(
+            root.join(".pi").join("skills").join("pi-root.md"),
+            "---\nname: pi-root\ndescription: Pi root file\n---\n# Pi Root",
+        )
+        .unwrap();
 
         let mut skills = scan_skill_directories_for_root(root, "project");
         skills.sort_by(|a, b| a.name.cmp(&b.name));
 
-        assert_eq!(skills.len(), 4);
+        assert_eq!(skills.len(), 5);
         assert_eq!(skills[0].name, "generic-skill");
         assert_eq!(skills[0].description, Some("Generic path".to_string()));
         assert_eq!(skills[0].level, "project");
         assert_eq!(skills[0].source_dir, ".agents");
+        assert_eq!(skills[0].file_name, None);
         assert_eq!(skills[1].name, "legacy-claude");
         assert_eq!(skills[1].source_dir, ".claude");
         assert_eq!(skills[2].name, "legacy-opencode");
         assert_eq!(skills[2].source_dir, ".opencode");
         assert_eq!(skills[3].name, "pi-project");
         assert_eq!(skills[3].source_dir, ".pi");
+        assert_eq!(skills[3].file_name, None);
+        assert_eq!(skills[4].name, "pi-root");
+        assert_eq!(skills[4].description, Some("Pi root file".to_string()));
+        assert_eq!(skills[4].source_dir, ".pi");
+        assert_eq!(skills[4].file_name, Some("pi-root.md".to_string()));
+        assert!(!skills.iter().any(|skill| skill.name == "agents-root"));
     }
 
     #[test]
@@ -862,13 +927,27 @@ mod tests {
             .join("pi-user");
         std::fs::create_dir_all(&pi_user_dir).unwrap();
         std::fs::write(pi_user_dir.join("SKILL.md"), "# Pi User").unwrap();
+        std::fs::write(
+            root.join(".pi")
+                .join("agent")
+                .join("skills")
+                .join("pi-user-root.md"),
+            "---\nname: pi-user-root\ndescription: User Pi root file\n---\n# Pi User Root",
+        )
+        .unwrap();
 
-        let skills = scan_skill_directories_for_root(root, "user");
+        let mut skills = scan_skill_directories_for_root(root, "user");
+        skills.sort_by(|a, b| a.name.cmp(&b.name));
 
-        assert_eq!(skills.len(), 1);
+        assert_eq!(skills.len(), 2);
         assert_eq!(skills[0].name, "pi-user");
         assert_eq!(skills[0].level, "user");
         assert_eq!(skills[0].source_dir, ".pi");
+        assert_eq!(skills[0].file_name, None);
+        assert_eq!(skills[1].name, "pi-user-root");
+        assert_eq!(skills[1].level, "user");
+        assert_eq!(skills[1].source_dir, ".pi");
+        assert_eq!(skills[1].file_name, Some("pi-user-root.md".to_string()));
     }
 
     // ── scan_commands_directory ──────────────────────────────────────────────

@@ -129,10 +129,11 @@
         level: selectedSkill.level,
         sourceDir: selectedSkill.source_dir,
         content: editContent,
+        fileName: selectedSkill.file_name,
       })
       // Update the local skill data with new content
       $skills = $skills.map(s =>
-        s.name === selectedSkill!.name && s.level === selectedSkill!.level && s.source_dir === selectedSkill!.source_dir
+        isSameSkillIdentity(s, getSkillIdentity(selectedSkill!))
           ? { ...s, template: editContent }
           : s
       )

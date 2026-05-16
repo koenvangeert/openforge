@@ -331,8 +331,9 @@ export async function saveSkillContent(
   level: string,
   sourceDir: string,
   content: string,
+  fileName: string | null = null,
 ): Promise<void> {
-  return invoke<void>("save_skill_content", { projectId, skillName, level, sourceDir, content });
+  return invoke<void>("save_skill_content", { projectId, skillName, level, sourceDir, content, fileName });
 }
 
 export async function searchOpenCodeFiles(projectId: string, query: string): Promise<string[]> {

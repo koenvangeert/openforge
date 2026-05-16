@@ -216,7 +216,8 @@ export async function invokePluginHostCommand(command: string, payload: unknown)
         String(commandPayload?.name ?? ''),
         commandPayload?.level === 'user' ? 'user' : 'project',
         String(commandPayload?.sourceDir ?? ''),
-        String(commandPayload?.content ?? '')
+        String(commandPayload?.content ?? ''),
+        typeof commandPayload?.fileName === 'string' ? commandPayload.fileName : null
       )
     case 'fetchReviewPrs':
       return fetchReviewPrs()

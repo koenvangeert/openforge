@@ -56,8 +56,9 @@ pub struct SkillInfo {
     pub description: Option<String>,
     pub agent: Option<String>,
     pub template: Option<String>,
-    pub level: String,      // "project" or "user"
-    pub source_dir: String, // ".agents", ".claude", ".opencode", or ".pi"
+    pub level: String,             // "project" or "user"
+    pub source_dir: String,        // ".agents", ".claude", ".opencode", or ".pi"
+    pub file_name: Option<String>, // direct root markdown file name for provider-specific skills
 }
 
 #[cfg(test)]

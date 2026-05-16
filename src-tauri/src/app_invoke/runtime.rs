@@ -79,6 +79,7 @@ fn save_skill_content(
     let level = payload_string(&request.payload, "level")?;
     let source_dir = payload_string(&request.payload, "sourceDir")?;
     let content = payload_string(&request.payload, "content")?;
+    let file_name = payload_optional_string(&request.payload, "fileName")?;
 
     let db = crate::db::acquire_db(&state.db);
     provider_runtime::save_skill_content(
@@ -88,9 +89,13 @@ fn save_skill_content(
         &level,
         &source_dir,
         &content,
+        file_name.as_deref(),
     )
     .map_err(|error| {
-        let status = if error.starts_with("Unsupported skill source directory") {
+        let status = if error.starts_with("Unsupported skill source directory")
+            || error.starts_with("Invalid skill file name")
+            || error == "Root markdown skill files are only supported for .pi skills"
+        {
             StatusCode::BAD_REQUEST
         } else if error == "Project not found" {
             StatusCode::NOT_FOUND
