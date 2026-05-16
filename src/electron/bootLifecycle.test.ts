@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { bootOpenForgeDesktop } from './bootLifecycle'
+import { RecordingFailureReporterAdapter } from './failureReporting'
 import type {
   BootBackendInvokeContext,
   BootLifecycleAdapter,
@@ -179,17 +180,22 @@ describe('Electron Boot Lifecycle Module seam', () => {
       name: 'strict sidecar readiness policy rejects on health timeout',
       policy: undefined,
       rejects: true,
+      expectedDecision: 'quit' as const,
+      expectedSeverity: 'fatal' as const,
     },
     {
       name: 'degraded sidecar readiness policy reveals renderer without sidecar',
       policy: { sidecarFailure: 'continue' as const },
       rejects: false,
+      expectedDecision: 'continue' as const,
+      expectedSeverity: 'error' as const,
     },
-  ])('$name', async ({ policy, rejects }) => {
+  ])('$name', async ({ policy, rejects, expectedDecision, expectedSeverity }) => {
     const adapter = new FakeBootLifecycleAdapter()
+    const failureReporter = new RecordingFailureReporterAdapter()
     adapter.startSidecarFailure = new Error('sidecar did not become ready: timed out')
 
-    const boot = bootOpenForgeDesktop(adapter, bootOptions({ policy }))
+    const boot = bootOpenForgeDesktop(adapter, bootOptions({ policy, failureReporter }))
 
     if (rejects) {
       await expect(boot).rejects.toThrow('sidecar did not become ready')
@@ -203,16 +209,28 @@ describe('Electron Boot Lifecycle Module seam', () => {
       expect(adapter.operations).toContain('apply-csp:null')
       expect(adapter.operations).toContain('create-main-window')
     }
+
+    expect(failureReporter.reports).toContainEqual(expect.objectContaining({
+      phase: 'boot:sidecar-health',
+      severity: expectedSeverity,
+      decision: expectedDecision,
+    }))
   })
 
   it('uses the default degraded policy when no sidecar path exists in skeleton dev mode', async () => {
     const adapter = new FakeBootLifecycleAdapter()
+    const failureReporter = new RecordingFailureReporterAdapter()
     adapter.sidecarPath = null
 
-    const result = await bootOpenForgeDesktop(adapter, bootOptions())
+    const result = await bootOpenForgeDesktop(adapter, bootOptions({ failureReporter }))
 
     expect(result.sidecar).toBeNull()
     expect(result.degradations).toEqual([{ kind: 'missing-sidecar', reason: 'No Electron sidecar path resolved' }])
+    expect(failureReporter.reports).toContainEqual(expect.objectContaining({
+      phase: 'boot:sidecar-resolution',
+      severity: 'warning',
+      decision: 'continue',
+    }))
     expect(adapter.operations).toContain('register-plugin-protocol:null')
     expect(adapter.operations).toContain('apply-csp:null')
     expect(adapter.operations).toContain('create-main-window')
@@ -220,10 +238,16 @@ describe('Electron Boot Lifecycle Module seam', () => {
 
   it('treats renderer load failure as strict and cleans up sidecar readiness resources', async () => {
     const adapter = new FakeBootLifecycleAdapter()
+    const failureReporter = new RecordingFailureReporterAdapter()
     adapter.mainWindowFailure = new Error('renderer failed to load')
 
-    await expect(bootOpenForgeDesktop(adapter, bootOptions())).rejects.toThrow('renderer failed to load')
+    await expect(bootOpenForgeDesktop(adapter, bootOptions({ failureReporter }))).rejects.toThrow('renderer failed to load')
 
+    expect(failureReporter.reports).toContainEqual(expect.objectContaining({
+      phase: 'boot:renderer-load',
+      severity: 'fatal',
+      decision: 'quit',
+    }))
     expect(adapter.sidecar.stop).toHaveBeenCalledTimes(1)
   })
 

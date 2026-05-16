@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { RecordingFailureReporterAdapter } from './failureReporting'
 import { loadAndRevealMainWindow } from './windowStartup'
 
 class FakeMainWindow {
@@ -54,5 +55,24 @@ describe('Electron main window startup visibility', () => {
 
     expect(window.show).toHaveBeenCalledTimes(1)
     expect(window.focus).toHaveBeenCalledTimes(1)
+  })
+
+  it('reports renderer load failure with a quit decision before rethrowing', async () => {
+    const window = new FakeMainWindow()
+    const failureReporter = new RecordingFailureReporterAdapter()
+    window.loadURL.mockRejectedValue(new Error('renderer refused connection'))
+
+    await expect(loadAndRevealMainWindow(
+      window,
+      { rendererUrl: 'http://127.0.0.1:1420' },
+      { failureReporter },
+    )).rejects.toThrow('renderer refused connection')
+
+    expect(failureReporter.reports).toContainEqual(expect.objectContaining({
+      phase: 'boot:renderer-load',
+      severity: 'fatal',
+      decision: 'quit',
+    }))
+    expect(window.show).not.toHaveBeenCalled()
   })
 })

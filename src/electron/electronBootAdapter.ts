@@ -15,12 +15,14 @@ import {
 } from './pluginProtocol.js'
 import { asChildProcessLike, createSidecarLaunchConfig, startSidecarReadiness } from './sidecar.js'
 import type { BootBackendInvokeContext, BootLifecycleAdapter } from './bootLifecycle.js'
+import type { ElectronFailureReporter } from './failureReporting.js'
 import type { SidecarEventEnvelopeLike, SidecarLaunchConfig, SidecarReadinessHandle } from './sidecar.js'
 
 export interface ElectronBootAdapterOptions {
   currentDir: string
   workspaceRoot: string
   env: NodeJS.ProcessEnv
+  failureReporter?: ElectronFailureReporter | null
 }
 
 /** Real Electron Adapter for the Boot Lifecycle Module seam. */
@@ -48,7 +50,9 @@ export function createElectronBootAdapter(options: ElectronBootAdapterOptions): 
     console.log(`[electron] Loading renderer from ${rendererUrl ?? 'packaged dist/index.html'}`)
     await loadAndRevealMainWindow(window, rendererUrl
       ? { rendererUrl }
-      : { filePath: join(options.currentDir, '..', 'dist', 'index.html') })
+      : { filePath: join(options.currentDir, '..', 'dist', 'index.html') }, {
+      failureReporter: options.failureReporter,
+    })
     return window
   }
 
@@ -111,6 +115,7 @@ export function createElectronBootAdapter(options: ElectronBootAdapterOptions): 
           sidecarLaunchProcess = child
         },
         logSidecarOutput: true,
+        failureReporter: options.failureReporter,
         createEventStream: sidecarConfig => {
           let eventListener: ((envelope: SidecarEventEnvelopeLike) => void) | null = null
           const forwarder = createAppEventForwarder({
@@ -118,6 +123,7 @@ export function createElectronBootAdapter(options: ElectronBootAdapterOptions): 
             fetch: (url, init) => fetch(url, init),
             windows: () => BrowserWindow.getAllWindows(),
             onEvent: envelope => eventListener?.(envelope),
+            failureReporter: options.failureReporter,
           })
           return {
             ...forwarder,

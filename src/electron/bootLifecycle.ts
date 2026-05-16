@@ -1,4 +1,6 @@
+import { createFailureReport, reportFailure } from './failureReporting.js'
 import { ElectronShutdownAdapter, RustSidecarShutdownAdapter, ShutdownCoordinator } from './shutdown.js'
+import type { ElectronFailureReporter } from './failureReporting.js'
 import type { ChildProcessLike, SidecarLaunchConfig, SidecarReadinessHandle } from './sidecar.js'
 
 export type BootFailurePolicy = 'fail' | 'continue'
@@ -58,6 +60,7 @@ export interface BootLifecycleOptions {
   policy?: Partial<BootLifecyclePolicy>
   logger?: BootLifecycleLogger
   warnOnMissingSidecar?: boolean
+  failureReporter?: ElectronFailureReporter | null
 }
 
 export interface BootResult {
@@ -106,6 +109,7 @@ export async function bootOpenForgeDesktop(
       }),
     ],
     logger,
+    failureReporter: options.failureReporter,
   })
   const shutdownAdapter = new ElectronShutdownAdapter({
     app: {
@@ -142,6 +146,14 @@ export async function bootOpenForgeDesktop(
     const sidecarPath = adapter.resolveSidecarPath()
     if (!sidecarPath) {
       const degradation = { kind: 'missing-sidecar' as const, reason: 'No Electron sidecar path resolved' }
+      await reportFailure(options.failureReporter, createFailureReport({
+        phase: 'boot:sidecar-resolution',
+        severity: policy.missingSidecar === 'fail' ? 'fatal' : 'warning',
+        cause: degradation.reason,
+        userMessage: 'OpenForge backend sidecar was not found.',
+        remediation: 'Build or package the Electron sidecar, or set OPENFORGE_SIDECAR_PATH to a valid executable.',
+        decision: policy.missingSidecar === 'fail' ? 'quit' : 'continue',
+      }))
       if (policy.missingSidecar === 'fail') throw new Error(degradation.reason)
       degradations.push(degradation)
       if (options.warnOnMissingSidecar ?? true) {
@@ -152,6 +164,14 @@ export async function bootOpenForgeDesktop(
       try {
         sidecar = await adapter.startSidecar(config)
       } catch (error) {
+        await reportFailure(options.failureReporter, createFailureReport({
+          phase: 'boot:sidecar-health',
+          severity: policy.sidecarFailure === 'fail' ? 'fatal' : 'error',
+          cause: error,
+          userMessage: 'OpenForge backend did not become ready.',
+          remediation: 'Stop stale OpenForge processes and launch again. If the failure repeats, rebuild the Rust sidecar.',
+          decision: policy.sidecarFailure === 'fail' ? 'quit' : 'continue',
+        }))
         if (policy.sidecarFailure === 'fail') throw error
         degradations.push({ kind: 'sidecar-unavailable', reason: reasonFromError(error) })
         logger.error('[electron] Rust sidecar failed; continuing in degraded mode:', error)
@@ -161,7 +181,19 @@ export async function bootOpenForgeDesktop(
     adapter.registerPluginProtocolHandler(sidecar?.config ?? null)
     adapter.applyRendererCsp(sidecar?.config ?? null)
 
-    mainWindow = await adapter.createMainWindow()
+    try {
+      mainWindow = await adapter.createMainWindow()
+    } catch (error) {
+      await reportFailure(options.failureReporter, createFailureReport({
+        phase: 'boot:renderer-load',
+        severity: 'fatal',
+        cause: error,
+        userMessage: 'OpenForge window could not load.',
+        remediation: 'Rebuild Electron assets and launch again. In development, verify Vite is serving the trusted renderer URL.',
+        decision: 'quit',
+      }))
+      throw error
+    }
     return { sidecar, mainWindow, degradations }
   } catch (error) {
     await cleanupStartedResources()

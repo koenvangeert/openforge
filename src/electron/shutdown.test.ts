@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { RecordingFailureReporterAdapter } from './failureReporting'
 import { ElectronShutdownAdapter, RustSidecarShutdownAdapter, ShutdownCoordinator } from './shutdown'
 import type { ChildProcessLike } from './sidecar'
 import type { ShutdownAdapter } from './shutdown'
@@ -119,9 +120,11 @@ describe('Shutdown Cleanup Module', () => {
     expect(events).toEqual(['last-adapter:ran'])
   })
 
-  it('promotes adapter-reported failures and timeouts into the observable shutdown report', async () => {
+  it('promotes adapter-reported failures and timeouts into the observable shutdown report and failure seam', async () => {
+    const failureReporter = new RecordingFailureReporterAdapter()
     const shutdown = new ShutdownCoordinator({
       logger: null,
+      failureReporter,
       adapters: [
         { name: 'rust-sidecar-failed', shutdown: () => ({ status: 'kill-failed', error: 'failed to send SIGKILL' }) },
         { name: 'rust-sidecar-killed', shutdown: () => ({ status: 'killed', timedOut: true }) },
@@ -133,6 +136,10 @@ describe('Shutdown Cleanup Module', () => {
     expect(report.ok).toBe(false)
     expect(report.adapters[0]).toMatchObject({ status: 'failed', error: 'failed to send SIGKILL' })
     expect(report.adapters[1]).toMatchObject({ status: 'timeout', error: 'adapter reported timeout' })
+    expect(failureReporter.reports).toEqual(expect.arrayContaining([
+      expect.objectContaining({ phase: 'shutdown:cleanup', severity: 'error', decision: 'quit' }),
+      expect.objectContaining({ phase: 'shutdown:cleanup', severity: 'error', decision: 'quit' }),
+    ]))
   })
 
   it('stops an in-flight Rust sidecar launch process when no ready handle exists yet', async () => {
