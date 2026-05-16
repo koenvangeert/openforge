@@ -36,6 +36,28 @@ describe('plugin-host backend runtime', () => {
     expect(await runtime.getBackendState('github')).toMatchObject({ state: 'ready', ready: true })
   })
 
+  it('exposes fs.readFile as FileContent shape to backend plugins', async () => {
+    const backendPath = await writeBackendModule(`
+      export default {
+        async activate(openforge, context) {
+          context.subscriptions.add(openforge.backend.registerMethod('readFile', {
+            async handler() {
+              return await openforge.fs.readFile({ projectId: 'P-1', path: 'README.md' })
+            }
+          }))
+        }
+      }
+    `)
+    const runtime = createPluginHostRuntime()
+
+    await expect(runtime.invokeBackend({ pluginId: 'reader', backendPath, command: 'readFile' })).resolves.toEqual({
+      type: 'text',
+      content: '',
+      mimeType: null,
+      size: 0,
+    })
+  })
+
   it('routes backend commands and explicit global event listeners through public integration primitives', async () => {
     const backendPath = await writeBackendModule(`
       export default {

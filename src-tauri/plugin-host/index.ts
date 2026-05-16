@@ -721,7 +721,12 @@ export class PluginHostRuntime {
       tasks: {},
       projects: {},
       fs: {
-        readFile: async () => '',
+        readFile: async () => ({
+          type: 'text',
+          content: '',
+          mimeType: null,
+          size: 0,
+        }),
         writeFile: async () => undefined,
       },
       shell: {},
