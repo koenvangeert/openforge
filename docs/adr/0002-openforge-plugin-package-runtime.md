@@ -331,7 +331,7 @@ V1 capabilities should include:
 - `config`
 - `projectConfig`
 
-Filesystem capability should be project-scoped as the primary interface, for example `openforge.fs.readFile({ projectId, path })`. Backend plugins may still use Node `fs` for trusted advanced operations or plugin-private files.
+Filesystem capability should be project-scoped as the primary interface, for example `openforge.fs.readFile({ projectId, path })`. Backend plugins may still use Node `fs` for trusted advanced operations or plugin-private files. `FileSystemAPI.readFile()` returns `FileContent`, not a raw string; plugin authors should follow the migration guidance in [`docs/plugin-sdk-file-api-migration.md`](../plugin-sdk-file-api-migration.md) when handling text, image, binary, document, and large-file metadata.
 
 Shell/terminal capability is included in v1, with explicit shell/session/index semantics. Avoid task-scoped ambiguity.
 
@@ -397,7 +397,9 @@ The cutover should:
 
 ## Testing, docs, and templates
 
-The SDK includes testing utilities/mocks for `OpenForgeAPI` under `@openforge/plugin-sdk/testing`:
+The SDK includes testing utilities/mocks for `OpenForgeAPI` under `@openforge/plugin-sdk/testing`. File-reading plugin tests should fixture `FileContent` objects for text, image, document, binary, and large-file paths instead of string-only reads; see [`docs/plugin-sdk-file-api-migration.md`](../plugin-sdk-file-api-migration.md) for examples.
+
+Available utilities:
 
 - `createMockOpenForgeApi()` / `createMockFrontendOpenForgeApi()` for frontend plugin unit tests.
 - `createMockBackendOpenForgeApi()` for backend plugin unit tests.
