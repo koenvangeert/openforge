@@ -21,6 +21,7 @@ import type {
   BoardStatus,
   CommandDescriptor,
   CommandShortcutMetadata,
+  FileContent,
   FileEntry,
   JsonSchema,
   OpenForgeContextSnapshot,
@@ -49,7 +50,7 @@ export type RuntimeHostBridge = {
   getTaskWorkspace?(taskId: string): Promise<TaskWorkspaceInfo | null>
   getLatestSession?(taskId: string): Promise<AgentSession | null>
   readDir?(request: { projectId: string; path?: string | null }): Promise<FileEntry[]>
-  readFile?(request: { projectId: string; path: string }): Promise<string | { content: string }>
+  readFile?(request: { projectId: string; path: string }): Promise<FileContent>
   writeFile?(request: { projectId: string; path: string; content: string }): Promise<void>
   searchFiles?(request: { projectId: string; query: string; limit?: number }): Promise<string[]>
   spawnShell?(request: { taskId: string; cwd: string; cols: number; rows: number; terminalIndex: number }): Promise<number>
@@ -543,11 +544,7 @@ class RuntimeContributionRegistry {
       },
       fs: {
         readDir: async (request) => this.host.readDir ? this.host.readDir(request) : unavailableCapability('fs.readDir'),
-        readFile: async (request) => {
-          if (!this.host.readFile) return unavailableCapability('fs.readFile')
-          const result = await this.host.readFile(request)
-          return typeof result === 'string' ? result : result.content
-        },
+        readFile: async (request) => this.host.readFile ? this.host.readFile(request) : unavailableCapability('fs.readFile'),
         writeFile: async (request) => this.host.writeFile ? this.host.writeFile(request) : unavailableCapability('fs.writeFile'),
         searchFiles: async (request) => this.host.searchFiles ? this.host.searchFiles(request) : unavailableCapability('fs.searchFiles'),
       },

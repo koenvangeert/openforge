@@ -1,3 +1,6 @@
+import { existsSync, readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it, vi } from 'vitest'
 import { OPENFORGE_FRONTEND_PLUGIN_MARKER } from '@openforge/plugin-sdk/frontend'
 import { isOpenForgePackageMetadata } from '@openforge/plugin-sdk'
@@ -13,6 +16,8 @@ vi.mock('./review/pr/PrReviewView.svelte', () => ({
 
 import packageJson from '../package.json'
 
+const pluginSrcDir = dirname(fileURLToPath(import.meta.url))
+
 function makeRuntimeHarness() {
   const subscriptions = { add: vi.fn() }
   const invokeGlobal = vi.fn(async (command: string) => command === 'openforge.getNavigation' ? { activeProjectId: 'project-1' } : null)
@@ -27,6 +32,14 @@ function makeRuntimeHarness() {
 }
 
 describe('github-sync plugin', () => {
+  it('does not retain stale host PluginContext state in the GitHub sync plugin entry', () => {
+    const indexSource = readFileSync(join(pluginSrcDir, 'index.ts'), 'utf8')
+
+    expect(indexSource).not.toContain('./pluginContext')
+    expect(indexSource).not.toContain('setPluginContext')
+    expect(existsSync(join(pluginSrcDir, 'pluginContext.ts'))).toBe(false)
+  })
+
   it('has valid package.json#openforge metadata without manifest contributions', () => {
     expect(isOpenForgePackageMetadata(packageJson.openforge)).toBe(true)
     expect(packageJson.openforge).not.toHaveProperty('contributes')

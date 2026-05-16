@@ -4,6 +4,7 @@ import type { Component } from 'svelte'
 import type {
   AgentSession,
   BoardStatus,
+  FileContent,
   FileEntry,
   Project,
   ProjectAttention,
@@ -265,7 +266,7 @@ export interface ProjectScopedFileRequest {
 
 export interface FileSystemAPI {
   readDir(request: { projectId: string; path?: string | null }): Promise<FileEntry[]>
-  readFile(request: ProjectScopedFileRequest): Promise<string>
+  readFile(request: ProjectScopedFileRequest): Promise<FileContent>
   writeFile(request: ProjectScopedFileRequest & { content: string }): Promise<void>
   searchFiles(request: { projectId: string; query: string; limit?: number }): Promise<string[]>
 }

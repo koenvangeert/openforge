@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { FrontendOpenForgeAPI, OpenForgeContextSnapshot } from '@openforge/plugin-sdk/frontend'
   import { activeProjectId, fileBrowserStates, pendingFileReveal } from './lib/stores'
   import { fsReadDir, fsReadFile } from './lib/ipc'
   import {
@@ -13,11 +14,13 @@
   import ResizablePanel from '@openforge/plugin-sdk/ui/ResizablePanel.svelte'
 
   interface Props {
+    api: FrontendOpenForgeAPI
+    context: OpenForgeContextSnapshot
     projectName: string
     projectId: string | null
   }
 
-  let { projectName, projectId = null }: Props = $props()
+  let { api, context: _context, projectName, projectId = null }: Props = $props()
 
   let loading = $state(true)
   let error = $state<string | null>(null)
@@ -54,7 +57,7 @@
     loading = true
     error = null
     try {
-      const entries = await fsReadDir(projectId, null)
+      const entries = await fsReadDir(api, projectId, null)
       if ($activeProjectId !== projectId) return
       updateProjectState(projectId, (state) => ({
         ...state,
@@ -98,7 +101,7 @@
     }
 
     try {
-      const entries = await fsReadDir(projectId, path)
+      const entries = await fsReadDir(api, projectId, path)
       if ($activeProjectId !== projectId) return false
       updateProjectState(projectId, (current) => ({
         ...current,
@@ -128,7 +131,7 @@
     error = null
 
     try {
-      const nextContent = await fsReadFile(projectId, path)
+      const nextContent = await fsReadFile(api, projectId, path)
       const currentState = getFileBrowserProjectState($fileBrowserStates, projectId)
       if (requestId !== activeFileRequestId || $activeProjectId !== projectId || currentState.selectedPath !== path) return false
       updateProjectState(projectId, (state) => ({
@@ -297,6 +300,7 @@
           </div>
         {:else}
           <FileContentViewer
+            {api}
             content={fileContent}
             fileName={selectedFileName}
             {error}

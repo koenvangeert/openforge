@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte'
-  import { getPluginContext } from '../../pluginContext'
+  import type { FrontendOpenForgeAPI, OpenForgeContextSnapshot } from '@openforge/plugin-sdk/frontend'
   type UnlistenFn = () => void
   import { reviewPrs, selectedReviewPr, prFileDiffs, reviewRequestCount, reviewComments, pendingManualComments, prOverviewComments, agentReviewComments, agentReviewLoading, agentReviewError, authoredPrs, authoredPrCount, activeProjectId } from '../../lib/stores'
   import { fetchReviewPrs, getReviewPrs, fetchAuthoredPrs, getAuthoredPrs, getPrFileDiffs, openUrl, getReviewComments, getFileContent, getFileAtRef, markReviewPrViewed, getAgentReviewComments, getProjectConfig, setProjectConfig } from '../../lib/ipc'
@@ -22,10 +22,13 @@
   type PrDetailTab = 'overview' | 'files'
 
   interface Props {
+    api: FrontendOpenForgeAPI
+    context: OpenForgeContextSnapshot
     projectName: string
+    projectId?: string | null
   }
 
-  let { projectName, projectId = null }: Props & { projectId?: string | null } = $props()
+  let { api, context: _context, projectName, projectId = null }: Props = $props()
 
   $effect(() => {
     $activeProjectId = projectId
@@ -40,6 +43,11 @@
   let activeTab = $state<PrDetailTab>('overview')
   let unlisteners: UnlistenFn[] = []
 
+  function listenGlobal<TPayload>(event: string, handler: (payload: TPayload) => void): UnlistenFn {
+    const subscription = api.events.onGlobal(event, handler)
+    return () => { void subscription.dispose() }
+  }
+
   // Repo filtering
   let excludedRepos = $state<Set<string>>(new Set())
   let showFilterDropdown = $state(false)
@@ -48,7 +56,7 @@
   $effect(() => {
     const pid = $activeProjectId
     if (pid) {
-      getProjectConfig(pid, 'pr_excluded_repos').then((val) => {
+      getProjectConfig(api, pid, 'pr_excluded_repos').then((val) => {
         if (val) {
           try {
             const parsed = JSON.parse(val)
@@ -89,7 +97,7 @@
     excludedRepos = newExcluded
     if ($activeProjectId) {
       const arr = [...newExcluded].sort()
-      await setProjectConfig($activeProjectId, 'pr_excluded_repos', JSON.stringify(arr))
+      await setProjectConfig(api, $activeProjectId, 'pr_excluded_repos', JSON.stringify(arr))
     }
   }
 
@@ -209,7 +217,7 @@
     isLoading = true
     error = null
     try {
-      const prs = await getReviewPrs()
+      const prs = await getReviewPrs(api)
       $reviewPrs = prs
     } catch (e) {
       console.error('Failed to load PRs:', e)
@@ -223,7 +231,7 @@
     isLoading = true
     error = null
     try {
-      const prs = await fetchReviewPrs()
+      const prs = await fetchReviewPrs(api)
       $reviewPrs = prs
     } catch (e) {
       console.error('Failed to refresh PRs:', e)
@@ -236,7 +244,7 @@
   /** Silently update PR store from DB without showing loading state. Used by background sync events. */
   async function silentRefreshPrs() {
     try {
-      const prs = await getReviewPrs()
+      const prs = await getReviewPrs(api)
       $reviewPrs = prs
     } catch (e) {
       console.error('Failed to silently refresh PRs:', e)
@@ -247,7 +255,7 @@
     isLoadingAuthored = true
     authoredError = null
     try {
-      const prs = await getAuthoredPrs()
+      const prs = await getAuthoredPrs(api)
       $authoredPrs = prs
       // count is updated reactively via $effect
     } catch (e) {
@@ -262,7 +270,7 @@
     isLoadingAuthored = true
     authoredError = null
     try {
-      const prs = await fetchAuthoredPrs()
+      const prs = await fetchAuthoredPrs(api)
       $authoredPrs = prs
       // count is updated reactively via $effect
     } catch (e) {
@@ -276,7 +284,7 @@
   /** Silently update authored PR store from DB without showing loading state. Used by background sync events. */
   async function silentRefreshAuthoredPrs() {
     try {
-      const prs = await getAuthoredPrs()
+      const prs = await getAuthoredPrs(api)
       $authoredPrs = prs
     } catch (e) {
       console.error('Failed to silently refresh authored PRs:', e)
@@ -284,20 +292,20 @@
   }
 
   async function selectPr(pr: ReviewPullRequest) {
-    void getPluginContext().invokeHost('navigate', { currentView: 'plugin:com.openforge.github-sync:pr_review' })
+    void api.commands.invokeGlobal('openforge.navigate', { currentView: 'plugin:com.openforge.github-sync:pr_review' })
     const now = Math.floor(Date.now() / 1000)
     const updatedPr = { ...pr, viewed_at: now, viewed_head_sha: pr.head_sha }
     $selectedReviewPr = updatedPr
     $reviewPrs = $reviewPrs.map(p => p.id === pr.id ? updatedPr : p)
     // Fire-and-forget IPC
-    markReviewPrViewed(pr.id, pr.head_sha).catch(e => console.error('Failed to mark viewed:', e))
+    markReviewPrViewed(api, pr.id, pr.head_sha).catch(e => console.error('Failed to mark viewed:', e))
     isLoading = true
     try {
-      const diffs = await getPrFileDiffs(pr.repo_owner, pr.repo_name, pr.number)
+      const diffs = await getPrFileDiffs(api, pr.repo_owner, pr.repo_name, pr.number)
       $prFileDiffs = diffs
-      const comments = await getReviewComments(pr.repo_owner, pr.repo_name, pr.number)
+      const comments = await getReviewComments(api, pr.repo_owner, pr.repo_name, pr.number)
       $reviewComments = comments
-      const agentComments = await getAgentReviewComments(pr.id)
+      const agentComments = await getAgentReviewComments(api, pr.id)
       $agentReviewComments = agentComments
     } catch (e) {
       console.error('Failed to load PR diffs:', e)
@@ -327,7 +335,7 @@
 
   function openPrOnGitHub() {
     if ($selectedReviewPr) {
-      openUrl($selectedReviewPr.html_url)
+      openUrl(api, $selectedReviewPr.html_url)
     }
   }
 
@@ -339,14 +347,14 @@
 
     if (file.status !== 'removed' && file.sha) {
       try {
-        newContent = await getFileContent(pr.repo_owner, pr.repo_name, file.sha)
+        newContent = await getFileContent(api, pr.repo_owner, pr.repo_name, file.sha)
       } catch { /* file may not exist */ }
     }
 
     if (file.status !== 'added') {
       const oldPath = file.previous_filename || file.filename
       try {
-        oldContent = await getFileAtRef(pr.repo_owner, pr.repo_name, oldPath, pr.base_ref)
+        oldContent = await getFileAtRef(api, pr.repo_owner, pr.repo_name, oldPath, pr.base_ref)
       } catch { /* file may not exist on base */ }
     }
 
@@ -357,17 +365,17 @@
     loadPrs()
     loadAuthoredPrs()
     unlisteners.push(
-      getPluginContext().onEvent('authored-prs-updated', () => {
+      listenGlobal('openforge.authored-prs-updated', () => {
         silentRefreshAuthoredPrs()
       })
     )
     unlisteners.push(
-      getPluginContext().onEvent('review-pr-count-changed', () => {
+      listenGlobal('openforge.review-pr-count-changed', () => {
         silentRefreshPrs()
       })
     )
     unlisteners.push(
-      getPluginContext().onEvent('agent-event', async (payload) => {
+      listenGlobal('openforge.agent-event', async (payload) => {
         const { task_id, event_type, data } = payload as { task_id: string; event_type: string; data: string }
         const pr = $selectedReviewPr
         if (!pr) return
@@ -382,7 +390,7 @@
             console.log('[PrReviewView] Status event:', event_type, 'statusType:', statusType)
             if (event_type === 'session.idle' || statusType === 'idle') {
               console.log('[PrReviewView] Session completed, fetching agent comments for PR:', pr.id)
-              const comments = await getAgentReviewComments(pr.id)
+              const comments = await getAgentReviewComments(api, pr.id)
               console.log('[PrReviewView] Fetched', comments.length, 'agent comments')
               $agentReviewComments = comments
               $agentReviewLoading = false
@@ -390,7 +398,7 @@
           } catch (e) {
             console.error('[PrReviewView] Failed to parse status event:', e, 'raw:', data)
             if (event_type === 'session.idle') {
-              const comments = await getAgentReviewComments(pr.id)
+              const comments = await getAgentReviewComments(api, pr.id)
               console.log('[PrReviewView] Fetched', comments.length, 'agent comments (fallback)')
               $agentReviewComments = comments
               $agentReviewLoading = false
@@ -453,7 +461,7 @@
       </div>
 
       {#if activeTab === 'overview'}
-        <PrOverviewTab pr={$selectedReviewPr} />
+        <PrOverviewTab {api} context={_context} pr={$selectedReviewPr} />
       {:else}
         <div class="flex flex-1 min-h-0 overflow-hidden">
           {#if isLoading}
@@ -474,6 +482,7 @@
             {/if}
             <DiffViewer
               bind:this={diffViewer}
+              {api}
               files={$prFileDiffs}
               existingComments={$reviewComments}
               repoOwner={$selectedReviewPr.repo_owner}
@@ -487,6 +496,7 @@
         </div>
 
         <ReviewSubmitPanel
+          {api}
           repoOwner={$selectedReviewPr.repo_owner}
           repoName={$selectedReviewPr.repo_name}
           prNumber={$selectedReviewPr.number}
@@ -658,7 +668,7 @@
                       <AuthoredPrCard
                         {pr}
                         selected={false}
-                        onClick={() => openUrl(pr.html_url)}
+                        onClick={() => openUrl(api, pr.html_url)}
                       />
                     {/each}
                   </div>

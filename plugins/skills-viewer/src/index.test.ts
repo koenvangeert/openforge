@@ -1,3 +1,6 @@
+import { existsSync, readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it, vi } from 'vitest'
 import { OPENFORGE_FRONTEND_PLUGIN_MARKER } from '@openforge/plugin-sdk/frontend'
 import { isOpenForgePackageMetadata } from '@openforge/plugin-sdk'
@@ -12,6 +15,8 @@ vi.mock('./SkillsView.svelte', () => ({
 }))
 
 import packageJson from '../package.json'
+
+const pluginSrcDir = dirname(fileURLToPath(import.meta.url))
 
 function makeRuntimeHarness() {
   const subscriptions = { add: vi.fn() }
@@ -28,6 +33,14 @@ function makeRuntimeHarness() {
 }
 
 describe('skills-viewer plugin', () => {
+  it('does not retain stale host PluginContext state in the skills viewer plugin entry', () => {
+    const indexSource = readFileSync(join(pluginSrcDir, 'index.ts'), 'utf8')
+
+    expect(indexSource).not.toContain('./pluginContext')
+    expect(indexSource).not.toContain('setPluginContext')
+    expect(existsSync(join(pluginSrcDir, 'pluginContext.ts'))).toBe(false)
+  })
+
   it('has valid package.json#openforge metadata without manifest contributions', () => {
     expect(isOpenForgePackageMetadata(packageJson.openforge)).toBe(true)
     expect(packageJson.openforge).not.toHaveProperty('contributes')
@@ -53,17 +66,14 @@ describe('skills-viewer plugin', () => {
     expect(subscriptions.add).toHaveBeenCalledWith(expect.objectContaining({ dispose: expect.any(Function) }))
   })
 
-  it('forwards skill list and save host commands through the runtime command bridge', async () => {
-    const { default: plugin } = await import('./index')
+  it('forwards skill list and save through explicit openforge.* runtime commands', async () => {
     const { listOpenCodeSkills, saveSkillContent } = await import('./lib/ipc')
-    const { api, context, invokeGlobal } = makeRuntimeHarness()
-    const skills = [{ name: 'reviewer', level: 'project', source_dir: '/skills', description: 'Reviews code' }]
+    const { api, invokeGlobal } = makeRuntimeHarness()
+    const skills = [{ name: 'reviewer', level: 'project' as const, source_dir: '/skills', description: 'Reviews code' }]
     invokeGlobal.mockResolvedValueOnce(skills).mockResolvedValueOnce(undefined)
 
-    await plugin.activate(api, context)
-
-    await expect(listOpenCodeSkills('P-1')).resolves.toEqual(skills)
-    await expect(saveSkillContent('P-1', 'reviewer', 'project', '/skills', 'content')).resolves.toBeUndefined()
+    await expect(listOpenCodeSkills(api, 'P-1')).resolves.toEqual(skills)
+    await expect(saveSkillContent(api, 'P-1', 'reviewer', 'project', '/skills', 'content')).resolves.toBeUndefined()
     expect(invokeGlobal).toHaveBeenNthCalledWith(1, 'openforge.listOpenCodeSkills', { projectId: 'P-1' })
     expect(invokeGlobal).toHaveBeenNthCalledWith(2, 'openforge.saveSkillContent', {
       projectId: 'P-1',

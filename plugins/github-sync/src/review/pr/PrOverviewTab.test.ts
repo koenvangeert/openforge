@@ -1,6 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/svelte'
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { writable } from 'svelte/store'
+import type { FrontendOpenForgeAPI, OpenForgeContextSnapshot } from '@openforge/plugin-sdk/frontend'
 import type { ReviewPullRequest } from '@openforge/plugin-sdk/domain'
 import PrOverviewTab from './PrOverviewTab.svelte'
 
@@ -39,13 +40,23 @@ const basePr: ReviewPullRequest = {
   viewed_head_sha: null,
 }
 
+const api = {
+  commands: { invokeGlobal: vi.fn() },
+  system: { openUrl: vi.fn() },
+} as unknown as FrontendOpenForgeAPI
+
+const context: OpenForgeContextSnapshot = {
+  pluginId: 'com.openforge.github-sync',
+  projectId: 'project-1',
+}
+
 describe('GitHub sync PrOverviewTab', () => {
   beforeEach(() => {
     vi.clearAllMocks()
   })
 
   it('renders PR body relative markdown images from the pull request head commit', async () => {
-    render(PrOverviewTab, { props: { pr: basePr } })
+    render(PrOverviewTab, { props: { api, context, pr: basePr } })
 
     await waitFor(() => {
       expect(screen.getByRole('img', { name: 'Architecture' })).toBeTruthy()
