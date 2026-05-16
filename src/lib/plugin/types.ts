@@ -1,6 +1,5 @@
-import type { OpenForgePackageMetadata, PluginStorage } from '@openforge/plugin-sdk'
+import type { OpenForgePackageMetadata } from '@openforge/plugin-sdk'
 
-export type { PluginStorage }
 export { MAX_SUPPORTED_API_VERSION } from '@openforge/plugin-sdk'
 
 export interface PluginManifest {
@@ -27,26 +26,6 @@ export function isPluginViewKey(value: string): value is PluginViewKey {
 export function parsePluginViewKey(key: PluginViewKey): { pluginId: string; viewId: string } {
   const parts = key.split(':')
   return { pluginId: parts[1], viewId: parts[2] }
-}
-
-export interface PluginContext {
-  pluginId: string
-  invokeHost(command: string, payload?: unknown): Promise<unknown>
-  invokeBackend(method: string, payload?: unknown): Promise<unknown>
-  onEvent(event: string, handler: (payload: unknown) => void): () => void
-  storage: PluginStorage
-}
-
-export interface PluginViewProps extends Record<string, unknown> {
-  projectId?: string | null
-  projectName?: string
-  projectPath?: string
-}
-
-export interface PluginTaskPaneProps extends Record<string, unknown> {
-  taskId: string
-  projectId?: string | null
-  projectName?: string
 }
 
 export type PluginState = 'installed' | 'active' | 'error' | 'disabled'
