@@ -130,6 +130,33 @@ function markShellPtyExited(entry: PoolEntry): void {
   notifyShellLifecycleListeners(entry.taskId)
 }
 
+const SHIFT_ENTER_CTRL_J_SEQUENCE = '\n'
+
+function isShellTerminalKey(taskId: string): boolean {
+  return /-shell-\d+$/.test(taskId)
+}
+
+function attachAgentTerminalKeyHandler(entry: PoolEntry): void {
+  if (isShellTerminalKey(entry.taskId)) return
+
+  entry.terminal.attachCustomKeyEventHandler((event) => {
+    const isShiftEnter = event.key === 'Enter' && event.shiftKey
+    const shouldConsume = isShiftEnter && (event.type === 'keydown' || event.type === 'keypress')
+    if (!shouldConsume) {
+      return true
+    }
+
+    event.preventDefault()
+    event.stopPropagation()
+
+    if (event.type === 'keydown' && entry.ptyActive) {
+      writePty(entry.taskId, SHIFT_ENTER_CTRL_J_SEQUENCE).catch(e => console.error('[terminalPool] write failed:', e))
+    }
+
+    return false
+  })
+}
+
 function waitForInitialFit(entry: PoolEntry): Promise<void> {
   return new Promise((resolve) => {
     requestAnimationFrame(() => {
@@ -322,6 +349,8 @@ export async function acquire(taskId: string): Promise<PoolEntry> {
     }
     markShellPtyExited(entry)
   }))
+
+  attachAgentTerminalKeyHandler(entry)
 
   // Terminal onData -> write to PTY (guarded by ptyActive)
   terminal.onData((data: string) => {
