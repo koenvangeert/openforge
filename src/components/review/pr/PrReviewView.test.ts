@@ -13,8 +13,6 @@ vi.mock('../../../lib/stores', () => ({
   pendingManualComments: writable([]),
   prOverviewComments: writable([]),
   agentReviewComments: writable([]),
-  agentReviewLoading: writable(false),
-  agentReviewError: writable(null),
   authoredPrs: writable([]),
   authoredPrCount: writable(0),
   activeProjectId: writable('P-1'),
@@ -48,8 +46,6 @@ vi.mock('../../../lib/ipc', () => ({
   openUrl: vi.fn(),
   getProjectConfig: vi.fn().mockResolvedValue(null),
   setProjectConfig: vi.fn().mockResolvedValue(undefined),
-  startAgentReview: vi.fn().mockResolvedValue({ session_id: 'session-1' }),
-  abortAgentReview: vi.fn().mockResolvedValue(undefined),
 }))
 
 vi.mock('../../../lib/desktopIpc', async () => {
@@ -61,7 +57,7 @@ vi.mock('../../../lib/desktopIpc', async () => {
 })
 
 import PrReviewView from './PrReviewView.svelte'
-import { reviewPrs, selectedReviewPr, prFileDiffs, reviewComments, pendingManualComments, reviewRequestCount, agentReviewComments, agentReviewLoading, agentReviewError, authoredPrs, authoredPrCount, activeProjectId } from '../../../lib/stores'
+import { reviewPrs, selectedReviewPr, prFileDiffs, reviewComments, pendingManualComments, reviewRequestCount, agentReviewComments, authoredPrs, authoredPrCount, activeProjectId } from '../../../lib/stores'
 import { getReviewPrs, fetchReviewPrs, getAuthoredPrs, getPrFileDiffs, getReviewComments, markReviewPrViewed, getProjectConfig, setProjectConfig } from '../../../lib/ipc'
 import { listenDesktopEvent } from '../../../lib/desktopIpc'
 
@@ -102,8 +98,6 @@ describe('PrReviewView', () => {
     authoredPrs.set([])
     authoredPrCount.set(0)
     agentReviewComments.set([])
-    agentReviewLoading.set(false)
-    agentReviewError.set(null)
     vi.clearAllMocks()
   })
 

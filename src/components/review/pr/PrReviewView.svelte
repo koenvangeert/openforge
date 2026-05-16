@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte'
   import { listenDesktopEvent, type DesktopUnlistenFn } from '../../../lib/desktopIpc'
-  import { reviewPrs, selectedReviewPr, prFileDiffs, reviewRequestCount, reviewComments, pendingManualComments, prOverviewComments, agentReviewComments, agentReviewLoading, agentReviewError, authoredPrs, authoredPrCount, activeProjectId } from '../../../lib/stores'
+  import { reviewPrs, selectedReviewPr, prFileDiffs, reviewRequestCount, reviewComments, pendingManualComments, prOverviewComments, agentReviewComments, authoredPrs, authoredPrCount, activeProjectId } from '../../../lib/stores'
   import { fetchReviewPrs, getReviewPrs, fetchAuthoredPrs, getAuthoredPrs, getPrFileDiffs, openUrl, getReviewComments, getFileContent, getFileContentBase64, getFileAtRef, getFileAtRefBase64, markReviewPrViewed, getAgentReviewComments, getProjectConfig, setProjectConfig } from '../../../lib/ipc'
   import { useAppRouter } from '../../../lib/router.svelte'
   import { getHTMLElementAt, isInputFocused } from '../../../lib/domUtils'
@@ -312,8 +312,6 @@
     $pendingManualComments = []
     $prOverviewComments = []
     $agentReviewComments = []
-    $agentReviewLoading = false
-    $agentReviewError = null
     activeTab = 'overview'
   }
 
@@ -365,43 +363,6 @@
     unlisteners.push(
       await listenDesktopEvent('review-pr-count-changed', () => {
         silentRefreshPrs()
-      })
-    )
-    unlisteners.push(
-      await listenDesktopEvent<{ task_id: string; event_type: string; data: string }>('agent-event', async (event) => {
-        const { task_id, event_type, data } = event.payload
-        const pr = $selectedReviewPr
-        if (!pr) return
-        if (task_id !== `pr-review-${pr.id}`) return
-
-        console.log('[PrReviewView] Agent event:', event_type, 'for task:', task_id, 'data:', data)
-
-        if (event_type === 'session.idle' || event_type === 'session.status') {
-          try {
-            const parsed = JSON.parse(data)
-            const statusType = parsed.properties?.status?.type
-            console.log('[PrReviewView] Status event:', event_type, 'statusType:', statusType)
-            if (event_type === 'session.idle' || statusType === 'idle') {
-              console.log('[PrReviewView] Session completed, fetching agent comments for PR:', pr.id)
-              const comments = await getAgentReviewComments(pr.id)
-              console.log('[PrReviewView] Fetched', comments.length, 'agent comments')
-              $agentReviewComments = comments
-              $agentReviewLoading = false
-            }
-          } catch (e) {
-            console.error('[PrReviewView] Failed to parse status event:', e, 'raw:', data)
-            if (event_type === 'session.idle') {
-              const comments = await getAgentReviewComments(pr.id)
-              console.log('[PrReviewView] Fetched', comments.length, 'agent comments (fallback)')
-              $agentReviewComments = comments
-              $agentReviewLoading = false
-            }
-          }
-        } else if (event_type === 'session.error') {
-          console.error('[PrReviewView] Agent review error:', data)
-          $agentReviewError = 'Agent review failed. Please try again.'
-          $agentReviewLoading = false
-        }
       })
     )
   })

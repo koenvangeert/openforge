@@ -130,6 +130,22 @@ describe('Electron migration Phase 0 contract inventory', () => {
     expect(inventoriedContracts).toEqual(parsedContracts)
   })
 
+  it('does not keep dead live agent-review controls in the public IPC inventory', () => {
+    const functionNames = ipcCommandContracts.map(contract => contract.functionName)
+    const ipcCommands = ipcCommandContracts.map(contract => contract.ipcCommand)
+
+    expect(functionNames).not.toContain('startAgentReview')
+    expect(functionNames).not.toContain('abortAgentReview')
+    expect(functionNames).not.toContain('dismissAllAgentReviewComments')
+    expect(ipcCommands).not.toContain('start_agent_review')
+    expect(ipcCommands).not.toContain('abort_agent_review')
+    expect(ipcCommands).not.toContain('dismiss_all_agent_review_comments')
+    expect(functionNames).toEqual(expect.arrayContaining([
+      'getAgentReviewComments',
+      'updateAgentReviewCommentStatus',
+    ]))
+  })
+
   it('locks the current app shell event channel names registered by appDesktopEventListeners', () => {
     expect(appShellEventContracts.map(contract => contract.eventName)).toEqual([
       'github-sync-complete',

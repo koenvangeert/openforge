@@ -11,6 +11,7 @@ vi.mock("./desktopIpc", () => ({
 	isElectronDesktopBridgeAvailable: vi.fn(() => true),
 }));
 
+import * as ipcModule from "./ipc";
 import {
 	checkPiInstalled,
 	createTask,
@@ -200,6 +201,14 @@ describe("ipc spawnShellPty", () => {
 			commitSha: "abc123",
 			files: [{ path: "src/App.svelte", old_path: null, status: "added" }],
 		});
+	});
+
+	it("does not export removed live GitHub agent review controls", () => {
+		expect(ipcModule).not.toHaveProperty("startAgentReview");
+		expect(ipcModule).not.toHaveProperty("abortAgentReview");
+		expect(ipcModule).not.toHaveProperty("dismissAllAgentReviewComments");
+		expect(ipcModule).toHaveProperty("getAgentReviewComments");
+		expect(ipcModule).toHaveProperty("updateAgentReviewCommentStatus");
 	});
 
 	it("sends registerBuiltinPlugin metadata as a single trusted builtin command argument", async () => {

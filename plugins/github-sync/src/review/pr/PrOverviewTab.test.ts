@@ -1,18 +1,9 @@
 import { render, screen, waitFor } from '@testing-library/svelte'
 import { describe, expect, it, vi, beforeEach } from 'vitest'
-import { writable } from 'svelte/store'
 import type { FrontendOpenForgeAPI, OpenForgeContextSnapshot } from '@openforge/plugin-sdk/frontend'
 import type { ReviewPullRequest } from '@openforge/plugin-sdk/domain'
+import { prOverviewComments } from '../../lib/stores'
 import PrOverviewTab from './PrOverviewTab.svelte'
-
-vi.mock('../../lib/stores', () => ({
-  prOverviewComments: writable([]),
-}))
-
-vi.mock('../../lib/ipc', () => ({
-  getPrOverviewComments: vi.fn().mockResolvedValue([]),
-  openUrl: vi.fn(),
-}))
 
 const basePr: ReviewPullRequest = {
   id: 12345,
@@ -41,7 +32,7 @@ const basePr: ReviewPullRequest = {
 }
 
 const api = {
-  commands: { invokeGlobal: vi.fn().mockResolvedValue([]) },
+  commands: { invokeGlobal: vi.fn(async (command: string) => command === 'openforge.getPrOverviewComments' ? [] : null) },
   system: { openUrl: vi.fn() },
 } as unknown as FrontendOpenForgeAPI
 
@@ -52,7 +43,9 @@ const context: OpenForgeContextSnapshot = {
 
 describe('GitHub sync PrOverviewTab', () => {
   beforeEach(() => {
+    prOverviewComments.set([])
     vi.clearAllMocks()
+    vi.mocked(api.commands.invokeGlobal).mockImplementation(async (command: string) => command === 'openforge.getPrOverviewComments' ? [] : null)
   })
 
   it('renders PR body relative markdown images from the pull request head commit', async () => {

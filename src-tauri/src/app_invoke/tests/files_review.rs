@@ -158,13 +158,6 @@ async fn handles_fs_self_review_and_agent_review_db_commands() {
         json!({ "commentId": agent_comment_id, "status": "addressed" }),
     )
     .await;
-    invoke_ok(
-        &state,
-        "dismiss_all_agent_review_comments",
-        json!({ "reviewPrId": 88 }),
-    )
-    .await;
-
     let _ = std::fs::remove_file(path);
 }
 
@@ -335,14 +328,28 @@ async fn handles_git_workspace_extraction_commands() {
 }
 
 #[tokio::test]
-async fn returns_explicit_blockers_for_live_review_commands() {
-    let (state, path) = test_state("app_invoke_files_review_blockers");
+async fn live_agent_review_commands_are_not_files_review_contracts() {
+    let (state, path) = test_state("app_invoke_files_review_removed_live_agent_review");
 
     let err = invoke(&state, "start_agent_review", json!({ "reviewPrId": 88 }))
         .await
-        .expect_err("live review command should report missing runtime state");
+        .expect_err("removed live review command should be unmatched");
     assert_eq!(err.0, StatusCode::NOT_IMPLEMENTED);
-    assert!(err.1.contains("requires provider runtime state"));
+    assert!(err.1.contains("is not implemented for Electron sidecar slice"));
+    assert!(!err.1.contains("requires provider runtime state"));
+
+    let err = invoke(&state, "abort_agent_review", json!({ "reviewSessionKey": "review-88" }))
+        .await
+        .expect_err("removed live review abort command should be unmatched");
+    assert_eq!(err.0, StatusCode::NOT_IMPLEMENTED);
+    assert!(err.1.contains("is not implemented for Electron sidecar slice"));
+    assert!(!err.1.contains("requires provider runtime state"));
+
+    let err = invoke(&state, "dismiss_all_agent_review_comments", json!({ "reviewPrId": 88 }))
+        .await
+        .expect_err("removed bulk dismiss command should be unmatched");
+    assert_eq!(err.0, StatusCode::NOT_IMPLEMENTED);
+    assert!(err.1.contains("is not implemented for Electron sidecar slice"));
 
     let _ = std::fs::remove_file(path);
 }
