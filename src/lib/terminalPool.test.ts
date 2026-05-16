@@ -7,7 +7,7 @@ import {
 	type Mock,
 	vi,
 } from "vitest";
-import { getPtyBuffer, openUrl } from "./ipc";
+import { getPtyBuffer, openUrl, writePty } from "./ipc";
 import { TERMINAL_FONT_FAMILY } from "./terminalOptions";
 import {
 	_getPool,
@@ -105,6 +105,7 @@ function getTerminalMocks(entry: TerminalPoolEntry) {
 		write: vi.mocked(entry.terminal.write),
 		dispose: vi.mocked(entry.terminal.dispose),
 		loadAddon: vi.mocked(entry.terminal.loadAddon),
+		attachCustomKeyEventHandler: vi.mocked(entry.terminal.attachCustomKeyEventHandler),
 		refresh: vi.mocked(entry.terminal.refresh),
 		focus: vi.mocked(entry.terminal.focus),
 		reset: vi.mocked(entry.terminal.reset),
@@ -142,6 +143,7 @@ vi.mock("@xterm/xterm", () => {
 		write = vi.fn();
 		dispose = vi.fn();
 		onData = vi.fn().mockReturnValue({ dispose: vi.fn() });
+		attachCustomKeyEventHandler = vi.fn();
 		loadAddon = vi.fn((addon: unknown) => {
 			if (
 				webglLoadShouldThrow &&
@@ -599,6 +601,48 @@ describe("terminalPool", () => {
 
 		expect(writeSpy).toHaveBeenCalledWith("hello world");
 		expect(entry.ptyActive).toBe(true);
+	});
+
+	it("agent terminals send Ctrl+J once and suppress xterm Shift+Enter keydown/keypress handling", async () => {
+		const agentEntry = await acquire("T-120");
+		const shellEntry = await acquire("T-120-shell-0");
+		agentEntry.ptyActive = true;
+		shellEntry.ptyActive = true;
+		const { attachCustomKeyEventHandler: agentKeyHandlerSpy } = getTerminalMocks(agentEntry);
+		const { attachCustomKeyEventHandler: shellKeyHandlerSpy } = getTerminalMocks(shellEntry);
+
+		expect(shellKeyHandlerSpy).not.toHaveBeenCalled();
+		expect(agentKeyHandlerSpy).toHaveBeenCalledTimes(1);
+		const handleKeyEvent = agentKeyHandlerSpy.mock.calls[0][0];
+		const keydownEvent = new KeyboardEvent("keydown", { key: "Enter", shiftKey: true, cancelable: true });
+		const keypressEvent = new KeyboardEvent("keypress", { key: "Enter", shiftKey: true, cancelable: true });
+		const keydownStopPropagation = vi.spyOn(keydownEvent, "stopPropagation");
+		const keypressStopPropagation = vi.spyOn(keypressEvent, "stopPropagation");
+
+		const handledKeydown = handleKeyEvent(keydownEvent);
+		const handledKeypress = handleKeyEvent(keypressEvent);
+
+		expect(handledKeydown).toBe(false);
+		expect(handledKeypress).toBe(false);
+		expect(keydownEvent.defaultPrevented).toBe(true);
+		expect(keypressEvent.defaultPrevented).toBe(true);
+		expect(keydownStopPropagation).toHaveBeenCalledTimes(1);
+		expect(keypressStopPropagation).toHaveBeenCalledTimes(1);
+		expect(writePty).toHaveBeenCalledTimes(1);
+		expect(writePty).toHaveBeenCalledWith("T-120", "\n");
+		expect(writePty).not.toHaveBeenCalledWith("T-120", "\r");
+		expect(writePty).not.toHaveBeenCalledWith("T-120", "\u001b[13;2u");
+
+		vi.mocked(writePty).mockClear();
+		agentEntry.ptyActive = false;
+		const inactiveKeydownEvent = new KeyboardEvent("keydown", { key: "Enter", shiftKey: true, cancelable: true });
+		const inactiveStopPropagation = vi.spyOn(inactiveKeydownEvent, "stopPropagation");
+		const handledInactive = handleKeyEvent(inactiveKeydownEvent);
+
+		expect(handledInactive).toBe(false);
+		expect(inactiveKeydownEvent.defaultPrevented).toBe(true);
+		expect(inactiveStopPropagation).toHaveBeenCalledTimes(1);
+		expect(writePty).not.toHaveBeenCalled();
 	});
 
 	it("pty-output listener ignores stale instance ids", async () => {
