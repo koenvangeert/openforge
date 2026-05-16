@@ -1,0 +1,23 @@
+{
+  "name": "@openforge/pr-review-ui",
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    "./AuthoredPrCard.svelte": "./src/AuthoredPrCard.svelte",
+    "./ReviewPrCard.svelte": "./src/ReviewPrCard.svelte",
+    "./FileTree.svelte": "./src/FileTree.svelte",
+    "./ReviewSubmitPanel.svelte": "./src/ReviewSubmitPanel.svelte",
+    "./PrOverviewTab.svelte": "./src/PrOverviewTab.svelte",
+    "./fileStatus": "./src/fileStatus.ts",
+    "./githubMarkdown": "./src/githubMarkdown.ts",
+    "./prStatusPresentation": "./src/prStatusPresentation.ts",
+    "./timeAgo": "./src/timeAgo.ts"
+  },
+  "dependencies": {
+    "@openforge/plugin-sdk": "workspace:*",
+    "lucide-svelte": "^0.577.0"
+  },
+  "peerDependencies": {
+    "svelte": "^5.0.0"
+  }
+}
