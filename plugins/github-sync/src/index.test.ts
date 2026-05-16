@@ -46,6 +46,19 @@ describe('github-sync plugin', () => {
     expect(packageJson.openforge.frontend).toBe('./dist/frontend.js')
   })
 
+  it('does not keep plugin-local runtime adapter modules or imports', () => {
+    const prReviewSource = readFileSync(join(pluginSrcDir, 'review/pr/PrReviewView.svelte'), 'utf8')
+    const prOverviewSource = readFileSync(join(pluginSrcDir, 'review/pr/PrOverviewTab.svelte'), 'utf8')
+    const reviewSubmitSource = readFileSync(join(pluginSrcDir, 'review/pr/ReviewSubmitPanel.svelte'), 'utf8')
+    const diffViewerSource = readFileSync(join(pluginSrcDir, 'review/shared/diff-viewer/DiffViewer.svelte'), 'utf8')
+
+    expect(existsSync(join(pluginSrcDir, 'lib/ipc.ts'))).toBe(false)
+    expect(prReviewSource).not.toContain('../../lib/ipc')
+    expect(prOverviewSource).not.toContain('../../lib/ipc')
+    expect(reviewSubmitSource).not.toContain('../../lib/ipc')
+    expect(diffViewerSource).not.toContain('../../../lib/ipc')
+  })
+
   it('registers PR view and refresh command at runtime through defineFrontendPlugin', async () => {
     const { default: plugin, PrReviewViewComponent } = await import('./index')
     const { api, context, subscriptions, invokeGlobal, onGlobal } = makeRuntimeHarness()
@@ -71,8 +84,8 @@ describe('github-sync plugin', () => {
 
     const refreshRegistration = vi.mocked(api.commands.register).mock.calls[0]?.[0]
     await refreshRegistration?.handler(undefined)
-    expect(invokeGlobal).toHaveBeenCalledWith('openforge.forceGithubSync', undefined)
-    expect(invokeGlobal).toHaveBeenCalledWith('openforge.getNavigation', undefined)
+    expect(invokeGlobal).toHaveBeenCalledWith('openforge.forceGithubSync')
+    expect(invokeGlobal).toHaveBeenCalledWith('openforge.getNavigation')
     expect(onGlobal).toHaveBeenCalledWith('openforge.navigation-changed', expect.any(Function))
   })
 })

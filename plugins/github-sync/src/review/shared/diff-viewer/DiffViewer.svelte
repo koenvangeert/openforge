@@ -5,12 +5,10 @@
   import type { FrontendOpenForgeAPI } from '@openforge/plugin-sdk/frontend'
   import type { PrFileDiff, ReviewComment, ReviewSubmissionComment, AgentReviewComment } from '@openforge/plugin-sdk/domain'
   import { pendingManualComments, agentReviewComments } from '../../../lib/stores'
-  import { updateAgentReviewCommentStatus } from '../../../lib/ipc'
   import { isTruncated, getTruncationStats, type FileContents } from '../../../lib/diffAdapter'
   import { buildExtendData, type CommentDisplayData } from '../../../lib/diffComments'
   import { timeAgo } from '../../../lib/timeAgo'
   import MarkdownContent from '@openforge/plugin-sdk/ui/MarkdownContent.svelte'
-  import { openUrl } from '../../../lib/ipc'
   import { diffHighlighter } from '../../../lib/diffHighlighter'
   import { createDiffSearch } from '../../../lib/useDiffSearch.svelte'
   import { createDiffWorker } from '../../../lib/useDiffWorker.svelte'
@@ -362,7 +360,10 @@
                                       onclick={async () => {
                                         if (comment.commentId === undefined) return
                                         try {
-                                           await updateAgentReviewCommentStatus(api, comment.commentId, 'approved')
+                                           await api.commands.invokeGlobal('openforge.updateAgentReviewCommentStatus', {
+                                             commentId: comment.commentId,
+                                             status: 'approved',
+                                           })
                                            $pendingManualComments = [...$pendingManualComments, {
                                              path: comment.filePath || file.filename,
                                             line: comment.lineNumber || 0,
@@ -384,7 +385,10 @@
                                     onclick={async () => {
                                       if (comment.commentId === undefined) return
                                       try {
-                                        await updateAgentReviewCommentStatus(api, comment.commentId, 'dismissed')
+                                        await api.commands.invokeGlobal('openforge.updateAgentReviewCommentStatus', {
+                                          commentId: comment.commentId,
+                                          status: 'dismissed',
+                                        })
                                         $agentReviewComments = $agentReviewComments.map(c =>
                                           c.id === comment.commentId ? { ...c, status: 'dismissed' } : c
                                         )
@@ -407,7 +411,7 @@
                               {/if}
                             </div>
                             <div class="text-base-content leading-relaxed text-[0.8rem] [&_p]:m-0 [&_p+p]:mt-1.5 [&_pre]:text-[0.75rem] [&_code]:text-[0.75rem] [&_pre]:bg-base-200 [&_pre]:rounded [&_pre]:p-2 [&_pre]:my-1.5 [&_code]:bg-base-200 [&_code]:px-1 [&_code]:rounded [&_ul]:my-1 [&_ol]:my-1 [&_li]:ml-4 [&_blockquote]:border-l-2 [&_blockquote]:border-base-300 [&_blockquote]:pl-3 [&_blockquote]:text-base-content/70 [&_a]:text-primary [&_a]:underline">
-                              <MarkdownContent content={comment.body} onOpenUrl={(url) => openUrl(api, url)} />
+                              <MarkdownContent content={comment.body} onOpenUrl={(url) => api.system.openUrl(url)} />
                             </div>
                           </div>
                         {/each}

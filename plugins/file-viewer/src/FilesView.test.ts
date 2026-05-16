@@ -74,7 +74,7 @@ describe('plugin FilesView', () => {
     vi.mocked(fsReadFile).mockResolvedValue(sampleFileContent)
   })
 
-  it('fetches the root directory through plugin host wrappers on mount', async () => {
+  it('fetches the root directory through the typed runtime fs API on mount', async () => {
     vi.mocked(fsReadDir).mockResolvedValue(sampleEntries)
 
     renderFilesView()
@@ -108,7 +108,7 @@ describe('plugin FilesView', () => {
     })
   })
 
-  it('loads selected file content through plugin host wrappers', async () => {
+  it('loads selected file content through the typed runtime fs API', async () => {
     vi.mocked(fsReadDir).mockResolvedValue(sampleEntries)
 
     renderFilesView()

@@ -1,7 +1,6 @@
 <script lang="ts">
   import type { FrontendOpenForgeAPI, OpenForgeContextSnapshot } from '@openforge/plugin-sdk/frontend'
   import { activeProjectId, fileBrowserStates, pendingFileReveal } from './lib/stores'
-  import { fsReadDir, fsReadFile } from './lib/ipc'
   import {
     createEmptyFileBrowserProjectState,
     flattenFileBrowserEntries,
@@ -57,7 +56,7 @@
     loading = true
     error = null
     try {
-      const entries = await fsReadDir(api, projectId, null)
+      const entries = await api.fs.readDir({ projectId, path: null })
       if ($activeProjectId !== projectId) return
       updateProjectState(projectId, (state) => ({
         ...state,
@@ -101,7 +100,7 @@
     }
 
     try {
-      const entries = await fsReadDir(api, projectId, path)
+      const entries = await api.fs.readDir({ projectId, path })
       if ($activeProjectId !== projectId) return false
       updateProjectState(projectId, (current) => ({
         ...current,
@@ -131,7 +130,7 @@
     error = null
 
     try {
-      const nextContent = await fsReadFile(api, projectId, path)
+      const nextContent = await api.fs.readFile({ projectId, path })
       const currentState = getFileBrowserProjectState($fileBrowserStates, projectId)
       if (requestId !== activeFileRequestId || $activeProjectId !== projectId || currentState.selectedPath !== path) return false
       updateProjectState(projectId, (state) => ({

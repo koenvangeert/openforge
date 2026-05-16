@@ -1,7 +1,6 @@
 <script lang="ts">
   import type { FrontendOpenForgeAPI } from '@openforge/plugin-sdk/frontend'
   import { pendingManualComments } from '../../lib/stores'
-  import { submitPrReview } from '../../lib/ipc'
 
   interface Props {
     api: FrontendOpenForgeAPI
@@ -31,16 +30,15 @@
     successMessage = null
 
     try {
-      await submitPrReview(
-        api,
-        repoOwner,
-        repoName,
+      await api.commands.invokeGlobal('openforge.submitPrReview', {
+        owner: repoOwner,
+        repo: repoName,
         prNumber,
         event,
-        summary.trim(),
-        $pendingManualComments,
-        commitId
-      )
+        body: summary.trim(),
+        comments: $pendingManualComments,
+        commitId,
+      })
       
       // Clear form on success
       $pendingManualComments = []

@@ -70,20 +70,12 @@ describe('file-viewer plugin', () => {
     expect(subscriptions.add).toHaveBeenCalledWith(expect.objectContaining({ dispose: expect.any(Function) }))
   })
 
-  it('preserves file content metadata through the typed fs runtime prop API', async () => {
-    const { fsReadFile } = await import('./lib/ipc')
-    const { api } = makeRuntimeHarness()
-    const imageContent = {
-      type: 'image' as const,
-      content: 'base64-image',
-      mimeType: 'image/png',
-      size: 12,
-    }
-    api.fs = {
-      readFile: vi.fn(async () => imageContent),
-    } as unknown as FrontendOpenForgeAPI['fs']
+  it('does not keep plugin-local runtime adapter modules or imports', () => {
+    const filesViewSource = readFileSync(join(pluginSrcDir, 'FilesView.svelte'), 'utf8')
+    const fileContentViewerSource = readFileSync(join(pluginSrcDir, 'FileContentViewer.svelte'), 'utf8')
 
-    await expect(fsReadFile(api, 'P-1', 'logo.png')).resolves.toEqual(imageContent)
-    expect(api.fs.readFile).toHaveBeenCalledWith({ projectId: 'P-1', path: 'logo.png' })
+    expect(existsSync(join(pluginSrcDir, 'lib/ipc.ts'))).toBe(false)
+    expect(filesViewSource).not.toContain('./lib/ipc')
+    expect(fileContentViewerSource).not.toContain('./lib/ipc')
   })
 })
