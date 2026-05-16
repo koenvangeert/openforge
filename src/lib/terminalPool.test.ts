@@ -44,6 +44,8 @@ const unlistenFns: UnlistenMock[] = [];
 let webLinksHandler: ((event: MouseEvent, uri: string) => void) | null = null;
 let webglConstructorShouldThrow = false;
 let webglLoadShouldThrow = false;
+const webglContextLossListeners: Array<() => void> = [];
+const webglContextLossDisposables: UnlistenMock[] = [];
 let fontLoadMock: Mock;
 const originalDocumentFonts = document.fonts;
 
@@ -190,7 +192,12 @@ vi.mock("@xterm/addon-webgl", () => {
 			}
 		}
 
-		onContextLoss = vi.fn();
+		onContextLoss = vi.fn((listener: () => void) => {
+			webglContextLossListeners.push(listener);
+			const disposable = vi.fn();
+			webglContextLossDisposables.push(disposable);
+			return { dispose: disposable };
+		});
 		activate = vi.fn();
 		dispose = vi.fn();
 	}
@@ -252,6 +259,8 @@ describe("terminalPool", () => {
 		webLinksHandler = null;
 		webglConstructorShouldThrow = false;
 		webglLoadShouldThrow = false;
+		webglContextLossListeners.length = 0;
+		webglContextLossDisposables.length = 0;
 		fontLoadMock = vi.fn().mockResolvedValue([]);
 		Object.defineProperty(document, "fonts", {
 			configurable: true,
@@ -433,6 +442,40 @@ describe("terminalPool", () => {
 			expect(warnSpy).toHaveBeenCalledWith(
 				"[terminalPool] WebGL renderer unavailable; falling back to the default renderer:",
 				expect.any(Error),
+			);
+		} finally {
+			warnSpy.mockRestore();
+		}
+	});
+
+	it("recovers from WebGL context loss by disposing the accelerated renderer and keeping terminal output alive", async () => {
+		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+
+		try {
+			const entry = await acquire("task-webgl-context-loss");
+			const wrapper = document.createElement("div");
+
+			await attach(entry, wrapper);
+
+			const webglAddon = requireValue(entry.webglAddon, "Expected WebGL addon to be loaded");
+			const { loadAddon: loadAddonSpy, refresh: refreshSpy, reset: resetSpy } = getTerminalMocks(entry);
+			entry.ptyActive = true;
+			entry.currentPtyInstance = 42;
+			loadAddonSpy.mockClear();
+
+			webglContextLossListeners[0]?.();
+
+			expect(webglContextLossDisposables[0]).toHaveBeenCalled();
+			expect(webglAddon.dispose).toHaveBeenCalled();
+			expect(entry.webglAddon).toBeNull();
+			expect(entry.webglUnavailable).toBe(true);
+			expect(entry.ptyActive).toBe(true);
+			expect(entry.currentPtyInstance).toBe(42);
+			expect(resetSpy).not.toHaveBeenCalled();
+			expect(loadAddonSpy).not.toHaveBeenCalled();
+			expect(refreshSpy).toHaveBeenCalled();
+			expect(warnSpy).toHaveBeenCalledWith(
+				"[terminalPool] WebGL renderer context lost; falling back to the default renderer.",
 			);
 		} finally {
 			warnSpy.mockRestore();
