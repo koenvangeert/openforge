@@ -1,27 +1,48 @@
 <script lang="ts">
-  import type { FrontendOpenForgeAPI } from '@openforge/plugin-sdk/frontend'
-  import { pendingManualComments } from '../../lib/stores'
+  import type { ReviewSubmissionComment } from '@openforge/plugin-sdk/domain'
+
+  type ReviewEvent = 'COMMENT' | 'APPROVE' | 'REQUEST_CHANGES'
+
+  interface SubmitReviewRequest {
+    repoOwner: string
+    repoName: string
+    prNumber: number
+    event: ReviewEvent
+    body: string
+    comments: ReviewSubmissionComment[]
+    commitId: string
+  }
 
   interface Props {
-    api: FrontendOpenForgeAPI
     repoOwner: string
     repoName: string
     prNumber: number
     commitId: string
+    pendingComments?: ReviewSubmissionComment[]
+    onPendingCommentsChange: (comments: ReviewSubmissionComment[]) => void
+    onSubmitReview: (request: SubmitReviewRequest) => Promise<void>
   }
 
-  let { api, repoOwner, repoName, prNumber, commitId }: Props = $props()
+  let {
+    repoOwner,
+    repoName,
+    prNumber,
+    commitId,
+    pendingComments = [],
+    onPendingCommentsChange,
+    onSubmitReview,
+  }: Props = $props()
 
   let summary = $state('')
   let isSubmitting = $state(false)
   let error = $state<string | null>(null)
   let successMessage = $state<string | null>(null)
-  let selectedEvent = $state<'COMMENT' | 'APPROVE' | 'REQUEST_CHANGES'>('COMMENT')
+  let selectedEvent = $state<ReviewEvent>('COMMENT')
 
-  let canSubmit = $derived(!isSubmitting && (summary.trim() !== '' || $pendingManualComments.length > 0))
+  let canSubmit = $derived(!isSubmitting && (summary.trim() !== '' || pendingComments.length > 0))
   let canApprove = $derived(!isSubmitting)
 
-  async function handleSubmit(event: 'COMMENT' | 'APPROVE' | 'REQUEST_CHANGES') {
+  async function handleSubmit(event: ReviewEvent) {
     const allowed = event === 'APPROVE' ? canApprove : canSubmit
     if (!allowed) return
 
@@ -30,22 +51,20 @@
     successMessage = null
 
     try {
-      await api.commands.invokeGlobal('openforge.submitPrReview', {
-        owner: repoOwner,
-        repo: repoName,
+      await onSubmitReview({
+        repoOwner,
+        repoName,
         prNumber,
         event,
         body: summary.trim(),
-        comments: $pendingManualComments,
+        comments: pendingComments,
         commitId,
       })
-      
-      // Clear form on success
-      $pendingManualComments = []
+
+      onPendingCommentsChange([])
       summary = ''
       successMessage = `Review submitted successfully (${event === 'APPROVE' ? 'Approved' : event === 'REQUEST_CHANGES' ? 'Changes Requested' : 'Commented'})`
-      
-      // Clear success message after 3 seconds
+
       setTimeout(() => {
         successMessage = null
       }, 3000)
@@ -83,8 +102,8 @@
 <div class="flex flex-col shrink-0 bg-base-200 border-t border-base-300">
   <div class="flex items-center justify-between px-6 py-4 pb-3 border-b border-base-300">
     <h3 class="text-[0.9rem] font-semibold text-base-content m-0">Submit Review</h3>
-    {#if $pendingManualComments.length > 0}
-      <span class="inline-flex items-center px-2.5 py-1 text-[0.7rem] font-semibold text-warning bg-warning/15 rounded-full">{$pendingManualComments.length} comment{$pendingManualComments.length === 1 ? '' : 's'} will be submitted</span>
+    {#if pendingComments.length > 0}
+      <span class="inline-flex items-center px-2.5 py-1 text-[0.7rem] font-semibold text-warning bg-warning/15 rounded-full">{pendingComments.length} comment{pendingComments.length === 1 ? '' : 's'} will be submitted</span>
     {/if}
   </div>
 

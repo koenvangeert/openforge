@@ -1,9 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/svelte'
-import { describe, expect, it, vi, beforeEach } from 'vitest'
-import type { FrontendOpenForgeAPI, OpenForgeContextSnapshot } from '@openforge/plugin-sdk/frontend'
+import { describe, expect, it, vi } from 'vitest'
 import type { ReviewPullRequest } from '@openforge/plugin-sdk/domain'
-import { prOverviewComments } from '../../lib/stores'
-import PrOverviewTab from './PrOverviewTab.svelte'
+import PrOverviewTab from '@openforge/pr-review-ui/PrOverviewTab.svelte'
 
 const basePr: ReviewPullRequest = {
   id: 12345,
@@ -31,25 +29,17 @@ const basePr: ReviewPullRequest = {
   viewed_head_sha: null,
 }
 
-const api = {
-  commands: { invokeGlobal: vi.fn(async (command: string) => command === 'openforge.getPrOverviewComments' ? [] : null) },
-  system: { openUrl: vi.fn() },
-} as unknown as FrontendOpenForgeAPI
-
-const context: OpenForgeContextSnapshot = {
-  pluginId: 'com.openforge.github-sync',
-  projectId: 'project-1',
-}
-
-describe('GitHub sync PrOverviewTab', () => {
-  beforeEach(() => {
-    prOverviewComments.set([])
-    vi.clearAllMocks()
-    vi.mocked(api.commands.invokeGlobal).mockImplementation(async (command: string) => command === 'openforge.getPrOverviewComments' ? [] : null)
-  })
-
+describe('shared PrOverviewTab in github-sync', () => {
   it('renders PR body relative markdown images from the pull request head commit', async () => {
-    render(PrOverviewTab, { props: { api, context, pr: basePr } })
+    render(PrOverviewTab, {
+      props: {
+        pr: basePr,
+        comments: [],
+        onCommentsChange: vi.fn(),
+        loadComments: vi.fn().mockResolvedValue([]),
+        onOpenUrl: vi.fn(),
+      },
+    })
 
     await waitFor(() => {
       expect(screen.getByRole('img', { name: 'Architecture' })).toBeTruthy()

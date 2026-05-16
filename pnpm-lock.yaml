@@ -31,6 +31,9 @@ importers:
       '@openforge/plugin-sdk':
         specifier: workspace:*
         version: link:packages/plugin-sdk
+      '@openforge/pr-review-ui':
+        specifier: workspace:*
+        version: link:packages/pr-review-ui
       '@openforge/terminal-shared':
         specifier: workspace:*
         version: link:packages/terminal-shared
@@ -140,6 +143,18 @@ importers:
         specifier: ^4.1.0
         version: 4.1.5(@opentelemetry/api@1.9.1)(@types/node@24.12.2)(jsdom@28.1.0)(vite@8.0.12(@types/node@24.12.2)(esbuild@0.27.3)(jiti@2.6.1)(yaml@2.8.4))
 
+  packages/pr-review-ui:
+    dependencies:
+      '@openforge/plugin-sdk':
+        specifier: workspace:*
+        version: link:../plugin-sdk
+      lucide-svelte:
+        specifier: ^0.577.0
+        version: 0.577.0(svelte@5.55.5)
+      svelte:
+        specifier: ^5.0.0
+        version: 5.55.5
+
   packages/terminal-shared:
     dependencies:
       svelte:
@@ -195,6 +210,9 @@ importers:
       '@openforge/plugin-sdk':
         specifier: workspace:*
         version: link:../../packages/plugin-sdk
+      '@openforge/pr-review-ui':
+        specifier: workspace:*
+        version: link:../../packages/pr-review-ui
     devDependencies:
       '@sveltejs/vite-plugin-svelte':
         specifier: ^7.0.0
@@ -4607,7 +4625,7 @@ snapshots:
 
   '@types/yauzl@2.10.3':
     dependencies:
-      '@types/node': 20.19.33
+      '@types/node': 24.12.2
     optional: true
 
   '@vitest/expect@4.1.5':
@@ -5829,7 +5847,7 @@ snapshots:
       '@protobufjs/path': 1.1.2
       '@protobufjs/pool': 1.1.0
       '@protobufjs/utf8': 1.1.1
-      '@types/node': 20.19.33
+      '@types/node': 24.12.2
       long: 5.3.2
 
   proxy-addr@2.0.7:

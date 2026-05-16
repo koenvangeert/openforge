@@ -6,16 +6,16 @@
   import { getHTMLElementAt, isInputFocused } from '../../lib/domUtils'
   import { useVimNavigation } from '../../lib/useVimNavigation.svelte'
   import { timeAgoFromSeconds } from '../../lib/timeAgo'
-  import ReviewPrCard from './ReviewPrCard.svelte'
-  import AuthoredPrCard from './AuthoredPrCard.svelte'
-  import FileTree from '../shared/FileTree.svelte'
+  import ReviewPrCard from '@openforge/pr-review-ui/ReviewPrCard.svelte'
+  import AuthoredPrCard from '@openforge/pr-review-ui/AuthoredPrCard.svelte'
+  import FileTree from '@openforge/pr-review-ui/FileTree.svelte'
   import ResizablePanel from '@openforge/plugin-sdk/ui/ResizablePanel.svelte'
   import DiffViewer from '../shared/diff-viewer/DiffViewer.svelte'
   import ProjectPageHeader from '../../project/ProjectPageHeader.svelte'
-  import ReviewSubmitPanel from './ReviewSubmitPanel.svelte'
-  import PrOverviewTab from './PrOverviewTab.svelte'
+  import ReviewSubmitPanel from '@openforge/pr-review-ui/ReviewSubmitPanel.svelte'
+  import PrOverviewTab from '@openforge/pr-review-ui/PrOverviewTab.svelte'
   import { hasMergeConflicts } from '@openforge/plugin-sdk/domain'
-  import type { AgentReviewComment, ReviewComment, ReviewPullRequest, AuthoredPullRequest, PrFileDiff } from '@openforge/plugin-sdk/domain'
+  import type { AgentReviewComment, ReviewComment, ReviewPullRequest, AuthoredPullRequest, PrFileDiff, PrOverviewComment, ReviewSubmissionComment } from '@openforge/plugin-sdk/domain'
   import type { FileContents } from '../../lib/diffAdapter'
 
   type PrDetailTab = 'overview' | 'files'
@@ -343,6 +343,33 @@
     }
   }
 
+  async function loadOverviewComments(pr: ReviewPullRequest): Promise<PrOverviewComment[]> {
+    return api.commands.invokeGlobal<PrOverviewComment[]>('openforge.getPrOverviewComments', {
+      owner: pr.repo_owner,
+      repo: pr.repo_name,
+      prNumber: pr.number,
+    })
+  }
+
+  async function submitReview(request: {
+    repoOwner: string
+    repoName: string
+    prNumber: number
+    event: 'COMMENT' | 'APPROVE' | 'REQUEST_CHANGES'
+    body: string
+    comments: ReviewSubmissionComment[]
+    commitId: string
+  }): Promise<void> {
+    await api.commands.invokeGlobal('openforge.submitPrReview', {
+      owner: request.repoOwner,
+      repo: request.repoName,
+      prNumber: request.prNumber,
+      event: request.event,
+      body: request.body,
+      comments: request.comments,
+      commitId: request.commitId,
+    })
+  }
 
   async function fetchPrFileContents(file: PrFileDiff): Promise<FileContents> {
     const pr = $selectedReviewPr!
@@ -437,7 +464,13 @@
       </div>
 
       {#if activeTab === 'overview'}
-        <PrOverviewTab {api} context={_context} pr={$selectedReviewPr} />
+        <PrOverviewTab
+          pr={$selectedReviewPr}
+          comments={$prOverviewComments}
+          onCommentsChange={(comments) => { $prOverviewComments = comments }}
+          loadComments={loadOverviewComments}
+          onOpenUrl={(url) => api.system.openUrl(url)}
+        />
       {:else}
         <div class="flex flex-1 min-h-0 overflow-hidden">
           {#if isLoading}
@@ -472,11 +505,13 @@
         </div>
 
         <ReviewSubmitPanel
-          {api}
           repoOwner={$selectedReviewPr.repo_owner}
           repoName={$selectedReviewPr.repo_name}
           prNumber={$selectedReviewPr.number}
           commitId={$selectedReviewPr.head_sha}
+          pendingComments={$pendingManualComments}
+          onPendingCommentsChange={(comments) => { $pendingManualComments = comments }}
+          onSubmitReview={submitReview}
         />
       {/if}
     </div>

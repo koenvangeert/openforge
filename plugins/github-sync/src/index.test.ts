@@ -46,17 +46,20 @@ describe('github-sync plugin', () => {
     expect(packageJson.openforge.frontend).toBe('./dist/frontend.js')
   })
 
-  it('does not keep plugin-local runtime adapter modules or imports', () => {
+  it('uses shared PR review UI components instead of plugin-local duplicate leaf components', () => {
     const prReviewSource = readFileSync(join(pluginSrcDir, 'review/pr/PrReviewView.svelte'), 'utf8')
-    const prOverviewSource = readFileSync(join(pluginSrcDir, 'review/pr/PrOverviewTab.svelte'), 'utf8')
-    const reviewSubmitSource = readFileSync(join(pluginSrcDir, 'review/pr/ReviewSubmitPanel.svelte'), 'utf8')
-    const diffViewerSource = readFileSync(join(pluginSrcDir, 'review/shared/diff-viewer/DiffViewer.svelte'), 'utf8')
 
+    expect(prReviewSource).toContain('@openforge/pr-review-ui/PrOverviewTab.svelte')
+    expect(prReviewSource).toContain('@openforge/pr-review-ui/ReviewSubmitPanel.svelte')
+    expect(prReviewSource).toContain('@openforge/pr-review-ui/ReviewPrCard.svelte')
+    expect(prReviewSource).toContain('@openforge/pr-review-ui/AuthoredPrCard.svelte')
+    expect(prReviewSource).toContain('@openforge/pr-review-ui/FileTree.svelte')
     expect(existsSync(join(pluginSrcDir, 'lib/ipc.ts'))).toBe(false)
-    expect(prReviewSource).not.toContain('../../lib/ipc')
-    expect(prOverviewSource).not.toContain('../../lib/ipc')
-    expect(reviewSubmitSource).not.toContain('../../lib/ipc')
-    expect(diffViewerSource).not.toContain('../../../lib/ipc')
+    expect(existsSync(join(pluginSrcDir, 'review/pr/PrOverviewTab.svelte'))).toBe(false)
+    expect(existsSync(join(pluginSrcDir, 'review/pr/ReviewSubmitPanel.svelte'))).toBe(false)
+    expect(existsSync(join(pluginSrcDir, 'review/pr/ReviewPrCard.svelte'))).toBe(false)
+    expect(existsSync(join(pluginSrcDir, 'review/pr/AuthoredPrCard.svelte'))).toBe(false)
+    expect(existsSync(join(pluginSrcDir, 'review/shared/FileTree.svelte'))).toBe(false)
   })
 
   it('registers PR view and refresh command at runtime through defineFrontendPlugin', async () => {

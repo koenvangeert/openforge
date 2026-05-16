@@ -1,34 +1,31 @@
 <script lang="ts">
   import { onMount } from 'svelte'
-  import type { FrontendOpenForgeAPI, OpenForgeContextSnapshot } from '@openforge/plugin-sdk/frontend'
-  import { prOverviewComments } from '../../lib/stores'
-  import { timeAgo, timeAgoFromSeconds } from '../../lib/timeAgo'
   import type { ReviewPullRequest, PrOverviewComment } from '@openforge/plugin-sdk/domain'
   import MarkdownContent from '@openforge/plugin-sdk/ui/MarkdownContent.svelte'
+  import { timeAgo, timeAgoFromSeconds } from './timeAgo'
+  import { getGitHubMarkdownImageBaseUrl } from './githubMarkdown'
 
   interface Props {
-    api: FrontendOpenForgeAPI
-    context: OpenForgeContextSnapshot
     pr: ReviewPullRequest
+    comments?: PrOverviewComment[]
+    onCommentsChange: (comments: PrOverviewComment[]) => void
+    loadComments: (pr: ReviewPullRequest) => Promise<PrOverviewComment[]>
+    onOpenUrl?: (url: string) => void
   }
 
-  let { api, context: _context, pr }: Props = $props()
+  let { pr, comments = [], onCommentsChange, loadComments, onOpenUrl }: Props = $props()
 
   let isLoading = $state(false)
   let error = $state<string | null>(null)
 
-  const markdownImageBaseUrl = $derived(`https://raw.githubusercontent.com/${pr.repo_owner}/${pr.repo_name}/${pr.head_sha}/`)
+  const markdownImageBaseUrl = $derived(getGitHubMarkdownImageBaseUrl(pr))
 
-  async function loadComments() {
+  async function loadOverviewComments() {
     isLoading = true
     error = null
     try {
-      const comments = await api.commands.invokeGlobal<PrOverviewComment[]>('openforge.getPrOverviewComments', {
-        owner: pr.repo_owner,
-        repo: pr.repo_name,
-        prNumber: pr.number,
-      })
-      $prOverviewComments = comments
+      const loadedComments = await loadComments(pr)
+      onCommentsChange(loadedComments)
     } catch (e) {
       console.error('Failed to load PR overview comments:', e)
       error = 'Failed to load PR overview.'
@@ -46,8 +43,6 @@
     })
   }
 
-
-
   function commentIcon(comment: PrOverviewComment): string {
     if (comment.comment_type === 'review_body') return '📋'
     if (comment.comment_type === 'review_comment') return '💬'
@@ -61,7 +56,7 @@
   }
 
   onMount(() => {
-    loadComments()
+    loadOverviewComments()
   })
 </script>
 
@@ -80,7 +75,7 @@
       </div>
       <div class="px-5 py-4">
         {#if pr.body}
-          <MarkdownContent content={pr.body} imageBaseUrl={markdownImageBaseUrl} onOpenUrl={(url) => api.system.openUrl(url)} />
+          <MarkdownContent content={pr.body} imageBaseUrl={markdownImageBaseUrl} {onOpenUrl} />
         {:else}
           <p class="text-sm text-base-content/50 italic m-0">No description provided.</p>
         {/if}
@@ -110,11 +105,11 @@
         <span class="text-3xl">⚠</span>
         <span>{error}</span>
       </div>
-    {:else if $prOverviewComments.length === 0}
+    {:else if comments.length === 0}
       <div class="text-sm text-base-content/50 text-center py-6">No comments on this pull request yet.</div>
     {:else}
       <div class="flex flex-col gap-4">
-        {#each $prOverviewComments as comment (comment.id)}
+        {#each comments as comment (comment.id)}
           <div class="bg-base-100 border border-base-300 rounded-lg overflow-hidden {comment.comment_type === 'review_comment' ? 'border-l-4 border-l-primary/40' : comment.comment_type === 'review_body' ? 'border-l-4 border-l-accent/40' : ''}">
             <div class="flex items-center gap-3 px-5 py-3 bg-base-200 border-b border-base-300">
               <div class="w-7 h-7 rounded-full bg-base-300 flex items-center justify-center text-xs font-bold text-base-content/70 shrink-0">
@@ -135,7 +130,7 @@
               </div>
             {/if}
             <div class="px-5 py-4">
-              <MarkdownContent content={comment.body} imageBaseUrl={markdownImageBaseUrl} onOpenUrl={(url) => api.system.openUrl(url)} />
+              <MarkdownContent content={comment.body} imageBaseUrl={markdownImageBaseUrl} {onOpenUrl} />
             </div>
           </div>
         {/each}

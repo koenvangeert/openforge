@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { PrFileDiff } from '@openforge/plugin-sdk/domain'
-  import { getFileStatusIcon, getFileStatusClass } from '../../lib/fileStatus'
+  import { getFileStatusIcon, getFileStatusClass } from './fileStatus'
 
   interface Props {
     files?: PrFileDiff[]
@@ -85,7 +85,7 @@
     expandedDirs = next
   }
 
-  function flattenTree(node: TreeNode, depth: number = 0, _dirs?: Set<string>): Array<{ node: TreeNode; depth: number }> {
+  function flattenTree(node: TreeNode, depth: number = 0): Array<{ node: TreeNode; depth: number }> {
     const result: Array<{ node: TreeNode; depth: number }> = []
     const sortedChildren = [...node.children.entries()].sort(([, a], [, b]) => {
       if (a.isDir && !b.isDir) return -1
@@ -101,7 +101,7 @@
     return result
   }
 
-  let flattenedNodes = $derived(flattenTree(tree, 0, expandedDirs))
+  let flattenedNodes = $derived(flattenTree(tree, 0))
 </script>
 
 <div class="flex flex-col h-full bg-base-200 border-r border-base-300">
