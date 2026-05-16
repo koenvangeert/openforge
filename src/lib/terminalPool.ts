@@ -2,7 +2,7 @@ import { listenDesktopEvent, type DesktopUnlistenFn } from './desktopIpc'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import { WebglAddon } from '@xterm/addon-webgl'
-import { Terminal, type ILinkHandler } from '@xterm/xterm'
+import { Terminal, type IDisposable, type ILinkHandler } from '@xterm/xterm'
 import { get } from 'svelte/store'
 import { getPtyBuffer, openUrl, resizePty, writePty } from './ipc'
 import { getTerminalOptions, preloadTerminalFonts } from './terminalOptions'
@@ -24,6 +24,7 @@ export interface PoolEntry {
   spawnPending: boolean
   currentPtyInstance: number | null
   webglAddon: WebglAddon | null
+  webglContextLossDisposable: IDisposable | null
   webglUnavailable: boolean
 }
 
@@ -200,6 +201,41 @@ function loadWebLinksAddon(terminal: Terminal): void {
   terminal.loadAddon(webLinksAddon)
 }
 
+function disposeWebglContextLossListener(entry: PoolEntry): void {
+  try {
+    entry.webglContextLossDisposable?.dispose()
+  } catch (error) {
+    console.warn('[terminalPool] Failed to dispose WebGL context loss listener:', error)
+  } finally {
+    entry.webglContextLossDisposable = null
+  }
+}
+
+function disposeWebglAddon(entry: PoolEntry): void {
+  const webglAddon = entry.webglAddon
+  disposeWebglContextLossListener(entry)
+  entry.webglAddon = null
+
+  try {
+    webglAddon?.dispose()
+  } catch (error) {
+    console.warn('[terminalPool] Failed to dispose WebGL renderer addon:', error)
+  }
+}
+
+function recoverFromWebglContextLoss(entry: PoolEntry): void {
+  if (!entry.webglAddon) return
+
+  console.warn('[terminalPool] WebGL renderer context lost; falling back to the default renderer.')
+  disposeWebglAddon(entry)
+  entry.webglUnavailable = true
+
+  if (entry.attached) {
+    safeFit(entry)
+    refreshTerminal(entry)
+  }
+}
+
 function loadWebglAddon(entry: PoolEntry): void {
   if (entry.webglAddon || entry.webglUnavailable) return
 
@@ -207,16 +243,26 @@ function loadWebglAddon(entry: PoolEntry): void {
 
   try {
     webglAddon = new WebglAddon()
-    entry.terminal.loadAddon(webglAddon)
     entry.webglAddon = webglAddon
+    entry.webglContextLossDisposable = webglAddon.onContextLoss(() => {
+      recoverFromWebglContextLoss(entry)
+    })
+    entry.terminal.loadAddon(webglAddon)
   } catch (error) {
-    try {
-      webglAddon?.dispose()
-    } catch (disposeError) {
-      console.warn('[terminalPool] Failed to dispose unavailable WebGL renderer addon:', disposeError)
+    if (!entry.webglUnavailable) {
+      if (entry.webglAddon) {
+        disposeWebglAddon(entry)
+      } else {
+        try {
+          webglAddon?.dispose()
+        } catch (disposeError) {
+          console.warn('[terminalPool] Failed to dispose unavailable WebGL renderer addon:', disposeError)
+        }
+      }
+      entry.webglAddon = null
+      entry.webglContextLossDisposable = null
+      entry.webglUnavailable = true
     }
-    entry.webglAddon = null
-    entry.webglUnavailable = true
     console.warn('[terminalPool] WebGL renderer unavailable; falling back to the default renderer:', error)
   }
 }
@@ -310,6 +356,7 @@ export async function acquire(taskId: string): Promise<PoolEntry> {
     spawnPending: false,
     currentPtyInstance: null,
     webglAddon: null,
+    webglContextLossDisposable: null,
     webglUnavailable: false,
   }
 
@@ -454,6 +501,7 @@ export function release(taskId: string): void {
     fn()
   })
   entry.unlisteners.length = 0
+  disposeWebglContextLossListener(entry)
   entry.terminal.dispose()
   pool.delete(taskId)
   shellLifecycleListeners.delete(taskId)
