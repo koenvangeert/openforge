@@ -166,28 +166,9 @@ async fn resolve_self_review_base(worktree_path: &str) -> Result<String, String>
         }
     }
 
-    let head_output = tokio::process::Command::new("git")
-        .arg("-C")
-        .arg(worktree_path)
-        .args(["rev-parse", "--verify", "HEAD"])
-        .output()
-        .await
-        .map_err(|e| format!("Failed to run git rev-parse HEAD: {e}"))?;
-
-    if head_output.status.success() {
-        let head = String::from_utf8_lossy(&head_output.stdout)
-            .trim()
-            .to_string();
-        if !head.is_empty() {
-            return Ok(head);
-        }
-    }
-
-    let stderr = String::from_utf8_lossy(&head_output.stderr);
     Err(format!(
-        "Failed to resolve self-review base: no usable merge base found from candidates [{}], and HEAD is not valid: {}",
-        SELF_REVIEW_BASE_CANDIDATES.join(", "),
-        stderr.trim()
+        "Failed to resolve self-review base: no usable merge base found from candidates [{}]",
+        SELF_REVIEW_BASE_CANDIDATES.join(", ")
     ))
 }
 
@@ -644,6 +625,46 @@ mod tests {
             .map(|commit| commit.message.as_str())
             .collect();
         assert_eq!(messages, vec!["feature commit"]);
+    }
+
+    #[tokio::test]
+    async fn test_task_diff_errors_when_no_candidate_base_exists() {
+        let repo = init_git_repo();
+        run_git(repo.path(), &["checkout", "-B", "trunk"]);
+        write_repo_file(repo.path(), "tracked.txt", "base\n");
+        commit_all(repo.path(), "trunk base commit");
+        run_git(repo.path(), &["checkout", "-b", "feature"]);
+        write_repo_file(repo.path(), "tracked.txt", "base\nfeature\n");
+        commit_all(repo.path(), "feature commit");
+
+        let err = get_task_diff_for_workspace(repo.path().to_str().unwrap(), false)
+            .await
+            .expect_err("missing base candidates should not fall back to HEAD and hide diffs");
+
+        assert!(
+            err.contains("Failed to resolve self-review base"),
+            "expected explicit base-resolution error, got {err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_task_commits_errors_when_no_candidate_base_exists() {
+        let repo = init_git_repo();
+        run_git(repo.path(), &["checkout", "-B", "trunk"]);
+        write_repo_file(repo.path(), "tracked.txt", "base\n");
+        commit_all(repo.path(), "trunk base commit");
+        run_git(repo.path(), &["checkout", "-b", "feature"]);
+        write_repo_file(repo.path(), "tracked.txt", "base\nfeature\n");
+        commit_all(repo.path(), "feature commit");
+
+        let err = get_task_commits_for_workspace(repo.path().to_str().unwrap())
+            .await
+            .expect_err("missing base candidates should not fall back to HEAD and hide commits");
+
+        assert!(
+            err.contains("Failed to resolve self-review base"),
+            "expected explicit base-resolution error, got {err}"
+        );
     }
 
     #[test]
