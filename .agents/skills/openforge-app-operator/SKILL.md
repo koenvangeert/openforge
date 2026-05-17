@@ -128,17 +128,18 @@ screencapture -x /tmp/openforge-dev-app.png
 If native screenshots are unavailable in the harness, use Electron/Chromium DevTools Protocol via the remote debugging port:
 
 1. Start Electron with `--remote-debugging-port=<port>`.
-2. Read targets from `http://127.0.0.1:<port>/json/list`.
-3. Connect to the page target WebSocket.
-4. Use `Runtime.evaluate`, `Input.dispatchMouseEvent`, and `Page.captureScreenshot` for read-only click-through and screenshots.
+2. Before CDP calls, poll `http://127.0.0.1:<debug-port>/json/list` until a page target exists.
+3. Verify the OpenForge HTTP bridge port responds before app assertions.
+4. Connect to the page target WebSocket.
+5. Use `Runtime.evaluate`, `Input.dispatchMouseEvent`, and `Page.captureScreenshot` for read-only click-through and screenshots.
 
-Record the screenshot path and the views clicked.
+Initial `ECONNREFUSED` during startup is not an app failure until readiness polling times out. Record the screenshot path and the views clicked.
 
 ## Conditional verification gates
 
 Choose gates based on changed files and risk:
 
-- Frontend/shared TypeScript: `pnpm exec tsc --noEmit` and focused `pnpm test -- --run <tests>`.
+- Frontend/shared TypeScript: `pnpm exec tsc --noEmit` and focused `pnpm test <path-or-pattern>` or `pnpm exec vitest run <path-or-pattern>`. Do not use separator forms such as `pnpm test -- <path>` or `pnpm test -- --run <path>`.
 - Broad frontend behavior: `pnpm test`.
 - Rust/backend sidecar: `cd src-tauri && cargo test`; use `cargo check` for quick Rust-only validation.
 - IPC/Electron bridge: IPC contract, backend bridge, preload, event forwarder, and TypeScript tests.
