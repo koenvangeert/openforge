@@ -89,6 +89,48 @@ async fn git_ref_exists(repo_path: &Path, git_ref: &str) -> Result<bool, GitWork
     Ok(output.status.success())
 }
 
+fn remote_name_from_ref(git_ref: &str) -> Option<&str> {
+    let (remote_name, branch_name) = git_ref.split_once('/')?;
+    if remote_name.is_empty() || branch_name.is_empty() {
+        return None;
+    }
+
+    Some(remote_name)
+}
+
+async fn git_remote_names(repo_path: &Path) -> Result<Vec<String>, GitWorktreeError> {
+    let output = git_command()
+        .arg("-C")
+        .arg(repo_path)
+        .arg("remote")
+        .output()
+        .await?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(GitWorktreeError::WorktreeAddFailed(stderr.to_string()));
+    }
+
+    Ok(String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .map(str::trim)
+        .filter(|remote_name| !remote_name.is_empty())
+        .map(ToOwned::to_owned)
+        .collect())
+}
+
+async fn resolve_remote_head_ref(
+    repo_path: &Path,
+    remote_name: &str,
+) -> Result<Option<String>, GitWorktreeError> {
+    let remote_head_ref = format!("{}/HEAD", remote_name);
+    if git_ref_exists(repo_path, &remote_head_ref).await? {
+        return Ok(Some(remote_head_ref));
+    }
+
+    Ok(None)
+}
+
 async fn resolve_worktree_base_ref(
     repo_path: &Path,
     preferred_base_ref: &str,
@@ -97,9 +139,55 @@ async fn resolve_worktree_base_ref(
         return Ok(preferred_base_ref.to_string());
     }
 
+    let remote_names = git_remote_names(repo_path).await?;
+    if let Some(remote_name) = remote_name_from_ref(preferred_base_ref) {
+        if remote_names.iter().any(|name| name == remote_name) {
+            if let Some(remote_head_ref) = resolve_remote_head_ref(repo_path, remote_name).await? {
+                warn!(
+                    "Preferred worktree base ref '{}' is unavailable; falling back to {}",
+                    preferred_base_ref, remote_head_ref
+                );
+                return Ok(remote_head_ref);
+            }
+
+            return Err(GitWorktreeError::WorktreeAddFailed(format!(
+                "base ref '{}' is unavailable and remote '{}' exists, but {}/HEAD is not set; refusing to fall back to local HEAD",
+                preferred_base_ref, remote_name, remote_name
+            )));
+        }
+    }
+
+    if remote_names.len() == 1 {
+        let remote_name = &remote_names[0];
+        if let Some(remote_head_ref) = resolve_remote_head_ref(repo_path, remote_name).await? {
+            warn!(
+                "Preferred worktree base ref '{}' is unavailable and remote '{}' is missing; falling back to {}",
+                preferred_base_ref,
+                remote_name_from_ref(preferred_base_ref).unwrap_or("<none>"),
+                remote_head_ref
+            );
+            return Ok(remote_head_ref);
+        }
+
+        return Err(GitWorktreeError::WorktreeAddFailed(format!(
+            "base ref '{}' is unavailable and remote '{}' is missing, but remote '{}' has no HEAD; refusing to fall back to local HEAD",
+            preferred_base_ref,
+            remote_name_from_ref(preferred_base_ref).unwrap_or("<none>"),
+            remote_name
+        )));
+    }
+
+    if remote_names.len() > 1 {
+        return Err(GitWorktreeError::WorktreeAddFailed(format!(
+            "base ref '{}' is unavailable and multiple remotes exist ({}); refusing to fall back to local HEAD",
+            preferred_base_ref,
+            remote_names.join(", ")
+        )));
+    }
+
     if git_ref_exists(repo_path, "HEAD").await? {
         warn!(
-            "Preferred worktree base ref '{}' is unavailable; falling back to HEAD",
+            "Preferred worktree base ref '{}' is unavailable and the repository has no remotes; falling back to HEAD",
             preferred_base_ref
         );
         return Ok("HEAD".to_string());
@@ -402,6 +490,17 @@ mod tests {
         );
     }
 
+    fn git_stdout(repo_path: &Path, args: &[&str]) -> String {
+        let output = git(repo_path, args);
+        assert!(
+            output.status.success(),
+            "git {:?} failed: {}",
+            args,
+            String::from_utf8_lossy(&output.stderr)
+        );
+        String::from_utf8_lossy(&output.stdout).trim().to_string()
+    }
+
     fn init_committed_repo(repo_path: &Path) {
         std::fs::create_dir_all(repo_path).expect("repo directory should be created");
         assert_git_success(repo_path, &["init", "-b", "main"]);
@@ -470,7 +569,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn resolve_worktree_base_ref_falls_back_to_head_without_origin_main() {
+    async fn resolve_worktree_base_ref_falls_back_to_head_without_origin_remote() {
         let temp = tempfile::tempdir().expect("tempdir should be created");
         let repo_path = temp.path().join("repo");
         init_committed_repo(&repo_path);
@@ -480,6 +579,157 @@ mod tests {
             .expect("HEAD fallback should resolve for local repositories");
 
         assert_eq!(base_ref, "HEAD");
+    }
+
+    #[tokio::test]
+    async fn resolve_worktree_base_ref_prefers_origin_head_before_local_head() {
+        let temp = tempfile::tempdir().expect("tempdir should be created");
+        let repo_path = temp.path().join("repo");
+        init_committed_repo(&repo_path);
+        let main_sha = git_stdout(&repo_path, &["rev-parse", "HEAD"]);
+        assert_git_success(&repo_path, &["checkout", "-b", "feature"]);
+        std::fs::write(repo_path.join("README.md"), "feature branch\n")
+            .expect("fixture file should be written");
+        assert_git_success(&repo_path, &["commit", "-am", "feature change"]);
+        assert_git_success(
+            &repo_path,
+            &[
+                "remote",
+                "add",
+                "origin",
+                "git@example.com:example/repo.git",
+            ],
+        );
+        assert_git_success(
+            &repo_path,
+            &["update-ref", "refs/remotes/origin/master", &main_sha],
+        );
+        assert_git_success(
+            &repo_path,
+            &[
+                "symbolic-ref",
+                "refs/remotes/origin/HEAD",
+                "refs/remotes/origin/master",
+            ],
+        );
+
+        let base_ref = resolve_worktree_base_ref(&repo_path, "origin/main")
+            .await
+            .expect("origin/HEAD should resolve when origin/main is missing");
+
+        assert_eq!(base_ref, "origin/HEAD");
+    }
+
+    #[tokio::test]
+    async fn resolve_worktree_base_ref_uses_single_remote_head_when_origin_is_missing() {
+        let temp = tempfile::tempdir().expect("tempdir should be created");
+        let repo_path = temp.path().join("repo");
+        init_committed_repo(&repo_path);
+        let main_sha = git_stdout(&repo_path, &["rev-parse", "HEAD"]);
+        assert_git_success(&repo_path, &["checkout", "-b", "feature"]);
+        std::fs::write(repo_path.join("README.md"), "feature branch\n")
+            .expect("fixture file should be written");
+        assert_git_success(&repo_path, &["commit", "-am", "feature change"]);
+        assert_git_success(
+            &repo_path,
+            &[
+                "remote",
+                "add",
+                "upstream",
+                "git@example.com:example/repo.git",
+            ],
+        );
+        assert_git_success(
+            &repo_path,
+            &["update-ref", "refs/remotes/upstream/trunk", &main_sha],
+        );
+        assert_git_success(
+            &repo_path,
+            &[
+                "symbolic-ref",
+                "refs/remotes/upstream/HEAD",
+                "refs/remotes/upstream/trunk",
+            ],
+        );
+
+        let base_ref = resolve_worktree_base_ref(&repo_path, "origin/main")
+            .await
+            .expect("the single remote HEAD should resolve when origin is absent");
+
+        assert_eq!(base_ref, "upstream/HEAD");
+    }
+
+    #[tokio::test]
+    async fn create_worktree_uses_origin_head_before_local_feature_head() {
+        let temp = tempfile::tempdir().expect("tempdir should be created");
+        let repo_path = temp.path().join("repo");
+        init_committed_repo(&repo_path);
+        let main_sha = git_stdout(&repo_path, &["rev-parse", "HEAD"]);
+        assert_git_success(&repo_path, &["checkout", "-b", "feature"]);
+        std::fs::write(repo_path.join("README.md"), "feature branch\n")
+            .expect("fixture file should be written");
+        assert_git_success(&repo_path, &["commit", "-am", "feature change"]);
+        assert_git_success(
+            &repo_path,
+            &[
+                "remote",
+                "add",
+                "origin",
+                "git@example.com:example/repo.git",
+            ],
+        );
+        assert_git_success(
+            &repo_path,
+            &["update-ref", "refs/remotes/origin/master", &main_sha],
+        );
+        assert_git_success(
+            &repo_path,
+            &[
+                "symbolic-ref",
+                "refs/remotes/origin/HEAD",
+                "refs/remotes/origin/master",
+            ],
+        );
+        let worktree_path = temp.path().join("worktree");
+
+        create_worktree(
+            &repo_path,
+            &worktree_path,
+            "T-1269/remote-default",
+            "origin/main",
+        )
+        .await
+        .expect("worktree should be based on origin/HEAD when origin/main is missing");
+
+        let readme = std::fs::read_to_string(worktree_path.join("README.md"))
+            .expect("worktree README should exist");
+        assert_eq!(readme, "local repo\n");
+    }
+
+    #[tokio::test]
+    async fn resolve_worktree_base_ref_rejects_head_fallback_when_origin_default_is_missing() {
+        let temp = tempfile::tempdir().expect("tempdir should be created");
+        let repo_path = temp.path().join("repo");
+        init_committed_repo(&repo_path);
+        assert_git_success(
+            &repo_path,
+            &[
+                "remote",
+                "add",
+                "origin",
+                "git@example.com:example/repo.git",
+            ],
+        );
+
+        let err = resolve_worktree_base_ref(&repo_path, "origin/main")
+            .await
+            .expect_err("origin repos without a remote default should not fall back to HEAD");
+
+        assert!(
+            err.to_string().contains("remote 'origin' exists"),
+            "unexpected error: {}",
+            err
+        );
     }
 
     #[test]
