@@ -1,6 +1,7 @@
 packages:
   - packages/*
   - plugins/*
+minimumReleaseAge: 7200
 allowBuilds:
   electron: true
 patchedDependencies:
