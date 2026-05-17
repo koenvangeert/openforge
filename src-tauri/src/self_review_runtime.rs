@@ -2,6 +2,8 @@ use crate::diff_parser;
 use base64::{engine::general_purpose, Engine as _};
 use serde::{Deserialize, Serialize};
 
+const SELF_REVIEW_BASE_CANDIDATES: &[&str] = &["origin/main", "origin/HEAD", "main", "master"];
+
 #[derive(Debug, Clone, Serialize)]
 pub struct CommitInfo {
     pub sha: String,
@@ -39,22 +41,7 @@ pub async fn get_task_diff_for_workspace(
     worktree_path: &str,
     include_uncommitted: bool,
 ) -> Result<Vec<diff_parser::TaskFileDiff>, String> {
-    let merge_base_output = tokio::process::Command::new("git")
-        .arg("-C")
-        .arg(&worktree_path)
-        .args(["merge-base", "origin/main", "HEAD"])
-        .output()
-        .await
-        .map_err(|e| format!("Failed to run git merge-base: {}", e))?;
-
-    if !merge_base_output.status.success() {
-        let stderr = String::from_utf8_lossy(&merge_base_output.stderr);
-        return Err(format!("git merge-base failed: {}", stderr));
-    }
-
-    let merge_base = String::from_utf8_lossy(&merge_base_output.stdout)
-        .trim()
-        .to_string();
+    let merge_base = resolve_self_review_base(worktree_path).await?;
 
     let mut cmd = tokio::process::Command::new("git");
     cmd.arg("-C")
@@ -145,6 +132,44 @@ pub async fn get_task_diff_for_workspace(
     }
 
     Ok(diffs)
+}
+
+// ============================================================================
+// Base ref helpers
+// ============================================================================
+
+async fn merge_base_for_ref(worktree_path: &str, base_ref: &str) -> Result<Option<String>, String> {
+    let output = tokio::process::Command::new("git")
+        .arg("-C")
+        .arg(worktree_path)
+        .args(["merge-base", base_ref, "HEAD"])
+        .output()
+        .await
+        .map_err(|e| format!("Failed to run git merge-base for {base_ref}: {e}"))?;
+
+    if !output.status.success() {
+        return Ok(None);
+    }
+
+    let merge_base = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if merge_base.is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(merge_base))
+    }
+}
+
+async fn resolve_self_review_base(worktree_path: &str) -> Result<String, String> {
+    for base_ref in SELF_REVIEW_BASE_CANDIDATES {
+        if let Some(merge_base) = merge_base_for_ref(worktree_path, base_ref).await? {
+            return Ok(merge_base);
+        }
+    }
+
+    Err(format!(
+        "Failed to resolve self-review base: no usable merge base found from candidates [{}]",
+        SELF_REVIEW_BASE_CANDIDATES.join(", ")
+    ))
 }
 
 // ============================================================================
@@ -239,25 +264,10 @@ pub async fn get_task_file_contents_for_workspace(
     status: &str,
     include_uncommitted: bool,
 ) -> Result<(String, String), String> {
-    let merge_base_output = tokio::process::Command::new("git")
-        .arg("-C")
-        .arg(&worktree_path)
-        .args(["merge-base", "origin/main", "HEAD"])
-        .output()
-        .await
-        .map_err(|e| format!("Failed to run git merge-base: {}", e))?;
-
-    if !merge_base_output.status.success() {
-        let stderr = String::from_utf8_lossy(&merge_base_output.stderr);
-        return Err(format!("git merge-base failed: {}", stderr));
-    }
-
-    let merge_base = String::from_utf8_lossy(&merge_base_output.stdout)
-        .trim()
-        .to_string();
+    let merge_base = resolve_self_review_base(worktree_path).await?;
 
     fetch_file_contents(
-        &worktree_path,
+        worktree_path,
         &merge_base,
         path,
         old_path,
@@ -283,22 +293,7 @@ pub async fn get_task_batch_file_contents_for_workspace(
     files: &[FileContentRequest],
     include_uncommitted: bool,
 ) -> Result<Vec<(String, String)>, String> {
-    let merge_base_output = tokio::process::Command::new("git")
-        .arg("-C")
-        .arg(&worktree_path)
-        .args(["merge-base", "origin/main", "HEAD"])
-        .output()
-        .await
-        .map_err(|e| format!("Failed to run git merge-base: {}", e))?;
-
-    if !merge_base_output.status.success() {
-        let stderr = String::from_utf8_lossy(&merge_base_output.stderr);
-        return Err(format!("git merge-base failed: {}", stderr));
-    }
-
-    let merge_base = String::from_utf8_lossy(&merge_base_output.stdout)
-        .trim()
-        .to_string();
+    let merge_base = resolve_self_review_base(worktree_path).await?;
 
     // Fetch each file using the single pre-computed merge-base.
     let mut results = Vec::with_capacity(files.len());
@@ -321,22 +316,7 @@ pub async fn get_task_batch_file_contents_for_workspace(
 pub async fn get_task_commits_for_workspace(
     worktree_path: &str,
 ) -> Result<Vec<CommitInfo>, String> {
-    let merge_base_output = tokio::process::Command::new("git")
-        .arg("-C")
-        .arg(&worktree_path)
-        .args(["merge-base", "origin/main", "HEAD"])
-        .output()
-        .await
-        .map_err(|e| format!("Failed to run git merge-base: {}", e))?;
-
-    if !merge_base_output.status.success() {
-        let stderr = String::from_utf8_lossy(&merge_base_output.stderr);
-        return Err(format!("git merge-base failed: {}", stderr));
-    }
-
-    let merge_base = String::from_utf8_lossy(&merge_base_output.stdout)
-        .trim()
-        .to_string();
+    let merge_base = resolve_self_review_base(worktree_path).await?;
 
     let log_output = tokio::process::Command::new("git")
         .arg("-C")
@@ -536,7 +516,156 @@ pub fn resolve_workspace_path(db: &crate::db::Database, task_id: &str) -> Result
 mod tests {
     use super::*;
     use crate::db::test_helpers::make_test_db;
+    use std::{fs, path::Path, process::Command};
     use tempfile::tempdir;
+
+    fn run_git(repo_path: &Path, args: &[&str]) {
+        let output = Command::new("git")
+            .arg("-C")
+            .arg(repo_path)
+            .args(args)
+            .output()
+            .expect("run git command");
+
+        assert!(
+            output.status.success(),
+            "git {:?} failed\nstdout:\n{}\nstderr:\n{}",
+            args,
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    fn init_git_repo() -> tempfile::TempDir {
+        let repo = tempdir().expect("create temp git repo");
+        run_git(repo.path(), &["init"]);
+        run_git(repo.path(), &["checkout", "-B", "main"]);
+        run_git(repo.path(), &["config", "user.email", "test@example.com"]);
+        run_git(repo.path(), &["config", "user.name", "Test User"]);
+        repo
+    }
+
+    fn write_repo_file(repo_path: &Path, path: &str, content: &str) {
+        fs::write(repo_path.join(path), content).expect("write repo file");
+    }
+
+    fn commit_all(repo_path: &Path, message: &str) {
+        run_git(repo_path, &["add", "."]);
+        run_git(repo_path, &["commit", "-m", message]);
+    }
+
+    #[tokio::test]
+    async fn test_task_diff_falls_back_to_local_main_without_origin_main() {
+        let repo = init_git_repo();
+        write_repo_file(repo.path(), "tracked.txt", "base\n");
+        commit_all(repo.path(), "base commit");
+        run_git(repo.path(), &["checkout", "-b", "feature"]);
+        write_repo_file(repo.path(), "tracked.txt", "base\nfeature\n");
+        commit_all(repo.path(), "feature commit");
+
+        let result = get_task_diff_for_workspace(repo.path().to_str().unwrap(), false).await;
+
+        assert!(
+            result.is_ok(),
+            "local-only repositories without origin/main should still produce a self-review diff: {:?}",
+            result
+        );
+        let diffs = result.unwrap();
+        assert!(
+            diffs.iter().any(|diff| {
+                diff.filename == "tracked.txt"
+                    && diff.patch.as_deref().unwrap_or("").contains("+feature")
+            }),
+            "expected diff for feature commit, got {:?}",
+            diffs
+        );
+    }
+
+    #[tokio::test]
+    async fn test_task_commits_falls_back_to_local_main_without_origin_main() {
+        let repo = init_git_repo();
+        write_repo_file(repo.path(), "tracked.txt", "base\n");
+        commit_all(repo.path(), "base commit");
+        run_git(repo.path(), &["checkout", "-b", "feature"]);
+        write_repo_file(repo.path(), "tracked.txt", "base\nfeature\n");
+        commit_all(repo.path(), "feature commit");
+
+        let commits = get_task_commits_for_workspace(repo.path().to_str().unwrap())
+            .await
+            .expect(
+                "local-only repositories without origin/main should still produce commit history",
+            );
+
+        assert_eq!(commits.len(), 1);
+        assert_eq!(commits[0].message, "feature commit");
+    }
+
+    #[tokio::test]
+    async fn test_task_commits_prefers_origin_main_when_available() {
+        let repo = init_git_repo();
+        write_repo_file(repo.path(), "tracked.txt", "root\n");
+        commit_all(repo.path(), "root commit");
+        write_repo_file(repo.path(), "tracked.txt", "root\norigin base\n");
+        commit_all(repo.path(), "origin base commit");
+        run_git(
+            repo.path(),
+            &["update-ref", "refs/remotes/origin/main", "HEAD"],
+        );
+        run_git(repo.path(), &["reset", "--hard", "HEAD~1"]);
+        run_git(repo.path(), &["checkout", "-b", "feature", "origin/main"]);
+        write_repo_file(repo.path(), "tracked.txt", "root\norigin base\nfeature\n");
+        commit_all(repo.path(), "feature commit");
+
+        let commits = get_task_commits_for_workspace(repo.path().to_str().unwrap())
+            .await
+            .expect("origin/main should be used when available");
+
+        let messages: Vec<&str> = commits
+            .iter()
+            .map(|commit| commit.message.as_str())
+            .collect();
+        assert_eq!(messages, vec!["feature commit"]);
+    }
+
+    #[tokio::test]
+    async fn test_task_diff_errors_when_no_candidate_base_exists() {
+        let repo = init_git_repo();
+        run_git(repo.path(), &["checkout", "-B", "trunk"]);
+        write_repo_file(repo.path(), "tracked.txt", "base\n");
+        commit_all(repo.path(), "trunk base commit");
+        run_git(repo.path(), &["checkout", "-b", "feature"]);
+        write_repo_file(repo.path(), "tracked.txt", "base\nfeature\n");
+        commit_all(repo.path(), "feature commit");
+
+        let err = get_task_diff_for_workspace(repo.path().to_str().unwrap(), false)
+            .await
+            .expect_err("missing base candidates should not fall back to HEAD and hide diffs");
+
+        assert!(
+            err.contains("Failed to resolve self-review base"),
+            "expected explicit base-resolution error, got {err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_task_commits_errors_when_no_candidate_base_exists() {
+        let repo = init_git_repo();
+        run_git(repo.path(), &["checkout", "-B", "trunk"]);
+        write_repo_file(repo.path(), "tracked.txt", "base\n");
+        commit_all(repo.path(), "trunk base commit");
+        run_git(repo.path(), &["checkout", "-b", "feature"]);
+        write_repo_file(repo.path(), "tracked.txt", "base\nfeature\n");
+        commit_all(repo.path(), "feature commit");
+
+        let err = get_task_commits_for_workspace(repo.path().to_str().unwrap())
+            .await
+            .expect_err("missing base candidates should not fall back to HEAD and hide commits");
+
+        assert!(
+            err.contains("Failed to resolve self-review base"),
+            "expected explicit base-resolution error, got {err}"
+        );
+    }
 
     #[test]
     fn test_resolve_workspace_path_from_task_workspaces_only() {
