@@ -99,19 +99,16 @@ const result = sessionIdFromEvent({event_js});
 process.stdout.write(result === null || result === undefined ? "null" : String(result));
 "#
         );
-        let path = std::env::temp_dir().join(format!(
-            "openforge-opencode-plugin-test-{}.mjs",
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .expect("system time should be after epoch")
-                .as_nanos()
-        ));
-        std::fs::write(&path, script).expect("write plugin test script");
+        let script_file = tempfile::Builder::new()
+            .prefix("openforge-opencode-plugin-test-")
+            .suffix(".mjs")
+            .tempfile()
+            .expect("create plugin test script");
+        std::fs::write(script_file.path(), script).expect("write plugin test script");
         let output = std::process::Command::new("node")
-            .arg(&path)
+            .arg(script_file.path())
             .output()
             .expect("run node for opencode plugin test");
-        let _ = std::fs::remove_file(&path);
 
         assert!(
             output.status.success(),

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { flushSync } from 'svelte'
-import type { PrFileDiff } from './types'
+import type { PrFileDiff } from '@openforge/plugin-sdk/domain'
 import type { FileContents } from './diffAdapter'
 
 import { createFileContentsFetcher } from './useFileContentsFetcher.svelte'
