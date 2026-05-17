@@ -1,10 +1,10 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { toGitDiffViewData } from '../../../../../packages/pr-review-ui/src/diffAdapter'
+import { toGitDiffViewData } from '@openforge/pr-review-ui/diffAdapter'
 import type { PrFileDiff, ReviewSubmissionComment } from '../../../../lib/types'
 import { requireElement } from '../../../../test-utils/dom'
 import DiffViewer from './DiffViewer.svelte'
-import { buildExtendData } from '../../../../../packages/pr-review-ui/src/diffComments'
+import { buildExtendData } from '@openforge/pr-review-ui/diffComments'
 import { getSelfReviewInlineCommentDraft, selfReviewStateByTask } from '../../../../lib/taskScopedReviewComments'
 
 const { mockDiffView, mockDiffHighlighter } = vi.hoisted(() => ({
@@ -32,14 +32,14 @@ vi.mock('@git-diff-view/svelte', async () => {
   }
 })
 
-vi.mock('../../../../../packages/pr-review-ui/src/useDiffWorker.svelte', () => ({
+vi.mock('@openforge/pr-review-ui/useDiffWorker.svelte', () => ({
   createDiffWorker: vi.fn().mockReturnValue({
     getDiffFile: () => undefined,
     processing: false,
   }),
 }))
 
-vi.mock('../../../../../packages/pr-review-ui/src/diffSearch', () => ({
+vi.mock('@openforge/pr-review-ui/diffSearch', () => ({
   findMatchesInContainer: vi.fn().mockReturnValue([]),
   applySearchHighlights: vi.fn(),
   applyOccurrenceHighlights: vi.fn(),
@@ -50,8 +50,8 @@ vi.mock('../../../../../packages/pr-review-ui/src/diffSearch', () => ({
   countMatchesInPatch: vi.fn().mockReturnValue(0),
 }))
 
-vi.mock('../../../../../packages/pr-review-ui/src/diffAdapter', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../../../packages/pr-review-ui/src/diffAdapter')>()
+vi.mock('@openforge/pr-review-ui/diffAdapter', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@openforge/pr-review-ui/diffAdapter')>()
   return {
     ...actual,
     toGitDiffViewData: vi.fn().mockReturnValue({}),
@@ -60,15 +60,15 @@ vi.mock('../../../../../packages/pr-review-ui/src/diffAdapter', async (importOri
   }
 })
 
-vi.mock('../../../../../packages/pr-review-ui/src/diffComments', () => ({
+vi.mock('@openforge/pr-review-ui/diffComments', () => ({
   buildExtendData: vi.fn().mockReturnValue({}),
 }))
 
-vi.mock('../../../../../packages/pr-review-ui/src/diffHighlighter', () => ({
+vi.mock('@openforge/pr-review-ui/diffHighlighter', () => ({
   diffHighlighter: mockDiffHighlighter,
 }))
 
-vi.mock('../../../../../packages/pr-review-ui/src/useVirtualizer.svelte', () => ({
+vi.mock('@openforge/pr-review-ui/useVirtualizer.svelte', () => ({
   createVirtualizer: vi.fn((opts: { getCount: () => number }) => ({
     get virtualItems() {
       const count = opts.getCount()
@@ -108,7 +108,7 @@ describe('DiffViewer Search', () => {
 
   it('passes the configured registerHighlighter through to DiffView', async () => {
     const diffFile = { clearId: vi.fn() }
-    const { createDiffWorker } = await import('../../../../../packages/pr-review-ui/src/useDiffWorker.svelte')
+    const { createDiffWorker } = await import('@openforge/pr-review-ui/useDiffWorker.svelte')
     vi.mocked(createDiffWorker).mockReturnValue({
       getDiffFile: () => diffFile as never,
       processing: false,
@@ -382,7 +382,7 @@ describe('DiffViewer pending comments source', () => {
 
   it('uses provided pending comments instead of the global PR review pending comments', async () => {
     const diffFile = { clearId: vi.fn() }
-    const { createDiffWorker } = await import('../../../../../packages/pr-review-ui/src/useDiffWorker.svelte')
+    const { createDiffWorker } = await import('@openforge/pr-review-ui/useDiffWorker.svelte')
     vi.mocked(createDiffWorker).mockReturnValue({
       getDiffFile: () => diffFile as never,
       processing: false,
@@ -409,7 +409,7 @@ describe('DiffViewer inline textarea drafts', () => {
     selfReviewStateByTask.set(new Map())
     globalThis.__diffViewerTestWidget = undefined
     const diffFile = { clearId: vi.fn() }
-    const { createDiffWorker } = await import('../../../../../packages/pr-review-ui/src/useDiffWorker.svelte')
+    const { createDiffWorker } = await import('@openforge/pr-review-ui/useDiffWorker.svelte')
     vi.mocked(createDiffWorker).mockReturnValue({
       getDiffFile: () => diffFile as never,
       processing: false,

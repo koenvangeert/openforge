@@ -1,18 +1,3 @@
-::highlight(diff-search-match) {
-  background-color: color-mix(in oklch, var(--color-warning) 40%, transparent);
-  color: var(--color-base-content);
-}
-
-::highlight(diff-search-current) {
-  background-color: var(--color-warning);
-  color: var(--color-warning-content);
-}
-
-::highlight(diff-occurrence-match) {
-  background-color: color-mix(in oklch, var(--color-info) 30%, transparent);
-  color: var(--color-base-content);
-}
-
 /* Flash highlight when scrolling to a comment via sidebar click */
 @keyframes diff-comment-flash {
   0% { background-color: color-mix(in oklch, var(--color-info) 40%, transparent); }

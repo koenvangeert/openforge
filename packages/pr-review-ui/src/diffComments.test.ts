@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import type { ReviewComment, ReviewSubmissionComment, AgentReviewComment, PrComment } from './types'
+import type { ReviewComment, ReviewSubmissionComment, AgentReviewComment, PrComment } from '@openforge/plugin-sdk/domain'
 import { sideToSplitSide, buildExtendData, prCommentsToReviewComments } from './diffComments'
 
 // ============================================================================

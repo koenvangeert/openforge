@@ -15,14 +15,7 @@ vi.mock("../../lib/stores", () => ({
 	taskDraftNotes: writable(new Map()),
 }));
 
-vi.mock("../../lib/useDiffWorker.svelte", () => ({
-	createDiffWorker: vi.fn().mockReturnValue({
-		getDiffFile: () => undefined,
-		processing: false,
-	}),
-}));
-
-vi.mock("../../../packages/pr-review-ui/src/useVirtualizer.svelte", () => ({
+vi.mock("@openforge/pr-review-ui/useVirtualizer.svelte", () => ({
 	createVirtualizer: vi.fn((opts: { getCount: () => number }) => ({
 		get virtualItems() {
 			const count = opts.getCount();
@@ -76,7 +69,7 @@ import {
 	setSelfReviewDiffFiles,
 	setSelfReviewGeneralComments,
 } from "../../lib/taskScopedSelfReviewState";
-import { createVirtualizer } from "../../../packages/pr-review-ui/src/useVirtualizer.svelte";
+import { createVirtualizer } from "@openforge/pr-review-ui/useVirtualizer.svelte";
 import { clearTaskReviewPaneState, getTaskReviewPaneState } from "../../lib/taskReviewPaneState";
 
 const baseTask: Task = {
