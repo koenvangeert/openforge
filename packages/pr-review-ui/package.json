@@ -26,7 +26,7 @@
     "./timeAgo": "./src/timeAgo.ts"
   },
   "dependencies": {
-    "@git-diff-view/core": "0.0.39",
+    "@git-diff-view/core": "0.1.4",
     "@git-diff-view/lowlight": "^0.0.39",
     "@git-diff-view/svelte": "^0.0.13",
     "@openforge/plugin-sdk": "workspace:*",
